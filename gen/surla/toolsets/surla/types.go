@@ -583,8 +583,9 @@ type (
 	InitProjectPayload = struct {
 		// Go module path of the new service (for example example.com/shop).
 		ModulePath string
-		// Direct child directory name inside the bound workspace root. When omitted or
-		// empty, defaults to the service name derived from module_path.
+		// Use a direct child name, or . to initialize the bound workspace itself while
+		// preserving allowed agent configuration. When omitted or empty, defaults to
+		// the service name derived from module_path.
 		Dir *string
 	}
 	// InitProjectResult defines the JSON result for the surla.init_project tool.
@@ -665,6 +666,16 @@ type (
 		ChangeID string
 		// Verification runs for change_id in newest-first order.
 		Runs []*VerificationStatusResult
+	}
+	// OpenViewsPayload defines the JSON payload for the surla.open_views tool.
+	OpenViewsPayload = struct {
+	}
+	// OpenViewsResult defines the JSON result for the surla.open_views tool.
+	OpenViewsResult = struct {
+		// Whether the browser opener completed successfully.
+		Opened bool
+		// Safe handoff result without a URL or credential.
+		Message string
 	}
 	// PreviewArchitecturePayload defines the JSON payload for the surla.preview_architecture tool.
 	PreviewArchitecturePayload = struct {

@@ -358,6 +358,22 @@ func ListVerificationsResultCodec() tools.JSONCodec[*ListVerificationsResult] {
 	}
 }
 
+// OpenViewsPayloadCodec returns a fresh codec for *OpenViewsPayload.
+func OpenViewsPayloadCodec() tools.JSONCodec[*OpenViewsPayload] {
+	return tools.JSONCodec[*OpenViewsPayload]{
+		ToJSON:   MarshalOpenViewsPayload,
+		FromJSON: UnmarshalOpenViewsPayload,
+	}
+}
+
+// OpenViewsResultCodec returns a fresh codec for *OpenViewsResult.
+func OpenViewsResultCodec() tools.JSONCodec[*OpenViewsResult] {
+	return tools.JSONCodec[*OpenViewsResult]{
+		ToJSON:   MarshalOpenViewsResult,
+		FromJSON: UnmarshalOpenViewsResult,
+	}
+}
+
 // PreviewArchitecturePayloadCodec returns a fresh codec for *PreviewArchitecturePayload.
 func PreviewArchitecturePayloadCodec() tools.JSONCodec[*PreviewArchitecturePayload] {
 	return tools.JSONCodec[*PreviewArchitecturePayload]{
@@ -1095,6 +1111,32 @@ var (
 		},
 		FromJSON: func(data []byte) (any, error) {
 			return UnmarshalListVerificationsResult(data)
+		},
+	}
+	// openViewsPayloadCodec provides an untyped codec for *OpenViewsPayload.
+	openViewsPayloadCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*OpenViewsPayload); ok {
+				return MarshalOpenViewsPayload(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *OpenViewsPayload: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalOpenViewsPayload(data)
+		},
+	}
+	// openViewsResultCodec provides an untyped codec for *OpenViewsResult.
+	openViewsResultCodec = tools.JSONCodec[any]{
+		ToJSON: func(v any) ([]byte, error) {
+			// Prefer typed marshal when the value matches the expected type.
+			if typed, ok := v.(*OpenViewsResult); ok {
+				return MarshalOpenViewsResult(typed)
+			}
+			return nil, fmt.Errorf("invalid value type for *OpenViewsResult: %T", v)
+		},
+		FromJSON: func(data []byte) (any, error) {
+			return UnmarshalOpenViewsResult(data)
 		},
 	}
 	// previewArchitecturePayloadCodec provides an untyped codec for *PreviewArchitecturePayload.
@@ -7756,7 +7798,7 @@ var getVerificationResultFields = []tools.FieldMetadata{
 var initProjectPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Go module path and optional direct child directory name for initializing a new Surla starter project inside the bound workspace.",
+		Description: "Go module path and optional directory for initializing a new Surla starter project in the bound workspace.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("module_path")},
@@ -7766,7 +7808,7 @@ var initProjectPayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("dir")},
 		JSONType:    "string",
-		Description: "Direct child directory name inside the bound workspace root. When omitted or empty, defaults to the service name derived from module_path.",
+		Description: "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.",
 	},
 }
 var initProjectResultFields = []tools.FieldMetadata{
@@ -8796,6 +8838,26 @@ var listVerificationsResultFields = []tools.FieldMetadata{
 				Value:         "not_completed",
 			},
 		},
+	},
+}
+var openViewsPayloadFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+}
+var openViewsResultFields = []tools.FieldMetadata{
+	{
+		JSONType: "object",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("opened")},
+		JSONType:    "boolean",
+		Description: "Whether the browser opener completed successfully.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
+		JSONType:    "string",
+		Description: "Safe handoff result without a URL or credential.",
 	},
 }
 var previewArchitecturePayloadFields = []tools.FieldMetadata{
@@ -14638,6 +14700,23 @@ func enrichListVerificationsResultValidationError(err error) error {
 	}
 	return tools.NewValidationError(ve.Error(), issues, m)
 }
+func enrichOpenViewsResultValidationError(err error) error {
+	var ve *tools.ValidationError
+	if !errors.As(err, &ve) {
+		return err
+	}
+	issues := ve.Issues()
+	if len(issues) == 0 {
+		return err
+	}
+	m := make(map[string]string)
+	for _, is := range issues {
+		if field, ok := tools.LookupFieldMetadata(openViewsResultFields, is.Field); ok && field.Description != "" {
+			m[is.Field] = field.Description
+		}
+	}
+	return tools.NewValidationError(ve.Error(), issues, m)
+}
 func enrichPreviewArchitecturePayloadValidationError(err error) error {
 	var ve *tools.ValidationError
 	if !errors.As(err, &ve) {
@@ -16260,6 +16339,68 @@ func invalidListVerificationsResultFieldTypeError(err error) error {
 		field = "$payload"
 	}
 	metadata, ok := tools.LookupFieldMetadata(listVerificationsResultFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidOpenViewsPayloadFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "OpenViewsPayloadTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(openViewsPayloadFields, field)
+	if !ok || metadata.JSONType == "" {
+		return err
+	}
+	actual := generatedUnmarshalJSONType(typeErr.Value)
+	if actual == "" {
+		return err
+	}
+	return tools.NewValidationError(
+		err.Error(),
+		[]*tools.FieldIssue{
+			{
+				Field:            field,
+				Constraint:       "invalid_field_type",
+				ExpectedJSONType: metadata.JSONType,
+				ActualJSONType:   actual,
+			},
+		},
+		nil,
+	)
+}
+func invalidOpenViewsResultFieldTypeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if !errors.As(err, &typeErr) {
+		return err
+	}
+	field := typeErr.Field
+	field = strings.TrimPrefix(field, "OpenViewsResultTransport.")
+	if field == "" {
+		field = "$payload"
+	}
+	metadata, ok := tools.LookupFieldMetadata(openViewsResultFields, field)
 	if !ok || metadata.JSONType == "" {
 		return err
 	}
@@ -19783,6 +19924,80 @@ func UnmarshalListVerificationsResult(data []byte) (*ListVerificationsResult, er
 	return out, nil
 }
 
+// MarshalOpenViewsPayload serializes *OpenViewsPayload into JSON.
+func MarshalOpenViewsPayload(v *OpenViewsPayload) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("openViewsPayload is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.OpenViewsPayloadTransport
+	out = &toolhttp.OpenViewsPayloadTransport{}
+	return json.Marshal(out)
+}
+
+// UnmarshalOpenViewsPayload deserializes JSON into *OpenViewsPayload.
+func UnmarshalOpenViewsPayload(data []byte) (*OpenViewsPayload, error) {
+	if len(data) == 0 {
+		var v *OpenViewsPayload
+		return v, nil
+	}
+	var tv toolhttp.OpenViewsPayloadTransport
+	if err := validateStopLiveTargetPayloadJSON(data); err != nil {
+		return nil, invalidOpenViewsPayloadFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidOpenViewsPayloadFieldTypeError(err)
+	}
+	in := &tv
+	_ = in
+	var out *OpenViewsPayload
+	out = &OpenViewsPayload{}
+	return out, nil
+}
+
+// MarshalOpenViewsResult serializes *OpenViewsResult into JSON.
+func MarshalOpenViewsResult(v *OpenViewsResult) ([]byte, error) {
+	if v == nil {
+		return nil, fmt.Errorf("openViewsResult is nil")
+	}
+	in := v
+	_ = in
+	var out *toolhttp.OpenViewsResultTransport
+	out = &toolhttp.OpenViewsResultTransport{
+		Opened:  &in.Opened,
+		Message: &in.Message,
+	}
+	return json.Marshal(out)
+}
+
+// UnmarshalOpenViewsResult deserializes JSON into *OpenViewsResult.
+func UnmarshalOpenViewsResult(data []byte) (*OpenViewsResult, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("openViewsResult JSON is empty")
+	}
+	var tv toolhttp.OpenViewsResultTransport
+	if err := validateOpenViewsResultJSON(data); err != nil {
+		return nil, invalidOpenViewsResultFieldTypeError(err)
+	}
+	if err := json.Unmarshal(data, &tv); err != nil {
+		return nil, invalidOpenViewsResultFieldTypeError(err)
+	}
+	if err := toolhttp.ValidateOpenViewsResultTransport(&tv); err != nil {
+		err = newValidationError(err)
+		err = enrichOpenViewsResultValidationError(err)
+		return nil, err
+	}
+	in := &tv
+	_ = in
+	var out *OpenViewsResult
+	out = &OpenViewsResult{
+		Opened:  *in.Opened,
+		Message: *in.Message,
+	}
+	return out, nil
+}
+
 // MarshalPreviewArchitecturePayload serializes *PreviewArchitecturePayload into JSON.
 func MarshalPreviewArchitecturePayload(v *PreviewArchitecturePayload) ([]byte, error) {
 	if v == nil {
@@ -21747,6 +21962,16 @@ func validateUpdateDraftResultJSON(data []byte) error {
 		return err
 	}
 	return validateUpdateDraftResultJSONValue("", root, "")
+}
+
+// validateOpenViewsResultJSON parses one JSON document and checks the exact value
+// shapes known from this generated Goa type.
+func validateOpenViewsResultJSON(data []byte) error {
+	root, err := readStrictToolJSON(data)
+	if err != nil {
+		return err
+	}
+	return validateOpenViewsResultJSONValue("", root, "")
 }
 
 // validateListChangesResultJSON parses one JSON document and checks the exact value
@@ -26284,7 +26509,7 @@ func validateInitProjectPayloadJSONValue(path string, value any, description str
 		case "dir":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Direct child directory name inside the bound workspace root. When omitted or empty, defaults to the service name derived from module_path.",
+				typed[key], "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.",
 			); err != nil {
 				return err
 			}
@@ -27138,6 +27363,50 @@ func validateUpdateDraftResultDraftCorrectionTransportJSONValue(path string, val
 				"folder",
 				"path",
 				"problem",
+			})
+		}
+	}
+	return nil
+}
+
+// validateOpenViewsResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateOpenViewsResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "message":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Safe handoff result without a URL or credential.",
+			); err != nil {
+				return err
+			}
+		case "opened":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the browser opener completed successfully.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"message",
+				"opened",
 			})
 		}
 	}

@@ -50,6 +50,10 @@ type Server struct {
 	GetTeam                   http.Handler
 	ShowTeamPane              http.Handler
 	StartTeamAgents           http.Handler
+	ListTeamAgentOptions      http.Handler
+	DismissTeamNotice         http.Handler
+	OpenViews                 http.Handler
+	MergeChange               http.Handler
 	ListChanges               http.Handler
 	WaitForChanges            http.Handler
 	StartBuild                http.Handler
@@ -122,6 +126,10 @@ func New(
 			{"GetTeam", "GET", "/team"},
 			{"ShowTeamPane", "POST", "/team/pane"},
 			{"StartTeamAgents", "POST", "/team/agents"},
+			{"ListTeamAgentOptions", "GET", "/team/agent-options"},
+			{"DismissTeamNotice", "POST", "/team/notices/dismiss"},
+			{"OpenViews", "POST", "/views/open"},
+			{"MergeChange", "POST", "/changes/{change_id}/merge"},
 			{"ListChanges", "GET", "/changes"},
 			{"WaitForChanges", "GET", "/change-updates"},
 			{"StartBuild", "POST", "/changes/{change_id}/build"},
@@ -166,6 +174,10 @@ func New(
 		GetTeam:                   NewGetTeamHandler(e.GetTeam, mux, decoder, encoder, errhandler, formatter),
 		ShowTeamPane:              NewShowTeamPaneHandler(e.ShowTeamPane, mux, decoder, encoder, errhandler, formatter),
 		StartTeamAgents:           NewStartTeamAgentsHandler(e.StartTeamAgents, mux, decoder, encoder, errhandler, formatter),
+		ListTeamAgentOptions:      NewListTeamAgentOptionsHandler(e.ListTeamAgentOptions, mux, decoder, encoder, errhandler, formatter),
+		DismissTeamNotice:         NewDismissTeamNoticeHandler(e.DismissTeamNotice, mux, decoder, encoder, errhandler, formatter),
+		OpenViews:                 NewOpenViewsHandler(e.OpenViews, mux, decoder, encoder, errhandler, formatter),
+		MergeChange:               NewMergeChangeHandler(e.MergeChange, mux, decoder, encoder, errhandler, formatter),
 		ListChanges:               NewListChangesHandler(e.ListChanges, mux, decoder, encoder, errhandler, formatter),
 		WaitForChanges:            NewWaitForChangesHandler(e.WaitForChanges, mux, decoder, encoder, errhandler, formatter),
 		StartBuild:                NewStartBuildHandler(e.StartBuild, mux, decoder, encoder, errhandler, formatter),
@@ -217,6 +229,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetTeam = m(s.GetTeam)
 	s.ShowTeamPane = m(s.ShowTeamPane)
 	s.StartTeamAgents = m(s.StartTeamAgents)
+	s.ListTeamAgentOptions = m(s.ListTeamAgentOptions)
+	s.DismissTeamNotice = m(s.DismissTeamNotice)
+	s.OpenViews = m(s.OpenViews)
+	s.MergeChange = m(s.MergeChange)
 	s.ListChanges = m(s.ListChanges)
 	s.WaitForChanges = m(s.WaitForChanges)
 	s.StartBuild = m(s.StartBuild)
@@ -267,6 +283,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetTeamHandler(mux, h.GetTeam)
 	MountShowTeamPaneHandler(mux, h.ShowTeamPane)
 	MountStartTeamAgentsHandler(mux, h.StartTeamAgents)
+	MountListTeamAgentOptionsHandler(mux, h.ListTeamAgentOptions)
+	MountDismissTeamNoticeHandler(mux, h.DismissTeamNotice)
+	MountOpenViewsHandler(mux, h.OpenViews)
+	MountMergeChangeHandler(mux, h.MergeChange)
 	MountListChangesHandler(mux, h.ListChanges)
 	MountWaitForChangesHandler(mux, h.WaitForChanges)
 	MountStartBuildHandler(mux, h.StartBuild)
@@ -1829,6 +1849,7 @@ func NewStartTeamAgentsHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
+		decodeRequest  = DecodeStartTeamAgentsRequest(mux, decoder)
 		encodeResponse = EncodeStartTeamAgentsResponse(encoder)
 		encodeError    = EncodeStartTeamAgentsError(encoder, formatter)
 	)
@@ -1836,8 +1857,212 @@ func NewStartTeamAgentsHandler(
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "start_team_agents")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTeamAgentOptionsHandler configures the mux to serve the "surla"
+// service "list_team_agent_options" endpoint.
+func MountListTeamAgentOptionsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/team/agent-options", f)
+}
+
+// NewListTeamAgentOptionsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "surla" service "list_team_agent_options" endpoint.
+func NewListTeamAgentOptionsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeListTeamAgentOptionsResponse(encoder)
+		encodeError    = EncodeListTeamAgentOptionsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "list_team_agent_options")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 		var err error
 		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDismissTeamNoticeHandler configures the mux to serve the "surla"
+// service "dismiss_team_notice" endpoint.
+func MountDismissTeamNoticeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/team/notices/dismiss", f)
+}
+
+// NewDismissTeamNoticeHandler creates a HTTP handler which loads the HTTP
+// request and calls the "surla" service "dismiss_team_notice" endpoint.
+func NewDismissTeamNoticeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDismissTeamNoticeRequest(mux, decoder)
+		encodeResponse = EncodeDismissTeamNoticeResponse(encoder)
+		encodeError    = EncodeDismissTeamNoticeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "dismiss_team_notice")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountOpenViewsHandler configures the mux to serve the "surla" service
+// "open_views" endpoint.
+func MountOpenViewsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/views/open", f)
+}
+
+// NewOpenViewsHandler creates a HTTP handler which loads the HTTP request and
+// calls the "surla" service "open_views" endpoint.
+func NewOpenViewsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeOpenViewsResponse(encoder)
+		encodeError    = EncodeOpenViewsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "open_views")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMergeChangeHandler configures the mux to serve the "surla" service
+// "merge_change" endpoint.
+func MountMergeChangeHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/changes/{change_id}/merge", f)
+}
+
+// NewMergeChangeHandler creates a HTTP handler which loads the HTTP request
+// and calls the "surla" service "merge_change" endpoint.
+func NewMergeChangeHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMergeChangeRequest(mux, decoder)
+		encodeResponse = EncodeMergeChangeResponse(encoder)
+		encodeError    = EncodeMergeChangeError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "merge_change")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

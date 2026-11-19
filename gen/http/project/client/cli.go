@@ -16,6 +16,28 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildAttachGuidePayload builds the payload for the project attach_guide
+// endpoint from CLI flags.
+func BuildAttachGuidePayload(projectAttachGuideBody *string) (*project.AttachGuidePayload, error) {
+	var err error
+	var body AttachGuideRequestBody
+	{
+		if projectAttachGuideBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*projectAttachGuideBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client\": \"gemini\",\n      \"hc_terminal_id\": \"x\"\n   }'")
+		}
+	}
+	v := &project.AttachGuidePayload{
+		HcTerminalID: body.HcTerminalID,
+		Client:       body.Client,
+	}
+
+	return v, nil
+}
+
 // BuildExchangeBrowserLinkPayload builds the payload for the project
 // exchange_browser_link endpoint from CLI flags.
 func BuildExchangeBrowserLinkPayload(projectExchangeBrowserLinkBody *string) (*project.ExchangeBrowserLinkPayload, error) {

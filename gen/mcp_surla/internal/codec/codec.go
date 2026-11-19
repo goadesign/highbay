@@ -5804,8 +5804,9 @@ func ValidateGetVerificationResultVerificationScenarioTransport(value *GetVerifi
 type InitProjectPayloadTransport struct {
 	// Go module path of the new service (for example example.com/shop).
 	ModulePath *string `json:"module_path"`
-	// Direct child directory name inside the bound workspace root. When omitted or
-	// empty, defaults to the service name derived from module_path.
+	// Use a direct child name, or . to initialize the bound workspace itself while
+	// preserving allowed agent configuration. When omitted or empty, defaults to
+	// the service name derived from module_path.
 	Dir *string `json:"dir,omitempty"`
 }
 
@@ -7061,6 +7062,28 @@ func ValidateListVerificationsResultVerificationStatusResultTransport(value *Lis
 			}
 		}
 
+	}
+	return err
+}
+
+// OpenViewsResultTransport stores JSON fields until they have been validated.
+type OpenViewsResultTransport struct {
+	// Whether the browser opener completed successfully.
+	Opened *bool `json:"opened"`
+	// Safe handoff result without a URL or credential.
+	Message *string `json:"message"`
+}
+
+// ValidateOpenViewsResultTransport checks decoded JSON before it becomes a service value.
+func ValidateOpenViewsResultTransport(value *OpenViewsResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Opened == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("opened", "body"))
+	}
+	if value.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
 	return err
 }
@@ -17106,6 +17129,25 @@ func EncodeListVerificationsResult(in *surla.VerificationListResult) ([]byte, er
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("encode ListVerificationsResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// EncodeOpenViewsResult turns a service value into JSON using the field names in the Goa design.
+func EncodeOpenViewsResult(in *surla.OpenViewsResult) ([]byte, error) {
+	var body *OpenViewsResultTransport
+	{
+		body = &OpenViewsResultTransport{
+			Opened:  &in.Opened,
+			Message: &in.Message,
+		}
+	}
+	if err := ValidateOpenViewsResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate OpenViewsResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode OpenViewsResult JSON: %w", err)
 	}
 	return data, nil
 }

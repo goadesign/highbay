@@ -17,6 +17,16 @@ func EnsureTeamProjectPath() string {
 	return "/project/team"
 }
 
+// AttachGuideProjectPath returns the URL path to the project service attach_guide HTTP endpoint.
+func AttachGuideProjectPath() string {
+	return "/project/attach-guide"
+}
+
+// StatusProjectPath returns the URL path to the project service status HTTP endpoint.
+func StatusProjectPath() string {
+	return "/project/status"
+}
+
 // StopProjectPath returns the URL path to the project service stop HTTP endpoint.
 func StopProjectPath() string {
 	return "/project/stop"

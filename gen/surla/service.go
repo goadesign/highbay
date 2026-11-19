@@ -377,11 +377,28 @@ type Service interface {
 	// only at the user's request. Any open Herdr dialog prevents all window
 	// changes. Fresh project, handle and space labels must still identify the pane.
 	ShowTeamPane(context.Context, *ShowTeamPanePayload) (err error)
-	// Ask the project's existing team-start owner to prepare the registered roles
-	// and open the Chorus launcher when a listed role is not running. Only the
-	// user may call it. It has the same bounded server-owned lifetime and dialog,
-	// space and availability refusals as the management team-start operation.
-	StartTeamAgents(context.Context) (res *ProjectTeam, err error)
+	// Start missing project agents using explicit choices, otherwise saved choices
+	// and installed cross-family defaults. Never replace a running guide. Only the
+	// user may call it. Workers run in Herdr when available, otherwise as finite
+	// server-owned headless processes. Opens no launcher.
+	StartTeamAgents(context.Context, *StartTeamAgentsPayload) (res *ProjectTeam, err error)
+	// Discover installed coding-agent executables and their supported options on
+	// demand. Only the user may call it; ordinary team reads never run discovery
+	// subprocesses.
+	ListTeamAgentOptions(context.Context) (res *ListTeamAgentOptionsResult, err error)
+	// Save the user's dismissal of one project notice without changing agent
+	// capability or startup behavior.
+	DismissTeamNotice(context.Context, *DismissTeamNoticePayload) (err error)
+	// Open a fresh project views session at the user's request. The project owner
+	// mints and opens the private link; no browser credential is returned to the
+	// caller.
+	OpenViews(context.Context) (res *OpenViewsResult, err error)
+	// Merge the user's current live-approved candidate and accepted tests into the
+	// clean checked-out local project branch. Rechecks approval, report and build
+	// identity before mutation. On failure restores the original branch and
+	// tracked state while preserving untracked files. After success stops only the
+	// merged build's workers. Repeating the exact already-taken approval is safe.
+	MergeChange(context.Context, *MergeChangePayload) (res *MergeChangeResult, err error)
 	// List the owner's saved Change Cards for this project, most recently saved
 	// first, with each card's summary, status, the request_revision in force, the
 	// request_revision of a revision the guide proposed beside a confirmed card
@@ -521,7 +538,7 @@ const ServiceName = "surla"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [43]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
+var MethodNames = [47]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
 
 // Evaluated Goa-AI cost, safety, history, and cache policy for a single agent.
 type AgentPolicyItem struct {
@@ -1204,6 +1221,13 @@ type DiffResult struct {
 	Summary string
 }
 
+// DismissTeamNoticePayload is the payload type of the surla service
+// dismiss_team_notice method.
+type DismissTeamNoticePayload struct {
+	// Notice to dismiss.
+	Notice string
+}
+
 // A file to correct before update_draft can bring a change forward, and the
 // folder that holds it. When folder is draft_folder, the guide corrects the
 // file in its draft. When folder is project_folder, the file is the user's
@@ -1375,8 +1399,9 @@ type HandOverModelSettingsPayload struct {
 type InitProjectPayload struct {
 	// Go module path of the new service (for example example.com/shop).
 	ModulePath string
-	// Direct child directory name inside the bound workspace root. When omitted or
-	// empty, defaults to the service name derived from module_path.
+	// Use a direct child name, or . to initialize the bound workspace itself while
+	// preserving allowed agent configuration. When omitted or empty, defaults to
+	// the service name derived from module_path.
 	Dir *string
 }
 
@@ -1396,6 +1421,29 @@ type InitProjectResult struct {
 	Commit string
 }
 
+type InstalledAgentOption struct {
+	// Coding-agent client family.
+	Client string
+	// Resolved installed executable.
+	Program string
+	// Human-readable client name.
+	Title string
+	// Advertised model choices; empty when the client accepts free-form names.
+	Models []string
+	// Advertised reasoning-effort choices.
+	Efforts []string
+	// Whether a model can be selected.
+	ModelSupported bool
+	// Whether reasoning effort can be selected.
+	ThinkingSupported bool
+	// Whether an unattended permission mode is supported.
+	YoloSupported bool
+	// What this client's unattended permission mode permits.
+	YoloEffect *string
+	// Whether Surla supports this client's finite noninteractive mode.
+	HeadlessSupported bool
+}
+
 // The most recently accepted Checkpoint 4 verification run of a Change Card.
 type LatestVerificationItem struct {
 	// Verification run identifier; get_verification takes it.
@@ -1409,6 +1457,13 @@ type LatestVerificationItem struct {
 	// suite in the stored verification settings. It does not say whether the
 	// candidate working tree, deployment or approval is current.
 	InputsCurrent bool
+}
+
+// ListTeamAgentOptionsResult is the result type of the surla service
+// list_team_agent_options method.
+type ListTeamAgentOptionsResult struct {
+	// Installed coding agents.
+	Agents []*InstalledAgentOption
 }
 
 // ListTracesPayload is the payload type of the surla service list_traces
@@ -1506,6 +1561,28 @@ type LiveTargetStatus struct {
 	LiveTarget LiveTarget
 }
 
+// MergeChangePayload is the payload type of the surla service merge_change
+// method.
+type MergeChangePayload struct {
+	// Approved change identifier.
+	ChangeID string
+	// Approved revision.
+	RequestRevision string
+	// Approved candidate commit.
+	CandidateCommit string
+	// Approved report digest.
+	ReportDigest string
+}
+
+// MergeChangeResult is the result type of the surla service merge_change
+// method.
+type MergeChangeResult struct {
+	// Checked-out local branch that received the approved work.
+	Branch string
+	// Resulting local branch commit.
+	HeadCommit string
+}
+
 // ModelConfigResult is the result type of the surla service configure_model
 // method.
 type ModelConfigResult struct {
@@ -1571,6 +1648,14 @@ type OpenBuildRefusal struct {
 	Build *StartedBuild
 }
 
+// OpenViewsResult is the result type of the surla service open_views method.
+type OpenViewsResult struct {
+	// Whether the browser opener completed successfully.
+	Opened bool
+	// Safe handoff result without a URL or credential.
+	Message string
+}
+
 // The run used the operator's evaluator: the one stored with surla
 // verification set, or the one named on surla verify's command line.
 type OperatorEvaluatorTests struct {
@@ -1589,11 +1674,11 @@ type PreviewArchitecturePayload struct {
 type ProjectTeam struct {
 	// Stable Chorus team name.
 	Team string
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space string
 	Roles []*ProjectTeamRole
-	// Launcher state after ensuring the team.
-	Dialog string
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode string
 	// What the user does next for the prepared team.
 	Step string
 }
@@ -1771,6 +1856,19 @@ type ReviseChangePayload struct {
 	Analysis *CP1RevisionAnalysis
 }
 
+type RoleAgentChoice struct {
+	// Installed coding-agent client family.
+	Client string
+	// Installed executable selected from list_team_agent_options.
+	Program string
+	// Optional client-supported model.
+	Model *string
+	// Optional client-supported reasoning effort.
+	Thinking *string
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo bool
+}
+
 // The owner checked this run against current approval requirements.
 // approve_merge rechecks them and may refuse a later change; this read saves
 // nothing.
@@ -1832,6 +1930,9 @@ type StartBuildPayload struct {
 	// agreed to build it again before any verification of it passed. Omit it
 	// otherwise.
 	Replaces *ReplacedBuild
+	// Choices for missing workers. Omitted and empty both use saved choices then
+	// installed cross-family defaults. Never launches or changes the guide.
+	Choices map[string]*RoleAgentChoice
 }
 
 // StartBuildResult is the result type of the surla service start_build method.
@@ -1850,6 +1951,14 @@ type StartLiveTargetPayload struct {
 	ChangeID string
 	// Full commit ID to build, in the candidate repository's object format.
 	CandidateCommit string
+}
+
+// StartTeamAgentsPayload is the payload type of the surla service
+// start_team_agents method.
+type StartTeamAgentsPayload struct {
+	// Choices for missing roles; guide is accepted only when not running. Omitted
+	// and empty choices both use saved choices and installed defaults.
+	Choices map[string]*RoleAgentChoice
 }
 
 // The usable build the user started for a change, with the builder's
@@ -2033,6 +2142,12 @@ type TeamSnapshot struct {
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*TeamRoleState
+	// Current desktop attachment.
+	HerdrMode string
+	// Saved client choices by role.
+	SavedChoices map[string]*RoleAgentChoice
+	// Dismissed project notices.
+	DismissedNotices []string
 }
 
 // No test-writer coverage snapshot was recorded. Never infer it from today's
@@ -2702,6 +2817,26 @@ func MakeTeamUnavailable(err error) *goa.ServiceError {
 // MakeAmbiguousSpace builds a goa.ServiceError from an error.
 func MakeAmbiguousSpace(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "ambiguous_space", false, false, false)
+}
+
+// MakeNotApproved builds a goa.ServiceError from an error.
+func MakeNotApproved(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "not_approved", false, false, false)
+}
+
+// MakeDetachedHead builds a goa.ServiceError from an error.
+func MakeDetachedHead(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "detached_head", false, false, false)
+}
+
+// MakeDirtyWorktree builds a goa.ServiceError from an error.
+func MakeDirtyWorktree(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "dirty_worktree", false, false, false)
+}
+
+// MakeMergeConflict builds a goa.ServiceError from an error.
+func MakeMergeConflict(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "merge_conflict", false, false, false)
 }
 
 // MakeNotRepository builds a goa.ServiceError from an error.
@@ -4956,8 +5091,9 @@ func validatejsonHandOverModelSettingsPayloadTransport(value *jsonHandOverModelS
 type jsonInitProjectPayloadTransport struct {
 	// Go module path of the new service (for example example.com/shop).
 	ModulePath *string `json:"module_path"`
-	// Direct child directory name inside the bound workspace root. When omitted or
-	// empty, defaults to the service name derived from module_path.
+	// Use a direct child name, or . to initialize the bound workspace itself while
+	// preserving allowed agent configuration. When omitted or empty, defaults to
+	// the service name derived from module_path.
 	Dir *string `json:"dir,omitempty"`
 }
 
@@ -5011,6 +5147,70 @@ func validatejsonInitProjectResultTransport(value *jsonInitProjectResultTranspor
 	}
 	if value.Commit != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.commit", *value.Commit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	return err
+}
+
+// jsonInstalledAgentOptionTransport stores JSON fields until they have been validated.
+type jsonInstalledAgentOptionTransport struct {
+	// Coding-agent client family.
+	Client *string `json:"client"`
+	// Resolved installed executable.
+	Program *string `json:"program"`
+	// Human-readable client name.
+	Title *string `json:"title"`
+	// Advertised model choices; empty when the client accepts free-form names.
+	Models []string `json:"models"`
+	// Advertised reasoning-effort choices.
+	Efforts []string `json:"efforts"`
+	// Whether a model can be selected.
+	ModelSupported *bool `json:"model_supported"`
+	// Whether reasoning effort can be selected.
+	ThinkingSupported *bool `json:"thinking_supported"`
+	// Whether an unattended permission mode is supported.
+	YoloSupported *bool `json:"yolo_supported"`
+	// What this client's unattended permission mode permits.
+	YoloEffect *string `json:"yolo_effect,omitempty"`
+	// Whether Surla supports this client's finite noninteractive mode.
+	HeadlessSupported *bool `json:"headless_supported"`
+}
+
+// validatejsonInstalledAgentOptionTransport checks decoded JSON before it becomes a service value.
+func validatejsonInstalledAgentOptionTransport(value *jsonInstalledAgentOptionTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if value.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if value.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if value.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", "body"))
+	}
+	if value.Efforts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("efforts", "body"))
+	}
+	if value.ModelSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("model_supported", "body"))
+	}
+	if value.ThinkingSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("thinking_supported", "body"))
+	}
+	if value.YoloSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo_supported", "body"))
+	}
+	if value.HeadlessSupported == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("headless_supported", "body"))
+	}
+	if value.Client != nil {
+		if !(*value.Client == "claude" || *value.Client == "codex" || *value.Client == "antigravity" || *value.Client == "cursor" || *value.Client == "gemini" || *value.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *value.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
 	}
 	return err
 }
@@ -5630,11 +5830,11 @@ func validatejsonProjectTeamRoleTransport(value *jsonProjectTeamRoleTransport) (
 type jsonProjectTeamTransport struct {
 	// Stable Chorus team name.
 	Team *string `json:"team"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space *string                         `json:"space"`
 	Roles []*jsonProjectTeamRoleTransport `json:"roles"`
-	// Launcher state after ensuring the team.
-	Dialog *string `json:"dialog"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode *string `json:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step *string `json:"step"`
 }
@@ -5653,8 +5853,8 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
-	if value.Dialog == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("dialog", "body"))
+	if value.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if value.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -5663,10 +5863,7 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
 	if value.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-		if utf8.RuneCountInString(*value.Space) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 1, true))
-		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 		if utf8.RuneCountInString(*value.Space) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 64, false))
 		}
@@ -5678,9 +5875,9 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 			}
 		}
 	}
-	if value.Dialog != nil {
-		if !(*value.Dialog == "opened" || *value.Dialog == "already_open" || *value.Dialog == "not_needed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dialog", *value.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if value.HerdrMode != nil {
+		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if value.Step != nil {
@@ -6105,6 +6302,47 @@ func validatejsonReviseChangePayloadTransport(value *jsonReviseChangePayloadTran
 	if value.Analysis != nil {
 		if err2 := validatejsonCP1RevisionAnalysisTransport(value.Analysis); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
+// jsonRoleAgentChoiceTransport stores JSON fields until they have been validated.
+type jsonRoleAgentChoiceTransport struct {
+	// Installed coding-agent client family.
+	Client *string `json:"client"`
+	// Installed executable selected from list_team_agent_options.
+	Program *string `json:"program"`
+	// Optional client-supported model.
+	Model *string `json:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `json:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo *bool `json:"yolo"`
+}
+
+// validatejsonRoleAgentChoiceTransport checks decoded JSON before it becomes a service value.
+func validatejsonRoleAgentChoiceTransport(value *jsonRoleAgentChoiceTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if value.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if value.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", "body"))
+	}
+	if value.Client != nil {
+		if !(*value.Client == "claude" || *value.Client == "codex" || *value.Client == "antigravity" || *value.Client == "cursor" || *value.Client == "gemini" || *value.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *value.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if value.Program != nil {
+		if utf8.RuneCountInString(*value.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.program", *value.Program, utf8.RuneCountInString(*value.Program), 1, true))
 		}
 	}
 	return err
@@ -6860,6 +7098,12 @@ type jsonTeamSnapshotTransport struct {
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*jsonTeamRoleStateTransport `json:"roles"`
+	// Current desktop attachment.
+	HerdrMode *string `json:"herdr_mode"`
+	// Saved client choices by role.
+	SavedChoices map[string]*jsonRoleAgentChoiceTransport `json:"saved_choices"`
+	// Dismissed project notices.
+	DismissedNotices []string `json:"dismissed_notices"`
 }
 
 // validatejsonTeamSnapshotTransport checks decoded JSON before it becomes a service value.
@@ -6873,11 +7117,40 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
+	if value.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
+	}
+	if value.SavedChoices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("saved_choices", "body"))
+	}
+	if value.DismissedNotices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dismissed_notices", "body"))
+	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validatejsonTeamRoleStateTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if value.HerdrMode != nil {
+		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
+		}
+	}
+	for k, v := range value.SavedChoices {
+		if !(k == "guide" || k == "builder" || k == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.saved_choices.key", k, []any{"guide", "builder", "test_writer"}))
+		}
+		if v != nil {
+			if err2 := validatejsonRoleAgentChoiceTransport(v); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.DismissedNotices {
+		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
 		}
 	}
 	return err
@@ -9431,6 +9704,20 @@ func validateInitProjectResultOriginal(value *InitProjectResult) (err error) {
 	return err
 }
 
+// validateInstalledAgentOptionOriginal checks the original typed value before JSON conversion.
+func validateInstalledAgentOptionOriginal(value *InstalledAgentOption) (err error) {
+	if value.Models == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("models", "value"))
+	}
+	if value.Efforts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("efforts", "value"))
+	}
+	if !(value.Client == "claude" || value.Client == "codex" || value.Client == "antigravity" || value.Client == "cursor" || value.Client == "gemini" || value.Client == "opencode") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.client", value.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+	}
+	return err
+}
+
 // validateListTracesPayloadOriginal checks the original typed value before JSON conversion.
 func validateListTracesPayloadOriginal(value *ListTracesPayload) (err error) {
 	if !(value.Status == "all" || value.Status == "error" || value.Status == "ok") {
@@ -9651,10 +9938,7 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.team", value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-	if utf8.RuneCountInString(value.Space) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 1, true))
-	}
+	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 	if utf8.RuneCountInString(value.Space) > 64 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 64, false))
 	}
@@ -9665,8 +9949,8 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 			}
 		}
 	}
-	if !(value.Dialog == "opened" || value.Dialog == "already_open" || value.Dialog == "not_needed") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dialog", value.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
 	}
 	if utf8.RuneCountInString(value.Step) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", value.Step, utf8.RuneCountInString(value.Step), 1, true))
@@ -9824,6 +10108,17 @@ func validateReviseChangePayloadOriginal(value *ReviseChangePayload) (err error)
 	return err
 }
 
+// validateRoleAgentChoiceOriginal checks the original typed value before JSON conversion.
+func validateRoleAgentChoiceOriginal(value *RoleAgentChoice) (err error) {
+	if !(value.Client == "claude" || value.Client == "codex" || value.Client == "antigravity" || value.Client == "cursor" || value.Client == "gemini" || value.Client == "opencode") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.client", value.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+	}
+	if utf8.RuneCountInString(value.Program) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.program", value.Program, utf8.RuneCountInString(value.Program), 1, true))
+	}
+	return err
+}
+
 // validateRunApprovalBlockedOriginal checks the original typed value before JSON conversion.
 func validateRunApprovalBlockedOriginal(value *RunApprovalBlocked) (err error) {
 	if utf8.RuneCountInString(value.Reason) < 1 {
@@ -9936,11 +10231,35 @@ func validateTeamSnapshotOriginal(value *TeamSnapshot) (err error) {
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
 	}
+	if value.SavedChoices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("saved_choices", "value"))
+	}
+	if value.DismissedNotices == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("dismissed_notices", "value"))
+	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validateTeamRoleStateOriginal(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
+	}
+	for k, v := range value.SavedChoices {
+		if !(k == "guide" || k == "builder" || k == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.saved_choices.key", k, []any{"guide", "builder", "test_writer"}))
+		}
+		if v != nil {
+			if err2 := validateRoleAgentChoiceOriginal(v); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range value.DismissedNotices {
+		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
 		}
 	}
 	return err
@@ -19062,6 +19381,134 @@ func DecodeInitProjectResult(data []byte) (out *InitProjectResult, err error) {
 	return out, nil
 }
 
+// EncodeInstalledAgentOption turns a service value into JSON using the field names in the Goa design.
+func EncodeInstalledAgentOption(in *InstalledAgentOption) ([]byte, error) {
+	if err := checkInstalledAgentOptionValue(in); err != nil {
+		return nil, fmt.Errorf("encode InstalledAgentOption JSON: %w", err)
+	}
+	if err := validateInstalledAgentOptionOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate InstalledAgentOption value: %w", err)
+	}
+	var body *jsonInstalledAgentOptionTransport
+	{
+		body = &jsonInstalledAgentOptionTransport{
+			Client:            &in.Client,
+			Program:           &in.Program,
+			Title:             &in.Title,
+			ModelSupported:    &in.ModelSupported,
+			ThinkingSupported: &in.ThinkingSupported,
+			YoloSupported:     &in.YoloSupported,
+			YoloEffect:        in.YoloEffect,
+			HeadlessSupported: &in.HeadlessSupported,
+		}
+		body.Models = make([]string, len(in.Models))
+		for i, val := range in.Models {
+			body.Models[i] = val
+		}
+		body.Efforts = make([]string, len(in.Efforts))
+		for i, val := range in.Efforts {
+			body.Efforts[i] = val
+		}
+	}
+	if err := validatejsonInstalledAgentOptionTransport(body); err != nil {
+		return nil, fmt.Errorf("validate InstalledAgentOption JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode InstalledAgentOption JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateInstalledAgentOptionValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateInstalledAgentOptionValue(in *InstalledAgentOption) error {
+	if err := checkInstalledAgentOptionValue(in); err != nil {
+		return fmt.Errorf("validate InstalledAgentOption value: %w", err)
+	}
+	if err := validateInstalledAgentOptionOriginal(in); err != nil {
+		return fmt.Errorf("validate InstalledAgentOption value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "InstalledAgentOption")
+	}
+
+	var body *jsonInstalledAgentOptionTransport
+	{
+		body = &jsonInstalledAgentOptionTransport{
+			Client:            &in.Client,
+			Program:           &in.Program,
+			Title:             &in.Title,
+			ModelSupported:    &in.ModelSupported,
+			ThinkingSupported: &in.ThinkingSupported,
+			YoloSupported:     &in.YoloSupported,
+			YoloEffect:        in.YoloEffect,
+			HeadlessSupported: &in.HeadlessSupported,
+		}
+		body.Models = make([]string, len(in.Models))
+		for i, val := range in.Models {
+			body.Models[i] = val
+		}
+		body.Efforts = make([]string, len(in.Efforts))
+		for i, val := range in.Efforts {
+			body.Efforts[i] = val
+		}
+	}
+	if err := validatejsonInstalledAgentOptionTransport(body); err != nil {
+		return fmt.Errorf("validate InstalledAgentOption value: %w", err)
+	}
+	return nil
+}
+
+// DecodeInstalledAgentOption checks JSON field names from the Goa design and returns a service value.
+func DecodeInstalledAgentOption(data []byte) (out *InstalledAgentOption, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode InstalledAgentOption JSON: %w", err)
+	}
+	if err := validateInstalledAgentOptionJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode InstalledAgentOption JSON: %w", err)
+	}
+	var body *jsonInstalledAgentOptionTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode InstalledAgentOption JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode InstalledAgentOption JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode InstalledAgentOption JSON after first value: %w", err)
+	}
+	if err := validatejsonInstalledAgentOptionTransport(body); err != nil {
+		return out, fmt.Errorf("validate InstalledAgentOption JSON: %w", err)
+	}
+	{
+		out = &InstalledAgentOption{
+			Client:            *body.Client,
+			Program:           *body.Program,
+			Title:             *body.Title,
+			ModelSupported:    *body.ModelSupported,
+			ThinkingSupported: *body.ThinkingSupported,
+			YoloSupported:     *body.YoloSupported,
+			YoloEffect:        body.YoloEffect,
+			HeadlessSupported: *body.HeadlessSupported,
+		}
+		out.Models = make([]string, len(body.Models))
+		for i, val := range body.Models {
+			out.Models[i] = val
+		}
+		out.Efforts = make([]string, len(body.Efforts))
+		for i, val := range body.Efforts {
+			out.Efforts[i] = val
+		}
+	}
+	return out, nil
+}
+
 // EncodeLatestVerificationItem turns a service value into JSON using the field names in the Goa design.
 func EncodeLatestVerificationItem(in *LatestVerificationItem) ([]byte, error) {
 	if err := checkLatestVerificationItemValue(in); err != nil {
@@ -21016,10 +21463,10 @@ func EncodeProjectTeam(in *ProjectTeam) ([]byte, error) {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:   &in.Team,
-			Space:  &in.Space,
-			Dialog: &in.Dialog,
-			Step:   &in.Step,
+			Team:      &in.Team,
+			Space:     &in.Space,
+			HerdrMode: &in.HerdrMode,
+			Step:      &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -21058,10 +21505,10 @@ func ValidateProjectTeamValue(in *ProjectTeam) error {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:   &in.Team,
-			Space:  &in.Space,
-			Dialog: &in.Dialog,
-			Step:   &in.Step,
+			Team:      &in.Team,
+			Space:     &in.Space,
+			HerdrMode: &in.HerdrMode,
+			Step:      &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -21104,10 +21551,10 @@ func DecodeProjectTeam(data []byte) (out *ProjectTeam, err error) {
 	}
 	{
 		out = &ProjectTeam{
-			Team:   *body.Team,
-			Space:  *body.Space,
-			Dialog: *body.Dialog,
-			Step:   *body.Step,
+			Team:      *body.Team,
+			Space:     *body.Space,
+			HerdrMode: *body.HerdrMode,
+			Step:      *body.Step,
 		}
 		out.Roles = make([]*ProjectTeamRole, len(body.Roles))
 		for i, val := range body.Roles {
@@ -22252,6 +22699,101 @@ func DecodeReviseChangePayload(data []byte) (out *ReviseChangePayload, err error
 			StoryRefreshOpID: body.StoryRefreshOpID,
 		}
 		out.Analysis = decodeCP1RevisionAnalysisTransportToCP1RevisionAnalysis(body.Analysis)
+	}
+	return out, nil
+}
+
+// EncodeRoleAgentChoice turns a service value into JSON using the field names in the Goa design.
+func EncodeRoleAgentChoice(in *RoleAgentChoice) ([]byte, error) {
+	if err := checkRoleAgentChoiceValue(in); err != nil {
+		return nil, fmt.Errorf("encode RoleAgentChoice JSON: %w", err)
+	}
+	if err := validateRoleAgentChoiceOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+	var body *jsonRoleAgentChoiceTransport
+	{
+		body = &jsonRoleAgentChoiceTransport{
+			Client:   &in.Client,
+			Program:  &in.Program,
+			Model:    in.Model,
+			Thinking: in.Thinking,
+			Yolo:     &in.Yolo,
+		}
+	}
+	if err := validatejsonRoleAgentChoiceTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RoleAgentChoice JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RoleAgentChoice JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRoleAgentChoiceValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRoleAgentChoiceValue(in *RoleAgentChoice) error {
+	if err := checkRoleAgentChoiceValue(in); err != nil {
+		return fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+	if err := validateRoleAgentChoiceOriginal(in); err != nil {
+		return fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RoleAgentChoice")
+	}
+
+	var body *jsonRoleAgentChoiceTransport
+	{
+		body = &jsonRoleAgentChoiceTransport{
+			Client:   &in.Client,
+			Program:  &in.Program,
+			Model:    in.Model,
+			Thinking: in.Thinking,
+			Yolo:     &in.Yolo,
+		}
+	}
+	if err := validatejsonRoleAgentChoiceTransport(body); err != nil {
+		return fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRoleAgentChoice checks JSON field names from the Goa design and returns a service value.
+func DecodeRoleAgentChoice(data []byte) (out *RoleAgentChoice, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RoleAgentChoice JSON: %w", err)
+	}
+	if err := validateRoleAgentChoiceJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RoleAgentChoice JSON: %w", err)
+	}
+	var body *jsonRoleAgentChoiceTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RoleAgentChoice JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RoleAgentChoice JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RoleAgentChoice JSON after first value: %w", err)
+	}
+	if err := validatejsonRoleAgentChoiceTransport(body); err != nil {
+		return out, fmt.Errorf("validate RoleAgentChoice JSON: %w", err)
+	}
+	{
+		out = &RoleAgentChoice{
+			Client:   *body.Client,
+			Program:  *body.Program,
+			Model:    body.Model,
+			Thinking: body.Thinking,
+			Yolo:     *body.Yolo,
+		}
 	}
 	return out, nil
 }
@@ -24252,7 +24794,8 @@ func EncodeTeamSnapshot(in *TeamSnapshot) ([]byte, error) {
 	var body *jsonTeamSnapshotTransport
 	{
 		body = &jsonTeamSnapshotTransport{
-			Team: &in.Team,
+			Team:      &in.Team,
+			HerdrMode: &in.HerdrMode,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -24261,6 +24804,19 @@ func EncodeTeamSnapshot(in *TeamSnapshot) ([]byte, error) {
 				continue
 			}
 			body.Roles[i] = encodeTeamRoleStateToTeamRoleStateTransport(val)
+		}
+		body.SavedChoices = make(map[string]*jsonRoleAgentChoiceTransport, len(in.SavedChoices))
+		for key, val := range in.SavedChoices {
+			tk := key
+			if val == nil {
+				body.SavedChoices[tk] = nil
+				continue
+			}
+			body.SavedChoices[tk] = encodeRoleAgentChoiceToRoleAgentChoiceTransport(val)
+		}
+		body.DismissedNotices = make([]string, len(in.DismissedNotices))
+		for i, val := range in.DismissedNotices {
+			body.DismissedNotices[i] = val
 		}
 	}
 	if err := validatejsonTeamSnapshotTransport(body); err != nil {
@@ -24291,7 +24847,8 @@ func ValidateTeamSnapshotValue(in *TeamSnapshot) error {
 	var body *jsonTeamSnapshotTransport
 	{
 		body = &jsonTeamSnapshotTransport{
-			Team: &in.Team,
+			Team:      &in.Team,
+			HerdrMode: &in.HerdrMode,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -24300,6 +24857,19 @@ func ValidateTeamSnapshotValue(in *TeamSnapshot) error {
 				continue
 			}
 			body.Roles[i] = encodeTeamRoleStateToTeamRoleStateTransport(val)
+		}
+		body.SavedChoices = make(map[string]*jsonRoleAgentChoiceTransport, len(in.SavedChoices))
+		for key, val := range in.SavedChoices {
+			tk := key
+			if val == nil {
+				body.SavedChoices[tk] = nil
+				continue
+			}
+			body.SavedChoices[tk] = encodeRoleAgentChoiceToRoleAgentChoiceTransport(val)
+		}
+		body.DismissedNotices = make([]string, len(in.DismissedNotices))
+		for i, val := range in.DismissedNotices {
+			body.DismissedNotices[i] = val
 		}
 	}
 	if err := validatejsonTeamSnapshotTransport(body); err != nil {
@@ -24334,7 +24904,8 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 	}
 	{
 		out = &TeamSnapshot{
-			Team: *body.Team,
+			Team:      *body.Team,
+			HerdrMode: *body.HerdrMode,
 		}
 		out.Roles = make([]*TeamRoleState, len(body.Roles))
 		for i, val := range body.Roles {
@@ -24343,6 +24914,19 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 				continue
 			}
 			out.Roles[i] = decodeTeamRoleStateTransportToTeamRoleState(val)
+		}
+		out.SavedChoices = make(map[string]*RoleAgentChoice, len(body.SavedChoices))
+		for key, val := range body.SavedChoices {
+			tk := key
+			if val == nil {
+				out.SavedChoices[tk] = nil
+				continue
+			}
+			out.SavedChoices[tk] = decodeRoleAgentChoiceTransportToRoleAgentChoice(val)
+		}
+		out.DismissedNotices = make([]string, len(body.DismissedNotices))
+		for i, val := range body.DismissedNotices {
+			out.DismissedNotices[i] = val
 		}
 	}
 	return out, nil
@@ -28754,10 +29338,10 @@ func decodeProjectTeamRoleTransportToProjectTeamRole(v *jsonProjectTeamRoleTrans
 
 func decodeProjectTeamTransportToProjectTeam(v *jsonProjectTeamTransport) *ProjectTeam {
 	res := &ProjectTeam{
-		Team:   *v.Team,
-		Space:  *v.Space,
-		Dialog: *v.Dialog,
-		Step:   *v.Step,
+		Team:      *v.Team,
+		Space:     *v.Space,
+		HerdrMode: *v.HerdrMode,
+		Step:      *v.Step,
 	}
 	res.Roles = make([]*ProjectTeamRole, len(v.Roles))
 	for i, val := range v.Roles {
@@ -28916,6 +29500,18 @@ func decodeRequiredTestTransportToRequiredTest(v *jsonRequiredTestTransport) *Re
 		FlowKey:  *v.FlowKey,
 		Scenario: *v.Scenario,
 		Hook:     *v.Hook,
+	}
+
+	return res
+}
+
+func decodeRoleAgentChoiceTransportToRoleAgentChoice(v *jsonRoleAgentChoiceTransport) *RoleAgentChoice {
+	res := &RoleAgentChoice{
+		Client:   *v.Client,
+		Program:  *v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     *v.Yolo,
 	}
 
 	return res
@@ -30233,10 +30829,10 @@ func encodeProjectTeamRoleToProjectTeamRoleTransport(v *ProjectTeamRole) *jsonPr
 
 func encodeProjectTeamToProjectTeamTransport(v *ProjectTeam) *jsonProjectTeamTransport {
 	res := &jsonProjectTeamTransport{
-		Team:   &v.Team,
-		Space:  &v.Space,
-		Dialog: &v.Dialog,
-		Step:   &v.Step,
+		Team:      &v.Team,
+		Space:     &v.Space,
+		HerdrMode: &v.HerdrMode,
+		Step:      &v.Step,
 	}
 	res.Roles = make([]*jsonProjectTeamRoleTransport, len(v.Roles))
 	for i, val := range v.Roles {
@@ -30400,6 +30996,18 @@ func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *jsonRequiredTes
 		FlowKey:  &v.FlowKey,
 		Scenario: &v.Scenario,
 		Hook:     &v.Hook,
+	}
+
+	return res
+}
+
+func encodeRoleAgentChoiceToRoleAgentChoiceTransport(v *RoleAgentChoice) *jsonRoleAgentChoiceTransport {
+	res := &jsonRoleAgentChoiceTransport{
+		Client:   &v.Client,
+		Program:  &v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     &v.Yolo,
 	}
 
 	return res
@@ -37551,7 +38159,7 @@ func validateInitProjectPayloadJSONValue(path string, value any, description str
 		case "dir":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Direct child directory name inside the bound workspace root. When omitted or empty, defaults to the service name derived from module_path.",
+				typed[key], "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.",
 			); err != nil {
 				return err
 			}
@@ -37627,6 +38235,162 @@ func validateInitProjectResultJSONValue(path string, value any, description stri
 				"module_path",
 				"service_name",
 			})
+		}
+	}
+	return nil
+}
+
+// validateInstalledAgentOptionJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateInstalledAgentOptionJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "client":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Coding-agent client family.",
+			); err != nil {
+				return err
+			}
+		case "efforts":
+			if err := validateInstalledAgentOptionJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Advertised reasoning-effort choices.",
+			); err != nil {
+				return err
+			}
+		case "headless_supported":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether Surla supports this client's finite noninteractive mode.",
+			); err != nil {
+				return err
+			}
+		case "model_supported":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether a model can be selected.",
+			); err != nil {
+				return err
+			}
+		case "models":
+			if err := validateInstalledAgentOptionJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Advertised model choices; empty when the client accepts free-form names.",
+			); err != nil {
+				return err
+			}
+		case "program":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Resolved installed executable.",
+			); err != nil {
+				return err
+			}
+		case "thinking_supported":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether reasoning effort can be selected.",
+			); err != nil {
+				return err
+			}
+		case "title":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Human-readable client name.",
+			); err != nil {
+				return err
+			}
+		case "yolo_effect":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this client's unattended permission mode permits.",
+			); err != nil {
+				return err
+			}
+		case "yolo_supported":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether an unattended permission mode is supported.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"client",
+				"efforts",
+				"headless_supported",
+				"model_supported",
+				"models",
+				"program",
+				"thinking_supported",
+				"title",
+				"yolo_effect",
+				"yolo_supported",
+			})
+		}
+	}
+	return nil
+}
+
+// validateInstalledAgentOptionJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateInstalledAgentOptionJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateInstalledAgentOptionJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateInstalledAgentOptionJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -38615,10 +39379,10 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "dialog":
+		case "herdr_mode":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Launcher state after ensuring the team.",
+				typed[key], "Whether Herdr hosts this project, is available, or is unavailable.",
 			); err != nil {
 				return err
 			}
@@ -38632,7 +39396,7 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 		case "space":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Local Herdr space identifier.",
+				typed[key], "Local Herdr space identifier, empty when Herdr is unavailable.",
 			); err != nil {
 				return err
 			}
@@ -38652,7 +39416,7 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
-				"dialog",
+				"herdr_mode",
 				"roles",
 				"space",
 				"step",
@@ -39376,6 +40140,74 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 	return nil
 }
 
+// validateRoleAgentChoiceJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRoleAgentChoiceJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "client":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Installed coding-agent client family.",
+			); err != nil {
+				return err
+			}
+		case "model":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional client-supported model.",
+			); err != nil {
+				return err
+			}
+		case "program":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Installed executable selected from list_team_agent_options.",
+			); err != nil {
+				return err
+			}
+		case "thinking":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional client-supported reasoning effort.",
+			); err != nil {
+				return err
+			}
+		case "yolo":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether to enable this client's advertised unattended permission mode.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"client",
+				"model",
+				"program",
+				"thinking",
+				"yolo",
+			})
+		}
+	}
+	return nil
+}
+
 // validateRunApprovalAvailableJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateRunApprovalAvailableJSONValue(path string, value any, description string) error {
 	field := path
@@ -39842,10 +40674,31 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "roles":
+		case "dismissed_notices":
 			if err := validateTeamSnapshotJSONValue2(
 				generatedJSONChildPath(path, key, false),
+				typed[key], "Dismissed project notices.",
+			); err != nil {
+				return err
+			}
+		case "herdr_mode":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current desktop attachment.",
+			); err != nil {
+				return err
+			}
+		case "roles":
+			if err := validateTeamSnapshotJSONValue3(
+				generatedJSONChildPath(path, key, false),
 				typed[key], "Registered roles in guide, builder, test_writer order; empty before registration.",
+			); err != nil {
+				return err
+			}
+		case "saved_choices":
+			if err := validateTeamSnapshotJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Saved client choices by role.",
 			); err != nil {
 				return err
 			}
@@ -39858,7 +40711,10 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"dismissed_notices",
+				"herdr_mode",
 				"roles",
+				"saved_choices",
 				"team",
 			})
 		}
@@ -39880,12 +40736,68 @@ func validateTeamSnapshotJSONValue2(path string, value any, description string) 
 		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
 	}
 	for index, item := range typed {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTeamSnapshotJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTeamSnapshotJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
 		if item == nil {
 			continue
 		}
 		if err := validateTeamRoleStateJSONValue(
 			generatedJSONChildPath(path, strconv.Itoa(index), true),
 			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTeamSnapshotJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTeamSnapshotJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if typed[key] == nil {
+			continue
+		}
+		if err := validateRoleAgentChoiceJSONValue(
+			generatedJSONChildPath(path, key, true),
+			typed[key], description,
 		); err != nil {
 			return err
 		}
@@ -44575,6 +45487,61 @@ func checkInitProjectResultInitProjectResultValue(in *InitProjectResult, field s
 	return nil
 }
 
+// checkInstalledAgentOptionValue checks text and cycles before conversion.
+func checkInstalledAgentOptionValue(in *InstalledAgentOption) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkInstalledAgentOptionInstalledAgentOptionValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkInstalledAgentOptionInstalledAgentOptionValue checks one generated value on the active path.
+func checkInstalledAgentOptionInstalledAgentOptionValue(in *InstalledAgentOption, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Client)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "client", false))
+		}
+		if !utf8.ValidString(string(in.Program)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "program", false))
+		}
+		if !utf8.ValidString(string(in.Title)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "title", false))
+		}
+		for index1, item1 := range in.Models {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "models", false), strconv.Itoa(index1), true))
+			}
+		}
+		for index1, item1 := range in.Efforts {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "efforts", false), strconv.Itoa(index1), true))
+			}
+		}
+		if in.YoloEffect != nil {
+			if !utf8.ValidString(string(*in.YoloEffect)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "yolo_effect", false))
+			}
+		}
+	}
+	return nil
+}
+
 // checkLatestVerificationItemValue checks text and cycles before conversion.
 func checkLatestVerificationItemValue(in *LatestVerificationItem) error {
 	if in == nil {
@@ -45321,8 +46288,8 @@ func checkProjectTeamProjectTeamValue(in *ProjectTeam, field string, active map[
 				return err
 			}
 		}
-		if !utf8.ValidString(string(in.Dialog)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "dialog", false))
+		if !utf8.ValidString(string(in.HerdrMode)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
 		}
 		if !utf8.ValidString(string(in.Step)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "step", false))
@@ -45708,6 +46675,49 @@ func checkReviseChangePayloadReviseChangePayloadValue(in *ReviseChangePayload, f
 		}
 		if err := checkCP1RevisionAnalysisCP1RevisionAnalysisValue(in.Analysis, generatedJSONChildPath(field, "analysis", false), active); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// checkRoleAgentChoiceValue checks text and cycles before conversion.
+func checkRoleAgentChoiceValue(in *RoleAgentChoice) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRoleAgentChoiceRoleAgentChoiceValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRoleAgentChoiceRoleAgentChoiceValue checks one generated value on the active path.
+func checkRoleAgentChoiceRoleAgentChoiceValue(in *RoleAgentChoice, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Client)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "client", false))
+		}
+		if !utf8.ValidString(string(in.Program)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "program", false))
+		}
+		if in.Model != nil {
+			if !utf8.ValidString(string(*in.Model)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "model", false))
+			}
+		}
+		if in.Thinking != nil {
+			if !utf8.ValidString(string(*in.Thinking)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "thinking", false))
+			}
 		}
 	}
 	return nil
@@ -46164,6 +47174,25 @@ func checkTeamSnapshotTeamSnapshotValue(in *TeamSnapshot, field string, active m
 			_ = item1
 			if err := checkTeamRoleStateTeamRoleStateValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "roles", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
+			}
+		}
+		if !utf8.ValidString(string(in.HerdrMode)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
+		}
+		for key1, item1 := range in.SavedChoices {
+			_ = item1
+			if !utf8.ValidString(string(key1)) {
+				return fmt.Errorf("%s: invalid UTF-8 map key", generatedJSONChildPath(field, "saved_choices", false))
+			}
+			if err := checkRoleAgentChoiceRoleAgentChoiceValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "saved_choices", false), string(key1), true), active); err != nil {
+				return err
+			}
+		}
+		for index1, item1 := range in.DismissedNotices {
+			_ = index1
+			_ = item1
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "dismissed_notices", false), strconv.Itoa(index1), true))
 			}
 		}
 	}

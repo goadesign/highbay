@@ -1054,6 +1054,17 @@ func ValidateListVerificationsResultTransport(body *ListVerificationsResultTrans
 	return
 }
 
+// ValidateOpenViewsResultTransport runs the validations defined on OpenViewsResultTransport.
+func ValidateOpenViewsResultTransport(body *OpenViewsResultTransport) (err error) {
+	if body.Opened == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("opened", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	return
+}
+
 // ValidatePreviewArchitecturePayloadTransport runs the validations defined on PreviewArchitecturePayloadTransport.
 func ValidatePreviewArchitecturePayloadTransport(body *PreviewArchitecturePayloadTransport) (err error) {
 	if body.ChangeID == nil {

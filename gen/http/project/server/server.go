@@ -21,6 +21,8 @@ type Server struct {
 	Mounts              []*MountPoint
 	Identity            http.Handler
 	EnsureTeam          http.Handler
+	AttachGuide         http.Handler
+	Status              http.Handler
 	Stop                http.Handler
 	BrowserLink         http.Handler
 	ExchangeBrowserLink http.Handler
@@ -55,12 +57,16 @@ func New(
 		Mounts: []*MountPoint{
 			{"Identity", "GET", "/project/identity"},
 			{"EnsureTeam", "POST", "/project/team"},
+			{"AttachGuide", "POST", "/project/attach-guide"},
+			{"Status", "GET", "/project/status"},
 			{"Stop", "POST", "/project/stop"},
 			{"BrowserLink", "POST", "/project/browser-link"},
 			{"ExchangeBrowserLink", "POST", "/project/browser-session"},
 		},
 		Identity:            NewIdentityHandler(e.Identity, mux, decoder, encoder, errhandler, formatter),
 		EnsureTeam:          NewEnsureTeamHandler(e.EnsureTeam, mux, decoder, encoder, errhandler, formatter),
+		AttachGuide:         NewAttachGuideHandler(e.AttachGuide, mux, decoder, encoder, errhandler, formatter),
+		Status:              NewStatusHandler(e.Status, mux, decoder, encoder, errhandler, formatter),
 		Stop:                NewStopHandler(e.Stop, mux, decoder, encoder, errhandler, formatter),
 		BrowserLink:         NewBrowserLinkHandler(e.BrowserLink, mux, decoder, encoder, errhandler, formatter),
 		ExchangeBrowserLink: NewExchangeBrowserLinkHandler(e.ExchangeBrowserLink, mux, decoder, encoder, errhandler, formatter),
@@ -74,6 +80,8 @@ func (s *Server) Service() string { return "project" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Identity = m(s.Identity)
 	s.EnsureTeam = m(s.EnsureTeam)
+	s.AttachGuide = m(s.AttachGuide)
+	s.Status = m(s.Status)
 	s.Stop = m(s.Stop)
 	s.BrowserLink = m(s.BrowserLink)
 	s.ExchangeBrowserLink = m(s.ExchangeBrowserLink)
@@ -86,6 +94,8 @@ func (s *Server) MethodNames() []string { return project.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountIdentityHandler(mux, h.Identity)
 	MountEnsureTeamHandler(mux, h.EnsureTeam)
+	MountAttachGuideHandler(mux, h.AttachGuide)
+	MountStatusHandler(mux, h.Status)
 	MountStopHandler(mux, h.Stop)
 	MountBrowserLinkHandler(mux, h.BrowserLink)
 	MountExchangeBrowserLinkHandler(mux, h.ExchangeBrowserLink)
@@ -171,6 +181,105 @@ func NewEnsureTeamHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "ensure_team")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAttachGuideHandler configures the mux to serve the "project" service
+// "attach_guide" endpoint.
+func MountAttachGuideHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/project/attach-guide", f)
+}
+
+// NewAttachGuideHandler creates a HTTP handler which loads the HTTP request
+// and calls the "project" service "attach_guide" endpoint.
+func NewAttachGuideHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAttachGuideRequest(mux, decoder)
+		encodeResponse = EncodeAttachGuideResponse(encoder)
+		encodeError    = EncodeAttachGuideError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "attach_guide")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountStatusHandler configures the mux to serve the "project" service
+// "status" endpoint.
+func MountStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/project/status", f)
+}
+
+// NewStatusHandler creates a HTTP handler which loads the HTTP request and
+// calls the "project" service "status" endpoint.
+func NewStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeStatusResponse(encoder)
+		encodeError    = EncodeStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "status")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
 		var err error
 		res, err := endpoint(ctx, nil)

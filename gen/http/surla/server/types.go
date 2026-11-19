@@ -186,8 +186,9 @@ type HandOverModelSettingsRequestBody struct {
 type InitProjectRequestBody struct {
 	// Go module path of the new service (for example example.com/shop).
 	ModulePath *string `form:"module_path,omitempty" json:"module_path,omitempty" xml:"module_path,omitempty"`
-	// Direct child directory name inside the bound workspace root. When omitted or
-	// empty, defaults to the service name derived from module_path.
+	// Use a direct child name, or . to initialize the bound workspace itself while
+	// preserving allowed agent configuration. When omitted or empty, defaults to
+	// the service name derived from module_path.
 	Dir *string `form:"dir,omitempty" json:"dir,omitempty" xml:"dir,omitempty"`
 }
 
@@ -215,6 +216,32 @@ type ShowTeamPaneRequestBody struct {
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 }
 
+// StartTeamAgentsRequestBody is the type of the "surla" service
+// "start_team_agents" endpoint HTTP request body.
+type StartTeamAgentsRequestBody struct {
+	// Choices for missing roles; guide is accepted only when not running. Omitted
+	// and empty choices both use saved choices and installed defaults.
+	Choices map[string]*RoleAgentChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
+}
+
+// DismissTeamNoticeRequestBody is the type of the "surla" service
+// "dismiss_team_notice" endpoint HTTP request body.
+type DismissTeamNoticeRequestBody struct {
+	// Notice to dismiss.
+	Notice *string `form:"notice,omitempty" json:"notice,omitempty" xml:"notice,omitempty"`
+}
+
+// MergeChangeRequestBody is the type of the "surla" service "merge_change"
+// endpoint HTTP request body.
+type MergeChangeRequestBody struct {
+	// Approved revision.
+	RequestRevision *string `form:"request_revision,omitempty" json:"request_revision,omitempty" xml:"request_revision,omitempty"`
+	// Approved candidate commit.
+	CandidateCommit *string `form:"candidate_commit,omitempty" json:"candidate_commit,omitempty" xml:"candidate_commit,omitempty"`
+	// Approved report digest.
+	ReportDigest *string `form:"report_digest,omitempty" json:"report_digest,omitempty" xml:"report_digest,omitempty"`
+}
+
 // StartBuildRequestBody is the type of the "surla" service "start_build"
 // endpoint HTTP request body.
 type StartBuildRequestBody struct {
@@ -225,6 +252,9 @@ type StartBuildRequestBody struct {
 	// agreed to build it again before any verification of it passed. Omit it
 	// otherwise.
 	Replaces *ReplacedBuildRequestBody `form:"replaces,omitempty" json:"replaces,omitempty" xml:"replaces,omitempty"`
+	// Choices for missing workers. Omitted and empty both use saved choices then
+	// installed cross-family defaults. Never launches or changes the guide.
+	Choices map[string]*RoleAgentChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
 
 // DropBuildRequestBody is the type of the "surla" service "drop_build"
@@ -975,6 +1005,12 @@ type GetTeamResponseBody struct {
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*TeamRoleStateResponseBody `form:"roles" json:"roles" xml:"roles"`
+	// Current desktop attachment.
+	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
+	// Saved client choices by role.
+	SavedChoices map[string]*RoleAgentChoiceResponseBody `form:"saved_choices" json:"saved_choices" xml:"saved_choices"`
+	// Dismissed project notices.
+	DismissedNotices []string `form:"dismissed_notices" json:"dismissed_notices" xml:"dismissed_notices"`
 }
 
 // StartTeamAgentsResponseBody is the type of the "surla" service
@@ -982,13 +1018,38 @@ type GetTeamResponseBody struct {
 type StartTeamAgentsResponseBody struct {
 	// Stable Chorus team name.
 	Team string `form:"team" json:"team" xml:"team"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space string                         `form:"space" json:"space" xml:"space"`
 	Roles []*ProjectTeamRoleResponseBody `form:"roles" json:"roles" xml:"roles"`
-	// Launcher state after ensuring the team.
-	Dialog string `form:"dialog" json:"dialog" xml:"dialog"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step string `form:"step" json:"step" xml:"step"`
+}
+
+// ListTeamAgentOptionsResponseBody is the type of the "surla" service
+// "list_team_agent_options" endpoint HTTP response body.
+type ListTeamAgentOptionsResponseBody struct {
+	// Installed coding agents.
+	Agents []*InstalledAgentOptionResponseBody `form:"agents" json:"agents" xml:"agents"`
+}
+
+// OpenViewsResponseBody is the type of the "surla" service "open_views"
+// endpoint HTTP response body.
+type OpenViewsResponseBody struct {
+	// Whether the browser opener completed successfully.
+	Opened bool `form:"opened" json:"opened" xml:"opened"`
+	// Safe handoff result without a URL or credential.
+	Message string `form:"message" json:"message" xml:"message"`
+}
+
+// MergeChangeResponseBody is the type of the "surla" service "merge_change"
+// endpoint HTTP response body.
+type MergeChangeResponseBody struct {
+	// Checked-out local branch that received the approved work.
+	Branch string `form:"branch" json:"branch" xml:"branch"`
+	// Resulting local branch commit.
+	HeadCommit string `form:"head_commit" json:"head_commit" xml:"head_commit"`
 }
 
 // ListChangesResponseBody is the type of the "surla" service "list_changes"
@@ -3590,6 +3651,187 @@ type StartTeamAgentsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListTeamAgentOptionsForbiddenResponseBody is the type of the "surla" service
+// "list_team_agent_options" endpoint HTTP response body for the "forbidden"
+// error.
+type ListTeamAgentOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DismissTeamNoticeForbiddenResponseBody is the type of the "surla" service
+// "dismiss_team_notice" endpoint HTTP response body for the "forbidden" error.
+type DismissTeamNoticeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// OpenViewsForbiddenResponseBody is the type of the "surla" service
+// "open_views" endpoint HTTP response body for the "forbidden" error.
+type OpenViewsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeNotFoundResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "not_found" error.
+type MergeChangeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeNotApprovedResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "not_approved" error.
+type MergeChangeNotApprovedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeDetachedHeadResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "detached_head" error.
+type MergeChangeDetachedHeadResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeDirtyWorktreeResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "dirty_worktree" error.
+type MergeChangeDirtyWorktreeResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeMergeConflictResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "merge_conflict" error.
+type MergeChangeMergeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeWorkingCopyBusyResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "working_copy_busy" error.
+type MergeChangeWorkingCopyBusyResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MergeChangeForbiddenResponseBody is the type of the "surla" service
+// "merge_change" endpoint HTTP response body for the "forbidden" error.
+type MergeChangeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListChangesForbiddenResponseBody is the type of the "surla" service
 // "list_changes" endpoint HTTP response body for the "forbidden" error.
 type ListChangesForbiddenResponseBody struct {
@@ -5116,6 +5358,20 @@ type TeamRoleStateResponseBody struct {
 	Assignment string `form:"assignment" json:"assignment" xml:"assignment"`
 }
 
+// RoleAgentChoiceResponseBody is used to define fields on response body types.
+type RoleAgentChoiceResponseBody struct {
+	// Installed coding-agent client family.
+	Client string `form:"client" json:"client" xml:"client"`
+	// Installed executable selected from list_team_agent_options.
+	Program string `form:"program" json:"program" xml:"program"`
+	// Optional client-supported model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo bool `form:"yolo" json:"yolo" xml:"yolo"`
+}
+
 // ProjectTeamRoleResponseBody is used to define fields on response body types.
 type ProjectTeamRoleResponseBody struct {
 	// Trusted role.
@@ -5125,6 +5381,31 @@ type ProjectTeamRoleResponseBody struct {
 	// The matching live terminal is not reported as an idle shell; missing
 	// foreground information counts as running.
 	Running bool `form:"running" json:"running" xml:"running"`
+}
+
+// InstalledAgentOptionResponseBody is used to define fields on response body
+// types.
+type InstalledAgentOptionResponseBody struct {
+	// Coding-agent client family.
+	Client string `form:"client" json:"client" xml:"client"`
+	// Resolved installed executable.
+	Program string `form:"program" json:"program" xml:"program"`
+	// Human-readable client name.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Advertised model choices; empty when the client accepts free-form names.
+	Models []string `form:"models" json:"models" xml:"models"`
+	// Advertised reasoning-effort choices.
+	Efforts []string `form:"efforts" json:"efforts" xml:"efforts"`
+	// Whether a model can be selected.
+	ModelSupported bool `form:"model_supported" json:"model_supported" xml:"model_supported"`
+	// Whether reasoning effort can be selected.
+	ThinkingSupported bool `form:"thinking_supported" json:"thinking_supported" xml:"thinking_supported"`
+	// Whether an unattended permission mode is supported.
+	YoloSupported bool `form:"yolo_supported" json:"yolo_supported" xml:"yolo_supported"`
+	// What this client's unattended permission mode permits.
+	YoloEffect *string `form:"yolo_effect,omitempty" json:"yolo_effect,omitempty" xml:"yolo_effect,omitempty"`
+	// Whether Surla supports this client's finite noninteractive mode.
+	HeadlessSupported bool `form:"headless_supported" json:"headless_supported" xml:"headless_supported"`
 }
 
 // ChangeListItemResponseBody is used to define fields on response body types.
@@ -5354,11 +5635,11 @@ type BuildDroppedResponseBody struct {
 type ProjectTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team string `form:"team" json:"team" xml:"team"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space string                         `form:"space" json:"space" xml:"space"`
 	Roles []*ProjectTeamRoleResponseBody `form:"roles" json:"roles" xml:"roles"`
-	// Launcher state after ensuring the team.
-	Dialog string `form:"dialog" json:"dialog" xml:"dialog"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step string `form:"step" json:"step" xml:"step"`
 }
@@ -5640,6 +5921,20 @@ type DesignSnapshotRequestBody struct {
 	// File contents keyed by module-relative path, such as design/design.go or
 	// go.mod.
 	Files map[string]string `form:"files,omitempty" json:"files,omitempty" xml:"files,omitempty"`
+}
+
+// RoleAgentChoiceRequestBody is used to define fields on request body types.
+type RoleAgentChoiceRequestBody struct {
+	// Installed coding-agent client family.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Installed executable selected from list_team_agent_options.
+	Program *string `form:"program,omitempty" json:"program,omitempty" xml:"program,omitempty"`
+	// Optional client-supported model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo *bool `form:"yolo,omitempty" json:"yolo,omitempty" xml:"yolo,omitempty"`
 }
 
 // ReplacedBuildRequestBody is used to define fields on request body types.
@@ -10124,7 +10419,8 @@ func NewUpdateDraftResponseBody(res *surla.DraftUpdateResult) *UpdateDraftRespon
 // "get_team" endpoint of the "surla" service.
 func NewGetTeamResponseBody(res *surla.TeamSnapshot) *GetTeamResponseBody {
 	body := &GetTeamResponseBody{
-		Team: res.Team,
+		Team:      res.Team,
+		HerdrMode: res.HerdrMode,
 	}
 	if res.Roles != nil {
 		body.Roles = make([]*TeamRoleStateResponseBody, len(res.Roles))
@@ -10138,6 +10434,25 @@ func NewGetTeamResponseBody(res *surla.TeamSnapshot) *GetTeamResponseBody {
 	} else {
 		body.Roles = []*TeamRoleStateResponseBody{}
 	}
+	if res.SavedChoices != nil {
+		body.SavedChoices = make(map[string]*RoleAgentChoiceResponseBody, len(res.SavedChoices))
+		for key, val := range res.SavedChoices {
+			tk := key
+			if val == nil {
+				body.SavedChoices[tk] = nil
+				continue
+			}
+			body.SavedChoices[tk] = marshalSurlaRoleAgentChoiceToRoleAgentChoiceResponseBody(val)
+		}
+	}
+	if res.DismissedNotices != nil {
+		body.DismissedNotices = make([]string, len(res.DismissedNotices))
+		for i, val := range res.DismissedNotices {
+			body.DismissedNotices[i] = val
+		}
+	} else {
+		body.DismissedNotices = []string{}
+	}
 	return body
 }
 
@@ -10145,10 +10460,10 @@ func NewGetTeamResponseBody(res *surla.TeamSnapshot) *GetTeamResponseBody {
 // of the "start_team_agents" endpoint of the "surla" service.
 func NewStartTeamAgentsResponseBody(res *surla.ProjectTeam) *StartTeamAgentsResponseBody {
 	body := &StartTeamAgentsResponseBody{
-		Team:   res.Team,
-		Space:  res.Space,
-		Dialog: res.Dialog,
-		Step:   res.Step,
+		Team:      res.Team,
+		Space:     res.Space,
+		HerdrMode: res.HerdrMode,
+		Step:      res.Step,
 	}
 	if res.Roles != nil {
 		body.Roles = make([]*ProjectTeamRoleResponseBody, len(res.Roles))
@@ -10161,6 +10476,45 @@ func NewStartTeamAgentsResponseBody(res *surla.ProjectTeam) *StartTeamAgentsResp
 		}
 	} else {
 		body.Roles = []*ProjectTeamRoleResponseBody{}
+	}
+	return body
+}
+
+// NewListTeamAgentOptionsResponseBody builds the HTTP response body from the
+// result of the "list_team_agent_options" endpoint of the "surla" service.
+func NewListTeamAgentOptionsResponseBody(res *surla.ListTeamAgentOptionsResult) *ListTeamAgentOptionsResponseBody {
+	body := &ListTeamAgentOptionsResponseBody{}
+	if res.Agents != nil {
+		body.Agents = make([]*InstalledAgentOptionResponseBody, len(res.Agents))
+		for i, val := range res.Agents {
+			if val == nil {
+				body.Agents[i] = nil
+				continue
+			}
+			body.Agents[i] = marshalSurlaInstalledAgentOptionToInstalledAgentOptionResponseBody(val)
+		}
+	} else {
+		body.Agents = []*InstalledAgentOptionResponseBody{}
+	}
+	return body
+}
+
+// NewOpenViewsResponseBody builds the HTTP response body from the result of
+// the "open_views" endpoint of the "surla" service.
+func NewOpenViewsResponseBody(res *surla.OpenViewsResult) *OpenViewsResponseBody {
+	body := &OpenViewsResponseBody{
+		Opened:  res.Opened,
+		Message: res.Message,
+	}
+	return body
+}
+
+// NewMergeChangeResponseBody builds the HTTP response body from the result of
+// the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeResponseBody(res *surla.MergeChangeResult) *MergeChangeResponseBody {
+	body := &MergeChangeResponseBody{
+		Branch:     res.Branch,
+		HeadCommit: res.HeadCommit,
 	}
 	return body
 }
@@ -12418,6 +12772,147 @@ func NewStartTeamAgentsForbiddenResponseBody(res *goa.ServiceError) *StartTeamAg
 	return body
 }
 
+// NewListTeamAgentOptionsForbiddenResponseBody builds the HTTP response body
+// from the result of the "list_team_agent_options" endpoint of the "surla"
+// service.
+func NewListTeamAgentOptionsForbiddenResponseBody(res *goa.ServiceError) *ListTeamAgentOptionsForbiddenResponseBody {
+	body := &ListTeamAgentOptionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDismissTeamNoticeForbiddenResponseBody builds the HTTP response body from
+// the result of the "dismiss_team_notice" endpoint of the "surla" service.
+func NewDismissTeamNoticeForbiddenResponseBody(res *goa.ServiceError) *DismissTeamNoticeForbiddenResponseBody {
+	body := &DismissTeamNoticeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewOpenViewsForbiddenResponseBody builds the HTTP response body from the
+// result of the "open_views" endpoint of the "surla" service.
+func NewOpenViewsForbiddenResponseBody(res *goa.ServiceError) *OpenViewsForbiddenResponseBody {
+	body := &OpenViewsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeNotFoundResponseBody builds the HTTP response body from the
+// result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeNotFoundResponseBody(res *goa.ServiceError) *MergeChangeNotFoundResponseBody {
+	body := &MergeChangeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeNotApprovedResponseBody builds the HTTP response body from the
+// result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeNotApprovedResponseBody(res *goa.ServiceError) *MergeChangeNotApprovedResponseBody {
+	body := &MergeChangeNotApprovedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeDetachedHeadResponseBody builds the HTTP response body from
+// the result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeDetachedHeadResponseBody(res *goa.ServiceError) *MergeChangeDetachedHeadResponseBody {
+	body := &MergeChangeDetachedHeadResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeDirtyWorktreeResponseBody builds the HTTP response body from
+// the result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeDirtyWorktreeResponseBody(res *goa.ServiceError) *MergeChangeDirtyWorktreeResponseBody {
+	body := &MergeChangeDirtyWorktreeResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeMergeConflictResponseBody builds the HTTP response body from
+// the result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeMergeConflictResponseBody(res *goa.ServiceError) *MergeChangeMergeConflictResponseBody {
+	body := &MergeChangeMergeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeWorkingCopyBusyResponseBody builds the HTTP response body from
+// the result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeWorkingCopyBusyResponseBody(res *goa.ServiceError) *MergeChangeWorkingCopyBusyResponseBody {
+	body := &MergeChangeWorkingCopyBusyResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMergeChangeForbiddenResponseBody builds the HTTP response body from the
+// result of the "merge_change" endpoint of the "surla" service.
+func NewMergeChangeForbiddenResponseBody(res *goa.ServiceError) *MergeChangeForbiddenResponseBody {
+	body := &MergeChangeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListChangesForbiddenResponseBody builds the HTTP response body from the
 // result of the "list_changes" endpoint of the "surla" service.
 func NewListChangesForbiddenResponseBody(res *goa.ServiceError) *ListChangesForbiddenResponseBody {
@@ -13433,6 +13928,47 @@ func NewShowTeamPanePayload(body *ShowTeamPaneRequestBody) *surla.ShowTeamPanePa
 	return v
 }
 
+// NewStartTeamAgentsPayload builds a surla service start_team_agents endpoint
+// payload.
+func NewStartTeamAgentsPayload(body *StartTeamAgentsRequestBody) *surla.StartTeamAgentsPayload {
+	v := &surla.StartTeamAgentsPayload{}
+	if body.Choices != nil {
+		v.Choices = make(map[string]*surla.RoleAgentChoice, len(body.Choices))
+		for key, val := range body.Choices {
+			tk := key
+			if val == nil {
+				v.Choices[tk] = nil
+				continue
+			}
+			v.Choices[tk] = unmarshalRoleAgentChoiceRequestBodyToSurlaRoleAgentChoice(val)
+		}
+	}
+
+	return v
+}
+
+// NewDismissTeamNoticePayload builds a surla service dismiss_team_notice
+// endpoint payload.
+func NewDismissTeamNoticePayload(body *DismissTeamNoticeRequestBody) *surla.DismissTeamNoticePayload {
+	v := &surla.DismissTeamNoticePayload{
+		Notice: *body.Notice,
+	}
+
+	return v
+}
+
+// NewMergeChangePayload builds a surla service merge_change endpoint payload.
+func NewMergeChangePayload(body *MergeChangeRequestBody, changeID string) *surla.MergeChangePayload {
+	v := &surla.MergeChangePayload{
+		RequestRevision: *body.RequestRevision,
+		CandidateCommit: *body.CandidateCommit,
+		ReportDigest:    *body.ReportDigest,
+	}
+	v.ChangeID = changeID
+
+	return v
+}
+
 // NewWaitForChangesPayload builds a surla service wait_for_changes endpoint
 // payload.
 func NewWaitForChangesPayload(since string) *surla.WaitForChangesPayload {
@@ -13449,6 +13985,17 @@ func NewStartBuildPayload(body *StartBuildRequestBody, changeID string) *surla.S
 	}
 	if body.Replaces != nil {
 		v.Replaces = unmarshalReplacedBuildRequestBodyToSurlaReplacedBuild(body.Replaces)
+	}
+	if body.Choices != nil {
+		v.Choices = make(map[string]*surla.RoleAgentChoice, len(body.Choices))
+		for key, val := range body.Choices {
+			tk := key
+			if val == nil {
+				v.Choices[tk] = nil
+				continue
+			}
+			v.Choices[tk] = unmarshalRoleAgentChoiceRequestBodyToSurlaRoleAgentChoice(val)
+		}
 	}
 	v.ChangeID = changeID
 
@@ -13825,6 +14372,64 @@ func ValidateShowTeamPaneRequestBody(body *ShowTeamPaneRequestBody) (err error) 
 	return
 }
 
+// ValidateStartTeamAgentsRequestBody runs the validations defined on
+// StartTeamAgentsRequestBody
+func ValidateStartTeamAgentsRequestBody(body *StartTeamAgentsRequestBody) (err error) {
+	for k, v := range body.Choices {
+		if !(k == "guide" || k == "builder" || k == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.choices.key", k, []any{"guide", "builder", "test_writer"}))
+		}
+		if v != nil {
+			if err2 := validateRoleAgentChoiceRequestBody(v, "body.choices[key]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateDismissTeamNoticeRequestBody runs the validations defined on
+// DismissTeamNoticeRequestBody
+func ValidateDismissTeamNoticeRequestBody(body *DismissTeamNoticeRequestBody) (err error) {
+	if body.Notice == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("notice", "body"))
+	}
+	if body.Notice != nil {
+		if !(*body.Notice == "single_agent_family" || *body.Notice == "outside_herdr" || *body.Notice == "herdr_unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.notice", *body.Notice, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		}
+	}
+	return
+}
+
+// ValidateMergeChangeRequestBody runs the validations defined on
+// MergeChangeRequestBody
+func ValidateMergeChangeRequestBody(body *MergeChangeRequestBody) (err error) {
+	if body.RequestRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
+	}
+	if body.CandidateCommit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("candidate_commit", "body"))
+	}
+	if body.ReportDigest == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report_digest", "body"))
+	}
+	if body.RequestRevision != nil {
+		if utf8.RuneCountInString(*body.RequestRevision) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", *body.RequestRevision, utf8.RuneCountInString(*body.RequestRevision), 1, true))
+		}
+	}
+	if body.CandidateCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.candidate_commit", *body.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if body.ReportDigest != nil {
+		if utf8.RuneCountInString(*body.ReportDigest) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.report_digest", *body.ReportDigest, utf8.RuneCountInString(*body.ReportDigest), 1, true))
+		}
+	}
+	return
+}
+
 // ValidateStartBuildRequestBody runs the validations defined on
 // StartBuildRequestBody
 func ValidateStartBuildRequestBody(body *StartBuildRequestBody) (err error) {
@@ -13839,6 +14444,16 @@ func ValidateStartBuildRequestBody(body *StartBuildRequestBody) (err error) {
 	if body.Replaces != nil {
 		if err2 := validateReplacedBuildRequestBody(body.Replaces, "body.replaces"); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for k, v := range body.Choices {
+		if !(k == "builder" || k == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.choices.key", k, []any{"builder", "test_writer"}))
+		}
+		if v != nil {
+			if err2 := validateRoleAgentChoiceRequestBody(v, "body.choices[key]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -14372,6 +14987,56 @@ func ValidateDesignSnapshotRequestBody(body *DesignSnapshotRequestBody) (err err
 func validateDesignSnapshotRequestBody(body *DesignSnapshotRequestBody, path string) (err error) {
 	if body.Files == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("files", path))
+	}
+	return
+}
+
+// ValidateRoleAgentChoiceRequestBody runs the validations defined on
+// RoleAgentChoice
+func ValidateRoleAgentChoiceRequestBody(body *RoleAgentChoiceRequestBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if body.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", "body"))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if body.Program != nil {
+		if utf8.RuneCountInString(*body.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.program", *body.Program, utf8.RuneCountInString(*body.Program), 1, true))
+		}
+	}
+	return
+}
+
+// validateRoleAgentChoiceRequestBody checks RoleAgentChoice and reports errors
+// using the path supplied by its caller
+func validateRoleAgentChoiceRequestBody(body *RoleAgentChoiceRequestBody, path string) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", path))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", path))
+	}
+	if body.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", path))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if body.Program != nil {
+		if utf8.RuneCountInString(*body.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".program", *body.Program, utf8.RuneCountInString(*body.Program), 1, true))
+		}
 	}
 	return
 }

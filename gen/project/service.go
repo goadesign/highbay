@@ -31,14 +31,18 @@ type Service interface {
 	// The CLI checks the answering server reports its expected project identity
 	// using the current server-lifetime management credential.
 	Identity(context.Context) (res *ProjectIdentity, err error)
-	// The CLI asks the project server to ensure its team, guide credential, Herdr
-	// space and atomic launcher roster, then open the launcher only when the
-	// guide, or a worker role the open build needs, has no running agent. A role
-	// without work stays in the roster, and its agent finds an empty list. A
-	// failed read of who has work counts every role. Accepted work has a bounded
-	// server-owned lifetime independent of client disconnection. Only the server
-	// management credential may call this operation; it is never an MCP tool.
+	// Read existing project team metadata with the management credential. Creates
+	// no team, credential, space, roster or agent and opens no window. This
+	// management operation is never an MCP tool.
 	EnsureTeam(context.Context) (res *ProjectTeam, err error)
+	// Attach the invoking coding agent as this project's guide. A supplied live
+	// Herdr terminal is adopted only after its model pane, local project and
+	// labels are validated. Omit terminal identity outside Herdr. Never opens a
+	// launcher.
+	AttachGuide(context.Context, *AttachGuidePayload) (res *AttachGuideResult, err error)
+	// Read existing project, saved change stage and cached role state. Creates
+	// nothing and starts no subprocess or agent.
+	Status(context.Context) (res *ProjectStatus, err error)
 	// The CLI requests ordered server shutdown. Before its listener closes, the
 	// server revokes management access and withdraws its running record; an
 	// authorized stop response can finish.
@@ -66,7 +70,29 @@ const ServiceName = "project"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"identity", "ensure_team", "stop", "browser_link", "exchange_browser_link"}
+var MethodNames = [7]string{"identity", "ensure_team", "attach_guide", "status", "stop", "browser_link", "exchange_browser_link"}
+
+// AttachGuidePayload is the payload type of the project service attach_guide
+// method.
+type AttachGuidePayload struct {
+	// Invoking local Herdr terminal identity.
+	HcTerminalID *string
+	// Invoking coding-agent client.
+	Client *string
+}
+
+// AttachGuideResult is the result type of the project service attach_guide
+// method.
+type AttachGuideResult struct {
+	// Stable project team name.
+	Team string
+	// Guide's registered Chorus handle.
+	Handle string
+	// Whether the invoking terminal was adopted.
+	AdoptedHerdr bool
+	// Current desktop attachment.
+	HerdrMode string
+}
 
 // BrowserLinkResult is the result type of the project service browser_link
 // method.
@@ -109,15 +135,37 @@ type ProjectIdentity struct {
 	Build *string
 }
 
+// ProjectStatus is the result type of the project service status method.
+type ProjectStatus struct {
+	// Physical project folder's base name.
+	ProjectName string
+	// Physical project folder.
+	Directory string
+	// Stable project team name.
+	Team string
+	// Current desktop attachment.
+	HerdrMode string
+	// Current saved stage.
+	Stage string
+	// Current change identifier, empty when none exists.
+	ChangeID string
+	// Current change title, empty when none exists.
+	ChangeTitle string
+	// Action currently needed, empty when none.
+	Attention string
+	// Observed role states, without terminal addresses or credentials.
+	Roles []*TeamRoleState
+}
+
 // ProjectTeam is the result type of the project service ensure_team method.
 type ProjectTeam struct {
 	// Stable Chorus team name.
 	Team string
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space string
 	Roles []*ProjectTeamRole
-	// Launcher state after ensuring the team.
-	Dialog string
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode string
 	// What the user does next for the prepared team.
 	Step string
 }
@@ -130,6 +178,28 @@ type ProjectTeamRole struct {
 	// The matching live terminal is not reported as an idle shell; missing
 	// foreground information counts as running.
 	Running bool
+}
+
+type TeamRoleState struct {
+	// Registered role.
+	Role string
+	// Registered Chorus handle.
+	Handle string
+	// Current terminal state; unknown means Herdr cannot establish it.
+	State string
+	// Reported block kind, or why a running agent needs the user: silent when it
+	// reports nothing for 60 seconds, assignment when it has waited with an unread
+	// assignment for 90 seconds.
+	Attention string
+	// held when Chorus reports a watcher, gone after its absence grace, unknown
+	// otherwise.
+	Watcher string
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
+	Assignment string
 }
 
 type TeamSpaceConflict struct {
@@ -236,6 +306,80 @@ func validatejsonProjectIdentityTransport(value *jsonProjectIdentityTransport) (
 	return err
 }
 
+// jsonProjectStatusTransport stores JSON fields until they have been validated.
+type jsonProjectStatusTransport struct {
+	// Physical project folder's base name.
+	ProjectName *string `json:"project_name"`
+	// Physical project folder.
+	Directory *string `json:"directory"`
+	// Stable project team name.
+	Team *string `json:"team"`
+	// Current desktop attachment.
+	HerdrMode *string `json:"herdr_mode"`
+	// Current saved stage.
+	Stage *string `json:"stage"`
+	// Current change identifier, empty when none exists.
+	ChangeID *string `json:"change_id"`
+	// Current change title, empty when none exists.
+	ChangeTitle *string `json:"change_title"`
+	// Action currently needed, empty when none.
+	Attention *string `json:"attention"`
+	// Observed role states, without terminal addresses or credentials.
+	Roles []*jsonTeamRoleStateTransport `json:"roles"`
+}
+
+// validatejsonProjectStatusTransport checks decoded JSON before it becomes a service value.
+func validatejsonProjectStatusTransport(value *jsonProjectStatusTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if value.Directory == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory", "body"))
+	}
+	if value.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if value.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
+	}
+	if value.Stage == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.ChangeTitle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_title", "body"))
+	}
+	if value.Attention == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
+	}
+	if value.Roles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
+	}
+	if value.HerdrMode != nil {
+		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
+		}
+	}
+	if value.Stage != nil {
+		if !(*value.Stage == "describe" || *value.Stage == "agree" || *value.Stage == "build" || *value.Stage == "check" || *value.Stage == "approve" || *value.Stage == "merged") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.stage", *value.Stage, []any{"describe", "agree", "build", "check", "approve", "merged"}))
+		}
+	}
+	for _, e := range value.Roles {
+		if e != nil {
+			if err2 := validatejsonTeamRoleStateTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
 // jsonProjectTeamRoleTransport stores JSON fields until they have been validated.
 type jsonProjectTeamRoleTransport struct {
 	// Trusted role.
@@ -273,11 +417,11 @@ func validatejsonProjectTeamRoleTransport(value *jsonProjectTeamRoleTransport) (
 type jsonProjectTeamTransport struct {
 	// Stable Chorus team name.
 	Team *string `json:"team"`
-	// Local Herdr space identifier.
+	// Local Herdr space identifier, empty when Herdr is unavailable.
 	Space *string                         `json:"space"`
 	Roles []*jsonProjectTeamRoleTransport `json:"roles"`
-	// Launcher state after ensuring the team.
-	Dialog *string `json:"dialog"`
+	// Whether Herdr hosts this project, is available, or is unavailable.
+	HerdrMode *string `json:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step *string `json:"step"`
 }
@@ -296,8 +440,8 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
 	}
-	if value.Dialog == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("dialog", "body"))
+	if value.HerdrMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if value.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -306,10 +450,7 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
 	if value.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-		if utf8.RuneCountInString(*value.Space) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 1, true))
-		}
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 		if utf8.RuneCountInString(*value.Space) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 64, false))
 		}
@@ -321,9 +462,9 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 			}
 		}
 	}
-	if value.Dialog != nil {
-		if !(*value.Dialog == "opened" || *value.Dialog == "already_open" || *value.Dialog == "not_needed") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dialog", *value.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if value.HerdrMode != nil {
+		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if value.Step != nil {
@@ -332,6 +473,80 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 		}
 		if utf8.RuneCountInString(*value.Step) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *value.Step, utf8.RuneCountInString(*value.Step), 512, false))
+		}
+	}
+	return err
+}
+
+// jsonTeamRoleStateTransport stores JSON fields until they have been validated.
+type jsonTeamRoleStateTransport struct {
+	// Registered role.
+	Role *string `json:"role"`
+	// Registered Chorus handle.
+	Handle *string `json:"handle"`
+	// Current terminal state; unknown means Herdr cannot establish it.
+	State *string `json:"state"`
+	// Reported block kind, or why a running agent needs the user: silent when it
+	// reports nothing for 60 seconds, assignment when it has waited with an unread
+	// assignment for 90 seconds.
+	Attention *string `json:"attention"`
+	// held when Chorus reports a watcher, gone after its absence grace, unknown
+	// otherwise.
+	Watcher *string `json:"watcher"`
+	// unread when this role owes an assignment read; nothing_owed when it has work
+	// and owes no read; no_work when the open build needs nothing from it (no
+	// build is open, the build was dropped, the test writer's tests are accepted,
+	// or a verification of the builder's build passed); unknown when the owner
+	// could not read assignments. The guide has no assignments.
+	Assignment *string `json:"assignment"`
+}
+
+// validatejsonTeamRoleStateTransport checks decoded JSON before it becomes a service value.
+func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Role == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("role", "body"))
+	}
+	if value.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if value.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if value.Attention == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
+	}
+	if value.Watcher == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", "body"))
+	}
+	if value.Assignment == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", "body"))
+	}
+	if value.Role != nil {
+		if !(*value.Role == "guide" || *value.Role == "builder" || *value.Role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *value.Role, []any{"guide", "builder", "test_writer"}))
+		}
+	}
+	if value.State != nil {
+		if !(*value.State == "not_started" || *value.State == "ended" || *value.State == "starting" || *value.State == "needs_you" || *value.State == "working" || *value.State == "waiting" || *value.State == "error" || *value.State == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *value.State, []any{"not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown"}))
+		}
+	}
+	if value.Attention != nil {
+		if !(*value.Attention == "none" || *value.Attention == "permission" || *value.Attention == "question" || *value.Attention == "auth" || *value.Attention == "silent" || *value.Attention == "assignment" || *value.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *value.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
+		}
+	}
+	if value.Watcher != nil {
+		if !(*value.Watcher == "held" || *value.Watcher == "gone" || *value.Watcher == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.watcher", *value.Watcher, []any{"held", "gone", "unknown"}))
+		}
+	}
+	if value.Assignment != nil {
+		if !(*value.Assignment == "unread" || *value.Assignment == "nothing_owed" || *value.Assignment == "no_work" || *value.Assignment == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 		}
 	}
 	return err
@@ -425,16 +640,54 @@ func validateProjectIdentityOriginal(value *ProjectIdentity) (err error) {
 	return err
 }
 
+// validateProjectStatusOriginal checks the original typed value before JSON conversion.
+func validateProjectStatusOriginal(value *ProjectStatus) (err error) {
+	if value.Roles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
+	}
+	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
+	}
+	if !(value.Stage == "describe" || value.Stage == "agree" || value.Stage == "build" || value.Stage == "check" || value.Stage == "approve" || value.Stage == "merged") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.stage", value.Stage, []any{"describe", "agree", "build", "check", "approve", "merged"}))
+	}
+	for _, e := range value.Roles {
+		if e != nil {
+			if err2 := validateTeamRoleStateOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// validateTeamRoleStateOriginal checks the original typed value before JSON conversion.
+func validateTeamRoleStateOriginal(value *TeamRoleState) (err error) {
+	if !(value.Role == "guide" || value.Role == "builder" || value.Role == "test_writer") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.role", value.Role, []any{"guide", "builder", "test_writer"}))
+	}
+	if !(value.State == "not_started" || value.State == "ended" || value.State == "starting" || value.State == "needs_you" || value.State == "working" || value.State == "waiting" || value.State == "error" || value.State == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.state", value.State, []any{"not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown"}))
+	}
+	if !(value.Attention == "none" || value.Attention == "permission" || value.Attention == "question" || value.Attention == "auth" || value.Attention == "silent" || value.Attention == "assignment" || value.Attention == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.attention", value.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
+	}
+	if !(value.Watcher == "held" || value.Watcher == "gone" || value.Watcher == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.watcher", value.Watcher, []any{"held", "gone", "unknown"}))
+	}
+	if !(value.Assignment == "unread" || value.Assignment == "nothing_owed" || value.Assignment == "no_work" || value.Assignment == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.assignment", value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+	}
+	return err
+}
+
 // validateProjectTeamOriginal checks the original typed value before JSON conversion.
 func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.team", value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})$"))
-	if utf8.RuneCountInString(value.Space) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 1, true))
-	}
+	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
 	if utf8.RuneCountInString(value.Space) > 64 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 64, false))
 	}
@@ -445,8 +698,8 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 			}
 		}
 	}
-	if !(value.Dialog == "opened" || value.Dialog == "already_open" || value.Dialog == "not_needed") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dialog", value.Dialog, []any{"opened", "already_open", "not_needed"}))
+	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
 	}
 	if utf8.RuneCountInString(value.Step) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", value.Step, utf8.RuneCountInString(value.Step), 1, true))
@@ -573,6 +826,134 @@ func DecodeProjectIdentity(data []byte) (out *ProjectIdentity, err error) {
 	return out, nil
 }
 
+// EncodeProjectStatus turns a service value into JSON using the field names in the Goa design.
+func EncodeProjectStatus(in *ProjectStatus) ([]byte, error) {
+	if err := checkProjectStatusValue(in); err != nil {
+		return nil, fmt.Errorf("encode ProjectStatus JSON: %w", err)
+	}
+	if err := validateProjectStatusOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate ProjectStatus value: %w", err)
+	}
+	var body *jsonProjectStatusTransport
+	{
+		body = &jsonProjectStatusTransport{
+			ProjectName: &in.ProjectName,
+			Directory:   &in.Directory,
+			Team:        &in.Team,
+			HerdrMode:   &in.HerdrMode,
+			Stage:       &in.Stage,
+			ChangeID:    &in.ChangeID,
+			ChangeTitle: &in.ChangeTitle,
+			Attention:   &in.Attention,
+		}
+		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
+		for i, val := range in.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = encodeTeamRoleStateToTeamRoleStateTransport(val)
+		}
+	}
+	if err := validatejsonProjectStatusTransport(body); err != nil {
+		return nil, fmt.Errorf("validate ProjectStatus JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode ProjectStatus JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateProjectStatusValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateProjectStatusValue(in *ProjectStatus) error {
+	if err := checkProjectStatusValue(in); err != nil {
+		return fmt.Errorf("validate ProjectStatus value: %w", err)
+	}
+	if err := validateProjectStatusOriginal(in); err != nil {
+		return fmt.Errorf("validate ProjectStatus value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "ProjectStatus")
+	}
+
+	var body *jsonProjectStatusTransport
+	{
+		body = &jsonProjectStatusTransport{
+			ProjectName: &in.ProjectName,
+			Directory:   &in.Directory,
+			Team:        &in.Team,
+			HerdrMode:   &in.HerdrMode,
+			Stage:       &in.Stage,
+			ChangeID:    &in.ChangeID,
+			ChangeTitle: &in.ChangeTitle,
+			Attention:   &in.Attention,
+		}
+		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
+		for i, val := range in.Roles {
+			if val == nil {
+				body.Roles[i] = nil
+				continue
+			}
+			body.Roles[i] = encodeTeamRoleStateToTeamRoleStateTransport(val)
+		}
+	}
+	if err := validatejsonProjectStatusTransport(body); err != nil {
+		return fmt.Errorf("validate ProjectStatus value: %w", err)
+	}
+	return nil
+}
+
+// DecodeProjectStatus checks JSON field names from the Goa design and returns a service value.
+func DecodeProjectStatus(data []byte) (out *ProjectStatus, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode ProjectStatus JSON: %w", err)
+	}
+	if err := validateProjectStatusJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode ProjectStatus JSON: %w", err)
+	}
+	var body *jsonProjectStatusTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode ProjectStatus JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode ProjectStatus JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode ProjectStatus JSON after first value: %w", err)
+	}
+	if err := validatejsonProjectStatusTransport(body); err != nil {
+		return out, fmt.Errorf("validate ProjectStatus JSON: %w", err)
+	}
+	{
+		out = &ProjectStatus{
+			ProjectName: *body.ProjectName,
+			Directory:   *body.Directory,
+			Team:        *body.Team,
+			HerdrMode:   *body.HerdrMode,
+			Stage:       *body.Stage,
+			ChangeID:    *body.ChangeID,
+			ChangeTitle: *body.ChangeTitle,
+			Attention:   *body.Attention,
+		}
+		out.Roles = make([]*TeamRoleState, len(body.Roles))
+		for i, val := range body.Roles {
+			if val == nil {
+				out.Roles[i] = nil
+				continue
+			}
+			out.Roles[i] = decodeTeamRoleStateTransportToTeamRoleState(val)
+		}
+	}
+	return out, nil
+}
+
 // EncodeProjectTeam turns a service value into JSON using the field names in the Goa design.
 func EncodeProjectTeam(in *ProjectTeam) ([]byte, error) {
 	if err := checkProjectTeamValue(in); err != nil {
@@ -584,10 +965,10 @@ func EncodeProjectTeam(in *ProjectTeam) ([]byte, error) {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:   &in.Team,
-			Space:  &in.Space,
-			Dialog: &in.Dialog,
-			Step:   &in.Step,
+			Team:      &in.Team,
+			Space:     &in.Space,
+			HerdrMode: &in.HerdrMode,
+			Step:      &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -626,10 +1007,10 @@ func ValidateProjectTeamValue(in *ProjectTeam) error {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:   &in.Team,
-			Space:  &in.Space,
-			Dialog: &in.Dialog,
-			Step:   &in.Step,
+			Team:      &in.Team,
+			Space:     &in.Space,
+			HerdrMode: &in.HerdrMode,
+			Step:      &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -672,10 +1053,10 @@ func DecodeProjectTeam(data []byte) (out *ProjectTeam, err error) {
 	}
 	{
 		out = &ProjectTeam{
-			Team:   *body.Team,
-			Space:  *body.Space,
-			Dialog: *body.Dialog,
-			Step:   *body.Step,
+			Team:      *body.Team,
+			Space:     *body.Space,
+			HerdrMode: *body.HerdrMode,
+			Step:      *body.Step,
 		}
 		out.Roles = make([]*ProjectTeamRole, len(body.Roles))
 		for i, val := range body.Roles {
@@ -773,6 +1154,104 @@ func DecodeProjectTeamRole(data []byte) (out *ProjectTeamRole, err error) {
 			Role:    *body.Role,
 			Handle:  *body.Handle,
 			Running: *body.Running,
+		}
+	}
+	return out, nil
+}
+
+// EncodeTeamRoleState turns a service value into JSON using the field names in the Goa design.
+func EncodeTeamRoleState(in *TeamRoleState) ([]byte, error) {
+	if err := checkTeamRoleStateValue(in); err != nil {
+		return nil, fmt.Errorf("encode TeamRoleState JSON: %w", err)
+	}
+	if err := validateTeamRoleStateOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TeamRoleState value: %w", err)
+	}
+	var body *jsonTeamRoleStateTransport
+	{
+		body = &jsonTeamRoleStateTransport{
+			Role:       &in.Role,
+			Handle:     &in.Handle,
+			State:      &in.State,
+			Attention:  &in.Attention,
+			Watcher:    &in.Watcher,
+			Assignment: &in.Assignment,
+		}
+	}
+	if err := validatejsonTeamRoleStateTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TeamRoleState JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TeamRoleState JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTeamRoleStateValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTeamRoleStateValue(in *TeamRoleState) error {
+	if err := checkTeamRoleStateValue(in); err != nil {
+		return fmt.Errorf("validate TeamRoleState value: %w", err)
+	}
+	if err := validateTeamRoleStateOriginal(in); err != nil {
+		return fmt.Errorf("validate TeamRoleState value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TeamRoleState")
+	}
+
+	var body *jsonTeamRoleStateTransport
+	{
+		body = &jsonTeamRoleStateTransport{
+			Role:       &in.Role,
+			Handle:     &in.Handle,
+			State:      &in.State,
+			Attention:  &in.Attention,
+			Watcher:    &in.Watcher,
+			Assignment: &in.Assignment,
+		}
+	}
+	if err := validatejsonTeamRoleStateTransport(body); err != nil {
+		return fmt.Errorf("validate TeamRoleState value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTeamRoleState checks JSON field names from the Goa design and returns a service value.
+func DecodeTeamRoleState(data []byte) (out *TeamRoleState, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TeamRoleState JSON: %w", err)
+	}
+	if err := validateProjectStatusJSONValue3("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TeamRoleState JSON: %w", err)
+	}
+	var body *jsonTeamRoleStateTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TeamRoleState JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TeamRoleState JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TeamRoleState JSON after first value: %w", err)
+	}
+	if err := validatejsonTeamRoleStateTransport(body); err != nil {
+		return out, fmt.Errorf("validate TeamRoleState JSON: %w", err)
+	}
+	{
+		out = &TeamRoleState{
+			Role:       *body.Role,
+			Handle:     *body.Handle,
+			State:      *body.State,
+			Attention:  *body.Attention,
+			Watcher:    *body.Watcher,
+			Assignment: *body.Assignment,
 		}
 	}
 	return out, nil
@@ -962,11 +1441,37 @@ func decodeProjectTeamRoleTransportToProjectTeamRole(v *jsonProjectTeamRoleTrans
 	return res
 }
 
+func decodeTeamRoleStateTransportToTeamRoleState(v *jsonTeamRoleStateTransport) *TeamRoleState {
+	res := &TeamRoleState{
+		Role:       *v.Role,
+		Handle:     *v.Handle,
+		State:      *v.State,
+		Attention:  *v.Attention,
+		Watcher:    *v.Watcher,
+		Assignment: *v.Assignment,
+	}
+
+	return res
+}
+
 func encodeProjectTeamRoleToProjectTeamRoleTransport(v *ProjectTeamRole) *jsonProjectTeamRoleTransport {
 	res := &jsonProjectTeamRoleTransport{
 		Role:    &v.Role,
 		Handle:  &v.Handle,
 		Running: &v.Running,
+	}
+
+	return res
+}
+
+func encodeTeamRoleStateToTeamRoleStateTransport(v *TeamRoleState) *jsonTeamRoleStateTransport {
+	res := &jsonTeamRoleStateTransport{
+		Role:       &v.Role,
+		Handle:     &v.Handle,
+		State:      &v.State,
+		Attention:  &v.Attention,
+		Watcher:    &v.Watcher,
+		Assignment: &v.Assignment,
 	}
 
 	return res
@@ -1048,6 +1553,209 @@ func validateProjectIdentityJSONValue2(path string, value any, description strin
 	return nil
 }
 
+// validateProjectStatusJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProjectStatusJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "attention":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Action currently needed, empty when none.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current change identifier, empty when none exists.",
+			); err != nil {
+				return err
+			}
+		case "change_title":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current change title, empty when none exists.",
+			); err != nil {
+				return err
+			}
+		case "directory":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Physical project folder.",
+			); err != nil {
+				return err
+			}
+		case "herdr_mode":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current desktop attachment.",
+			); err != nil {
+				return err
+			}
+		case "project_name":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Physical project folder's base name.",
+			); err != nil {
+				return err
+			}
+		case "roles":
+			if err := validateProjectStatusJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Observed role states, without terminal addresses or credentials.",
+			); err != nil {
+				return err
+			}
+		case "stage":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current saved stage.",
+			); err != nil {
+				return err
+			}
+		case "team":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stable project team name.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"attention",
+				"change_id",
+				"change_title",
+				"directory",
+				"herdr_mode",
+				"project_name",
+				"roles",
+				"stage",
+				"team",
+			})
+		}
+	}
+	return nil
+}
+
+// validateProjectStatusJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProjectStatusJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateProjectStatusJSONValue3(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateProjectStatusJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProjectStatusJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignment":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "unread when this role owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it (no build is open, the build was dropped, the test writer's tests are accepted, or a verification of the builder's build passed); unknown when the owner could not read assignments. The guide has no assignments.",
+			); err != nil {
+				return err
+			}
+		case "attention":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds.",
+			); err != nil {
+				return err
+			}
+		case "handle":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Registered Chorus handle.",
+			); err != nil {
+				return err
+			}
+		case "role":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Registered role.",
+			); err != nil {
+				return err
+			}
+		case "state":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current terminal state; unknown means Herdr cannot establish it.",
+			); err != nil {
+				return err
+			}
+		case "watcher":
+			if err := validateProjectIdentityJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "held when Chorus reports a watcher, gone after its absence grace, unknown otherwise.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignment",
+				"attention",
+				"handle",
+				"role",
+				"state",
+				"watcher",
+			})
+		}
+	}
+	return nil
+}
+
 // validateProjectTeamJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateProjectTeamJSONValue(path string, value any, description string) error {
 	field := path
@@ -1068,10 +1776,10 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "dialog":
+		case "herdr_mode":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Launcher state after ensuring the team.",
+				typed[key], "Whether Herdr hosts this project, is available, or is unavailable.",
 			); err != nil {
 				return err
 			}
@@ -1085,7 +1793,7 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 		case "space":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Local Herdr space identifier.",
+				typed[key], "Local Herdr space identifier, empty when Herdr is unavailable.",
 			); err != nil {
 				return err
 			}
@@ -1105,7 +1813,7 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
-				"dialog",
+				"herdr_mode",
 				"roles",
 				"space",
 				"step",
@@ -1513,6 +2221,97 @@ func checkProjectIdentityProjectIdentityValue(in *ProjectIdentity, field string,
 	return nil
 }
 
+// checkProjectStatusValue checks text and cycles before conversion.
+func checkProjectStatusValue(in *ProjectStatus) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkProjectStatusProjectStatusValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkProjectStatusProjectStatusValue checks one generated value on the active path.
+func checkProjectStatusProjectStatusValue(in *ProjectStatus, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ProjectName)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "project_name", false))
+		}
+		if !utf8.ValidString(string(in.Directory)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "directory", false))
+		}
+		if !utf8.ValidString(string(in.Team)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
+		}
+		if !utf8.ValidString(string(in.HerdrMode)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
+		}
+		if !utf8.ValidString(string(in.Stage)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "stage", false))
+		}
+		if !utf8.ValidString(string(in.ChangeID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+		}
+		if !utf8.ValidString(string(in.ChangeTitle)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_title", false))
+		}
+		if !utf8.ValidString(string(in.Attention)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "attention", false))
+		}
+		for index1, item1 := range in.Roles {
+			_ = index1
+			_ = item1
+			if err := checkProjectStatusTeamRoleStateValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "roles", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkProjectStatusTeamRoleStateValue checks one generated value on the active path.
+func checkProjectStatusTeamRoleStateValue(in *TeamRoleState, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Role)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "role", false))
+		}
+		if !utf8.ValidString(string(in.Handle)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "handle", false))
+		}
+		if !utf8.ValidString(string(in.State)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "state", false))
+		}
+		if !utf8.ValidString(string(in.Attention)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "attention", false))
+		}
+		if !utf8.ValidString(string(in.Watcher)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "watcher", false))
+		}
+		if !utf8.ValidString(string(in.Assignment)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "assignment", false))
+		}
+	}
+	return nil
+}
+
 // checkProjectTeamValue checks text and cycles before conversion.
 func checkProjectTeamValue(in *ProjectTeam) error {
 	if in == nil {
@@ -1549,8 +2348,8 @@ func checkProjectTeamProjectTeamValue(in *ProjectTeam, field string, active map[
 				return err
 			}
 		}
-		if !utf8.ValidString(string(in.Dialog)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "dialog", false))
+		if !utf8.ValidString(string(in.HerdrMode)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
 		}
 		if !utf8.ValidString(string(in.Step)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "step", false))
@@ -1587,6 +2386,18 @@ func checkProjectTeamRoleValue(in *ProjectTeamRole) error {
 	}
 	active := make(map[any]bool)
 	if err := checkProjectTeamProjectTeamRoleValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTeamRoleStateValue checks text and cycles before conversion.
+func checkTeamRoleStateValue(in *TeamRoleState) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkProjectStatusTeamRoleStateValue(in, "$", active); err != nil {
 		return err
 	}
 	return nil

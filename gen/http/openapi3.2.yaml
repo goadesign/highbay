@@ -3492,6 +3492,19 @@ paths:
                         schema:
                             $ref: '#/components/schemas/StartBuildRequestBody'
                         example:
+                            choices:
+                                builder:
+                                    client: opencode
+                                    model: Beatae nam.
+                                    program: ys
+                                    thinking: Dignissimos enim minus qui et et animi.
+                                    yolo: true
+                                test_writer:
+                                    client: opencode
+                                    model: Beatae nam.
+                                    program: ys
+                                    thinking: Dignissimos enim minus qui et et animi.
+                                    yolo: true
                             replaces:
                                 change_id: "61"
                                 started_at: "2008-09-02T12:30:42Z"
@@ -4228,6 +4241,127 @@ paths:
                                 name: conflict
                                 temporary: false
                                 timeout: false
+    /changes/{change_id}/merge:
+        post:
+            tags:
+                - surla
+            summary: merge_change surla
+            description: Merge the user's current live-approved candidate and accepted tests into the clean checked-out local project branch. Rechecks approval, report and build identity before mutation. On failure restores the original branch and tracked state while preserving untracked files. After success stops only the merged build's workers. Repeating the exact already-taken approval is safe.
+            operationId: surla#merge_change
+            parameters:
+                - name: change_id
+                  in: path
+                  description: Approved change identifier.
+                  required: true
+                  schema:
+                    type: string
+                    description: Approved change identifier.
+                    example: 6e
+                    minLength: 1
+                  example: 6e
+            requestBody:
+                description: Request body for merge_change.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MergeChangeRequestBody'
+                        example:
+                            candidate_commit: 9f87b1183cb6ac76ab85d0a62250bf2663f54052efabe0c25ecd4b757c7a0970
+                            report_digest: q
+                            request_revision: xx1
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MergeChangeResponseBody'
+                            example:
+                                branch: Harum sed voluptas nobis aut.
+                                head_commit: Est ducimus et.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+                "404":
+                    description: 'not_found: The owned Change Card does not exist.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: not_found
+                                temporary: false
+                                timeout: false
+                "409":
+                    description: |-
+                        not_approved: The current live approval, verification report or open build does not match this request.
+
+                        detached_head: Check out a local branch before merging.
+
+                        dirty_worktree: Commit or remove tracked changes before merging; untracked files may remain.
+
+                        merge_conflict: Git could not merge the approved commits; the original tracked state was restored, or the error reports that restoration failed.
+
+                        working_copy_busy: A project operation currently owns a working-copy turn; try again when it finishes.
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            examples:
+                                detached_head:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: detached_head
+                                        temporary: false
+                                        timeout: false
+                                dirty_worktree:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: dirty_worktree
+                                        temporary: false
+                                        timeout: false
+                                merge_conflict:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: merge_conflict
+                                        temporary: false
+                                        timeout: false
+                                not_approved:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: not_approved
+                                        temporary: false
+                                        timeout: false
+                                working_copy_busy:
+                                    value:
+                                        fault: false
+                                        id: 123abc
+                                        message: parameter 'p' must be an integer
+                                        name: working_copy_busy
+                                        temporary: false
+                                        timeout: false
     /changes/{change_id}/verifications:
         get:
             tags:
@@ -14431,6 +14565,70 @@ paths:
                                 name: live_target_unavailable
                                 temporary: false
                                 timeout: false
+    /project/attach-guide:
+        post:
+            tags:
+                - project
+            summary: attach_guide project
+            description: Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.
+            operationId: project#attach_guide
+            requestBody:
+                description: Request body for attach_guide.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AttachGuideRequestBody'
+                        example:
+                            client: gemini
+                            hc_terminal_id: x
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AttachGuideResponseBody'
+                            example:
+                                adopted_herdr: true
+                                handle: Sit ea possimus.
+                                herdr_mode: available
+                                team: Qui praesentium.
+                "403":
+                    description: 'forbidden: The trusted credential cannot perform this operation.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+                "422":
+                    description: 'unprocessable: The requested credential exchange does not exist or is invalid.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unprocessable
+                                temporary: false
+                                timeout: false
+                "503":
+                    description: 'team_unavailable: The guide could not be attached to this project.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TeamUnavailable'
+                            example:
+                                cause: roster_folder
+                                name: Natus quasi et corporis dignissimos.
     /project/browser-link:
         post:
             tags:
@@ -14571,6 +14769,74 @@ paths:
                                 name: unprocessable
                                 temporary: false
                                 timeout: false
+    /project/status:
+        get:
+            tags:
+                - project
+            summary: status project
+            description: Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.
+            operationId: project#status
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ProjectStatus'
+                            example:
+                                attention: Nostrum eum quam rerum.
+                                change_id: Eos expedita dolore est rerum vel.
+                                change_title: Et similique quidem.
+                                directory: Ab qui ullam aut qui ea.
+                                herdr_mode: unavailable
+                                project_name: Sed quo.
+                                roles:
+                                    - assignment: unknown
+                                      attention: assignment
+                                      handle: Quae ea aut iusto ea blanditiis.
+                                      role: test_writer
+                                      state: waiting
+                                      watcher: unknown
+                                    - assignment: unknown
+                                      attention: assignment
+                                      handle: Quae ea aut iusto ea blanditiis.
+                                      role: test_writer
+                                      state: waiting
+                                      watcher: unknown
+                                    - assignment: unknown
+                                      attention: assignment
+                                      handle: Quae ea aut iusto ea blanditiis.
+                                      role: test_writer
+                                      state: waiting
+                                      watcher: unknown
+                                stage: describe
+                                team: Nihil ducimus modi sed fugiat.
+                "403":
+                    description: 'forbidden: The trusted credential cannot perform this operation.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+                "422":
+                    description: 'unprocessable: The requested credential exchange does not exist or is invalid.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unprocessable
+                                temporary: false
+                                timeout: false
     /project/stop:
         post:
             tags:
@@ -14612,7 +14878,7 @@ paths:
             tags:
                 - project
             summary: ensure_team project
-            description: The CLI asks the project server to ensure its team, guide credential, Herdr space and atomic launcher roster, then open the launcher only when the guide, or a worker role the open build needs, has no running agent. A role without work stays in the roster, and its agent finds an empty list. A failed read of who has work counts every role. Accepted work has a bounded server-owned lifetime independent of client disconnection. Only the server management credential may call this operation; it is never an MCP tool.
+            description: Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.
             operationId: project#ensure_team
             responses:
                 "200":
@@ -14622,7 +14888,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ProjectTeam'
                             example:
-                                dialog: not_needed
+                                herdr_mode: unavailable
                                 roles:
                                     - handle: Quo a est cumque quae quod velit.
                                       role: builder
@@ -14633,7 +14899,7 @@ paths:
                                     - handle: Quo a est cumque quae quod velit.
                                       role: builder
                                       running: true
-                                space: j8
+                                space: j8a
                                 step: uk
                                 team: P
                 "403":
@@ -14829,6 +15095,10 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/TeamSnapshot'
                             example:
+                                dismissed_notices:
+                                    - herdr_unavailable
+                                    - herdr_unavailable
+                                herdr_mode: unavailable
                                 roles:
                                     - assignment: unknown
                                       attention: assignment
@@ -14848,7 +15118,107 @@ paths:
                                       role: test_writer
                                       state: waiting
                                       watcher: unknown
+                                saved_choices:
+                                    test_writer:
+                                        client: opencode
+                                        model: Beatae nam.
+                                        program: ys
+                                        thinking: Dignissimos enim minus qui et et animi.
+                                        yolo: true
                                 team: Autem explicabo omnis ipsam aut provident architecto.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+    /team/agent-options:
+        get:
+            tags:
+                - surla
+            summary: list_team_agent_options surla
+            description: Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.
+            operationId: surla#list_team_agent_options
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTeamAgentOptionsResponseBody'
+                            example:
+                                agents:
+                                    - client: gemini
+                                      efforts:
+                                        - Vel aut quam modi est libero rem.
+                                        - Fugiat voluptas.
+                                      headless_supported: true
+                                      model_supported: false
+                                      models:
+                                        - Tempore eum id ipsum non fuga rem.
+                                        - Molestiae et nesciunt cupiditate recusandae non non.
+                                        - Quos dolores ut reiciendis deserunt.
+                                        - Maiores quasi optio.
+                                      program: Enim aperiam dolor tenetur recusandae.
+                                      thinking_supported: true
+                                      title: Voluptas et ut nulla.
+                                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                                      yolo_supported: false
+                                    - client: gemini
+                                      efforts:
+                                        - Vel aut quam modi est libero rem.
+                                        - Fugiat voluptas.
+                                      headless_supported: true
+                                      model_supported: false
+                                      models:
+                                        - Tempore eum id ipsum non fuga rem.
+                                        - Molestiae et nesciunt cupiditate recusandae non non.
+                                        - Quos dolores ut reiciendis deserunt.
+                                        - Maiores quasi optio.
+                                      program: Enim aperiam dolor tenetur recusandae.
+                                      thinking_supported: true
+                                      title: Voluptas et ut nulla.
+                                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                                      yolo_supported: false
+                                    - client: gemini
+                                      efforts:
+                                        - Vel aut quam modi est libero rem.
+                                        - Fugiat voluptas.
+                                      headless_supported: true
+                                      model_supported: false
+                                      models:
+                                        - Tempore eum id ipsum non fuga rem.
+                                        - Molestiae et nesciunt cupiditate recusandae non non.
+                                        - Quos dolores ut reiciendis deserunt.
+                                        - Maiores quasi optio.
+                                      program: Enim aperiam dolor tenetur recusandae.
+                                      thinking_supported: true
+                                      title: Voluptas et ut nulla.
+                                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                                      yolo_supported: false
+                                    - client: gemini
+                                      efforts:
+                                        - Vel aut quam modi est libero rem.
+                                        - Fugiat voluptas.
+                                      headless_supported: true
+                                      model_supported: false
+                                      models:
+                                        - Tempore eum id ipsum non fuga rem.
+                                        - Molestiae et nesciunt cupiditate recusandae non non.
+                                        - Quos dolores ut reiciendis deserunt.
+                                        - Maiores quasi optio.
+                                      program: Enim aperiam dolor tenetur recusandae.
+                                      thinking_supported: true
+                                      title: Voluptas et ut nulla.
+                                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                                      yolo_supported: false
                 "403":
                     description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
                     content:
@@ -14867,8 +15237,29 @@ paths:
             tags:
                 - surla
             summary: start_team_agents surla
-            description: Ask the project's existing team-start owner to prepare the registered roles and open the Chorus launcher when a listed role is not running. Only the user may call it. It has the same bounded server-owned lifetime and dialog, space and availability refusals as the management team-start operation.
+            description: Start missing project agents using explicit choices, otherwise saved choices and installed cross-family defaults. Never replace a running guide. Only the user may call it. Workers run in Herdr when available, otherwise as finite server-owned headless processes. Opens no launcher.
             operationId: surla#start_team_agents
+            requestBody:
+                description: Request body for start_team_agents.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/StartTeamAgentsRequestBody'
+                        example:
+                            choices:
+                                builder:
+                                    client: opencode
+                                    model: Beatae nam.
+                                    program: ys
+                                    thinking: Dignissimos enim minus qui et et animi.
+                                    yolo: true
+                                guide:
+                                    client: opencode
+                                    model: Beatae nam.
+                                    program: ys
+                                    thinking: Dignissimos enim minus qui et et animi.
+                                    yolo: true
             responses:
                 "200":
                     description: OK response.
@@ -14877,7 +15268,7 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ProjectTeam'
                             example:
-                                dialog: already_open
+                                herdr_mode: attached
                                 roles:
                                     - handle: Quo a est cumque quae quod velit.
                                       role: builder
@@ -14891,7 +15282,7 @@ paths:
                                     - handle: Quo a est cumque quae quod velit.
                                       role: builder
                                       running: true
-                                space: "0"
+                                space: 0et
                                 step: q8t
                                 team: c
                 "403":
@@ -14944,6 +15335,38 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: team_unavailable
+                                temporary: false
+                                timeout: false
+    /team/notices/dismiss:
+        post:
+            tags:
+                - surla
+            summary: dismiss_team_notice surla
+            description: Save the user's dismissal of one project notice without changing agent capability or startup behavior.
+            operationId: surla#dismiss_team_notice
+            requestBody:
+                description: Request body for dismiss_team_notice.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DismissTeamNoticeRequestBody'
+                        example:
+                            notice: herdr_unavailable
+            responses:
+                "204":
+                    description: No Content response.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
                                 temporary: false
                                 timeout: false
     /team/pane:
@@ -15388,6 +15811,36 @@ paths:
                                 id: 123abc
                                 message: parameter 'p' must be an integer
                                 name: not_implemented
+                                temporary: false
+                                timeout: false
+    /views/open:
+        post:
+            tags:
+                - surla
+            summary: open_views surla
+            description: Open a fresh project views session at the user's request. The project owner mints and opens the private link; no browser credential is returned to the caller.
+            operationId: surla#open_views
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OpenViewsResponseBody'
+                            example:
+                                message: Et dignissimos consectetur.
+                                opened: true
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
                                 temporary: false
                                 timeout: false
     /workspace/check:
@@ -18258,6 +18711,62 @@ components:
                 - agent_policies
                 - tools
                 - banner
+        AttachGuideRequestBody:
+            type: object
+            properties:
+                client:
+                    type: string
+                    description: Invoking coding-agent client.
+                    example: gemini
+                    enum:
+                        - claude
+                        - codex
+                        - antigravity
+                        - cursor
+                        - gemini
+                        - opencode
+                hc_terminal_id:
+                    type: string
+                    description: Invoking local Herdr terminal identity.
+                    example: x
+                    minLength: 1
+            description: Request body for attach_guide.
+            example:
+                client: gemini
+                hc_terminal_id: x
+        AttachGuideResponseBody:
+            type: object
+            properties:
+                adopted_herdr:
+                    type: boolean
+                    description: Whether the invoking terminal was adopted.
+                    example: true
+                handle:
+                    type: string
+                    description: Guide's registered Chorus handle.
+                    example: Sit ea possimus.
+                herdr_mode:
+                    type: string
+                    description: Current desktop attachment.
+                    example: available
+                    enum:
+                        - attached
+                        - available
+                        - unavailable
+                team:
+                    type: string
+                    description: Stable project team name.
+                    example: Qui praesentium.
+            example:
+                adopted_herdr: true
+                handle: Sit ea possimus.
+                herdr_mode: available
+                team: Qui praesentium.
+            required:
+                - team
+                - handle
+                - adopted_herdr
+                - herdr_mode
         BrowserLinkResponseBody:
             type: object
             properties:
@@ -22133,6 +22642,22 @@ components:
                 - modified_declarations
                 - version_deltas
                 - summary
+        DismissTeamNoticeRequestBody:
+            type: object
+            properties:
+                notice:
+                    type: string
+                    description: Notice to dismiss.
+                    example: herdr_unavailable
+                    enum:
+                        - single_agent_family
+                        - outside_herdr
+                        - herdr_unavailable
+            description: Request body for dismiss_team_notice.
+            example:
+                notice: herdr_unavailable
+            required:
+                - notice
         DraftCorrection:
             type: object
             properties:
@@ -22492,7 +23017,7 @@ components:
             properties:
                 dir:
                     type: string
-                    description: Direct child directory name inside the bound workspace root. When omitted or empty, defaults to the service name derived from module_path.
+                    description: Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.
                     example: shop
                 module_path:
                     type: string
@@ -22536,6 +23061,95 @@ components:
                 - module_path
                 - service_name
                 - commit
+        InstalledAgentOption:
+            type: object
+            properties:
+                client:
+                    type: string
+                    description: Coding-agent client family.
+                    example: gemini
+                    enum:
+                        - claude
+                        - codex
+                        - antigravity
+                        - cursor
+                        - gemini
+                        - opencode
+                efforts:
+                    type: array
+                    items:
+                        type: string
+                        example: Vel aut quam modi est libero rem.
+                    description: Advertised reasoning-effort choices.
+                    example:
+                        - Vel aut quam modi est libero rem.
+                        - Fugiat voluptas.
+                headless_supported:
+                    type: boolean
+                    description: Whether Surla supports this client's finite noninteractive mode.
+                    example: true
+                model_supported:
+                    type: boolean
+                    description: Whether a model can be selected.
+                    example: false
+                models:
+                    type: array
+                    items:
+                        type: string
+                        example: Tempore eum id ipsum non fuga rem.
+                    description: Advertised model choices; empty when the client accepts free-form names.
+                    example:
+                        - Tempore eum id ipsum non fuga rem.
+                        - Molestiae et nesciunt cupiditate recusandae non non.
+                        - Quos dolores ut reiciendis deserunt.
+                        - Maiores quasi optio.
+                program:
+                    type: string
+                    description: Resolved installed executable.
+                    example: Enim aperiam dolor tenetur recusandae.
+                thinking_supported:
+                    type: boolean
+                    description: Whether reasoning effort can be selected.
+                    example: true
+                title:
+                    type: string
+                    description: Human-readable client name.
+                    example: Voluptas et ut nulla.
+                yolo_effect:
+                    type: string
+                    description: What this client's unattended permission mode permits.
+                    example: Tempora rerum exercitationem quo nobis.
+                yolo_supported:
+                    type: boolean
+                    description: Whether an unattended permission mode is supported.
+                    example: false
+            example:
+                client: gemini
+                efforts:
+                    - Vel aut quam modi est libero rem.
+                    - Fugiat voluptas.
+                headless_supported: true
+                model_supported: false
+                models:
+                    - Tempore eum id ipsum non fuga rem.
+                    - Molestiae et nesciunt cupiditate recusandae non non.
+                    - Quos dolores ut reiciendis deserunt.
+                    - Maiores quasi optio.
+                program: Enim aperiam dolor tenetur recusandae.
+                thinking_supported: true
+                title: Voluptas et ut nulla.
+                yolo_effect: Tempora rerum exercitationem quo nobis.
+                yolo_supported: false
+            required:
+                - client
+                - program
+                - title
+                - models
+                - efforts
+                - model_supported
+                - thinking_supported
+                - yolo_supported
+                - headless_supported
         LatestVerificationItem:
             type: object
             properties:
@@ -22565,6 +23179,147 @@ components:
                 - run_id
                 - state
                 - inputs_current
+        ListTeamAgentOptionsResponseBody:
+            type: object
+            properties:
+                agents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/InstalledAgentOption'
+                    description: Installed coding agents.
+                    example:
+                        - client: gemini
+                          efforts:
+                            - Vel aut quam modi est libero rem.
+                            - Fugiat voluptas.
+                          headless_supported: true
+                          model_supported: false
+                          models:
+                            - Tempore eum id ipsum non fuga rem.
+                            - Molestiae et nesciunt cupiditate recusandae non non.
+                            - Quos dolores ut reiciendis deserunt.
+                            - Maiores quasi optio.
+                          program: Enim aperiam dolor tenetur recusandae.
+                          thinking_supported: true
+                          title: Voluptas et ut nulla.
+                          yolo_effect: Tempora rerum exercitationem quo nobis.
+                          yolo_supported: false
+                        - client: gemini
+                          efforts:
+                            - Vel aut quam modi est libero rem.
+                            - Fugiat voluptas.
+                          headless_supported: true
+                          model_supported: false
+                          models:
+                            - Tempore eum id ipsum non fuga rem.
+                            - Molestiae et nesciunt cupiditate recusandae non non.
+                            - Quos dolores ut reiciendis deserunt.
+                            - Maiores quasi optio.
+                          program: Enim aperiam dolor tenetur recusandae.
+                          thinking_supported: true
+                          title: Voluptas et ut nulla.
+                          yolo_effect: Tempora rerum exercitationem quo nobis.
+                          yolo_supported: false
+                        - client: gemini
+                          efforts:
+                            - Vel aut quam modi est libero rem.
+                            - Fugiat voluptas.
+                          headless_supported: true
+                          model_supported: false
+                          models:
+                            - Tempore eum id ipsum non fuga rem.
+                            - Molestiae et nesciunt cupiditate recusandae non non.
+                            - Quos dolores ut reiciendis deserunt.
+                            - Maiores quasi optio.
+                          program: Enim aperiam dolor tenetur recusandae.
+                          thinking_supported: true
+                          title: Voluptas et ut nulla.
+                          yolo_effect: Tempora rerum exercitationem quo nobis.
+                          yolo_supported: false
+                        - client: gemini
+                          efforts:
+                            - Vel aut quam modi est libero rem.
+                            - Fugiat voluptas.
+                          headless_supported: true
+                          model_supported: false
+                          models:
+                            - Tempore eum id ipsum non fuga rem.
+                            - Molestiae et nesciunt cupiditate recusandae non non.
+                            - Quos dolores ut reiciendis deserunt.
+                            - Maiores quasi optio.
+                          program: Enim aperiam dolor tenetur recusandae.
+                          thinking_supported: true
+                          title: Voluptas et ut nulla.
+                          yolo_effect: Tempora rerum exercitationem quo nobis.
+                          yolo_supported: false
+            example:
+                agents:
+                    - client: gemini
+                      efforts:
+                        - Vel aut quam modi est libero rem.
+                        - Fugiat voluptas.
+                      headless_supported: true
+                      model_supported: false
+                      models:
+                        - Tempore eum id ipsum non fuga rem.
+                        - Molestiae et nesciunt cupiditate recusandae non non.
+                        - Quos dolores ut reiciendis deserunt.
+                        - Maiores quasi optio.
+                      program: Enim aperiam dolor tenetur recusandae.
+                      thinking_supported: true
+                      title: Voluptas et ut nulla.
+                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                      yolo_supported: false
+                    - client: gemini
+                      efforts:
+                        - Vel aut quam modi est libero rem.
+                        - Fugiat voluptas.
+                      headless_supported: true
+                      model_supported: false
+                      models:
+                        - Tempore eum id ipsum non fuga rem.
+                        - Molestiae et nesciunt cupiditate recusandae non non.
+                        - Quos dolores ut reiciendis deserunt.
+                        - Maiores quasi optio.
+                      program: Enim aperiam dolor tenetur recusandae.
+                      thinking_supported: true
+                      title: Voluptas et ut nulla.
+                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                      yolo_supported: false
+                    - client: gemini
+                      efforts:
+                        - Vel aut quam modi est libero rem.
+                        - Fugiat voluptas.
+                      headless_supported: true
+                      model_supported: false
+                      models:
+                        - Tempore eum id ipsum non fuga rem.
+                        - Molestiae et nesciunt cupiditate recusandae non non.
+                        - Quos dolores ut reiciendis deserunt.
+                        - Maiores quasi optio.
+                      program: Enim aperiam dolor tenetur recusandae.
+                      thinking_supported: true
+                      title: Voluptas et ut nulla.
+                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                      yolo_supported: false
+                    - client: gemini
+                      efforts:
+                        - Vel aut quam modi est libero rem.
+                        - Fugiat voluptas.
+                      headless_supported: true
+                      model_supported: false
+                      models:
+                        - Tempore eum id ipsum non fuga rem.
+                        - Molestiae et nesciunt cupiditate recusandae non non.
+                        - Quos dolores ut reiciendis deserunt.
+                        - Maiores quasi optio.
+                      program: Enim aperiam dolor tenetur recusandae.
+                      thinking_supported: true
+                      title: Voluptas et ut nulla.
+                      yolo_effect: Tempora rerum exercitationem quo nobis.
+                      yolo_supported: false
+            required:
+                - agents
         LivePromptItem:
             type: object
             properties:
@@ -22784,6 +23539,50 @@ components:
                     url: Maxime eos.
             required:
                 - live_target
+        MergeChangeRequestBody:
+            type: object
+            properties:
+                candidate_commit:
+                    type: string
+                    description: Approved candidate commit.
+                    example: 9f87b1183cb6ac76ab85d0a62250bf2663f54052efabe0c25ecd4b757c7a0970
+                    pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+                report_digest:
+                    type: string
+                    description: Approved report digest.
+                    example: q
+                    minLength: 1
+                request_revision:
+                    type: string
+                    description: Approved revision.
+                    example: xx1
+                    minLength: 1
+            description: Request body for merge_change.
+            example:
+                candidate_commit: 9f87b1183cb6ac76ab85d0a62250bf2663f54052efabe0c25ecd4b757c7a0970
+                report_digest: q
+                request_revision: xx1
+            required:
+                - request_revision
+                - candidate_commit
+                - report_digest
+        MergeChangeResponseBody:
+            type: object
+            properties:
+                branch:
+                    type: string
+                    description: Checked-out local branch that received the approved work.
+                    example: Harum sed voluptas nobis aut.
+                head_commit:
+                    type: string
+                    description: Resulting local branch commit.
+                    example: Est ducimus et.
+            example:
+                branch: Harum sed voluptas nobis aut.
+                head_commit: Est ducimus et.
+            required:
+                - branch
+                - head_commit
         ModelConfigResult:
             type: object
             properties:
@@ -23068,6 +23867,23 @@ components:
                 - message
                 - change_id
                 - build
+        OpenViewsResponseBody:
+            type: object
+            properties:
+                message:
+                    type: string
+                    description: Safe handoff result without a URL or credential.
+                    example: Et dignissimos consectetur.
+                opened:
+                    type: boolean
+                    description: Whether the browser opener completed successfully.
+                    example: true
+            example:
+                message: Et dignissimos consectetur.
+                opened: true
+            required:
+                - opened
+                - message
         PreviewArchitecturePayload:
             type: object
             properties:
@@ -23115,17 +23931,125 @@ components:
                 - project_id
                 - directory
                 - owner
+        ProjectStatus:
+            type: object
+            properties:
+                attention:
+                    type: string
+                    description: Action currently needed, empty when none.
+                    example: Nostrum eum quam rerum.
+                change_id:
+                    type: string
+                    description: Current change identifier, empty when none exists.
+                    example: Eos expedita dolore est rerum vel.
+                change_title:
+                    type: string
+                    description: Current change title, empty when none exists.
+                    example: Et similique quidem.
+                directory:
+                    type: string
+                    description: Physical project folder.
+                    example: Ab qui ullam aut qui ea.
+                herdr_mode:
+                    type: string
+                    description: Current desktop attachment.
+                    example: unavailable
+                    enum:
+                        - attached
+                        - available
+                        - unavailable
+                project_name:
+                    type: string
+                    description: Physical project folder's base name.
+                    example: Sed quo.
+                roles:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TeamRoleState'
+                    description: Observed role states, without terminal addresses or credentials.
+                    example:
+                        - assignment: unknown
+                          attention: assignment
+                          handle: Quae ea aut iusto ea blanditiis.
+                          role: test_writer
+                          state: waiting
+                          watcher: unknown
+                        - assignment: unknown
+                          attention: assignment
+                          handle: Quae ea aut iusto ea blanditiis.
+                          role: test_writer
+                          state: waiting
+                          watcher: unknown
+                        - assignment: unknown
+                          attention: assignment
+                          handle: Quae ea aut iusto ea blanditiis.
+                          role: test_writer
+                          state: waiting
+                          watcher: unknown
+                stage:
+                    type: string
+                    description: Current saved stage.
+                    example: describe
+                    enum:
+                        - describe
+                        - agree
+                        - build
+                        - check
+                        - approve
+                        - merged
+                team:
+                    type: string
+                    description: Stable project team name.
+                    example: Nihil ducimus modi sed fugiat.
+            example:
+                attention: Nostrum eum quam rerum.
+                change_id: Eos expedita dolore est rerum vel.
+                change_title: Et similique quidem.
+                directory: Ab qui ullam aut qui ea.
+                herdr_mode: unavailable
+                project_name: Sed quo.
+                roles:
+                    - assignment: unknown
+                      attention: assignment
+                      handle: Quae ea aut iusto ea blanditiis.
+                      role: test_writer
+                      state: waiting
+                      watcher: unknown
+                    - assignment: unknown
+                      attention: assignment
+                      handle: Quae ea aut iusto ea blanditiis.
+                      role: test_writer
+                      state: waiting
+                      watcher: unknown
+                    - assignment: unknown
+                      attention: assignment
+                      handle: Quae ea aut iusto ea blanditiis.
+                      role: test_writer
+                      state: waiting
+                      watcher: unknown
+                stage: describe
+                team: Nihil ducimus modi sed fugiat.
+            required:
+                - project_name
+                - directory
+                - team
+                - herdr_mode
+                - stage
+                - change_id
+                - change_title
+                - attention
+                - roles
         ProjectTeam:
             type: object
             properties:
-                dialog:
+                herdr_mode:
                     type: string
-                    description: Launcher state after ensuring the team.
-                    example: not_needed
+                    description: Whether Herdr hosts this project, is available, or is unavailable.
+                    example: unavailable
                     enum:
-                        - opened
-                        - already_open
-                        - not_needed
+                        - attached
+                        - available
+                        - unavailable
                 roles:
                     type: array
                     items:
@@ -23142,10 +24066,9 @@ components:
                           running: true
                 space:
                     type: string
-                    description: Local Herdr space identifier.
-                    example: j8
-                    pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$
-                    minLength: 1
+                    description: Local Herdr space identifier, empty when Herdr is unavailable.
+                    example: j8a
+                    pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})?$
                     maxLength: 64
                 step:
                     type: string
@@ -23159,7 +24082,7 @@ components:
                     example: P
                     pattern: ^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$
             example:
-                dialog: not_needed
+                herdr_mode: unavailable
                 roles:
                     - handle: Quo a est cumque quae quod velit.
                       role: builder
@@ -23170,14 +24093,14 @@ components:
                     - handle: Quo a est cumque quae quod velit.
                       role: builder
                       running: true
-                space: j8
+                space: j8a
                 step: uk
                 team: P
             required:
                 - team
                 - space
                 - roles
-                - dialog
+                - herdr_mode
                 - step
         ProjectTeamRole:
             type: object
@@ -25269,6 +26192,47 @@ components:
                 - prompt
                 - revision_note
                 - analysis
+        RoleAgentChoice:
+            type: object
+            properties:
+                client:
+                    type: string
+                    description: Installed coding-agent client family.
+                    example: opencode
+                    enum:
+                        - claude
+                        - codex
+                        - antigravity
+                        - cursor
+                        - gemini
+                        - opencode
+                model:
+                    type: string
+                    description: Optional client-supported model.
+                    example: Beatae nam.
+                program:
+                    type: string
+                    description: Installed executable selected from list_team_agent_options.
+                    example: ys
+                    minLength: 1
+                thinking:
+                    type: string
+                    description: Optional client-supported reasoning effort.
+                    example: Dignissimos enim minus qui et et animi.
+                yolo:
+                    type: boolean
+                    description: Whether to enable this client's advertised unattended permission mode.
+                    example: true
+            example:
+                client: opencode
+                model: Beatae nam.
+                program: ys
+                thinking: Dignissimos enim minus qui et et animi.
+                yolo: true
+            required:
+                - client
+                - program
+                - yolo
         ShowTeamPaneRequestBody:
             type: object
             properties:
@@ -25288,6 +26252,24 @@ components:
         StartBuildRequestBody:
             type: object
             properties:
+                choices:
+                    type: object
+                    description: Choices for missing workers. Omitted and empty both use saved choices then installed cross-family defaults. Never launches or changes the guide.
+                    example:
+                        builder:
+                            client: opencode
+                            model: Beatae nam.
+                            program: ys
+                            thinking: Dignissimos enim minus qui et et animi.
+                            yolo: true
+                        test_writer:
+                            client: opencode
+                            model: Beatae nam.
+                            program: ys
+                            thinking: Dignissimos enim minus qui et et animi.
+                            yolo: true
+                    additionalProperties:
+                        $ref: '#/components/schemas/RoleAgentChoice'
                 replaces:
                     $ref: '#/components/schemas/ReplacedBuild'
                 request_revision:
@@ -25297,6 +26279,19 @@ components:
                     minLength: 1
             description: Request body for start_build.
             example:
+                choices:
+                    builder:
+                        client: opencode
+                        model: Beatae nam.
+                        program: ys
+                        thinking: Dignissimos enim minus qui et et animi.
+                        yolo: true
+                    test_writer:
+                        client: opencode
+                        model: Beatae nam.
+                        program: ys
+                        thinking: Dignissimos enim minus qui et et animi.
+                        yolo: true
                 replaces:
                     change_id: "61"
                     started_at: "2008-09-02T12:30:42Z"
@@ -25318,14 +26313,14 @@ components:
                     anyOf:
                         - type: object
                           properties:
-                            dialog:
+                            herdr_mode:
                                 type: string
-                                description: Launcher state after ensuring the team.
-                                example: opened
+                                description: Whether Herdr hosts this project, is available, or is unavailable.
+                                example: available
                                 enum:
-                                    - opened
-                                    - already_open
-                                    - not_needed
+                                    - attached
+                                    - available
+                                    - unavailable
                             roles:
                                 type: array
                                 items:
@@ -25339,10 +26334,9 @@ components:
                                       running: true
                             space:
                                 type: string
-                                description: Local Herdr space identifier.
-                                example: z
-                                pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})$
-                                minLength: 1
+                                description: Local Herdr space identifier, empty when Herdr is unavailable.
+                                example: z2e
+                                pattern: ^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\.\.[A-Za-z0-9_.-]{1,62})?$
                                 maxLength: 64
                             state:
                                 type: string
@@ -25360,7 +26354,7 @@ components:
                                 example: "1"
                                 pattern: ^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$
                           example:
-                            dialog: opened
+                            herdr_mode: available
                             roles:
                                 - handle: Quo a est cumque quae quod velit.
                                   role: builder
@@ -25368,14 +26362,14 @@ components:
                                 - handle: Quo a est cumque quae quod velit.
                                   role: builder
                                   running: true
-                            space: z
+                            space: z2e
                             step: "9"
                             team: "1"
                           required:
                             - team
                             - space
                             - roles
-                            - dialog
+                            - herdr_mode
                             - step
                             - state
                         - type: object
@@ -25531,6 +26525,42 @@ components:
             required:
                 - change_id
                 - candidate_commit
+        StartTeamAgentsRequestBody:
+            type: object
+            properties:
+                choices:
+                    type: object
+                    description: Choices for missing roles; guide is accepted only when not running. Omitted and empty choices both use saved choices and installed defaults.
+                    example:
+                        builder:
+                            client: opencode
+                            model: Beatae nam.
+                            program: ys
+                            thinking: Dignissimos enim minus qui et et animi.
+                            yolo: true
+                        guide:
+                            client: opencode
+                            model: Beatae nam.
+                            program: ys
+                            thinking: Dignissimos enim minus qui et et animi.
+                            yolo: true
+                    additionalProperties:
+                        $ref: '#/components/schemas/RoleAgentChoice'
+            description: Request body for start_team_agents.
+            example:
+                choices:
+                    builder:
+                        client: opencode
+                        model: Beatae nam.
+                        program: ys
+                        thinking: Dignissimos enim minus qui et et animi.
+                        yolo: true
+                    guide:
+                        client: opencode
+                        model: Beatae nam.
+                        program: ys
+                        thinking: Dignissimos enim minus qui et et animi.
+                        yolo: true
         StartedBuild:
             type: object
             properties:
@@ -28092,6 +29122,27 @@ components:
         TeamSnapshot:
             type: object
             properties:
+                dismissed_notices:
+                    type: array
+                    items:
+                        type: string
+                        example: herdr_unavailable
+                        enum:
+                            - single_agent_family
+                            - outside_herdr
+                            - herdr_unavailable
+                    description: Dismissed project notices.
+                    example:
+                        - herdr_unavailable
+                        - herdr_unavailable
+                herdr_mode:
+                    type: string
+                    description: Current desktop attachment.
+                    example: unavailable
+                    enum:
+                        - attached
+                        - available
+                        - unavailable
                 roles:
                     type: array
                     items:
@@ -28116,11 +29167,27 @@ components:
                           role: test_writer
                           state: waiting
                           watcher: unknown
+                saved_choices:
+                    type: object
+                    description: Saved client choices by role.
+                    example:
+                        test_writer:
+                            client: opencode
+                            model: Beatae nam.
+                            program: ys
+                            thinking: Dignissimos enim minus qui et et animi.
+                            yolo: true
+                    additionalProperties:
+                        $ref: '#/components/schemas/RoleAgentChoice'
                 team:
                     type: string
                     description: Stable team name, also returned before a team is prepared.
                     example: Autem explicabo omnis ipsam aut provident architecto.
             example:
+                dismissed_notices:
+                    - herdr_unavailable
+                    - herdr_unavailable
+                herdr_mode: unavailable
                 roles:
                     - assignment: unknown
                       attention: assignment
@@ -28140,10 +29207,20 @@ components:
                       role: test_writer
                       state: waiting
                       watcher: unknown
+                saved_choices:
+                    test_writer:
+                        client: opencode
+                        model: Beatae nam.
+                        program: ys
+                        thinking: Dignissimos enim minus qui et et animi.
+                        yolo: true
                 team: Autem explicabo omnis ipsam aut provident architecto.
             required:
                 - team
                 - roles
+                - herdr_mode
+                - saved_choices
+                - dismissed_notices
         TeamSpaceConflict:
             type: object
             properties:

@@ -4290,6 +4290,22 @@ func (c *Client) BuildStartTeamAgentsRequest(ctx context.Context, v any) (*http.
 	return req, nil
 }
 
+// EncodeStartTeamAgentsRequest returns an encoder for requests sent to the
+// surla start_team_agents server.
+func EncodeStartTeamAgentsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*surla.StartTeamAgentsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("surla", "start_team_agents", "*surla.StartTeamAgentsPayload", v)
+		}
+		body := NewStartTeamAgentsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("surla", "start_team_agents", err)
+		}
+		return nil
+	}
+}
+
 // DecodeStartTeamAgentsResponse returns a decoder for responses returned by
 // the surla start_team_agents endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
@@ -4407,6 +4423,462 @@ func DecodeStartTeamAgentsResponse(decoder func(*http.Response) goahttp.Decoder,
 				return nil, goahttp.ErrDecodingError("surla", "start_team_agents", err)
 			}
 			return nil, goahttp.ErrInvalidResponse("surla", "start_team_agents", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTeamAgentOptionsRequest instantiates a HTTP request object with
+// method and path set to call the "surla" service "list_team_agent_options"
+// endpoint
+func (c *Client) BuildListTeamAgentOptionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTeamAgentOptionsSurlaPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "list_team_agent_options", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeListTeamAgentOptionsResponse returns a decoder for responses returned
+// by the surla list_team_agent_options endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListTeamAgentOptionsResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeListTeamAgentOptionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "list_team_agent_options", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "list_team_agent_options", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTeamAgentOptionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "list_team_agent_options", err)
+			}
+			err = ValidateListTeamAgentOptionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "list_team_agent_options", err)
+			}
+			res := NewListTeamAgentOptionsResultOK(&body)
+			return res, nil
+		case http.StatusForbidden:
+			var (
+				body ListTeamAgentOptionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "list_team_agent_options", err)
+			}
+			err = ValidateListTeamAgentOptionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "list_team_agent_options", err)
+			}
+			return nil, NewListTeamAgentOptionsForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "list_team_agent_options", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "list_team_agent_options", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDismissTeamNoticeRequest instantiates a HTTP request object with method
+// and path set to call the "surla" service "dismiss_team_notice" endpoint
+func (c *Client) BuildDismissTeamNoticeRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DismissTeamNoticeSurlaPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "dismiss_team_notice", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDismissTeamNoticeRequest returns an encoder for requests sent to the
+// surla dismiss_team_notice server.
+func EncodeDismissTeamNoticeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*surla.DismissTeamNoticePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("surla", "dismiss_team_notice", "*surla.DismissTeamNoticePayload", v)
+		}
+		body := NewDismissTeamNoticeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("surla", "dismiss_team_notice", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDismissTeamNoticeResponse returns a decoder for responses returned by
+// the surla dismiss_team_notice endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDismissTeamNoticeResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeDismissTeamNoticeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "dismiss_team_notice", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "dismiss_team_notice", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusForbidden:
+			var (
+				body DismissTeamNoticeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "dismiss_team_notice", err)
+			}
+			err = ValidateDismissTeamNoticeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "dismiss_team_notice", err)
+			}
+			return nil, NewDismissTeamNoticeForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "dismiss_team_notice", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "dismiss_team_notice", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildOpenViewsRequest instantiates a HTTP request object with method and
+// path set to call the "surla" service "open_views" endpoint
+func (c *Client) BuildOpenViewsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: OpenViewsSurlaPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "open_views", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeOpenViewsResponse returns a decoder for responses returned by the
+// surla open_views endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeOpenViewsResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeOpenViewsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "open_views", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "open_views", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body OpenViewsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "open_views", err)
+			}
+			err = ValidateOpenViewsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "open_views", err)
+			}
+			res := NewOpenViewsResultOK(&body)
+			return res, nil
+		case http.StatusForbidden:
+			var (
+				body OpenViewsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "open_views", err)
+			}
+			err = ValidateOpenViewsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "open_views", err)
+			}
+			return nil, NewOpenViewsForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "open_views", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "open_views", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMergeChangeRequest instantiates a HTTP request object with method and
+// path set to call the "surla" service "merge_change" endpoint
+func (c *Client) BuildMergeChangeRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		changeID string
+	)
+	{
+		p, ok := v.(*surla.MergeChangePayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("surla", "merge_change", "*surla.MergeChangePayload", v)
+		}
+		changeID = p.ChangeID
+	}
+
+	rawPath := fmt.Sprintf("/changes/%v/merge", url.PathEscape(fmt.Sprint(changeID)))
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MergeChangeSurlaPath(changeID), RawPath: rawPath}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "merge_change", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMergeChangeRequest returns an encoder for requests sent to the surla
+// merge_change server.
+func EncodeMergeChangeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*surla.MergeChangePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("surla", "merge_change", "*surla.MergeChangePayload", v)
+		}
+		body := NewMergeChangeRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("surla", "merge_change", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMergeChangeResponse returns a decoder for responses returned by the
+// surla merge_change endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeMergeChangeResponse may return the following errors:
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "not_approved" (type *goa.ServiceError): http.StatusConflict
+//   - "detached_head" (type *goa.ServiceError): http.StatusConflict
+//   - "dirty_worktree" (type *goa.ServiceError): http.StatusConflict
+//   - "merge_conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "working_copy_busy" (type *goa.ServiceError): http.StatusConflict
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeMergeChangeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "merge_change", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MergeChangeResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+			}
+			err = ValidateMergeChangeResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+			}
+			res := NewMergeChangeResultOK(&body)
+			return res, nil
+		case http.StatusNotFound:
+			var (
+				body MergeChangeNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+			}
+			err = ValidateMergeChangeNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+			}
+			return nil, NewMergeChangeNotFound(&body)
+		case http.StatusConflict:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "not_approved":
+				var (
+					body MergeChangeNotApprovedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+				}
+				err = ValidateMergeChangeNotApprovedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+				}
+				return nil, NewMergeChangeNotApproved(&body)
+			case "detached_head":
+				var (
+					body MergeChangeDetachedHeadResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+				}
+				err = ValidateMergeChangeDetachedHeadResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+				}
+				return nil, NewMergeChangeDetachedHead(&body)
+			case "dirty_worktree":
+				var (
+					body MergeChangeDirtyWorktreeResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+				}
+				err = ValidateMergeChangeDirtyWorktreeResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+				}
+				return nil, NewMergeChangeDirtyWorktree(&body)
+			case "merge_conflict":
+				var (
+					body MergeChangeMergeConflictResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+				}
+				err = ValidateMergeChangeMergeConflictResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+				}
+				return nil, NewMergeChangeMergeConflict(&body)
+			case "working_copy_busy":
+				var (
+					body MergeChangeWorkingCopyBusyResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+				}
+				err = ValidateMergeChangeWorkingCopyBusyResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+				}
+				return nil, NewMergeChangeWorkingCopyBusy(&body)
+			default:
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+				}
+				return nil, goahttp.ErrInvalidResponse("surla", "merge_change", resp.StatusCode, string(body))
+			}
+		case http.StatusForbidden:
+			var (
+				body MergeChangeForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+			}
+			err = ValidateMergeChangeForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "merge_change", err)
+			}
+			return nil, NewMergeChangeForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "merge_change", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "merge_change", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -7249,6 +7721,49 @@ func unmarshalTeamRoleStateResponseBodyToSurlaTeamRoleState(v *TeamRoleStateResp
 	return res
 }
 
+// unmarshalRoleAgentChoiceResponseBodyToSurlaRoleAgentChoice builds a value of
+// type *surla.RoleAgentChoice from a value of type
+// *RoleAgentChoiceResponseBody.
+func unmarshalRoleAgentChoiceResponseBodyToSurlaRoleAgentChoice(v *RoleAgentChoiceResponseBody) *surla.RoleAgentChoice {
+	res := &surla.RoleAgentChoice{
+		Client:   *v.Client,
+		Program:  *v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     *v.Yolo,
+	}
+
+	return res
+}
+
+// marshalSurlaRoleAgentChoiceToRoleAgentChoiceRequestBody builds a value of
+// type *RoleAgentChoiceRequestBody from a value of type *surla.RoleAgentChoice.
+func marshalSurlaRoleAgentChoiceToRoleAgentChoiceRequestBody(v *surla.RoleAgentChoice) *RoleAgentChoiceRequestBody {
+	res := &RoleAgentChoiceRequestBody{
+		Client:   v.Client,
+		Program:  v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     v.Yolo,
+	}
+
+	return res
+}
+
+// marshalRoleAgentChoiceRequestBodyToSurlaRoleAgentChoice builds a value of
+// type *surla.RoleAgentChoice from a value of type *RoleAgentChoiceRequestBody.
+func marshalRoleAgentChoiceRequestBodyToSurlaRoleAgentChoice(v *RoleAgentChoiceRequestBody) *surla.RoleAgentChoice {
+	res := &surla.RoleAgentChoice{
+		Client:   v.Client,
+		Program:  v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     v.Yolo,
+	}
+
+	return res
+}
+
 // unmarshalProjectTeamRoleResponseBodyToSurlaProjectTeamRole builds a value of
 // type *surla.ProjectTeamRole from a value of type
 // *ProjectTeamRoleResponseBody.
@@ -7257,6 +7772,32 @@ func unmarshalProjectTeamRoleResponseBodyToSurlaProjectTeamRole(v *ProjectTeamRo
 		Role:    *v.Role,
 		Handle:  *v.Handle,
 		Running: *v.Running,
+	}
+
+	return res
+}
+
+// unmarshalInstalledAgentOptionResponseBodyToSurlaInstalledAgentOption builds
+// a value of type *surla.InstalledAgentOption from a value of type
+// *InstalledAgentOptionResponseBody.
+func unmarshalInstalledAgentOptionResponseBodyToSurlaInstalledAgentOption(v *InstalledAgentOptionResponseBody) *surla.InstalledAgentOption {
+	res := &surla.InstalledAgentOption{
+		Client:            *v.Client,
+		Program:           *v.Program,
+		Title:             *v.Title,
+		ModelSupported:    *v.ModelSupported,
+		ThinkingSupported: *v.ThinkingSupported,
+		YoloSupported:     *v.YoloSupported,
+		YoloEffect:        v.YoloEffect,
+		HeadlessSupported: *v.HeadlessSupported,
+	}
+	res.Models = make([]string, len(v.Models))
+	for i, val := range v.Models {
+		res.Models[i] = val
+	}
+	res.Efforts = make([]string, len(v.Efforts))
+	for i, val := range v.Efforts {
+		res.Efforts[i] = val
 	}
 
 	return res
@@ -7663,10 +8204,10 @@ func unmarshalBuildDroppedResponseBodyToSurlaBuildDropped(v *BuildDroppedRespons
 // *surla.ProjectTeam from a value of type *ProjectTeamResponseBody.
 func unmarshalProjectTeamResponseBodyToSurlaProjectTeam(v *ProjectTeamResponseBody) *surla.ProjectTeam {
 	res := &surla.ProjectTeam{
-		Team:   *v.Team,
-		Space:  *v.Space,
-		Dialog: *v.Dialog,
-		Step:   *v.Step,
+		Team:      *v.Team,
+		Space:     *v.Space,
+		HerdrMode: *v.HerdrMode,
+		Step:      *v.Step,
 	}
 	res.Roles = make([]*surla.ProjectTeamRole, len(v.Roles))
 	for i, val := range v.Roles {

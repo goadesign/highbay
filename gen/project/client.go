@@ -17,16 +17,20 @@ import (
 type Client struct {
 	IdentityEndpoint            goa.Endpoint
 	EnsureTeamEndpoint          goa.Endpoint
+	AttachGuideEndpoint         goa.Endpoint
+	StatusEndpoint              goa.Endpoint
 	StopEndpoint                goa.Endpoint
 	BrowserLinkEndpoint         goa.Endpoint
 	ExchangeBrowserLinkEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "project" service client given the endpoints.
-func NewClient(identity, ensureTeam, stop, browserLink, exchangeBrowserLink goa.Endpoint) *Client {
+func NewClient(identity, ensureTeam, attachGuide, status, stop, browserLink, exchangeBrowserLink goa.Endpoint) *Client {
 	return &Client{
 		IdentityEndpoint:            identity,
 		EnsureTeamEndpoint:          ensureTeam,
+		AttachGuideEndpoint:         attachGuide,
+		StatusEndpoint:              status,
 		StopEndpoint:                stop,
 		BrowserLinkEndpoint:         browserLink,
 		ExchangeBrowserLinkEndpoint: exchangeBrowserLink,
@@ -62,6 +66,35 @@ func (c *Client) EnsureTeam(ctx context.Context) (res *ProjectTeam, err error) {
 		return
 	}
 	return ires.(*ProjectTeam), nil
+}
+
+// AttachGuide calls the "attach_guide" endpoint of the "project" service.
+// AttachGuide may return the following errors:
+//   - "team_unavailable" (type *TeamUnavailable): The guide could not be attached to this project.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
+//   - error: internal error
+func (c *Client) AttachGuide(ctx context.Context, p *AttachGuidePayload) (res *AttachGuideResult, err error) {
+	var ires any
+	ires, err = c.AttachGuideEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AttachGuideResult), nil
+}
+
+// Status calls the "status" endpoint of the "project" service.
+// Status may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
+//   - error: internal error
+func (c *Client) Status(ctx context.Context) (res *ProjectStatus, err error) {
+	var ires any
+	ires, err = c.StatusEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*ProjectStatus), nil
 }
 
 // Stop calls the "stop" endpoint of the "project" service.

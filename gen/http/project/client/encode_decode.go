@@ -266,6 +266,229 @@ func DecodeEnsureTeamResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildAttachGuideRequest instantiates a HTTP request object with method and
+// path set to call the "project" service "attach_guide" endpoint
+func (c *Client) BuildAttachGuideRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AttachGuideProjectPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("project", "attach_guide", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAttachGuideRequest returns an encoder for requests sent to the project
+// attach_guide server.
+func EncodeAttachGuideRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*project.AttachGuidePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("project", "attach_guide", "*project.AttachGuidePayload", v)
+		}
+		body := NewAttachGuideRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("project", "attach_guide", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAttachGuideResponse returns a decoder for responses returned by the
+// project attach_guide endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeAttachGuideResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "team_unavailable" (type *project.TeamUnavailable): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeAttachGuideResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("project", "attach_guide", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("project", "attach_guide", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AttachGuideResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "attach_guide", err)
+			}
+			err = ValidateAttachGuideResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "attach_guide", err)
+			}
+			res := NewAttachGuideResultOK(&body)
+			return res, nil
+		case http.StatusForbidden:
+			var (
+				body AttachGuideForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "attach_guide", err)
+			}
+			err = ValidateAttachGuideForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "attach_guide", err)
+			}
+			return nil, NewAttachGuideForbidden(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AttachGuideUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "attach_guide", err)
+			}
+			err = ValidateAttachGuideUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "attach_guide", err)
+			}
+			return nil, NewAttachGuideUnprocessable(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body AttachGuideTeamUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "attach_guide", err)
+			}
+			err = ValidateAttachGuideTeamUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "attach_guide", err)
+			}
+			return nil, NewAttachGuideTeamUnavailable(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "attach_guide", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("project", "attach_guide", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildStatusRequest instantiates a HTTP request object with method and path
+// set to call the "project" service "status" endpoint
+func (c *Client) BuildStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: StatusProjectPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("project", "status", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeStatusResponse returns a decoder for responses returned by the project
+// status endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeStatusResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - error: internal error
+func DecodeStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("project", "status", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("project", "status", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body StatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "status", err)
+			}
+			err = ValidateStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "status", err)
+			}
+			res := NewStatusProjectStatusOK(&body)
+			return res, nil
+		case http.StatusForbidden:
+			var (
+				body StatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "status", err)
+			}
+			err = ValidateStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "status", err)
+			}
+			return nil, NewStatusForbidden(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body StatusUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "status", err)
+			}
+			err = ValidateStatusUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "status", err)
+			}
+			return nil, NewStatusUnprocessable(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "status", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("project", "status", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildStopRequest instantiates a HTTP request object with method and path set
 // to call the "project" service "stop" endpoint
 func (c *Client) BuildStopRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -566,6 +789,21 @@ func unmarshalProjectTeamRoleResponseBodyToProjectProjectTeamRole(v *ProjectTeam
 		Role:    *v.Role,
 		Handle:  *v.Handle,
 		Running: *v.Running,
+	}
+
+	return res
+}
+
+// unmarshalTeamRoleStateResponseBodyToProjectTeamRoleState builds a value of
+// type *project.TeamRoleState from a value of type *TeamRoleStateResponseBody.
+func unmarshalTeamRoleStateResponseBodyToProjectTeamRoleState(v *TeamRoleStateResponseBody) *project.TeamRoleState {
+	res := &project.TeamRoleState{
+		Role:       *v.Role,
+		Handle:     *v.Handle,
+		State:      *v.State,
+		Attention:  *v.Attention,
+		Watcher:    *v.Watcher,
+		Assignment: *v.Assignment,
 	}
 
 	return res

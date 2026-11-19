@@ -24,8 +24,8 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
-		"project (identity|ensure-team|stop|browser-link|exchange-browser-link)",
-		"surla (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|get-builder-assignment|list-test-writer-assignments|get-test-writer-assignment|report-tests-finished|review-verification)",
+		"project (identity|ensure-team|attach-guide|status|stop|browser-link|exchange-browser-link)",
+		"surla (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-team-agent-options|dismiss-team-notice|open-views|merge-change|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|get-builder-assignment|list-test-writer-assignments|get-test-writer-assignment|report-tests-finished|review-verification)",
 	}
 }
 
@@ -70,6 +70,11 @@ func ParseEndpoint(
 		projectIdentityFlags = flag.NewFlagSet("identity", flag.ExitOnError)
 
 		projectEnsureTeamFlags = flag.NewFlagSet("ensure-team", flag.ExitOnError)
+
+		projectAttachGuideFlags    = flag.NewFlagSet("attach-guide", flag.ExitOnError)
+		projectAttachGuideBodyFlag = new(cliStringFlag)
+
+		projectStatusFlags = flag.NewFlagSet("status", flag.ExitOnError)
 
 		projectStopFlags = flag.NewFlagSet("stop", flag.ExitOnError)
 
@@ -163,7 +168,19 @@ func ParseEndpoint(
 		surlaShowTeamPaneFlags    = flag.NewFlagSet("show-team-pane", flag.ExitOnError)
 		surlaShowTeamPaneBodyFlag = new(cliStringFlag)
 
-		surlaStartTeamAgentsFlags = flag.NewFlagSet("start-team-agents", flag.ExitOnError)
+		surlaStartTeamAgentsFlags    = flag.NewFlagSet("start-team-agents", flag.ExitOnError)
+		surlaStartTeamAgentsBodyFlag = new(cliStringFlag)
+
+		surlaListTeamAgentOptionsFlags = flag.NewFlagSet("list-team-agent-options", flag.ExitOnError)
+
+		surlaDismissTeamNoticeFlags    = flag.NewFlagSet("dismiss-team-notice", flag.ExitOnError)
+		surlaDismissTeamNoticeBodyFlag = new(cliStringFlag)
+
+		surlaOpenViewsFlags = flag.NewFlagSet("open-views", flag.ExitOnError)
+
+		surlaMergeChangeFlags        = flag.NewFlagSet("merge-change", flag.ExitOnError)
+		surlaMergeChangeBodyFlag     = new(cliStringFlag)
+		surlaMergeChangeChangeIDFlag = new(cliStringFlag)
 
 		surlaListChangesFlags = flag.NewFlagSet("list-changes", flag.ExitOnError)
 
@@ -201,6 +218,7 @@ func ParseEndpoint(
 		surlaReviewVerificationFlags     = flag.NewFlagSet("review-verification", flag.ExitOnError)
 		surlaReviewVerificationRunIDFlag = new(cliStringFlag)
 	)
+	projectAttachGuideFlags.Var(projectAttachGuideBodyFlag, "body", "")
 	projectExchangeBrowserLinkFlags.Var(projectExchangeBrowserLinkBodyFlag, "body", "")
 	surlaProposeChangeFlags.Var(surlaProposeChangeBodyFlag, "body", "")
 	surlaReviseChangeFlags.Var(surlaReviseChangeBodyFlag, "body", "")
@@ -223,6 +241,10 @@ func ParseEndpoint(
 	surlaReadCheckOutputFlags.Var(surlaReadCheckOutputBodyFlag, "body", "")
 	surlaListTracesFlags.Var(surlaListTracesCursorFlag, "cursor", "")
 	surlaShowTeamPaneFlags.Var(surlaShowTeamPaneBodyFlag, "body", "")
+	surlaStartTeamAgentsFlags.Var(surlaStartTeamAgentsBodyFlag, "body", "")
+	surlaDismissTeamNoticeFlags.Var(surlaDismissTeamNoticeBodyFlag, "body", "")
+	surlaMergeChangeFlags.Var(surlaMergeChangeBodyFlag, "body", "")
+	surlaMergeChangeFlags.Var(surlaMergeChangeChangeIDFlag, "change-id", "Approved change identifier.")
 	surlaWaitForChangesFlags.Var(surlaWaitForChangesSinceFlag, "since", "")
 	surlaStartBuildFlags.Var(surlaStartBuildBodyFlag, "body", "")
 	surlaStartBuildFlags.Var(surlaStartBuildChangeIDFlag, "change-id", "Confirmed Change Card identifier.")
@@ -239,6 +261,8 @@ func ParseEndpoint(
 	projectFlags.Usage = projectUsage
 	projectIdentityFlags.Usage = projectIdentityUsage
 	projectEnsureTeamFlags.Usage = projectEnsureTeamUsage
+	projectAttachGuideFlags.Usage = projectAttachGuideUsage
+	projectStatusFlags.Usage = projectStatusUsage
 	projectStopFlags.Usage = projectStopUsage
 	projectBrowserLinkFlags.Usage = projectBrowserLinkUsage
 	projectExchangeBrowserLinkFlags.Usage = projectExchangeBrowserLinkUsage
@@ -275,6 +299,10 @@ func ParseEndpoint(
 	surlaGetTeamFlags.Usage = surlaGetTeamUsage
 	surlaShowTeamPaneFlags.Usage = surlaShowTeamPaneUsage
 	surlaStartTeamAgentsFlags.Usage = surlaStartTeamAgentsUsage
+	surlaListTeamAgentOptionsFlags.Usage = surlaListTeamAgentOptionsUsage
+	surlaDismissTeamNoticeFlags.Usage = surlaDismissTeamNoticeUsage
+	surlaOpenViewsFlags.Usage = surlaOpenViewsUsage
+	surlaMergeChangeFlags.Usage = surlaMergeChangeUsage
 	surlaListChangesFlags.Usage = surlaListChangesUsage
 	surlaWaitForChangesFlags.Usage = surlaWaitForChangesUsage
 	surlaStartBuildFlags.Usage = surlaStartBuildUsage
@@ -329,6 +357,12 @@ func ParseEndpoint(
 
 			case "ensure-team":
 				epf = projectEnsureTeamFlags
+
+			case "attach-guide":
+				epf = projectAttachGuideFlags
+
+			case "status":
+				epf = projectStatusFlags
 
 			case "stop":
 				epf = projectStopFlags
@@ -436,6 +470,18 @@ func ParseEndpoint(
 			case "start-team-agents":
 				epf = surlaStartTeamAgentsFlags
 
+			case "list-team-agent-options":
+				epf = surlaListTeamAgentOptionsFlags
+
+			case "dismiss-team-notice":
+				epf = surlaDismissTeamNoticeFlags
+
+			case "open-views":
+				epf = surlaOpenViewsFlags
+
+			case "merge-change":
+				epf = surlaMergeChangeFlags
+
 			case "list-changes":
 				epf = surlaListChangesFlags
 
@@ -501,6 +547,11 @@ func ParseEndpoint(
 				endpoint = c.Identity()
 			case "ensure-team":
 				endpoint = c.EnsureTeam()
+			case "attach-guide":
+				endpoint = c.AttachGuide()
+				data, err = projectc.BuildAttachGuidePayload(projectAttachGuideBodyFlag.value)
+			case "status":
+				endpoint = c.Status()
 			case "stop":
 				endpoint = c.Stop()
 			case "browser-link":
@@ -594,6 +645,17 @@ func ParseEndpoint(
 				data, err = surlac.BuildShowTeamPanePayload(surlaShowTeamPaneBodyFlag.value)
 			case "start-team-agents":
 				endpoint = c.StartTeamAgents()
+				data, err = surlac.BuildStartTeamAgentsPayload(surlaStartTeamAgentsBodyFlag.value)
+			case "list-team-agent-options":
+				endpoint = c.ListTeamAgentOptions()
+			case "dismiss-team-notice":
+				endpoint = c.DismissTeamNotice()
+				data, err = surlac.BuildDismissTeamNoticePayload(surlaDismissTeamNoticeBodyFlag.value)
+			case "open-views":
+				endpoint = c.OpenViews()
+			case "merge-change":
+				endpoint = c.MergeChange()
+				data, err = surlac.BuildMergeChangePayload(surlaMergeChangeBodyFlag.value, surlaMergeChangeChangeIDFlag.value)
 			case "list-changes":
 				endpoint = c.ListChanges()
 			case "wait-for-changes":
@@ -643,7 +705,9 @@ func projectUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] project COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    identity: The CLI checks the answering server reports its expected project identity using the current server-lifetime management credential.`)
-	fmt.Fprintln(os.Stderr, `    ensure-team: The CLI asks the project server to ensure its team, guide credential, Herdr space and atomic launcher roster, then open the launcher only when the guide, or a worker role the open build needs, has no running agent. A role without work stays in the roster, and its agent finds an empty list. A failed read of who has work counts every role. Accepted work has a bounded server-owned lifetime independent of client disconnection. Only the server management credential may call this operation; it is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `    ensure-team: Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `    attach-guide: Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.`)
+	fmt.Fprintln(os.Stderr, `    status: Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.`)
 	fmt.Fprintln(os.Stderr, `    stop: The CLI requests ordered server shutdown. Before its listener closes, the server revokes management access and withdraws its running record; an authorized stop response can finish.`)
 	fmt.Fprintln(os.Stderr, `    browser-link: The CLI mints a short-lived single-use browser link. The URL is the only credential allowed in a browser-launch command line.`)
 	fmt.Fprintln(os.Stderr, `    exchange-browser-link: The browser exchanges the single-use link once for an in-memory user session. The session is never a cookie or stored on disk and is sent only to this server address.`)
@@ -674,13 +738,47 @@ func projectEnsureTeamUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `The CLI asks the project server to ensure its team, guide credential, Herdr space and atomic launcher roster, then open the launcher only when the guide, or a worker role the open build needs, has no running agent. A role without work stays in the roster, and its agent finds an empty list. A failed read of who has work counts every role. Accepted work has a bounded server-owned lifetime independent of client disconnection. Only the server management credential may call this operation; it is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.`)
 
 	// Flags list
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project ensure-team")
+}
+
+func projectAttachGuideUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] project attach-guide", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project attach-guide --body '{\n      \"client\": \"gemini\",\n      \"hc_terminal_id\": \"x\"\n   }'")
+}
+
+func projectStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] project status", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read existing project, saved change stage and cached role state. Creates nothing and starts no subprocess or agent.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project status")
 }
 
 func projectStopUsage() {
@@ -768,7 +866,11 @@ func surlaUsage() {
 	fmt.Fprintln(os.Stderr, `    update-draft: The guide brings design changes made outside Surla into its draft, before drafting a new change and when told a design file changed in the project folder. Under the draft's lock Surla compares each design file's draft and live versions over a recorded base. The history base is the latest recorded version present in the project's committed history since the draft's start, or the starting folder version when that history supplies none. The comparison base is whichever of that history base and the outside version the draft last took was recorded later; with no previous take, it is the history base. A live version equal to the comparison base brings nothing. If the project's committed history gained a recorded version since the last take, Surla takes and reports the live version without merging it. Otherwise an outside change is taken when the draft did not change that file, merged with git merge-file when both changed it, and listed to correct when both changed the same lines or one side removed what the other changed. A draft file Go cannot parse, and a module the project's go.mod requires at another version or with another replace directive than the draft's, are listed to correct; Surla does not merge go.mod. Each listed file names the folder that holds it: the guide corrects a file of its draft, while a design file or go.mod of the project folder that cannot be parsed is the user's to correct there and the guide never edits it. When the project's commit, the draft, the project's files or the draft's made-from list change while Surla prepares the update, Surla brings nothing and answers conflict, and the guide calls update_draft again. Surla records an interrupted update so a later call can finish it without merging its result again; if the guide changed the file in between, the file is listed to correct. An uncommitted revert to an older version may bring nothing; when a build reports design_changed_outside for an uncommitted design change, the user commits the change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change. Otherwise call refresh_story after this update. Takes no input.`)
 	fmt.Fprintln(os.Stderr, `    get-team: Read the project team's registered roles and current terminal, watcher and unread-assignment facts. Reading creates nothing and marks no assignment read. Only the user's browser session may call it. wait_for_changes covers this snapshot as well as the change list.`)
 	fmt.Fprintln(os.Stderr, `    show-team-pane: Show this project's space and focus the requested registered role's pane, only at the user's request. Any open Herdr dialog prevents all window changes. Fresh project, handle and space labels must still identify the pane.`)
-	fmt.Fprintln(os.Stderr, `    start-team-agents: Ask the project's existing team-start owner to prepare the registered roles and open the Chorus launcher when a listed role is not running. Only the user may call it. It has the same bounded server-owned lifetime and dialog, space and availability refusals as the management team-start operation.`)
+	fmt.Fprintln(os.Stderr, `    start-team-agents: Start missing project agents using explicit choices, otherwise saved choices and installed cross-family defaults. Never replace a running guide. Only the user may call it. Workers run in Herdr when available, otherwise as finite server-owned headless processes. Opens no launcher.`)
+	fmt.Fprintln(os.Stderr, `    list-team-agent-options: Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.`)
+	fmt.Fprintln(os.Stderr, `    dismiss-team-notice: Save the user's dismissal of one project notice without changing agent capability or startup behavior.`)
+	fmt.Fprintln(os.Stderr, `    open-views: Open a fresh project views session at the user's request. The project owner mints and opens the private link; no browser credential is returned to the caller.`)
+	fmt.Fprintln(os.Stderr, `    merge-change: Merge the user's current live-approved candidate and accepted tests into the clean checked-out local project branch. Rechecks approval, report and build identity before mutation. On failure restores the original branch and tracked state while preserving untracked files. After success stops only the merged build's workers. Repeating the exact already-taken approval is safe.`)
 	fmt.Fprintln(os.Stderr, `    list-changes: List the owner's saved Change Cards for this project, most recently saved first, with each card's summary, status, the request_revision in force, the request_revision of a revision the guide proposed beside a confirmed card while it waits for the user, the state of its most recently accepted verification run and whether its revision and selected tests are current, and when it was last saved, and say whether this server can record approvals. The views page opens on this list; agents use it to find a change_id. Reading changes nothing.`)
 	fmt.Fprintln(os.Stderr, `    wait-for-changes: Return the current change list's version as soon as it differs from since, the version of the list the caller last read, or after a bounded wait of a few seconds when nothing changed. The version also changes when the owner's Story evaluation starts, finishes or is replaced, or a public fact in get_team changes. The views page keeps one such read open and, only when the version changed, calls list_changes again and, while it shows the Story, get_story_refresh. Each call is traced but never saved in the diagnostics history list_traces reads, so an open page does not push real operations out of view.`)
 	fmt.Fprintln(os.Stderr, `    start-build: The user starts building a confirmed change at its agreed revision, the one in force, on the project owner's bound team. A project has one open build. Building another change is refused with previous_change_open until the user has merged a passed run of the open build into the branch checked out in the project folder or dropped it with drop_build. Building the open build's own change again keeps its number and base and replaces its assignments; while no verification of it has passed, replaces must name the open build the page showed, else unfinished_build_open; once that build is merged or dropped, building its change again starts a new build. Surla first checks, without effects, merge or drop, a revision drafted before a drop, and the agreed design against the project's commit; numbers a new build one more than any surla/build-<n> or surla/tests-<n> branch and the open build; and saves it with its base, the project's commit, by one rename. Then it makes a missing working copy (.surla-build, and .surla-tests when a test writer is used) on the build's own branch and registers the builder and the test writer in their copies. Build moves no existing copy: each joins the build's branch when its worker first reads the assignment. A refused start saves nothing; after the save, a server stop leaves the build saved, and building again makes a missing copy and registers the roles. After the start's turns are released, bringing the team up has its own 45-second limit. get_build reads the saved build without this start's transient team outcome.`)
@@ -1314,17 +1416,89 @@ func surlaShowTeamPaneUsage() {
 func surlaStartTeamAgentsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] surla start-team-agents", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Ask the project's existing team-start owner to prepare the registered roles and open the Chorus launcher when a listed role is not running. Only the user may call it. It has the same bounded server-owned lifetime and dialog, space and availability refusals as the management team-start operation.`)
+	fmt.Fprintln(os.Stderr, `Start missing project agents using explicit choices, otherwise saved choices and installed cross-family defaults. Never replace a running guide. Only the user may call it. Workers run in Herdr when available, otherwise as finite server-owned headless processes. Opens no launcher.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla start-team-agents --body '{\n      \"choices\": {\n         \"builder\": {\n            \"client\": \"opencode\",\n            \"model\": \"Beatae nam.\",\n            \"program\": \"ys\",\n            \"thinking\": \"Dignissimos enim minus qui et et animi.\",\n            \"yolo\": true\n         },\n         \"guide\": {\n            \"client\": \"opencode\",\n            \"model\": \"Beatae nam.\",\n            \"program\": \"ys\",\n            \"thinking\": \"Dignissimos enim minus qui et et animi.\",\n            \"yolo\": true\n         }\n      }\n   }'")
+}
+
+func surlaListTeamAgentOptionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla list-team-agent-options", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.`)
 
 	// Flags list
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla start-team-agents")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla list-team-agent-options")
+}
+
+func surlaDismissTeamNoticeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla dismiss-team-notice", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Save the user's dismissal of one project notice without changing agent capability or startup behavior.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla dismiss-team-notice --body '{\n      \"notice\": \"herdr_unavailable\"\n   }'")
+}
+
+func surlaOpenViewsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla open-views", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Open a fresh project views session at the user's request. The project owner mints and opens the private link; no browser credential is returned to the caller.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla open-views")
+}
+
+func surlaMergeChangeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla merge-change", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -change-id STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Merge the user's current live-approved candidate and accepted tests into the clean checked-out local project branch. Rechecks approval, report and build identity before mutation. On failure restores the original branch and tracked state while preserving untracked files. After success stops only the merged build's workers. Repeating the exact already-taken approval is safe.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -change-id STRING: Approved change identifier.`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla merge-change --body '{\n      \"candidate_commit\": \"9f87b1183cb6ac76ab85d0a62250bf2663f54052efabe0c25ecd4b757c7a0970\",\n      \"report_digest\": \"q\",\n      \"request_revision\": \"xx1\"\n   }' --change-id \"6e\"")
 }
 
 func surlaListChangesUsage() {
@@ -1378,7 +1552,7 @@ func surlaStartBuildUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla start-build --body '{\n      \"replaces\": {\n         \"change_id\": \"61\",\n         \"started_at\": \"2008-09-02T12:30:42Z\"\n      },\n      \"request_revision\": \"q9g\"\n   }' --change-id \"k0\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla start-build --body '{\n      \"choices\": {\n         \"builder\": {\n            \"client\": \"opencode\",\n            \"model\": \"Beatae nam.\",\n            \"program\": \"ys\",\n            \"thinking\": \"Dignissimos enim minus qui et et animi.\",\n            \"yolo\": true\n         },\n         \"test_writer\": {\n            \"client\": \"opencode\",\n            \"model\": \"Beatae nam.\",\n            \"program\": \"ys\",\n            \"thinking\": \"Dignissimos enim minus qui et et animi.\",\n            \"yolo\": true\n         }\n      },\n      \"replaces\": {\n         \"change_id\": \"61\",\n         \"started_at\": \"2008-09-02T12:30:42Z\"\n      },\n      \"request_revision\": \"q9g\"\n   }' --change-id \"k0\"")
 }
 
 func surlaDropBuildUsage() {

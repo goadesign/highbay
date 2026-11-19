@@ -46,6 +46,10 @@ type Endpoints struct {
 	GetTeam                   goa.Endpoint
 	ShowTeamPane              goa.Endpoint
 	StartTeamAgents           goa.Endpoint
+	ListTeamAgentOptions      goa.Endpoint
+	DismissTeamNotice         goa.Endpoint
+	OpenViews                 goa.Endpoint
+	MergeChange               goa.Endpoint
 	ListChanges               goa.Endpoint
 	WaitForChanges            goa.Endpoint
 	StartBuild                goa.Endpoint
@@ -94,6 +98,10 @@ func NewEndpoints(s Service) *Endpoints {
 		GetTeam:                   NewGetTeamEndpoint(s),
 		ShowTeamPane:              NewShowTeamPaneEndpoint(s),
 		StartTeamAgents:           NewStartTeamAgentsEndpoint(s),
+		ListTeamAgentOptions:      NewListTeamAgentOptionsEndpoint(s),
+		DismissTeamNotice:         NewDismissTeamNoticeEndpoint(s),
+		OpenViews:                 NewOpenViewsEndpoint(s),
+		MergeChange:               NewMergeChangeEndpoint(s),
 		ListChanges:               NewListChangesEndpoint(s),
 		WaitForChanges:            NewWaitForChangesEndpoint(s),
 		StartBuild:                NewStartBuildEndpoint(s),
@@ -142,6 +150,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetTeam = m(e.GetTeam)
 	e.ShowTeamPane = m(e.ShowTeamPane)
 	e.StartTeamAgents = m(e.StartTeamAgents)
+	e.ListTeamAgentOptions = m(e.ListTeamAgentOptions)
+	e.DismissTeamNotice = m(e.DismissTeamNotice)
+	e.OpenViews = m(e.OpenViews)
+	e.MergeChange = m(e.MergeChange)
 	e.ListChanges = m(e.ListChanges)
 	e.WaitForChanges = m(e.WaitForChanges)
 	e.StartBuild = m(e.StartBuild)
@@ -420,7 +432,42 @@ func NewShowTeamPaneEndpoint(s Service) goa.Endpoint {
 // method "start_team_agents" of service "surla".
 func NewStartTeamAgentsEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.StartTeamAgents(ctx)
+		p := req.(*StartTeamAgentsPayload)
+		return s.StartTeamAgents(ctx, p)
+	}
+}
+
+// NewListTeamAgentOptionsEndpoint returns an endpoint function that calls the
+// method "list_team_agent_options" of service "surla".
+func NewListTeamAgentOptionsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.ListTeamAgentOptions(ctx)
+	}
+}
+
+// NewDismissTeamNoticeEndpoint returns an endpoint function that calls the
+// method "dismiss_team_notice" of service "surla".
+func NewDismissTeamNoticeEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DismissTeamNoticePayload)
+		return nil, s.DismissTeamNotice(ctx, p)
+	}
+}
+
+// NewOpenViewsEndpoint returns an endpoint function that calls the method
+// "open_views" of service "surla".
+func NewOpenViewsEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.OpenViews(ctx)
+	}
+}
+
+// NewMergeChangeEndpoint returns an endpoint function that calls the method
+// "merge_change" of service "surla".
+func NewMergeChangeEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MergeChangePayload)
+		return s.MergeChange(ctx, p)
 	}
 }
 

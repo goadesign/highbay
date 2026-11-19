@@ -164,6 +164,26 @@ func StartTeamAgentsSurlaPath() string {
 	return "/team/agents"
 }
 
+// ListTeamAgentOptionsSurlaPath returns the URL path to the surla service list_team_agent_options HTTP endpoint.
+func ListTeamAgentOptionsSurlaPath() string {
+	return "/team/agent-options"
+}
+
+// DismissTeamNoticeSurlaPath returns the URL path to the surla service dismiss_team_notice HTTP endpoint.
+func DismissTeamNoticeSurlaPath() string {
+	return "/team/notices/dismiss"
+}
+
+// OpenViewsSurlaPath returns the URL path to the surla service open_views HTTP endpoint.
+func OpenViewsSurlaPath() string {
+	return "/views/open"
+}
+
+// MergeChangeSurlaPath returns the URL path to the surla service merge_change HTTP endpoint.
+func MergeChangeSurlaPath(changeID string) string {
+	return fmt.Sprintf("/changes/%v/merge", changeID)
+}
+
 // ListChangesSurlaPath returns the URL path to the surla service list_changes HTTP endpoint.
 func ListChangesSurlaPath() string {
 	return "/changes"
