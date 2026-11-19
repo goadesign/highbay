@@ -36,6 +36,8 @@ type teamServiceFixture struct {
 	show     func(context.Context, string) error
 	register func(context.Context, BuildFolders) error
 	start    func(context.Context) (*gensurla.ProjectTeam, error)
+	options  func(context.Context) ([]*gensurla.InstalledAgentOption, error)
+	dismiss  func(context.Context, string) error
 	// choices captures the last selection crossing the CP-to-team owner boundary.
 	choices map[string]*gensurla.RoleAgentChoice
 }
@@ -46,6 +48,21 @@ func (f *teamServiceFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, 
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "read")
 	copy := f.snapshot
+	if copy.HerdrMode == "" {
+		copy.HerdrMode = "attached"
+	}
+	if copy.Team == "" {
+		copy.Team = "fixture-team"
+	}
+	if copy.Roles == nil {
+		copy.Roles = []*gensurla.TeamRoleState{}
+	}
+	if copy.SavedChoices == nil {
+		copy.SavedChoices = map[string]*gensurla.RoleAgentChoice{}
+	}
+	if copy.DismissedNotices == nil {
+		copy.DismissedNotices = []string{}
+	}
 	return &copy, nil
 }
 
@@ -75,12 +92,43 @@ func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string
 }
 
 // ListAgentOptions returns an installed-client fixture without executable discovery.
-func (f *teamServiceFixture) ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error) {
-	return []*gensurla.InstalledAgentOption{}, nil
+func (f *teamServiceFixture) ListAgentOptions(ctx context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	f.mu.Lock()
+	options := f.options
+	f.mu.Unlock()
+	if options != nil {
+		return options(ctx)
+	}
+	return fixtureAgentOptions(), nil
 }
 
-// DismissNotice has no persistence effect in tests that exercise other owners.
-func (f *teamServiceFixture) DismissNotice(context.Context, string) error { return nil }
+// fixtureAgentOptions provides deterministic metadata; no executable is launched.
+func fixtureAgentOptions() []*gensurla.InstalledAgentOption {
+	return []*gensurla.InstalledAgentOption{
+		{Client: "codex", Program: "/fixture/codex", Title: "Codex", Models: []string{"codex-default"},
+			Efforts: []string{"low", "high"}, ModelSupported: true, ThinkingSupported: true,
+			YoloSupported: true, HeadlessSupported: true},
+		{Client: "claude", Program: "/fixture/claude", Title: "Claude Code", Models: []string{"claude-default"},
+			Efforts: []string{"low", "high"}, ModelSupported: true, ThinkingSupported: true,
+			YoloSupported: true, HeadlessSupported: true},
+	}
+}
+
+// DismissNotice persists an immutable snapshot replacement without outside effects.
+func (f *teamServiceFixture) DismissNotice(ctx context.Context, notice string) error {
+	f.mu.Lock()
+	dismiss := f.dismiss
+	f.mu.Unlock()
+	if dismiss != nil {
+		if err := dismiss(ctx, notice); err != nil {
+			return err
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.snapshot.DismissedNotices = append(append([]string{}, f.snapshot.DismissedNotices...), notice)
+	return nil
+}
 
 // StopWorkers has no process effect in tests that exercise other owners.
 func (f *teamServiceFixture) StopWorkers(context.Context, BuildIdentity) error { return nil }
@@ -121,6 +169,33 @@ func testTeamBinding() *TeamBinding {
 	return &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{
 		snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
 	}}
+}
+
+// TestTeamAgentOptionsReturnsBuildRoles binds discovery to the saved evaluator
+// contract, rather than guessing needed roles from currently running panes.
+func TestTeamAgentOptionsReturnsBuildRoles(t *testing.T) {
+	for _, stored := range []bool{false, true} {
+		t.Run(fmt.Sprint(stored), func(t *testing.T) {
+			opts := Options{Team: &TeamBinding{Owner: "owner", Service: &teamServiceFixture{}}}
+			want := []string{"builder", "test_writer"}
+			if stored {
+				opts.BuildCacheDir = t.TempDir()
+				opts.Verification = &VerificationConfig{RunsDir: t.TempDir()}
+				want = []string{"builder"}
+			}
+			cp := newControlPlane(t, opts)
+			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
+				return Principal{ID: "owner", Kind: CallerUser}, nil
+			})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest("GET", "/team/agent-options", nil))
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			result, err := gensurla.DecodeListTeamAgentOptionsResult(response.Body.Bytes())
+			require.NoError(t, err)
+			assert.Equal(t, want, result.BuildRoles)
+			assert.Len(t, result.Agents, 2)
+		})
+	}
 }
 
 // TestTeamUserTransport enforces user-only access before the owner sees a call,
