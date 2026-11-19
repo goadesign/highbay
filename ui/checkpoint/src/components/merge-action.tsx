@@ -31,7 +31,8 @@ export function MergeFeedback({ idPrefix, controls }: { idPrefix: string; contro
   const recovery = error === null ? null : mergeRecovery(error.name);
   return <section id={idPrefix} aria-label="Merge into current branch" aria-busy={controls.pending}>
     {controls.pending ? <p id={`${idPrefix}-pending`} role="status">
-      Merging the approved commits into the project’s current branch… This continues if you close the page.
+      Merging the approved commits into the project’s current branch… Once Git changes the project,
+      closing this page does not interrupt the transaction.
     </p> : null}
     {receipt !== null ? <div id={`${idPrefix}-receipt`} role="status">
       <p>Merged into <code>{receipt.branch}</code> at <code>{receipt.head_commit.slice(0, 12)}</code>

@@ -491,6 +491,20 @@ li { margin-bottom: 0.35rem; }
 /* The display rule above would otherwise override the hidden attribute. */
 .surla-field-row[hidden] { display: none; }
 .surla-field-label { display: flex; flex-direction: column; gap: 0.22rem; flex: 1 1 12rem; font-size: 0.82rem; font-weight: 500; }
+.surla-agent-picker { margin-block: 1rem 1.5rem; }
+.surla-agent-picker fieldset {
+  min-inline-size: 0;
+  margin-block: 1rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 4px);
+}
+.surla-agent-picker legend { padding-inline: 0.3rem; font-weight: 600; }
+.surla-agent-picker .surla-field-label { min-inline-size: 0; }
+.surla-agent-picker input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .surla-input {
   width: 100%;
   min-block-size: 1.95rem;

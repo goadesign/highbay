@@ -190,6 +190,7 @@ export interface LatestVerificationItem {
 
 export interface ListTeamAgentOptionsResponseBody {
   agents: InstalledAgentOption[];
+  build_roles: ("builder" | "test_writer")[];
 }
 
 export interface LivePromptItem {
@@ -1946,13 +1947,24 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
   "ListTeamAgentOptionsResponseBody": {
     "type": "object",
     "required": [
-      "agents"
+      "agents",
+      "build_roles"
     ],
     "properties": {
       "agents": {
         "type": "array",
         "items": {
           "$ref": "#/$defs/InstalledAgentOption"
+        }
+      },
+      "build_roles": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "builder",
+            "test_writer"
+          ]
         }
       }
     },

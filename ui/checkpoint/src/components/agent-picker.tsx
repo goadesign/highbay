@@ -32,12 +32,16 @@ export function AgentPickerView({
   idPrefix, roles, options, choices, loading, error, herdrMode, disabled,
   backgroundConsent, onBackgroundConsentChange, onChoiceChange, onRefresh, onLoad,
 }: AgentPickerProps) {
-  useEffect(() => { onLoad(); }, [onLoad]);
+  useEffect(() => {
+    let mounted = true;
+    queueMicrotask(() => { if (mounted) onLoad(); });
+    return () => { mounted = false; };
+  }, [onLoad]);
   const headless = herdrMode === "unavailable";
   const installed = options ?? [];
   const supported = installed.filter((option) => !headless || option.headless_supported);
   return (
-    <section id={idPrefix} aria-labelledby={idPrefix + "-title"} aria-busy={loading}>
+    <section id={idPrefix} className="surla-agent-picker" aria-labelledby={idPrefix + "-title"} aria-busy={loading}>
       <div className="surla-region-header">
         <h3 id={idPrefix + "-title"}>Choose workers</h3>
         <Button id={idPrefix + "-refresh"} disabled={disabled || loading} onClick={onRefresh}>

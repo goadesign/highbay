@@ -16,7 +16,12 @@ import { createRoot, Root } from "react-dom/client";
 import { ArchitecturePreviewView, IncomingChangeCardView } from "./components/c4-graph";
 import { ChangeListView } from "./components/change-list";
 import { CP1EditorView } from "./components/cp1-editor";
-import { BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
+import { BuildMergeInstructions, BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
+import { AgentPickerView } from "./components/agent-picker";
+import { choicesForRoles, proposeWorkerChoices, workerChoicesReady } from "./agent-choices";
+import type { WorkerChoices, WorkerRole } from "./agent-choices";
+import { MergeFeedback, MergePrimaryAction } from "./components/merge-action";
+import type { MergeControls } from "./components/merge-action";
 import { VerificationView } from "./components/cp4-verification";
 import { ProposedRevisionView } from "./components/proposal";
 import { ApprovalStage } from "./components/approval-stage";
@@ -576,6 +581,24 @@ export function bootstrapViewsPage() {
   let teamReadAgain = false;
   let teamStartReceipt: TeamStageProps["startReceipt"] = null;
   let teamActionError: string | null = null;
+  // Installed options are read on demand. Local choices survive team polling,
+  // navigation and failed discovery; only an explicit launch persists them.
+  let agentOptions: Operations["list_team_agent_options"]["result"] | null = null;
+  let agentOptionsError: string | null = null;
+  let workerChoices: WorkerChoices = {};
+  const editedWorkerChoices = new Set<WorkerRole>();
+  let backgroundConsent = false;
+  // Successful dismissal receipts prevent an earlier team read restoring a
+  // notice. Reload still reads the preference from its project owner.
+  type TeamNotice = TeamSnapshot["dismissed_notices"][number];
+  const noticeDismissed = new Set<TeamNotice>();
+  const noticeErrors = new Map<TeamNotice, string>();
+  // Merge outcomes belong to one exact approval and build, never a latest run.
+  let mergeOutcome: {
+    identity: string;
+    receipt: MergeControls["receipt"];
+    error: MergeControls["error"];
+  } | null = null;
   // buildChangeId identifies the single retained build read. The generation
   // rejects replies begun before a start, its successful answer, or a change
   // of selected card.
@@ -781,7 +804,7 @@ export function bootstrapViewsPage() {
 
   // sessionEndedMessage tells the user what to do once the session is gone.
   function sessionEndedMessage(): string {
-    return "This page's Surla session has ended. Run surla in your project folder to open a new page.";
+    return "This page's Surla session has ended. Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.";
   }
 
   // start exchanges the link from the address fragment for a session, removes
@@ -820,8 +843,8 @@ export function bootstrapViewsPage() {
     rootEl.dataset.state = reason === "link-used" ? "link-used" : "signed-out";
     statusEl.textContent =
       reason === "link-used"
-        ? "This link was already used. Run surla in your project folder to open a new page."
-        : "Run surla in your project folder to open this page.";
+        ? "This link was already used. Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion."
+        : "Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.";
     syncAllRegions();
   }
 
@@ -1324,7 +1347,8 @@ export function bootstrapViewsPage() {
   // isViewingSelectedRun binds evidence reads to the explicit Check/Approve selection.
   function isViewingSelectedRun(runId: string): boolean {
     return selectedRunId === runId &&
-      (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval");
+      (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval" ||
+        editorOpen && editorStage === "build" && activeEditor?.card.change_id === runsById.get(runId)?.change_id);
   }
 
   // approvalReviewFresh validates the observation's identity and transport
@@ -1334,6 +1358,118 @@ export function bootstrapViewsPage() {
       selectedReview !== null && selectedReview.runId === run.run_id &&
       selectedReview.generation === verificationGeneration &&
       selectedReview.order >= (runObservationOrder.get(run.run_id) ?? -1);
+  }
+
+  // mergeIdentity correlates receipts with the approved inputs and saved build.
+  // It deliberately does not bind the user to the newest passed run.
+  function mergeIdentity(run: VerificationStatusResult): string | null {
+    const build = buildChangeId === run.change_id && buildSnapshot?.state === "started" ? buildSnapshot : null;
+    return build !== null && run.state.type === "completed"
+      ? JSON.stringify([run.change_id, build.started_at, run.request_revision,
+        run.candidate_commit, run.state.value.report.report_digest]) : null;
+  }
+
+  // buildApprovalRun locates the card's exact saved approval, keeping a user
+  // selection when it carries that binding. Branch tips and recency are not IDs.
+  function buildApprovalRun(card: ChangeCardResult): VerificationStatusResult | null {
+    const approval = card.approval;
+    if (approval === undefined) return null;
+    const selected = resolveDisplayedVerificationRun();
+    if (selected !== null && selected.change_id === card.change_id &&
+      selected.request_revision === card.request_revision && selected.candidate_commit === approval.candidate_commit &&
+      selected.state.type === "completed" && selected.state.value.report.report_digest === approval.report_digest) return selected;
+    return savedApprovalEvidenceRun(card, approval);
+  }
+
+  // refreshMergeState follows the exact approval through existing read owners.
+  // It may resolve an unknown outcome but never repeats the mutation.
+  function refreshMergeState(run: VerificationStatusResult | null) {
+    if (sessionState !== "active") return;
+    if (run === null) { openRecordedApproval(); return; }
+    selectedRunId = run.run_id;
+    selectedVerificationChangeId = run.change_id;
+    readBuild(run.change_id);
+    readApprovalReview(run.run_id, run.change_id);
+    refreshOpenCard(run.change_id);
+    readTeam();
+  }
+
+  // mergeControls admits only a current owner-recorded approval for this build.
+  // Retained evidence remains visible while reads or the update chain are stale.
+  function mergeControls(run: VerificationStatusResult | null): MergeControls {
+    const build = run !== null ? knownTakingBuild(run.change_id) : null;
+    const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
+    const pending = Array.from(pendingCalls).some((call) => call.op === "merge_change");
+    const identity = run !== null ? mergeIdentity(run) : null;
+    const outcome = identity !== null && mergeOutcome?.identity === identity ? mergeOutcome : null;
+    let reason: string | null = null;
+    if (run === null) reason = "Read the exact saved approval before merging.";
+    else if (sessionState !== "active") reason = "Open a fresh Surla page through your coding agent to check current approval.";
+    else if (build === null) reason = "Read the current build before merging.";
+    else if (build.taking.state === "merged") reason = "This build is already merged. Describe the next change when you are ready.";
+    else if (build.taking.state === "dropped") reason = "This build was dropped; it cannot be merged through Surla.";
+    else if (!build.in_force || !runBelongsToBuild(run.change_id, build, run)) reason = "This result does not belong to the current agreed build.";
+    else if (!approvalReviewFresh(run)) reason = "Refresh merge state to read current approval and build facts.";
+    else if (review?.approval.state !== "recorded") reason = "Review and approve this result before merging.";
+    else if (build.taking.state !== "passed") reason = "The current build has no passed result to merge.";
+    else if (run.state.type !== "completed" || !run.state.value.report.passed ||
+      review.approval.candidate_commit !== run.candidate_commit ||
+      review.approval.report_digest !== run.state.value.report.report_digest ||
+      review.approval.suite_commit !== run.suite_commit) reason = "The saved approval does not match this result. Refresh merge state.";
+    return { eligible: reason === null && !pending, pending, reason,
+      receipt: outcome?.receipt ?? null, error: outcome?.error ?? null,
+      onMerge: () => { if (run !== null) mergeApprovedRun(run); },
+      onRefresh: () => refreshMergeState(run) };
+  }
+
+  // mergeApprovedRun captures the exact tuple before any asynchronous read can
+  // change selection. Lost responses recover through reads, never automatic retry.
+  function mergeApprovedRun(run: VerificationStatusResult) {
+    if (!mergeControls(run).eligible || run.state.type !== "completed") return;
+    const identity = mergeIdentity(run);
+    if (identity === null) return;
+    const request: Operations["merge_change"]["request"] = {
+      change_id: run.change_id, request_revision: run.request_revision,
+      candidate_commit: run.candidate_commit, report_digest: run.state.value.report.report_digest,
+    };
+    mergeOutcome = { identity, receipt: null, error: null };
+    // Reads begun before the mutation cannot establish its outcome or restore
+    // approval admission. A failure needs a fresh owner read before another try.
+    buildGeneration++;
+    verificationGeneration++;
+    callServer("merge_change", request, run.change_id, (result) => {
+      if (sessionState !== "active") return;
+      mergeOutcome = { identity, receipt: { at: new Date().toISOString(), ...result }, error: null };
+      statusEl.textContent = "Merged approved change " + run.change_id + " into " + result.branch + " at " + result.head_commit.slice(0, 12) + ".";
+      readBuild(run.change_id);
+      refreshOpenCard(run.change_id);
+      readTeam();
+      void loadChanges();
+    }, (message, failure) => {
+      if (sessionState !== "active") return;
+      mergeOutcome = { identity, receipt: null, error: {
+        name: failure.kind === "server" ? failure.body?.name ?? null : null, message,
+      } };
+      statusEl.textContent = "Merge was not confirmed. Refresh merge state before trying again.";
+    });
+  }
+
+  // mergePanel keeps manual commands secondary and available only after the
+  // same live approval that permits the server action has been read.
+  function mergePanel(run: VerificationStatusResult | null, idPrefix: string): React.ReactNode {
+    const controls = mergeControls(run);
+    const build = run !== null ? knownTakingBuild(run.change_id) : null;
+    const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
+    let manualInstructions: React.ReactNode = null;
+    if (controls.eligible && run !== null && build !== null && build.taking.state === "passed" &&
+      review?.approval.state === "recorded" && approvalReviewFresh(run) &&
+      runBelongsToBuild(run.change_id, build, run) && run.state.type === "completed") {
+      manualInstructions = <BuildMergeInstructions taking={build.taking} candidateCommit={run.candidate_commit}
+        testsCommit={run.test_source.source === "written_tests" ? run.test_source.commit : null}
+        onFocusedControlRemoved={focusVerificationHeading} />;
+    }
+    return <><MergeFeedback idPrefix={idPrefix} controls={controls} />
+      {manualInstructions}</>;
   }
 
   // isViewingChangeResult reports whether the active result view currently
@@ -1510,6 +1646,7 @@ export function bootstrapViewsPage() {
         if (sessionState !== "active") return;
         teamSnapshot = snapshot;
         teamReadError = null;
+        proposeMissingWorkerChoices();
         done();
       },
       (message) => {
@@ -1522,6 +1659,129 @@ export function bootstrapViewsPage() {
         done();
       }
     );
+  }
+
+  // buildWorkerRoles is the owner's plan for a new build, including the
+  // builder-only case before any working copy or role has been registered.
+  function buildWorkerRoles(): readonly WorkerRole[] {
+    return agentOptions?.build_roles ?? [];
+  }
+
+  // teamWorkerRoles selects only registered workers with current assignments.
+  function teamWorkerRoles(): WorkerRole[] {
+    return (teamSnapshot?.roles ?? []).flatMap((role) => role.role !== "guide" &&
+      (role.assignment === "unread" || role.assignment === "nothing_owed") ? [role.role] : []);
+  }
+
+  // proposeMissingWorkerChoices refreshes only automatic proposals. A user's
+  // input remains unchanged even when saved preferences or discovery change.
+  function proposeMissingWorkerChoices() {
+    if (agentOptions === null || teamSnapshot === null) return;
+    const saved = { ...teamSnapshot.saved_choices };
+    for (const role of editedWorkerChoices) {
+      const choice = workerChoices[role];
+      if (choice !== undefined) saved[role] = choice;
+    }
+    const roles = Array.from(new Set([...buildWorkerRoles(), ...teamWorkerRoles()]));
+    const proposed = proposeWorkerChoices(roles, agentOptions.agents, saved, teamSnapshot.herdr_mode);
+    for (const role of roles) {
+      if (!editedWorkerChoices.has(role)) workerChoices[role] = proposed[role];
+    }
+  }
+
+  // loadAgentOptions is a stable mount callback; the owner is not probed by
+  // wait_for_changes or routine renders once discovery has completed.
+  function loadAgentOptions() {
+    if (agentOptions === null && agentOptionsError === null) readAgentOptions();
+  }
+
+  // readAgentOptions is the explicit discovery and retry path. Failed reads
+  // retain drafts but cannot authorize a new launch from stale capabilities.
+  function readAgentOptions() {
+    if (sessionState !== "active" || hasPending("list_team_agent_options", "")) return;
+    if (teamSnapshot === null || teamFactsError() !== null) readTeam();
+    callServer("list_team_agent_options", {}, "", (result) => {
+      if (sessionState !== "active") return;
+      agentOptions = result;
+      agentOptionsError = null;
+      proposeMissingWorkerChoices();
+    }, (message) => {
+      if (sessionState === "active") agentOptionsError = message;
+    });
+  }
+
+  // workersReady shares the same admission facts between visible controls
+  // and their callbacks; empty or stale discovery never silently uses defaults.
+  function workersReady(roles: readonly WorkerRole[]): boolean {
+    return agentOptions !== null && agentOptionsError === null &&
+      !hasPending("list_team_agent_options", "") && teamFactsError() === null &&
+      workerChoicesReady(roles, workerChoices, agentOptions.agents,
+        teamSnapshot?.herdr_mode ?? null, backgroundConsent);
+  }
+
+  // dismissTeamNotice saves only the named recommendation, without launching
+  // an agent or changing a capability. A refusal leaves the notice visible.
+  function dismissTeamNotice(notice: TeamNotice) {
+    if (sessionState !== "active" || hasPending("dismiss_team_notice", notice)) return;
+    noticeErrors.delete(notice);
+    callServer("dismiss_team_notice", { notice }, notice, () => {
+      if (sessionState !== "active") return;
+      noticeDismissed.add(notice);
+      readTeam();
+    }, (message) => {
+      if (sessionState === "active") noticeErrors.set(notice, message);
+    });
+  }
+
+  // workerRecommendations appear beside worker selection, when their advice
+  // is relevant. They share the owner's persisted dismissals across views.
+  function workerRecommendations(idPrefix: string): React.ReactNode {
+    const snapshot = teamSnapshot;
+    if (snapshot === null || teamFactsError() !== null) return null;
+    const families = new Set((agentOptions?.agents ?? []).filter((option) =>
+      snapshot.herdr_mode !== "unavailable" || option.headless_supported).map((option) => option.client));
+    const notices: { notice: TeamNotice; title: string; text: string }[] = [];
+    if (buildWorkerRoles().includes("test_writer") && families.size === 1) notices.push({
+      notice: "single_agent_family", title: "One coding-agent family is installed.",
+      text: "Surla can use it for both workers. A second model family can give the builder and test writer different perspectives.",
+    });
+    if (snapshot.herdr_mode === "available") notices.push({
+      notice: "outside_herdr", title: "Your guide is outside Herdr.",
+      text: "Workers will open in the project’s Herdr tab. Starting them selects that tab without bringing the Herdr window to the foreground. You can keep using this coding-agent session.",
+    });
+    if (snapshot.herdr_mode === "unavailable") notices.push({
+      notice: "herdr_unavailable", title: "Workers will run in the background.",
+      text: "Herdr provides a live workspace with agent panes. You can continue here with server-managed background workers instead.",
+    });
+    return notices.filter(({ notice }) => !noticeDismissed.has(notice) &&
+      !snapshot.dismissed_notices.includes(notice)).map(({ notice, title, text }) =>
+      <Alert key={notice} id={idPrefix + "-notice-" + notice}>
+        <p><strong>{title}</strong></p><p>{text}</p>
+        {noticeErrors.has(notice) ? <p role="alert">Could not save this dismissal. {noticeErrors.get(notice)}</p> : null}
+        <Button id={idPrefix + "-notice-" + notice + "-dismiss"}
+          disabled={sessionState !== "active" || hasPending("dismiss_team_notice", notice)}
+          onClick={() => dismissTeamNotice(notice)}>
+          {hasPending("dismiss_team_notice", notice) ? "Saving…" : noticeErrors.has(notice) ? "Retry dismissal" : "Dismiss recommendation"}
+        </Button>
+      </Alert>);
+  }
+
+  // workerPicker renders controlled values for this action's required roles.
+  function workerPicker(idPrefix: string, roles: readonly WorkerRole[]): React.ReactNode {
+    return <>{workerRecommendations(idPrefix)}<AgentPickerView idPrefix={idPrefix} roles={roles}
+      options={agentOptions?.agents ?? null} choices={workerChoices}
+      loading={hasPending("list_team_agent_options", "")} error={agentOptionsError}
+      herdrMode={teamSnapshot?.herdr_mode ?? null} disabled={sessionState !== "active" ||
+        hasPending("start_team_agents", "") || Array.from(pendingCalls).some((call) => call.op === "start_build")}
+      backgroundConsent={backgroundConsent} onBackgroundConsentChange={(value) => {
+        backgroundConsent = value;
+        syncAllRegions();
+      }} onChoiceChange={(role, choice) => {
+        workerChoices = { ...workerChoices, [role]: choice };
+        editedWorkerChoices.add(role);
+        proposeMissingWorkerChoices();
+        syncAllRegions();
+      }} onRefresh={readAgentOptions} onLoad={loadAgentOptions} /></>;
   }
 
   // teamFactsError distinguishes retained observations from currently followed
@@ -1575,11 +1835,11 @@ export function bootstrapViewsPage() {
   // receipt records this request; readTeam supplies current role health.
   function startTeamWorkers() {
     if (sessionState !== "active" || !teamWorkersHaveWork() ||
-        hasPending("start_team_agents", "")) return;
+        !workersReady(teamWorkerRoles()) || hasPending("start_team_agents", "")) return;
     const begun = new Date().toISOString();
     teamActionError = null;
     callServer(
-      "start_team_agents", {}, "",
+      "start_team_agents", { choices: choicesForRoles(teamWorkerRoles(), workerChoices) }, "",
       (result) => {
         if (sessionState !== "active") return;
         teamStartReceipt = { at: begun, result };
@@ -1797,7 +2057,7 @@ export function bootstrapViewsPage() {
   function startBuild(replaces?: ReplacedBuild) {
     const ed = activeEditor;
     if (ed === null || sessionState !== "active" || editorRequest !== null ||
-        ed.card.status !== "confirmed" || ed.incomingCard !== null ||
+        ed.card.status !== "confirmed" || ed.incomingCard !== null || !workersReady(buildWorkerRoles()) ||
         buildChangeId !== ed.card.change_id || buildSnapshot === null ||
         buildReadError !== null || buildDraftedBeforeDrop !== false || hasPending("start_build", ed.card.change_id) ||
         (openBuildRefusal !== null && openBuildRefusal.change_id !== ed.card.change_id)) return;
@@ -1810,6 +2070,7 @@ export function bootstrapViewsPage() {
     const request: Operations["start_build"]["request"] = {
       change_id: changeId,
       request_revision: revision,
+      choices: choicesForRoles(buildWorkerRoles(), workerChoices),
     };
     // The Build control binds its confirmation to this exact saved start;
     // synchronous rendering invalidates that question when the start changes.
@@ -2326,7 +2587,7 @@ export function bootstrapViewsPage() {
               next = <span>Describe the next change when you are ready.</span>;
               break;
             case "passed":
-              next = <span>Merge the verified commits shown below.</span>;
+              next = <MergePrimaryAction id="surla-cp5-merge" controls={mergeControls(run)} />;
               break;
             case "dropped":
               attention = "This build was dropped. Your saved approval remains readable.";
@@ -2339,8 +2600,12 @@ export function bootstrapViewsPage() {
       if (newer !== null) {
         if (review?.approval.state === "blocked") attention = "A newer check is available.";
         next = <><Button id="surla-cp5-review-latest"
-          variant={review?.approval.state === "available" ? "default" : "primary"}
+          variant={review?.approval.state === "available" || review?.approval.state === "recorded" ? "default" : "primary"}
           disabled={editorRequest !== null} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
+      }
+      if (run !== null && hasPending("merge_change", run.change_id)) {
+        attention = "Merging the approved result.";
+        next = <MergePrimaryAction id="surla-cp5-merge" controls={mergeControls(run)} />;
       }
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
@@ -2370,8 +2635,12 @@ export function bootstrapViewsPage() {
           attention = "The tests could not be checked.";
           next = <span>{tests.step}</span>;
         } else if (build.taking.state === "passed") {
-          attention = "A verification of this build passed.";
-          next = <span>Review the saved result below before approving it.</span>;
+          const approved = buildApprovalRun(activeEditor.card);
+          attention = approved !== null ? "Your approval is recorded." : "A verification of this build passed.";
+          next = approved !== null && mergeControls(approved).eligible
+            ? <MergePrimaryAction id="surla-build-merge" controls={mergeControls(approved)} />
+            : approved !== null ? <Button onClick={() => refreshMergeState(approved)}>Check current approval</Button>
+            : <span>Review the saved result below before approving it.</span>;
         } else if (tests.state === "reported") {
           attention = "Surla is checking the reported tests.";
           next = <span>Wait for Surla's verdict.</span>;
@@ -2381,6 +2650,10 @@ export function bootstrapViewsPage() {
           next = <span>{tests.state === "accepted" || tests.state === "not_used"
             ? "The builder implements and verifies the change." : "The test writer prepares and reports the tests."}</span>;
         }
+      }
+      if (hasPending("merge_change", activeEditor.card.change_id)) {
+        attention = "Merging the approved result.";
+        next = <MergePrimaryAction id="surla-build-merge" controls={mergeControls(buildApprovalRun(activeEditor.card))} />;
       }
     } else if (activeResult?.kind === "cp4-verification") {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
@@ -2405,7 +2678,7 @@ export function bootstrapViewsPage() {
       let step: string | React.ReactElement;
       if (sessionState !== "active") {
         attention = "The session ended.";
-        step = "Run surla in your project folder to reopen this project.";
+        step = "Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.";
       } else if (listError !== null) {
         attention = "The changes could not be read.";
         step = onDescribe ? "Choose Read the changes again below." : "Open Describe to retry reading changes.";
@@ -2770,6 +3043,9 @@ export function bootstrapViewsPage() {
               checkError={cardLoadErrors.get(ed.card.change_id) ??
                 (latestCheck !== null ? runRequestErrors.get(latestCheck.run_id) ?? null : null)}
               approvalAvailable={approvalUnavailable === null && changeList?.approval_available === true}
+              agentPicker={workerPicker("surla-build-agents", buildWorkerRoles())}
+              agentsReady={workersReady(buildWorkerRoles())}
+              mergeAction={mergePanel(buildApprovalRun(ed.card), "surla-build-merge-feedback")}
               onRefresh={() => readBuild(ed.card.change_id)}
               onReadFindings={readBuildFindings}
               onBuild={startBuild}
@@ -2858,7 +3134,6 @@ export function bootstrapViewsPage() {
           else openChange(effectiveChangeId);
         }}
         onReturnToChangeCard={handleReturnToChangeCard}
-        onFocusedControlRemoved={focusVerificationHeading}
       />
     );
   }
@@ -2925,6 +3200,8 @@ export function bootstrapViewsPage() {
             error={teamFactsError()}
             starting={hasPending("start_team_agents", "")}
             canStartWorkers={teamWorkersHaveWork()}
+            agentPicker={teamWorkersHaveWork() ? workerPicker("surla-team-agents", teamWorkerRoles()) : workerRecommendations("surla-team-agents")}
+            agentsReady={workersReady(teamWorkerRoles())}
             disabled={sessionState !== "active"}
             showing={showingTeamRoles()}
             startReceipt={teamStartReceipt}
@@ -3037,11 +3314,11 @@ export function bootstrapViewsPage() {
         approvalError={run !== null ? approveErrors.get(run.run_id) ?? null : null}
         unavailableReason={approvalUnavailable}
         build={run !== null ? knownTakingBuild(run.change_id) : null} unsaved={hasUnsavedEdits()}
+        mergeAction={mergePanel(run, "surla-cp5-merge-feedback")}
         savedRecord={recordCard !== undefined && recordCard.change_id === selectedVerificationChangeId && recordApproval !== undefined
           ? { approval: recordApproval, requestRevision: recordCard.request_revision, reason: recordCard.unverified_approval?.reason ?? null } : null}
         onRefresh={() => { if (run !== null) readApprovalReview(run.run_id, run.change_id); else handleLoadLatestCard(); }}
         onOpenProof={openProof} onOpenAgreement={handleReturnToChangeCard}
-        onFocusedControlRemoved={focusVerificationHeading}
       />));
       return;
     }
