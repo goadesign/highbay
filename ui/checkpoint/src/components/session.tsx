@@ -7,8 +7,8 @@ import { Alert, Card } from "./shadcn";
 // SignedOutReason says why the page has no session.
 export type SignedOutReason = "no-link" | "link-used" | "link-failed";
 
-// SignedOutView tells the user how to open this page with `surla`. It never
-// offers a way to type or paste a credential.
+// SignedOutView names the agent and companion routes that open a fresh views
+// session. It never offers a way to type or paste a credential.
 export function SignedOutView({ reason, message }: { reason: SignedOutReason; message: string }) {
   return (
     <Card id="surla-signed-out" className="surla-card" aria-labelledby="surla-signed-out-title">
@@ -17,7 +17,7 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
           ? "This link was already used"
           : reason === "link-failed"
           ? "Surla could not open this page"
-          : "Open this project's views with surla"}
+          : "Open this project’s views"}
       </h2>
       {reason === "link-used" ? (
         <Alert id="surla-link-used" variant="warning" role="alert">
@@ -31,12 +31,11 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
         </Alert>
       ) : null}
       <p>
-        Run <code>surla</code> in your project folder. It starts or finds the project's Surla
-        server and opens this page with a one-time link.
+        Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.
       </p>
       <p className="surla-muted">
-        The page keeps its session only while it is open: reloading it, closing it, or opening
-        it in another tab needs a new link from <code>surla</code>.
+        Reloading or reopening this page, or opening it in another tab, needs a fresh session
+        through one of those routes.
       </p>
     </Card>
   );
@@ -49,8 +48,8 @@ export function SessionEndedNotice({ unsavedLines }: { unsavedLines: string[] })
   return (
     <Alert id="surla-session-ended" variant="warning" role="alert">
       <strong>This page's Surla session has ended. </strong>
-      The Surla server no longer accepts it, for example because the server restarted. Run{" "}
-      <code>surla</code> in your project folder to open a new page.
+      The Surla server no longer accepts it, for example because the server restarted.
+      {" "}Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.
       {unsavedLines.length > 0 ? (
         <>
           <p>

@@ -31,16 +31,26 @@ You are taking part in a usability study of a developer tool called
   real first-time user works from the README and the tool, and that is what
   this study measures. Documents the README links to are not available. If
   you want one, say so in your report, because that is useful evidence.
-- Run Surla itself the way the README shows, including `surla init`, which
-  sets up your starter project.
+- Install and set up Surla the way the README shows. After one-time setup,
+  use your coding-agent conversation and Surla's browser page to reach the
+  goal. Setup changes global coding-agent configuration and skill files,
+  and may install the Herdr companion and its free macOS shortcut outside
+  `work/`. Report the paths it changes; do not remove shared settings during
+  cleanup. Report every terminal command you still need to enter as the user;
+  distinguish commands your coding agent runs internally and harness-only
+  agent launches. Do not hide a manual workaround as ordinary progress.
+- You may read and invoke the runtime `/surla` (`$surla`) skill that Surla
+  installs for your coding agent. This is separate from the forbidden
+  `surla-ux-review` study skill. Learn the entrypoint from the README; the
+  facilitator will not configure a connection or supply a page credential.
 - Surla runs your product's code as ordinary processes with your file and
   network access. Its working copies and process groups do not confine that
   code. Any sandbox imposed by your coding-agent environment is a separate
   environment restriction.
 - Do not compile, generate code from, or run your product's code yourself,
   for example with `goa gen`, `go build`, `go run`, or `go test` in your
-  project. Your product's code runs only through Surla's commands, such as
-  `surla verify`. If Surla's README or generated files tell you to run one
+  project. Your product's code runs only through Surla's documented
+  operations. If Surla's README or generated files tell you to run one
   of those commands yourself, or you need a step Surla gives you no way to
   run, do not run it. Say so in your report instead.
 - This machine has: {{ENVIRONMENT_FACTS}}. Never print the value of a
@@ -49,9 +59,9 @@ You are taking part in a usability study of a developer tool called
   {{CODING_AGENTS}}. If you start one, save its full output under
   `{{PARTICIPANT}}/work/agent-logs/`. Tell it to use Surla, and tell it not to
   read Surla's source, use the `surla-ux-review` skill, or compile, generate
-  code from, or run the product's code except through Surla's commands. If
-  it needs such a step, it must stop and say so in its output, not skip the
-  step or edit generated files by hand. Surla's source is
+  code from, or run the product's code except through Surla's documented
+  operations. If it needs such a step, it must stop and say so in its output,
+  not skip the step or edit generated files by hand. Surla's source is
   the clone apart from its README, and `github.com/goadesign/surla` in the Go
   module cache. It may read other libraries it needs to write code.
 - Run long-running processes, such as servers, in the background. Report
@@ -70,8 +80,12 @@ Send a step report when any of these happens:
 - you finish a meaningful part of the goal;
 - you are stuck;
 - you are choosing between different ways of using Surla;
-- you are about to run a `surla` command for the first time. Report before
-  running it, and say what you expect it to do;
+- you are about to install or set up Surla, invoke its skill for the first
+  time, or make a new human decision in its browser page. Report before the
+  action and say what you expect;
+- you need to enter a terminal command as the user after one-time setup to
+  move the product forward; report the reason and what the interface made
+  available;
 - about ten actions have passed since your last report.
 
 Use this format:

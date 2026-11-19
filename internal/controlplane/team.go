@@ -156,7 +156,11 @@ func (c *ControlPlane) ListTeamAgentOptions(ctx context.Context) (*gensurla.List
 	if err != nil {
 		return nil, err
 	}
-	return &gensurla.ListTeamAgentOptionsResult{Agents: agents}, nil
+	roles := []string{"builder"}
+	if !c.storedEvaluator() {
+		roles = append(roles, "test_writer")
+	}
+	return &gensurla.ListTeamAgentOptionsResult{Agents: agents, BuildRoles: roles}, nil
 }
 
 // DismissTeamNotice persists a project notice preference through its team owner.

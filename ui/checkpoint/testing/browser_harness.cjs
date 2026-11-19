@@ -631,6 +631,159 @@ async function takingScenario(input, facts, views) {
   }
 }
 
+// experienceScenario exercises the changed inline worker and approved-merge
+// controls through the existing isolated browser and real served page.
+async function experienceScenario(input, facts, views) {
+  const variant = input.experience_view;
+  const [width, height] = variant === "phone" ? [375, 800] : variant === "reflow" ? [640, 450] : [1280, 900];
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 }, views.sessionId);
+  await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: variant === "dark" ? "dark" : "light" }] }, views.sessionId);
+  await until(views, "document.getElementById('surla-nav-build') !== null");
+  const merge = ["merge", "build_merge", "merge_conflict", "dirty_worktree"].includes(input.experience);
+  const mergeId = input.experience === "build_merge" ? "surla-build-merge" : "surla-cp5-merge";
+  await evaluate(views, "document.getElementById('surla-nav-" + (merge && input.experience !== "build_merge" ? "cp5" : "build") + "').click(), true");
+  const root = merge && input.experience !== "build_merge" ? "surla-approval-stage" : "surla-build-section";
+  const prefix = "surla-build-agents";
+  if (input.experience === "build_merge") {
+    const available = await until(views, "Array.from(document.querySelectorAll('#surla-frame-next button')).some((node) => node.textContent === 'Check current approval') || document.getElementById('surla-build-merge')?.disabled === false");
+    if (available.timed_out) throw new Error("Build did not offer its exact approved merge state");
+    await evaluate(views, "Array.from(document.querySelectorAll('#surla-frame-next button')).find((node) => node.textContent === 'Check current approval')?.click(), true");
+  }
+  let ready = await until(views, merge
+    ? "document.getElementById('" + mergeId + "')?.disabled === false"
+    : "document.getElementById('surla-build-agents-builder-client')?.value.length > 0");
+  if (ready.timed_out) throw new Error("experience did not load: " + await evaluate(views, "document.body.innerText.slice(0, 6500)"));
+  const measured = { name: variant, background_gated: true, draft_preserved: true, notice_dismissed: true, client_changed: true,
+    initial_clients: [], manual_secondary: true, merge_count: 0, action_text: "", action_recovered: true };
+  measured.no_auto_launch = !views.requests.some((r) => r.method === "POST" && /\/(build|agents|merge)$/.test(new URL(r.url).pathname));
+  if (!merge) {
+    measured.initial_clients = await evaluate(views, "Array.from(document.querySelectorAll('#" + prefix + " select[id$=-client]'), (node) => JSON.parse(node.value)[0])");
+    if (["picker", "headless", "builder_only"].includes(input.experience)) {
+      await evaluate(views, "(" + function changeClient() {
+        const client = document.getElementById("surla-build-agents-builder-client");
+        client.value = JSON.stringify(["claude", "/fixture/claude"]);
+        client.dispatchEvent(new Event("change", { bubbles: true }));
+      }.toString() + ")()");
+      ready = await until(views, "document.getElementById('surla-build-agents-builder-client').value === JSON.stringify(['claude', '/fixture/claude'])");
+      measured.client_changed = !ready.timed_out;
+      await evaluate(views, "(" + function restoreClient() {
+        const client = document.getElementById("surla-build-agents-builder-client");
+        client.value = JSON.stringify(["codex", "/fixture/codex"]);
+        client.dispatchEvent(new Event("change", { bubbles: true }));
+      }.toString() + ")()");
+      await until(views, "document.getElementById('surla-build-agents-builder-client').value === JSON.stringify(['codex', '/fixture/codex'])");
+    }
+    await evaluate(views, "(" + function setDraft() {
+      const model = document.getElementById("surla-build-agents-builder-model");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(model, "custom/browser-model");
+      model.dispatchEvent(new Event("input", { bubbles: true }));
+      const effort = document.getElementById("surla-build-agents-builder-thinking");
+      if (effort) { effort.value = "high"; effort.dispatchEvent(new Event("change", { bubbles: true })); }
+    }.toString() + ")()");
+    await evaluate(views, "document.getElementById('surla-build-agents-refresh').click(), true");
+    await until(views, "document.getElementById('surla-build-agents-refresh')?.disabled === false");
+    if (input.experience === "headless" || input.experience === "configured_permissions") {
+      measured.background_gated = await evaluate(views, "document.getElementById('surla-build-again')?.disabled === true");
+      await evaluate(views, "document.querySelectorAll('#surla-build-agents input[id$=-yolo]').forEach((node) => node.click()), true");
+      measured.background_gated &&= await evaluate(views, "document.getElementById('surla-build-again')?.disabled === true");
+      await evaluate(views, "document.getElementById('surla-build-agents-background-consent').click(), true");
+      const enabled = await until(views, "document.getElementById('surla-build-again')?.disabled === false");
+      measured.background_gated &&= !enabled.timed_out;
+    }
+    await evaluate(views, "document.getElementById('surla-nav-team').click(), true");
+    ready = await until(views, "document.getElementById('surla-team-agents-builder-model') !== null");
+    if (ready.timed_out) throw new Error("Team picker did not load");
+    measured.draft_preserved = await evaluate(views, "document.getElementById('surla-team-agents-builder-model').value === 'custom/browser-model'");
+    if (input.experience === "single") {
+      await evaluate(views, "document.getElementById('surla-team-agents-notice-single_agent_family-dismiss').click(), true");
+      ready = await until(views, "document.getElementById('surla-team-agents-notice-single_agent_family') === null");
+      measured.notice_dismissed = !ready.timed_out;
+      await evaluate(views, "document.getElementById('surla-team-refresh').click(), true");
+      await until(views, "document.getElementById('surla-team-refresh')?.disabled === false");
+      measured.notice_dismissed &&= await evaluate(views, "document.getElementById('surla-team-agents-notice-single_agent_family') === null");
+    }
+    measured.no_auto_launch &&= !views.requests.some((r) => r.method === "POST" && /\/(build|agents|merge)$/.test(new URL(r.url).pathname));
+    await evaluate(views, "document.getElementById('surla-team-start').click(), true");
+    ready = await until(views, "document.getElementById('surla-team-start-receipt') !== null");
+    if (ready.timed_out) throw new Error("explicit Team launch did not return a receipt");
+    await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
+    await until(views, "document.getElementById('surla-build-agents-builder-model') !== null");
+    measured.draft_preserved &&= await evaluate(views, "document.getElementById('surla-build-agents-builder-model').value === 'custom/browser-model'");
+  } else {
+    measured.merge_count = await evaluate(views, "document.querySelectorAll('#" + mergeId + "').length");
+    measured.manual_secondary = await evaluate(views, "Array.from(document.querySelectorAll('#" + root + " details')).some((node) => node.querySelector('summary')?.textContent === 'Manual merge instructions' && !node.open)");
+  }
+  // Native Tab events prove that the controls remain in the keyboard order and
+  // receive the stylesheet's visible focus outline at every tested width.
+  const keyboard = [];
+  let focusVisible = false;
+  await evaluate(views, "document.activeElement?.blur(), window.scrollTo(0, 0), true");
+  for (let count = 0; count < 120; count++) {
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
+    const active = await evaluate(views, "({ id: document.activeElement?.id ?? '', visible: (() => { const style = getComputedStyle(document.activeElement); return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2; })() })");
+    if (!keyboard.includes(active.id)) keyboard.push(active.id);
+    if (active.id === (merge ? mergeId : "surla-build-agents-builder-client")) focusVisible = active.visible;
+    if (active.id === (merge ? mergeId : "surla-build-again")) break;
+  }
+  measured.keyboard_controls = keyboard;
+  measured.focus_visible = focusVisible;
+  Object.assign(measured, await evaluate(views, "(" + function measure(root) {
+    const region = document.getElementById(root);
+    const controls = Array.from(region.querySelectorAll("button, input, select, summary")).filter((node) => node.getClientRects().length);
+    return { width: document.documentElement.clientWidth, document_width: document.documentElement.scrollWidth,
+      controls_fit: controls.every((node) => { const box = node.getBoundingClientRect(); return box.width > 0 && box.left >= -1 && box.right <= document.documentElement.clientWidth + 1; }) };
+  }.toString() + ")(" + JSON.stringify(root) + ")"));
+  await evaluate(views, "document.getElementById('" + (merge ? mergeId : "surla-build-agents") + "').scrollIntoView({block: 'center'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  measured.screenshot = require("node:path").join(input.capture_directory, input.experience + "-" + variant + ".png");
+  const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+  fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
+  if (merge) {
+    await evaluate(views, "Array.from(document.querySelectorAll('#" + root + " details > summary')).find((node) => node.textContent === 'Manual merge instructions').focus(), true");
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
+    measured.manual_secondary &&= await evaluate(views, "(" + function inspectManual(root) {
+      const details = Array.from(document.querySelectorAll("#" + root + " details")).find((node) => node.querySelector("summary")?.textContent === "Manual merge instructions");
+      const commands = Array.from(details.querySelectorAll("pre"));
+      return details.open && commands.length === 2 && commands.every((node) => {
+        node.focus();
+        const style = getComputedStyle(node);
+        return node.tabIndex === 0 && document.activeElement === node && style.whiteSpace === "pre" && ["auto", "scroll"].includes(style.overflowX);
+      }) && commands[0].textContent === "git merge " + "1".repeat(40) && commands[1].textContent === "git merge " + "2".repeat(40);
+    }.toString() + ")(" + JSON.stringify(root) + ")");
+    await evaluate(views, "Array.from(document.querySelectorAll('#" + root + " details')).find((node) => node.querySelector('summary')?.textContent === 'Manual merge instructions').open = false, true");
+    await evaluate(views, "document.getElementById('" + mergeId + "').click(), true");
+    const feedback = input.experience === "build_merge" ? "surla-build-merge-feedback" : "surla-cp5-merge-feedback";
+    const refused = !["merge", "build_merge"].includes(input.experience);
+    ready = await until(views, !refused
+      ? "document.getElementById('" + mergeId + "') === null && document.body.innerText.includes('feature/orders') && document.body.innerText.includes('3333333') && /(?:approved build|verified commits) (?:is|are) merged/.test(document.body.innerText)"
+      : "document.getElementById('" + feedback + "-error') !== null");
+    measured.action_recovered = !ready.timed_out;
+    measured.action_text = await evaluate(views, "document.getElementById('" + root + "').innerText");
+    if (refused) {
+      measured.action_recovered &&= await evaluate(views, "document.getElementById('" + mergeId + "')?.disabled === true");
+      await evaluate(views, "document.querySelector('#" + feedback + "-error details').open = true, true");
+      measured.action_recovered &&= await evaluate(views, "document.getElementById('" + feedback + "-error').innerText.includes(" + JSON.stringify(input.experience === "dirty_worktree" ? "Save or commit tracked changes" : "original branch and tracked files were restored") + ")");
+    }
+    await evaluate(views, "document.getElementById('" + feedback + (refused ? "-error" : "-receipt") + "')?.scrollIntoView({block: 'center'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    const resultCapture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
+    fs.writeFileSync(require("node:path").join(input.capture_directory, input.experience + "-" + variant + "-result.png"), Buffer.from(resultCapture.data, "base64"));
+    if (refused) {
+      await evaluate(views, "document.getElementById('" + feedback + "-refresh').click(), true");
+      ready = await until(views, "document.getElementById('" + mergeId + "')?.disabled === false");
+      measured.action_recovered &&= !ready.timed_out;
+    }
+  } else {
+    await evaluate(views, "document.getElementById('surla-build-again').click(), true");
+    ready = await until(views, "document.getElementById('surla-build-confirm')?.disabled === false");
+    if (ready.timed_out) throw new Error("explicit Build confirmation did not open");
+    await evaluate(views, "document.getElementById('surla-build-confirm').click(), true");
+    ready = await until(views, "document.getElementById('surla-build-start-receipts') !== null");
+    if (ready.timed_out) throw new Error("explicit Build launch did not return a receipt");
+  }
+  facts.experience = [measured];
+}
+
 // approvalScenario captures the real served UI using explicit typed owner
 // fixtures. The separate served-page tests exercise real approval persistence.
 async function approvalScenario(input, facts, views) {
@@ -750,7 +903,7 @@ async function approvalScenario(input, facts, views) {
         approve_in_next: action !== null && footer.contains(action),
         approve_enabled: action !== null && !action.disabled,
         focus_visible: action !== null && document.activeElement === action && style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 2,
-        commands: Array.from(stage.querySelectorAll(".surla-approval-basis .surla-build-merge pre"), (node) => node.textContent),
+        commands: Array.from(stage.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
         footer_reserved: !phone || getComputedStyle(footer).position !== "fixed" || padding >= footer.getBoundingClientRect().height,
         overflowing: [stage, ...stage.querySelectorAll("*"), footer].filter((node) => {
           if (!node.getClientRects().length || node.closest("pre") || getComputedStyle(node).clipPath === "inset(50%)") return false;
@@ -951,6 +1104,11 @@ async function main(input, facts) {
 
     if (input.agreement) {
       await agreementScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
+    if (input.experience) {
+      await experienceScenario(input, facts, views);
       await dt.send("Target.closeTarget", { targetId: views.targetId });
       return;
     }

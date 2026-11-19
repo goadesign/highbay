@@ -33,6 +33,22 @@ type browserApprovalService struct {
 	review *gensurla.VerificationReviewResult
 	// build supplies taking facts without deriving them in the page.
 	build *gensurla.ChangeBuild
+	// card supplies the same live approval as the selected-run fixture.
+	card *gensurla.ChangeCardResult
+}
+
+// GetChange returns the matching live card when the presentation fixture sets
+// one, retaining the actual owner for other browser fixture users.
+func (s *browserApprovalService) GetChange(
+	ctx context.Context, p *gensurla.GetChangePayload,
+) (*gensurla.ChangeCardResult, error) {
+	s.mu.RLock()
+	card := s.card
+	s.mu.RUnlock()
+	if card != nil {
+		return card, nil
+	}
+	return s.Service.GetChange(ctx, p)
 }
 
 // ReviewVerification returns the typed owner fixture without changing state.
@@ -116,8 +132,10 @@ func TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth(t *testing.T) {
 	browser := startBrowser(t, executable, t.TempDir())
 	for _, state := range []string{"current", "agreement_changed", "approved", "tests_changed", "failed", "not_completed"} {
 		review, build := browserApprovalFixture(card, vp.state.Record.Owner, state)
+		fixtureCard := *card
+		fixtureCard.Approval, _ = review.Review.Approval.AsRecorded()
 		service.mu.Lock()
-		service.review, service.build = review, build
+		service.review, service.build, service.card = review, build, &fixtureCard
 		service.mu.Unlock()
 		link, err := vp.link()
 		require.NoError(t, err)
@@ -147,8 +165,10 @@ func TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth(t *testing.T) {
 			} else {
 				assert.Zero(t, view.ApproveCount, "only the owner-available state offers approval")
 			}
-			if state == "current" || state == "approved" {
+			if state == "approved" {
 				assert.Equal(t, []string{"git merge " + strings.Repeat("1", 40), "git merge " + strings.Repeat("2", 40)}, view.Commands)
+			} else {
+				assert.Empty(t, view.Commands, "manual merge instructions require a live recorded approval")
 			}
 			t.Logf("presentation fixture %s/%s: %+v", state, view.Name, view)
 		}

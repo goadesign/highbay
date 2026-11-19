@@ -41,6 +41,9 @@ export interface BuildSectionProps {
   checkKnown: boolean;
   checkError: string | null;
   approvalAvailable: boolean;
+  agentPicker: React.ReactNode;
+  agentsReady: boolean;
+  mergeAction: React.ReactNode;
   onRefresh: () => void;
   onReadFindings: () => void;
   onPrepareBuild: (ready: (build: ChangeBuild | null) => void) => void;
@@ -74,6 +77,9 @@ export function BuildSectionView({
   checkKnown,
   checkError,
   approvalAvailable,
+  agentPicker,
+  agentsReady,
+  mergeAction,
   onRefresh,
   onReadFindings,
   onBuild,
@@ -94,7 +100,7 @@ export function BuildSectionView({
   const eligible = confirmed && displayedCurrent && build !== null && error === null && draftedBeforeDrop === false;
   const blockingBuild = openBuildRefusal !== null && openBuildRefusal.change_id !== card.change_id
     ? openBuildRefusal : null;
-  const blocked = disabled || starting || dropping || loading || !eligible || blockingBuild !== null;
+  const blocked = disabled || starting || dropping || loading || !eligible || !agentsReady || blockingBuild !== null;
   const otherPrimary = !confirmed || !displayedCurrent || dirty || card.proposed_revision !== undefined;
   const report = check?.state.type === "completed" ? check.state.value.report : null;
   const matchedCheck = checkKnown && check?.inputs_current === true &&
@@ -287,11 +293,13 @@ export function BuildSectionView({
         build?.state === "not_started" ? <p id="surla-build-state">Not built yet.</p> : null}
     {saved?.taking.state === "building" ? roleFacts : null}
   </>;
-  const primaryBuild = showDirect ? <span ref={triggerRef}>
+  const primaryBuild = showDirect ? <>
+    {!confirming ? agentPicker : null}
+    <span ref={triggerRef}>
       <Button id="surla-build-start" variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
         disabled={blocked || questionBusy} aria-describedby={blockingBuild !== null ? "surla-build-start-explanation surla-build-action-error" : "surla-build-start-explanation"}
         onClick={requiresConfirmation ? ask : start}>{directLabel}</Button>
-    </span> : null;
+    </span></> : null;
   const actions = <>
     {blockingBuild !== null || saved === null ? primaryBuild : null}
     {check !== null ? <Button id="surla-build-review-check" variant={reviewPrimary ? "primary" : "default"}
@@ -299,11 +307,13 @@ export function BuildSectionView({
       {reviewPrimary ? "Review result" : "Review saved check"}
     </Button> : null}
     <Button id="surla-build-view-team" disabled={disabled || starting} onClick={onOpenTeam}>View team</Button>
-    {current && (open || replay) && draftedBeforeDrop === false && confirmed && displayedCurrent ? <span ref={triggerRef}>
+    {current && (open || replay) && draftedBeforeDrop === false && confirmed && displayedCurrent ? <>
+      {!confirming ? agentPicker : null}
+      <span ref={triggerRef}>
       <Button id="surla-build-again" disabled={blocked || questionBusy}
         aria-describedby={blockingBuild !== null ? "surla-build-action-error" : undefined}
         onClick={ask}>Build again…</Button>
-    </span> : null}
+    </span></> : null}
     {blockingBuild !== null ? <Button id="surla-build-open-blocking-change" disabled={disabled || starting}
       onClick={() => onOpenChange(blockingBuild.change_id)}>Open change {blockingBuild.change_id}</Button> : null}
   </>;
@@ -358,7 +368,7 @@ export function BuildSectionView({
                 ? <>Build did not start: change {blockingBuild.change_id} has an open build. {blockingBuild.build.taking.state === "building"
                   ? "Nothing of it has passed its check yet: let its builder finish, or drop it."
                   : blockingBuild.build.taking.state === "passed"
-                    ? "Its builder’s commit passed the accepted tests: merge it, or drop it."
+                    ? "Its builder’s commit passed the accepted tests: open that change to review and approve its result before merging, or drop it."
                     : "Review its current state before building this change."}</>
                 : actionError ?? blockingBuild.message}
             </Alert>}>{explanation}</BuildTakingView>
@@ -372,6 +382,7 @@ export function BuildSectionView({
         actions={actions} header={header} dropLabel="Drop…">
         {explanation}{showDirect ? <div className="surla-field-row">{primaryBuild}</div> : null}
       </BuildTakingView> : null}
+      {blockingBuild === null ? mergeAction : null}
       {saved === null && blockingBuild === null ? <>
         {observations}{progress}{explanation}<div className="surla-field-row surla-build-actions">{actions}</div>
       </> : null}
@@ -419,6 +430,7 @@ export function BuildSectionView({
             </p>
             <p id="surla-build-confirm-explanation">{startExplanation}</p>
             <div className="surla-field-row">
+              {agentPicker}
               <Button id="surla-build-confirm" disabled={blocked} onClick={start}>Build again</Button>
               <Button id="surla-build-cancel" disabled={disabled || starting} onClick={cancel}>Cancel</Button>
             </div>
@@ -504,10 +516,14 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
     <div id="surla-build-taking" data-state={taking.state} ref={attachTaking} tabIndex={-1}>
       {header !== null ? <div className="surla-region-header surla-build-header">{header}{actionRow}</div> : null}
       {progress}
-      {taking.state === "passed" ? <BuildMergeInstructions taking={taking}
-        candidateCommit={taking.candidate_commit}
-        testsCommit={taking.tests.source === "written_tests" ? taking.tests.commit : null}
-        onFocusedControlRemoved={onFocusedControlRemoved} /> : null}
+      {taking.state === "passed" ? <div className="surla-build-merge">
+        <p>The builder’s commit <code>{taking.candidate_commit}</code> passed on <code>{taking.candidate_branch}</code>
+          {taking.tests.source === "written_tests" ? <> with tests <code>{taking.tests.commit}</code> from <code>{taking.tests.branch}</code></> : null}.</p>
+        <p>A passing check is not approval. Review and approval of the saved result are required before merging.</p>
+        {!taking.base_in_branch ? <Alert variant="warning">
+          Your branch no longer holds the commit where this build started (its history was rewritten), so merging brings that history back. To start from your branch as it is, drop this change and build it again.
+        </Alert> : null}
+      </div> : null}
       {taking.state === "merged" ? <p>It is in your branch. {build.test_writer.tests.state === "not_used"
         ? "Surla's verification covered a passed run's commit before you merged it, not your branch after the merge, which may also hold other changes merged after this build started."
         : "Surla's verification covered a passed run's commits before you merged them, not your branch after the merge, which may also hold other changes merged after this build started."} {build.in_force ? "Build another change or refine this one when there is more to do." : "Build the current agreed revision to implement the new agreement."} No role has work on this build.</p> : null}
@@ -541,36 +557,38 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
   );
 }
 
-// BuildMergeInstructions names the passed commits, never movable branch tips.
-// The branch labels describe where those commits were verified.
+// BuildMergeInstructions is secondary guidance for a live-approved result.
+// Its caller supplies the approved commits; branch labels identify the build.
 export function BuildMergeInstructions({ taking, candidateCommit, testsCommit, onFocusedControlRemoved }: {
   taking: Extract<StartedBuild["taking"], { state: "passed" }>;
   candidateCommit: string;
   testsCommit: string | null;
   onFocusedControlRemoved: () => void;
 }) {
-  // The owner supplies its stable fallback when a focused scrollport is
-  // removed. Unfocused command subtrees never reclaim another control's focus.
-  const attachCommands = useCallback((node: HTMLPreElement | null) => {
+  // The owner supplies its stable fallback when the focused disclosure or a
+  // command scrollport is removed. Unfocused instructions never reclaim focus.
+  const attachInstructions = useCallback((node: HTMLDetailsElement | null) => {
     if (node === null) return;
     return () => {
       if (node.contains(document.activeElement)) onFocusedControlRemoved();
     };
   }, [onFocusedControlRemoved]);
-  return <div className="surla-build-merge">
-    <h4>To take this change, run in the project folder:</h4>
+  return <details className="surla-details surla-build-merge" ref={attachInstructions}>
+    <summary>Manual merge instructions</summary>
+    <p>To merge this approved result yourself, run in the project folder:</p>
     <ol>
-      <li><pre ref={attachCommands} tabIndex={0} role="region" aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
+      <li><pre tabIndex={0} role="region" aria-label="Merge the builder’s commit"><code>git merge {candidateCommit}</code></pre>
         <p>The builder’s commit, verified on <code>{taking.candidate_branch}</code>.</p></li>
       {testsCommit !== null && taking.tests.source === "written_tests" ? <li>
-        <pre ref={attachCommands} tabIndex={0} role="region" aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
+        <pre tabIndex={0} role="region" aria-label="Merge the tests’ commit"><code>git merge {testsCommit}</code></pre>
         <p>Then the tests’ commit, verified on <code>{taking.tests.branch}</code>.</p></li> : null}
     </ol>
-    <p>Build another change once you have, or drop this one. Surla does not merge or deploy anything.</p>
+    <p>These commands merge the approved commits into your checked-out branch. They do not deploy anything.
+      Refresh the build after merging. Build another change once it is merged, or drop this one.</p>
     {!taking.base_in_branch ? <Alert variant="warning">
       Your branch no longer holds the commit where this build started (its history was rewritten), so these merges bring that history back. To start from your branch as it is, drop this change and build it again.
     </Alert> : null}
-  </div>;
+  </details>;
 }
 
 // runBelongsToBuild mirrors the owner's eligibleBuildRuns predicate. A newer
@@ -590,26 +608,19 @@ function buildTimestampNanos(at: string): bigint {
 }
 
 // SavedResultCommits keeps historical verification and approval evidence bound
-// to its own inputs. Only an eligible run of the open build adds guidance.
-export function SavedResultCommits({ changeId, candidateCommit, testsCommit, build, run, onFocusedControlRemoved }: {
-  changeId: string;
+// to its own inputs. Merge admission and manual guidance belong to the page.
+export function SavedResultCommits({ candidateCommit, testsCommit, build }: {
   candidateCommit: string;
   testsCommit: string | null;
   build: StartedBuild | null;
-  run: VerificationStatusResult | null;
-  onFocusedControlRemoved: () => void;
 }) {
   const taking = build?.taking;
-  const matched = taking?.state === "passed" && run !== null && build !== null &&
-    runBelongsToBuild(changeId, build, run) && run.candidate_commit === candidateCommit &&
-    (run.test_source.source === "written_tests" ? run.suite_commit === testsCommit : testsCommit === null);
-  return matched ? <BuildMergeInstructions taking={taking} candidateCommit={candidateCommit} testsCommit={testsCommit}
-    onFocusedControlRemoved={onFocusedControlRemoved} /> : <p>
+  return <p>
     This saved result names the builder’s commit <code>{candidateCommit}</code>
     {testsCommit !== null ? <> and the tests’ commit <code>{testsCommit}</code></> : null}.
     {taking?.state === "merged"
       ? " This build is merged into your branch; this verification covered these commits, not your branch after the merge."
-      : " Review the current build’s taking state before merging."}
+      : " Merging requires current recorded approval for these exact commits."}
   </p>;
 }
 

@@ -60,8 +60,6 @@ export interface VerificationViewProps {
   onOpenChangeCard: () => void;
   // onReturnToChangeCard switches the view back to the already-loaded Change Card.
   onReturnToChangeCard: () => void;
-  // onFocusedControlRemoved returns focus to this view's stable heading.
-  onFocusedControlRemoved: () => void;
 }
 
 // scenarioOutcomeLabels translates the evaluator's outcomes without treating
@@ -132,7 +130,6 @@ export function VerificationView({
   onSelectRun,
   onOpenChangeCard,
   onReturnToChangeCard,
-  onFocusedControlRemoved,
 }: VerificationViewProps) {
   const effectiveChangeId = run ? run.change_id : changeId;
   const sameCardLoaded = loadedCard !== null && loadedCard.change_id === effectiveChangeId;
@@ -439,12 +436,9 @@ export function VerificationView({
       <details className="surla-details" id="surla-cp4-details">
         <summary>Candidate and run details</summary>
         {state.type === "completed" && state.value.report.passed ? <SavedResultCommits
-          changeId={run.change_id}
           candidateCommit={run.candidate_commit}
           testsCommit={testSource.source === "written_tests" ? run.suite_commit : null}
           build={inputsKnown ? build : null}
-          run={run}
-          onFocusedControlRemoved={onFocusedControlRemoved}
         /> : null}
         <dl className="surla-verification-details">
           <dt>Candidate commit</dt><dd><code>{run.candidate_commit}</code></dd>

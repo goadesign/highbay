@@ -1032,6 +1032,9 @@ type StartTeamAgentsResponseBody struct {
 type ListTeamAgentOptionsResponseBody struct {
 	// Installed coding agents.
 	Agents []*InstalledAgentOptionResponseBody `form:"agents" json:"agents" xml:"agents"`
+	// Worker roles a new build requires with the project's current verification
+	// settings.
+	BuildRoles []string `form:"build_roles" json:"build_roles" xml:"build_roles"`
 }
 
 // OpenViewsResponseBody is the type of the "surla" service "open_views"
@@ -10552,6 +10555,14 @@ func NewListTeamAgentOptionsResponseBody(res *surla.ListTeamAgentOptionsResult) 
 		}
 	} else {
 		body.Agents = []*InstalledAgentOptionResponseBody{}
+	}
+	if res.BuildRoles != nil {
+		body.BuildRoles = make([]string, len(res.BuildRoles))
+		for i, val := range res.BuildRoles {
+			body.BuildRoles[i] = val
+		}
+	} else {
+		body.BuildRoles = []string{}
 	}
 	return body
 }

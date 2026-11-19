@@ -31,6 +31,9 @@ export interface TeamStageProps {
   starting: boolean;
   // canStartWorkers reports that a registered worker has a build assignment.
   canStartWorkers: boolean;
+  // The page owns discovery and controlled choices for the workers with work.
+  agentPicker: React.ReactNode;
+  agentsReady: boolean;
   // disabled prevents actions after the browser session has ended.
   disabled: boolean;
   // showing identifies the roles with an outstanding Show pane request.
@@ -129,6 +132,8 @@ export function TeamStageView({
   error,
   starting,
   canStartWorkers,
+  agentPicker,
+  agentsReady,
   disabled,
   showing,
   startReceipt,
@@ -151,7 +156,7 @@ export function TeamStageView({
           {canStartWorkers || starting ? <Button
             id="surla-team-start"
             variant={needsStart ? "primary" : "default"}
-            disabled={disabled || starting}
+            disabled={disabled || starting || !agentsReady}
             aria-busy={starting}
             onClick={onStartWorkers}
           >
@@ -176,6 +181,8 @@ export function TeamStageView({
       {loading ? (
         <p id="surla-team-loading">{snapshot === null ? "Reading the project team…" : "Updating team…"}</p>
       ) : null}
+      {agentPicker}
+      {canStartWorkers ? <p>Workers already running keep their current sessions. These choices apply when a worker starts.</p> : null}
       {snapshot === null ? (
         !loading && error === null ? <p>The project team has not been read.</p> : null
       ) : (

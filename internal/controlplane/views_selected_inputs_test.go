@@ -499,7 +499,7 @@ await control(origin, "act", { key: "accept-t2" });
 page.$("#surla-nav-build").click();
 page.$("#surla-build-refresh").click();
 await until(() => !page.$("#surla-build-error") && page.sent("GET", buildPath).some((r) => r.status === 200 && JSON.parse(r.answer).build.test_writer.tests.commit === "3333333333333333333333333333333333333333"), "the explicit retry did not discover accepted T2");
-await until(() => page.requests.slice(before).some((r) => r.path === runPath && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "discovering T2 through Build did not replace the positive T1 run observation");
+await until(() => page.requests.slice(before).some((r) => r.path === runPath + "/review" && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "discovering T2 through Build did not replace the positive T1 owner review");
 expect(page.sent("GET", "/changes").length === lists && page.sent("GET", "/change-updates").every((r) => r.status === undefined), "the test received a version notification before the explicit retry established freshness");
 page.$("#surla-nav-cp5").click();
 await until(() => page.text("#surla-cp4-inputs").includes("does not match"), "the saved result did not reflect the recovered Build");

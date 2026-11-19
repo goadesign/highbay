@@ -77,10 +77,19 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
 		"origin": vp.state.Origin(), "first": link(), "guide": string(guide),
 	}
 	runViewsPageScript(t, node, input, `
+  // Recovery stays available through the agent or companion without a shell step.
+  const expectRecovery = (page, selector) => {
+    const text = page.text(selector);
+    expect(text.includes("coding agent") && text.includes("Open Page") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
+    expect(!text.includes("Run surla") && !text.includes("run surla"), "session recovery still requires a typed terminal command: " + text);
+  };
   // Without a link the page explains how to open it and asks the server nothing.
   const bare = await openPage(origin);
   await until(() => bare.$("#surla-signed-out"), "a page without a link did not say how to open it");
-  expect(bare.text("#surla-signed-out").includes("Run surla in your project folder"), "the signed-out page does not name surla");
+  expectRecovery(bare, "#surla-signed-out");
+  expect(!bare.text("#surla-signed-out-title").includes("with surla"), "the no-link heading still directs the user to the CLI");
+  const lifetime = bare.text("#surla-signed-out .surla-muted");
+  expect(lifetime.includes("fresh session") && lifetime.includes("one of those routes"), "the session-lifetime note omitted the established reopen routes: " + lifetime);
   await sleep(200);
   expect(bare.requests.length === 0, "a page without a link sent requests: " + JSON.stringify(bare.requests));
   bare.close();
@@ -127,6 +136,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   const reused = await openPage(origin, { link: input.first });
   await until(() => reused.$("#surla-link-used"), "a used link was not reported");
   expect(reused.text("#surla-link-used").includes("already used"), "the used link was not reported plainly");
+  expectRecovery(reused, "#surla-signed-out");
   expect(reused.win.location.hash === "", "a refused link stayed in the address");
   reused.close();
 
@@ -144,7 +154,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   expect(page.status().includes("You opened a new Surla link") && page.status().includes("Open link"), "the existing live status did not announce the deferred link");
   page.$("#surla-confirm-submit").click();
   await until(() => page.$("#surla-session-ended"), "the page did not say its session ended");
-  expect(page.text("#surla-session-ended").includes("Run surla in your project folder"), "the page did not say how to continue");
+  expectRecovery(page, "#surla-session-ended");
   expect(page.$('textarea[data-field="expected_outcome"]').value === "Typed before the restart", "typed edits were lost");
   expect(page.text("#surla-session-ended-edits").includes("Typed before the restart"), "the unsaved edits are not shown for copying");
   expect(page.$("#surla-open-pending-link").disabled && page.beforeUnload(), "a failed save released unsaved input");

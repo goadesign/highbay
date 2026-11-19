@@ -24,13 +24,13 @@ export interface ApprovalStageProps {
   approvalError: string | null;
   unavailableReason: string | null;
   rawDetails: React.ReactNode;
+  mergeAction: React.ReactNode;
   build: StartedBuild | null;
   unsaved: boolean;
   savedRecord: { approval: ApprovalItem; requestRevision: string; reason: string | null } | null;
   onRefresh: () => void;
   onOpenProof: () => void;
   onOpenAgreement: () => void;
-  onFocusedControlRemoved: () => void;
 }
 
 // outcomeLabels separates assertion failure, missing execution and harness failure.
@@ -55,6 +55,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
     {props.error !== null ? <Alert id="surla-cp5-read-error" variant="destructive" role="alert">{props.error}</Alert> : null}
     <Button id="surla-cp5-refresh-approval" disabled={props.busy} onClick={props.onRefresh}>Check current approval</Button>
     <Button onClick={props.onOpenProof}>Open saved runs</Button>
+    {props.mergeAction}
   </section>;
   const report = run.state.type === "completed" ? run.state.value.report : null;
   const approval = review?.approval;
@@ -167,10 +168,11 @@ export function ApprovalStage(props: ApprovalStageProps) {
             <ul>{Object.entries(saved.artifacts).map(([name, digest]) => <li key={name}><code>{name}</code>: <code>{digest}</code></li>)}</ul>
           </details>
         </section> : <p>Approval records permission to promote this result.</p>}
-        {props.build?.in_force === false ? <p>This build belongs to an earlier agreement. Review the current agreement before taking its commits.</p> :
-        <SavedResultCommits changeId={run.change_id} candidateCommit={run.candidate_commit}
+        {props.build?.in_force === false ? <p>This build belongs to an earlier agreement. Review the current agreement before taking its commits.</p> : null}
+        <SavedResultCommits candidateCommit={run.candidate_commit}
           testsCommit={run.test_source.source === "written_tests" ? run.suite_commit : null}
-          build={props.build} run={run} onFocusedControlRemoved={props.onFocusedControlRemoved} />}
+          build={props.build} />
+        {props.mergeAction}
         <details className="surla-details" id="surla-cp5-approval-details">
           <summary>Verified inputs and digests</summary>
           <dl>
@@ -203,7 +205,7 @@ function SavedApprovalRecord({ record }: { record: NonNullable<ApprovalStageProp
   return <section id="surla-cp5-approval" data-approval-state={record.reason === null ? "recorded" : "unverified"} tabIndex={-1} aria-label="Saved promotion approval">
     <h3>{record.reason !== null ? "Saved approval, unverified" : "Approval recorded"}</h3>
     {record.reason !== null ? <Alert id="surla-cp5-unverified-approval-reason" variant="warning" role="status">{record.reason}</Alert> : null}
-    <p>Approval records permission to promote the inputs below. Surla did not merge or deploy anything.</p>
+    <p>Approval records permission to promote the inputs below. Approval alone does not merge or deploy anything.</p>
     <dl>
       <dt>Agreement</dt><dd><code>{record.requestRevision}</code></dd>
       <dt>Builder’s commit</dt><dd><code>{approval.candidate_commit}</code></dd>

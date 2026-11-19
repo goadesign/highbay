@@ -63,6 +63,10 @@ type (
 		Approval bool `json:"approval,omitempty"`
 		// ApprovalState identifies the typed owner fixture shown in this batch.
 		ApprovalState string `json:"approval_state,omitempty"`
+		// Experience selects the inline worker and approved-merge browser journey.
+		Experience string `json:"experience,omitempty"`
+		// ExperienceView selects desktop, phone, dark or reflow geometry.
+		ExperienceView string `json:"experience_view,omitempty"`
 		// TestReview selects the saved test-verdict layout scenario.
 		TestReview bool `json:"test_review,omitempty"`
 		// TestReviewState identifies the typed test-verdict fixture.
@@ -116,6 +120,8 @@ type (
 		Agreement []agreementViewFacts `json:"agreement"`
 		// Approval records viewport, evidence and keyboard facts for one owner state.
 		Approval []approvalViewFacts `json:"approval"`
+		// Experience records native controls, keyboard access and action feedback.
+		Experience []experienceViewFacts `json:"experience"`
 		// TestReview records required tests, findings and orientation at each width.
 		TestReview []testReviewViewFacts `json:"test_review"`
 		// Reload is the views page after a reload.
@@ -355,7 +361,11 @@ type (
 
 	// phoneTeamOwner retains real project operations while keeping observations
 	// under this layout fixture's explicit snapshot lifetime.
-	phoneTeamOwner struct{ *Server }
+	phoneTeamOwner struct {
+		*Server
+		// workersAssigned makes the phone fixture's saved build assignments explicit.
+		workersAssigned bool
+	}
 
 	// phoneBuildService serves immutable presentation facts through the generated
 	// HTTP boundary. The real service owns cards, credentials and Team state.
@@ -658,7 +668,9 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 
 	t.Run("g a reload ends the session", func(t *testing.T) {
 		assert.False(t, facts.Reload.SignedOutTimedOut, "the reloaded page did not say how to open it")
-		assert.Contains(t, facts.Reload.SignedOutText, "Run surla in your project folder", "the reloaded page's message")
+		assert.Contains(t, facts.Reload.SignedOutText,
+			"Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.",
+			"the reloaded page's recovery routes")
 		assert.Equal(t, origin+"/views", facts.Reload.Href, "the reloaded page's address")
 		assert.Len(t, requestsTo(facts.Reload.PageRequests, http.MethodGet, "/views"), 1, "the reload did not load the page again")
 		assert.Empty(t, pageFetches(facts.Reload.PageRequests), "the reloaded page sent requests of its own")
@@ -721,6 +733,27 @@ func (o *phoneTeamOwner) Supervise(ctx context.Context, _ controlplane.Assignmen
 	return nil
 }
 
+// ListAgentOptions keeps layout fixtures independent of discovery processes and
+// supplies complete installed metadata through the existing team boundary.
+func (o *phoneTeamOwner) ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	return browserWorkerOptions().Agents, nil
+}
+
+// ReadTeam supplies assigned-worker facts only for the phone fixture, whose
+// build is served by phoneBuildService rather than the live card-store owner.
+func (o *phoneTeamOwner) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
+	snapshot, err := o.Server.ReadTeam(ctx)
+	if err != nil || !o.workersAssigned {
+		return snapshot, err
+	}
+	for _, role := range snapshot.Roles {
+		if role.Role != "guide" {
+			role.Assignment = "unread"
+		}
+	}
+	return snapshot, nil
+}
+
 // GetBuild returns a recorded layout state, retaining the real reader for any
 // change outside this fixture.
 func (s *phoneBuildService) GetBuild(
@@ -759,7 +792,7 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	cp, err := controlplane.New(controlplane.Options{
 		CardsDir:     vp.state.CardsDir(),
 		WorkspaceDir: vp.state.Record.Directory,
-		Team:         &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server}},
+		Team:         &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server, workersAssigned: true}},
 	})
 	require.NoError(t, err)
 	service := &phoneBuildService{Service: cp, builds: make(map[string]*gensurla.ChangeBuild)}

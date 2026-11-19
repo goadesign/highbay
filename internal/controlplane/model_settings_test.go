@@ -172,7 +172,7 @@ func TestModelChoiceTextsSayTheDefaultFollowsOnlyWithoutAChoice(t *testing.T) {
 	readme := documentText(t, "../../README.md")
 	assert.Contains(t, openAPI, "While no model is chosen, a hand_over_model_settings call that holds a provider's settings selects that provider's default model")
 	assert.Contains(t, reference, "While no model is chosen, a hand-over that holds a provider's settings selects that provider's default model")
-	assert.Contains(t, readme, "while no model is chosen, live targets then use")
+	assert.Contains(t, strings.ToLower(readme), "while no model is chosen, live targets then use")
 	for _, stale := range []string{
 		"the first hand_over_model_settings that holds a provider's settings selects",
 		"until `surla` hands over a provider's settings, which selects",

@@ -2,7 +2,7 @@
 
 **[← Back to README](../README.md)** · **[Golden Path Architecture →](ARCHITECTURE_PLAYBOOK.md)** · **[CLI & MCP Reference →](REFERENCE.md)**
 
-This page follows one change through Surla from the first command to the
+This page follows one change through Surla from the first conversation to the
 merge. For each step it says what you do and see, what each agent does, and
 what the server records. The [reference](REFERENCE.md) holds the exact
 contract of every command, tool and field.
@@ -14,11 +14,11 @@ Each has its own credential, so the server always knows who is calling.
 
 | Who or what | What it is | Trusted for |
 | --- | --- | --- |
-| You, the user | The person who runs `surla` in the project folder. You act on the page in your browser. | The only one who confirms a change, starts a build, approves a result and can request a merge. |
+| You, the user | The person who describes the goal to a coding agent and acts on the page in a browser. | The only one who confirms a change, starts a build, approves a result and can request a merge. |
 | The guide | The coding agent you talk to about what should change. | Writing the Story (described below) and proposing the change. Surla checks the proposal's shape, not whether it is right: you judge that when you confirm it. |
 | The builder | The coding agent that writes the application's code, in its own working copy of the project (`.surla-build`). | Nothing on its word: its work counts only when Surla verifies a commit of it. |
 | The test writer | The coding agent that writes the tests for a build, in its own working copy of the project. | Nothing on its word: its tests count only when Surla's check accepts them. |
-| The server | The project's Surla server. `surla` starts one for each project folder. It keeps the record of what was agreed, built, accepted and approved, and it runs every check. | Deciding, from the files the agents produce, whether work is done. |
+| The server | The project's Surla server. The guide's first Surla call starts or attaches to one for each project folder. It keeps the record of what was agreed, built, accepted and approved, and it runs every check. | Deciding, from the files the agents produce, whether work is done. |
 | The page | A page in your browser that the server serves; the reference calls it the views page. It talks to the server as you. | Carrying your decisions. No agent has your identity. |
 | Herdr | The optional workspace for running the agents in side-by-side panes. | Running and showing the terminals. |
 | Chorus | The service that launches panes for the project's Herdr team and carries its agents' messages. | Conversation only: a message never makes work count as done. |
@@ -78,7 +78,7 @@ says so.
 
 ```mermaid
 flowchart TD
-    A["You run surla in the project folder"] --> B["You connect a coding agent as the guide"]
+    A["One-time setup: surla up"] --> B["You invoke /surla or $surla in your coding agent"]
     B --> C["You describe the change to the guide"]
     C --> D["The guide writes the Story and proposes a Change Card"]
     D --> E["You answer its questions and confirm it on the page"]
@@ -90,7 +90,7 @@ flowchart TD
     F --> I["The builder writes the code, commits and asks Surla to verify"]
     I --> J
     J --> K["You approve the result on the page"]
-    K --> L["You merge the approved work into your local project branch"]
+    K --> L["You press Merge into current branch on the page to take the approved work into your local branch"]
 ```
 
 Tool descriptions and the server's terminal name these steps by checkpoint:
@@ -108,26 +108,37 @@ decision, with a local branch as its destination.
 
 ## Starting: `surla`, the team and the page
 
-Run `surla` in the project folder. It starts a server for that physical
-folder, or attaches to the one already running from the same build of Surla.
-It uses a parentless Herdr terminal when `hc` is available and a detached
-background process otherwise. It opens a fresh views page through a one-use
-link. Use `surla status --json` to check whether the server is running and
-see its current stage and role states.
+After installing Surla, run [`surla up`](REFERENCE.md#surla-up) once. It
+registers the `surla stdio` MCP server and `/surla` skill with detected coding
+agents and starts Chorus when installed. `surla setup -global` performs only
+the registration. Reload the coding agent's MCP configuration or open a new
+session if it has not discovered the integration yet.
 
-Start the conversation in a coding agent connected to Surla as the guide.
-A local integration can [attach the guide](REFERENCE.md#attach_guide) and adopt its
-existing Herdr pane. With Herdr, a user API client can also
-[start a missing guide](REFERENCE.md#start_team_agents) by supplying an explicit
-guide choice. Running `surla` itself opens the browser without starting agents or
-opening a team launcher.
+Open your project folder in the agent and invoke `/surla` (`$surla` in
+Codex). Its first Surla tool call starts or attaches to the server for that
+physical folder and attaches the current session as the guide. Discovery
+alone starts no server. If the folder is empty, the guide can call
+[`init_project`](REFERENCE.md#init_project) with `dir: "."` to create the
+starter and its first Git commit in place.
 
-To open a fresh page after a reload or close, run `surla` again or ask the
-guide to call [`open_views`](REFERENCE.md#open_views). For browser automation,
-`surla --print-link` prints the one-use URL and expiry as JSON. If you open a
-fresh link in a tab with unsaved input, save or discard your edits and then
-choose **Open link**. The two-minute expiry starts when the link is issued.
-See [startup and recovery](REFERENCE.md#surla-serve).
+In Herdr, when the client forwards its terminal identity, Surla can adopt the
+guide's existing local pane and space if their project and team labels are
+compatible. You keep the conversation already open. Without Herdr, the server runs in the background; the same MCP tools
+and browser decisions remain available. Bare `surla` remains an operator
+entrypoint that opens the page without starting agents or a team launcher.
+
+The guide calls [`open_views`](REFERENCE.md#open_views) to open a fresh page
+in your browser. Ask it to open the page again after a reload or close. The
+Herdr companion also offers **Open Page**, alongside the current stage, role
+attention and pane focus buttons. Setup installs the companion as a floating
+window; it does not change Herdr's workspace layout.
+
+For terminal operation and browser automation, `surla --print-link` prints
+the one-use URL and expiry as JSON, and `surla status --json` reads the
+server's current stage and role states. If you open a fresh link in a tab
+with unsaved input, save or discard your edits and then choose **Open link**.
+The two-minute expiry starts when the link is issued. See
+[startup and recovery](REFERENCE.md#surla-serve).
 
 The frame names the journey Describe → Agree → Build → Check → Approve.
 Team, Story, Live target, Architecture and Diagnostics remain available as
@@ -140,14 +151,14 @@ On Describe, with no change open for editing, it shows no agreement.
 | View | What it is for |
 | --- | --- |
 | Describe | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
-| Team | Each role's observed state, its Chorus watcher (the agent's background wait for messages) and its assignment status. **Start workers** starts missing build workers. **Show … pane** brings a role's pane forward in Herdr. |
+| Team | Each role's observed state, its Chorus watcher (the agent's background wait for messages), its assignment and inline agent choices. **Start workers** starts missing workers with work on the build. **Show … pane** brings a role's pane forward in Herdr. |
 | Story | The Story of the change shown, and the guide's latest Story draft. |
 | Live target | The running copy of your application that the builder tries prompts on, and the model connection it uses. |
 | Agree | The Change Card: its questions, your answers, confirmation and a proposed revision. Unsaved edits stay available when you move to another stage. |
 | Build | The saved build and its next step, with agreement details available below. |
 | Architecture | The architecture preview of the confirmed card. |
 | Check | The change’s saved verification runs and their test details. |
-| Approve | The selected run’s recorded Story, finished flows and required test outcomes, excluded drafts, unknown coverage, approval requirements and verified commits. The one **Approve this result** action appears in Next only when the owner says it is available. |
+| Approve | The selected run’s recorded Story, finished flows and required test outcomes, excluded drafts, unknown coverage, approval requirements and verified commits. Next offers **Approve this result** when available, then **Merge into current branch** for the current approved result. |
 
 A **Diagnostics** drawer shows the server's [operation diagnostics](REFERENCE.md#operation-diagnostics).
 The [views page reference](REFERENCE.md#views-page) describes each view in
@@ -256,8 +267,26 @@ Card, run `surla preview -dir <module>`.
 
 ## Building
 
-After confirming, you press **Build this change** in Build. The saved
-agreement stays below the build under **Agreed:** and your request. Open **Agreement details** to review it or **Refine agreed
+After confirming, choose the required agents, models and permissions inline
+in Build, then press **Build this change**. Choices start from saved project
+preferences or installed defaults, preferring different agent families for
+the builder and test writer. One installed family can fill both roles. A
+project with configured tests needs only a builder. Only the roles needed
+for this start need choices; a running guide keeps its session.
+
+When Herdr is unavailable, choose a supported background agent and explicitly
+allow it to run without interactive permission prompts. Enable each available
+**Skip permission prompts (YOLO)** switch and confirm **I agree to run these
+workers in the background.** Clients without that switch use their configured
+permissions. Build explains the selected client's permission effect before
+starting. If no suitable agent is installed, the picker asks you to install
+a coding agent, or a client with background execution support, and then
+refresh installed agents.
+Herdr recommendations can be dismissed, as can the recommendation for a
+second family when a build needs both workers and only one suitable family
+is available. Those preferences persist for this project.
+
+The saved agreement stays below the build under **Agreed:** and your request. Open **Agreement details** to review it or **Refine agreed
 answers and examples** to edit it. The build control explains which agents
 start and that, from Build on, the tests and the builder's code run on this
 machine as ordinary programs, with your access to files and the network;
@@ -462,13 +491,16 @@ builder edits it into the prompt's source and commits it.
 In the Live target view you see the target's state and commit, the prompts it
 changed (never their text), and **Stop live target**. Under **Model
 connection** you choose the model that live targets started afterwards use: a
-provider and model name, whose key and request settings `surla` handed to the
-server from the shell where you typed it, or a running model gateway. While no
-model is chosen, a hand-over picks the default model of the provider whose
+provider and model name, whose key and request settings the guide's
+`surla stdio` connection received from its client and handed over, or a
+running model gateway. Real-client environment forwarding has not been
+live-verified; see [stdio integration](REFERENCE.md#surla-stdio). Bare `surla`
+can hand over the same settings from an operator's shell. While no model is
+chosen, a hand-over picks the default model of the provider whose
 settings it holds, `anthropic` first when it holds both, in the order of the
 reference's [provider table](REFERENCE.md#hand_over_model_settings). The
-server receives model request settings from the shell that runs `surla`,
-including when Herdr starts the server with the core's environment. See
+server receives only allowlisted provider settings through those hand-overs;
+its inherited environment is not a source of settings for live targets. See
 [model provider settings](REFERENCE.md#model-provider-settings) and the
 [live target prompt contract](REFERENCE.md#live-target-prompt-contract).
 
@@ -606,25 +638,33 @@ accepted for that revision, and records the approval on the Change Card:
 the builder's commit, the tests commit and the report. Approval merges and
 deploys nothing.
 
-The approval names two commits: the builder's commit that the run verified (on
-`surla/build-<n>`), and the tests commit that Surla accepted for the revision
-(on `surla/tests-<n>`, or the evaluator's commit with stored verification
-settings). The recorded approval lists them under **Verified inputs and
-digests** as **Builder's commit** and **Tests' commit**. Because the builder
-commits in `.surla-build` rather than in the project folder, while the open
-build shows **Passed** for the current agreement the page gives you the
-`git merge <commit>` commands under **To take this change, run in the project
-folder:** first `git merge <candidate_commit>` (verified on `surla/build-<n>`),
-and then, for the test writer's tests, `git merge <tests_commit>` (verified on
-`surla/tests-<n>`); with stored verification settings, the tests commit is the
-evaluator's and only `git merge <candidate_commit>` is shown. Once the branch
-checked out in the project folder holds the approved work, the build shows
-**Merged**. A user API client can also call [`merge_change`](REFERENCE.md#merge_change)
-with the current approval. Surla checks the selected report and accepted tests,
-merges into the checked-out local branch with clean tracked files, and
-attempts to restore the original tracked state if a merge step fails. Surla stops only
-that build's workers after a merge or drop. On Approve, Next then points to
-describing the next change while your selected approval stays readable.
+The approval names the builder's commit that the run verified (on
+`surla/build-<n>`) and the tests commit Surla accepted for the revision (on
+`surla/tests-<n>`, or the evaluator's commit with stored verification
+settings). **Verified inputs and digests** keeps those commits readable.
+
+After approval, press **Merge into current branch** to merge the approved
+work into the local branch checked out in the project folder. The server checks the live
+approval, selected report and accepted tests again and requires clean tracked
+files. It merges the candidate and, for written tests, the accepted tests
+commit. If a merge step fails, Surla attempts to restore the original branch
+tip and tracked state and shows the Git and restoration outcomes. Read those
+outcomes before retrying. The
+[`merge_change` reference](REFERENCE.md#merge_change) lists Git settings the
+server refuses and the recovery for dirty files or conflicts.
+
+For that same live-approved result, **Manual merge instructions** remain
+available as a secondary path. They name
+the exact verified commits: first `git merge <candidate_commit>`, then, for
+written tests, `git merge <tests_commit>`. A configured evaluator stays in its
+own repository, so only the candidate is merged. You can ask an agent to
+perform those merges after approving if you prefer.
+
+Once the checked-out branch holds the approved work, the build shows
+**Merged**. Surla stops only that build's workers after a merge or drop,
+leaving the guide in place. The dated success receipt names the actual branch
+and a short resulting commit; **Merge receipt** expands their full values. On Approve, Next points to describing the next
+change while your selected approval stays readable.
 Before drafting the next change, the guide calls `update_draft` (and
 then `refresh_story`) so `.surla-draft` brings in the design changes merged into
 the project folder. Approval is refused when the run used other tests than the ones

@@ -1464,6 +1464,9 @@ type LatestVerificationItem struct {
 type ListTeamAgentOptionsResult struct {
 	// Installed coding agents.
 	Agents []*InstalledAgentOption
+	// Worker roles a new build requires with the project's current verification
+	// settings.
+	BuildRoles []string
 }
 
 // ListTracesPayload is the payload type of the surla service list_traces

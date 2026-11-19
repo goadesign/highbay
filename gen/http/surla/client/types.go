@@ -1032,6 +1032,9 @@ type StartTeamAgentsResponseBody struct {
 type ListTeamAgentOptionsResponseBody struct {
 	// Installed coding agents.
 	Agents []*InstalledAgentOptionResponseBody `form:"agents,omitempty" json:"agents,omitempty" xml:"agents,omitempty"`
+	// Worker roles a new build requires with the project's current verification
+	// settings.
+	BuildRoles []string `form:"build_roles,omitempty" json:"build_roles,omitempty" xml:"build_roles,omitempty"`
 }
 
 // OpenViewsResponseBody is the type of the "surla" service "open_views"
@@ -12661,6 +12664,10 @@ func NewListTeamAgentOptionsResultOK(body *ListTeamAgentOptionsResponseBody) *su
 		}
 		v.Agents[i] = unmarshalInstalledAgentOptionResponseBodyToSurlaInstalledAgentOption(val)
 	}
+	v.BuildRoles = make([]string, len(body.BuildRoles))
+	for i, val := range body.BuildRoles {
+		v.BuildRoles[i] = val
+	}
 
 	return v
 }
@@ -15226,11 +15233,25 @@ func ValidateListTeamAgentOptionsResponseBody(body *ListTeamAgentOptionsResponse
 	if body.Agents == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("agents", "body"))
 	}
+	if body.BuildRoles == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("build_roles", "body"))
+	}
 	for _, e := range body.Agents {
 		if e != nil {
 			if err2 := validateInstalledAgentOptionResponseBody(e, "body.agents[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if len(body.BuildRoles) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.build_roles", body.BuildRoles, len(body.BuildRoles), 1, true))
+	}
+	if len(body.BuildRoles) > 2 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.build_roles", body.BuildRoles, len(body.BuildRoles), 2, false))
+	}
+	for _, e := range body.BuildRoles {
+		if !(e == "builder" || e == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.build_roles[*]", e, []any{"builder", "test_writer"}))
 		}
 	}
 	return
