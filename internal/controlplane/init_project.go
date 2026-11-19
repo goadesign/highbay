@@ -1,4 +1,4 @@
-// This file implements atomic starter-project initialization (`init_project`)
+// This file implements starter-project initialization (`init_project`)
 // inside an operator-owned staging directory outside the workspace and its
 // descriptor-relative publication and cleanup helpers.
 package controlplane
@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -53,10 +54,11 @@ var (
 	projectMarkerNames = []string{"go.mod", "design", "gen", "internal", "cmd", "eval"}
 )
 
-// InitProject initializes a new Surla starter project inside a direct child
-// directory of the server's bound initial workspace root, building the starter
-// inside an operator-owned staging directory outside the workspace and
-// publishing it atomically via `renameat.NoReplace`.
+// InitProject builds and commits a new starter outside the workspace. It
+// publishes into a new direct child directory by default, or into the initial
+// workspace root with dir ".". A write-ahead record allows startup to finish
+// publication after an interruption. The result names the active workspace and
+// its initial Git commit.
 func (c *ControlPlane) InitProject(
 	ctx context.Context,
 	p *gensurla.InitProjectPayload,
@@ -83,13 +85,16 @@ func (c *ControlPlane) InitProject(
 	if p.Dir != nil && *p.Dir != "" {
 		targetBase = *p.Dir
 	}
-	if err := validateInitDirName(targetBase); err != nil {
-		recordInitRefused(span, "invalid_dir_name")
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
-			"init_project creates a direct child directory inside the workspace; omit dir to create %q or pass a single child directory name: %w",
-			serviceName,
-			err,
-		))
+	inPlace := targetBase == "."
+	if !inPlace {
+		if err := validateInitDirName(targetBase); err != nil {
+			recordInitRefused(span, "invalid_dir_name")
+			return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+				"omit dir to create the direct child directory %q, pass a single child directory name, or pass \".\" to initialize the workspace root: %w",
+				serviceName,
+				err,
+			))
+		}
 	}
 	if !scaffold.ValidVersion(c.surlaVersion) {
 		recordInitRefused(span, "surla_version_unavailable")
@@ -201,10 +206,16 @@ func (c *ControlPlane) InitProject(
 	if run == nil {
 		run = scaffold.RunCommand
 	}
+	// Prepare needs a nonexistent destination. For in-place initialization
+	// the service child determines only the staging filesystem boundary.
+	prepareDir := targetPath
+	if inPlace {
+		prepareDir = filepath.Join(c.initialWorkspaceRoot, serviceName)
+	}
 	builtService, stagePath, initialCommit, err := scaffold.Prepare(
 		initCtx,
 		scaffold.Options{
-			Dir:          targetPath,
+			Dir:          prepareDir,
 			WorkDir:      stageParentDir,
 			Module:       modulePath,
 			SurlaVersion: c.surlaVersion,
@@ -318,6 +329,21 @@ func (c *ControlPlane) InitProject(
 		Dev:      stageDev,
 		Ino:      stageIno,
 	}
+	if inPlace {
+		wal, err = c.prepareInPlaceRecord(initCtx, workspaceFD, stageFD, wal)
+		if err == nil {
+			err = initCtx.Err()
+		}
+		if err != nil {
+			stageClosed = true
+			cleanErr := removeOwnedStagingDir(stageParentFD, stageFD, stageParentDir, stageName, stageDev, stageIno)
+			if isConflictError(err) && cleanErr == nil {
+				recordInitRefused(span, "already_initialized")
+				return nil, err
+			}
+			return nil, failInitFault(span, "prepare in-place publication failed", errors.Join(err, cleanErr))
+		}
+	}
 	if err := c.writeWorkspaceRecord(wal); err != nil {
 		stageClosed = true
 		return nil, failInitFault(
@@ -332,6 +358,12 @@ func (c *ControlPlane) InitProject(
 	}
 	if c.initStepHook != nil {
 		c.initStepHook("after_wal")
+	}
+	if inPlace {
+		if err := c.finishInPlaceWorkspace(wal, workspaceFD, stageParentFD, stageFD); err != nil {
+			return nil, failInitFault(span, "in-place publication interrupted; restart Surla to recover the workspace", err)
+		}
+		return initializedProject(span, targetPath, modulePath, builtService, initialCommit), nil
 	}
 
 	if gotWSPath, err := abspath.FDPath(workspaceFD); err != nil || gotWSPath != c.initialWorkspaceRoot {
@@ -427,6 +459,11 @@ func (c *ControlPlane) InitProject(
 		recordWorkspaceCleanupFailure("surla.controlplane.finalize_init_project", err)
 	}
 
+	return initializedProject(span, targetPath, modulePath, builtService, initialCommit), nil
+}
+
+// initializedProject records completed publication and returns the bound project.
+func initializedProject(span trace.Span, targetPath, modulePath, builtService, initialCommit string) *gensurla.InitProjectResult {
 	span.AddEvent(
 		"project_initialized",
 		trace.WithAttributes(
@@ -439,7 +476,7 @@ func (c *ControlPlane) InitProject(
 		ModulePath:  modulePath,
 		ServiceName: builtService,
 		Commit:      initialCommit,
-	}, nil
+	}
 }
 
 // Error returns the foreign staging replacement message.
@@ -502,30 +539,36 @@ func openVerifiedDirFD(dir string, expectedDev, expectedIno uint64) (int, error)
 	return fd, nil
 }
 
-// checkWorkspaceUninitialized verifies that workspaceFD has no project markers,
-// no existing targetBase entry, and no committed Git HEAD.
+// checkWorkspaceUninitialized rejects an existing project or a collision
+// with the selected destination before preparing the starter.
 func checkWorkspaceUninitialized(ctx context.Context, workspaceFD int, workspaceDir, targetBase string) error {
-	for _, marker := range projectMarkerNames {
+	if targetBase == "." {
+		if err := checkInPlaceWorkspaceNames(workspaceFD, workspaceDir, nil); err != nil {
+			return err
+		}
+	} else {
+		for _, marker := range projectMarkerNames {
+			var st unix.Stat_t
+			if err := unix.Fstatat(workspaceFD, marker, &st, unix.AT_SYMLINK_NOFOLLOW); err == nil {
+				return gensurla.MakeConflict(fmt.Errorf(
+					"workspace %s already contains %q; init_project requires an uninitialized workspace",
+					workspaceDir,
+					marker,
+				))
+			} else if !errors.Is(err, unix.ENOENT) {
+				return fmt.Errorf("check workspace %s for %q: %w", workspaceDir, marker, err)
+			}
+		}
 		var st unix.Stat_t
-		if err := unix.Fstatat(workspaceFD, marker, &st, unix.AT_SYMLINK_NOFOLLOW); err == nil {
+		if err := unix.Fstatat(workspaceFD, targetBase, &st, unix.AT_SYMLINK_NOFOLLOW); err == nil {
 			return gensurla.MakeConflict(fmt.Errorf(
-				"workspace %s already contains %q; init_project requires an uninitialized workspace",
+				"target directory %q already exists in workspace %s",
+				targetBase,
 				workspaceDir,
-				marker,
 			))
 		} else if !errors.Is(err, unix.ENOENT) {
-			return fmt.Errorf("check workspace %s for %q: %w", workspaceDir, marker, err)
+			return fmt.Errorf("check target directory %q in %s: %w", targetBase, workspaceDir, err)
 		}
-	}
-	var st unix.Stat_t
-	if err := unix.Fstatat(workspaceFD, targetBase, &st, unix.AT_SYMLINK_NOFOLLOW); err == nil {
-		return gensurla.MakeConflict(fmt.Errorf(
-			"target directory %q already exists in workspace %s",
-			targetBase,
-			workspaceDir,
-		))
-	} else if !errors.Is(err, unix.ENOENT) {
-		return fmt.Errorf("check target directory %q in %s: %w", targetBase, workspaceDir, err)
 	}
 	if hasCommittedGitHEAD(ctx, workspaceDir) {
 		return gensurla.MakeConflict(fmt.Errorf(
@@ -777,13 +820,17 @@ func removeOwnedStagingDir(
 // readDirEntriesFD opens an independent directory stream on dirFD via
 // `Openat(dirFD, ".", O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC)` so reading or
 // closing the stream neither shares nor advances dirFD's open file description.
-func readDirEntriesFD(dirFD int, name string) ([]os.DirEntry, error) {
+// A positive limit reads at most that many entries; a non-positive limit reads all.
+func readDirEntriesFD(dirFD int, name string, limit int) ([]os.DirEntry, error) {
 	iterFD, err := unix.Openat(dirFD, ".", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
 	}
 	dirFile := os.NewFile(uintptr(iterFD), name)
-	entries, readErr := dirFile.ReadDir(-1)
+	entries, readErr := dirFile.ReadDir(limit)
+	if errors.Is(readErr, io.EOF) {
+		readErr = nil
+	}
 	closeErr := dirFile.Close()
 	if err := errors.Join(readErr, closeErr); err != nil {
 		return nil, err
@@ -795,7 +842,7 @@ func readDirEntriesFD(dirFD int, name string) ([]os.DirEntry, error) {
 // descriptor-relative operations (`Openat` with `O_NOFOLLOW` and `Unlinkat`),
 // verifying that every child resides on `expectedDev`.
 func emptyOwnedDirFD(dirFD int, expectedDev uint64) error {
-	entries, err := readDirEntriesFD(dirFD, "surla-stage-dir")
+	entries, err := readDirEntriesFD(dirFD, "surla-stage-dir", -1)
 	if err != nil {
 		return err
 	}
@@ -836,7 +883,7 @@ func emptyOwnedDirFD(dirFD int, expectedDev uint64) error {
 // syncDirTreeFD recursively fsyncs all regular files and child directories in
 // post-order under dirFD on expectedDev, then fsyncs dirFD itself.
 func syncDirTreeFD(dirFD int, expectedDev uint64) error {
-	entries, err := readDirEntriesFD(dirFD, "surla-sync-dir")
+	entries, err := readDirEntriesFD(dirFD, "surla-sync-dir", -1)
 	if err != nil {
 		return err
 	}
