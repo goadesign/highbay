@@ -96,6 +96,7 @@ export interface ChangeCardResult {
   prompt: string;
   proposed_revision?: ProposedRevisionItem;
   request_revision: string;
+  revision_note?: string;
   status: "needs_confirmation" | "confirmed";
   stories?: StorySummaryItem[];
   summary: string;
@@ -223,6 +224,7 @@ export interface ProposedRevisionItem {
   preserved_behaviors: string[];
   prompt: string;
   request_revision: string;
+  revision_note?: string;
   stories?: StorySummaryItem[];
   summary: string;
   ui_composition?: UICompositionItem;
@@ -1488,6 +1490,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "request_revision": {
         "type": "string"
       },
+      "revision_note": {
+        "type": "string"
+      },
       "status": {
         "type": "string",
         "enum": [
@@ -2157,6 +2162,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "type": "string"
       },
       "request_revision": {
+        "type": "string"
+      },
+      "revision_note": {
         "type": "string"
       },
       "stories": {

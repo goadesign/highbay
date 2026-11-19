@@ -70,7 +70,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	}
 	revise := func(ctx context.Context, changeID, rev string, analysis *gensurla.CP1RevisionAnalysis) (*gensurla.ChangeCardResult, error) {
 		return cp.ReviseChange(ctx, &gensurla.ReviseChangePayload{
-			ChangeID: changeID, RequestRevision: rev, Prompt: "Refunds up to $100 are instant.", Analysis: analysis,
+			ChangeID: changeID, RequestRevision: rev, Prompt: "Refunds up to $100 are instant.", RevisionNote: "Revise the change.", Analysis: analysis,
 		})
 	}
 
@@ -108,7 +108,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 
 	// The same accounting rule is reported to an MCP caller as a tool error.
 	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &gensurla.ReviseChangePayload{
-		ChangeID: "chg-tx", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.", Analysis: dropped,
+		ChangeID: "chg-tx", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.", RevisionNote: "Revise the change.", Analysis: dropped,
 	})})
 	require.NoError(t, err)
 	complete, ok := res.Outcome.AsComplete()
@@ -121,7 +121,8 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	// HTTP POST /changes/revise succeeds against r1.
 	httpBody := reviseArgs(t, &gensurla.ReviseChangePayload{
 		ChangeID: "chg-tx", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.",
-		Analysis: revision("Refunds up to $100 are instant via HTTP.", "check_01"),
+		RevisionNote: "Revise the change.",
+		Analysis:     revision("Refunds up to $100 are instant via HTTP.", "check_01"),
 	})
 	status, body := postJSON(t, srv.URL+"/changes/revise", "alice-token", string(httpBody))
 	require.Equal(t, http.StatusOK, status, body)
@@ -143,7 +144,8 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	// MCP revise_change succeeds against the HTTP proposal and replaces it.
 	res, err = adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &gensurla.ReviseChangePayload{
 		ChangeID: "chg-tx", RequestRevision: httpCard.ProposedRevision.RequestRevision, Prompt: "Refunds up to $150 are instant.",
-		Analysis: revision("Refunds up to $150 are instant via MCP.", "check_01"),
+		RevisionNote: "Revise the change.",
+		Analysis:     revision("Refunds up to $150 are instant via MCP.", "check_01"),
 	})})
 	require.NoError(t, err)
 	complete, ok = res.Outcome.AsComplete()
@@ -178,6 +180,7 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 	kept := approved.Examples[0].ID
 	revised, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
 		ChangeID: "chg", RequestRevision: approved.RequestRevision, Prompt: "Refunds up to $60 are instant.",
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     "Refunds up to $60 are instant.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -215,6 +218,7 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 choice = AmbiguityChoiceCard(1, "Shipping changes who waits")`
 	r2, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
 		ChangeID: "rev", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $50 are instant; shipping is open.",
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     "Refunds up to $50 are instant; whether shipping counts is open.",
 			Ambiguities: question("Does shipping count toward the limit?"),
@@ -238,6 +242,7 @@ choice = AmbiguityChoiceCard(1, "Shipping changes who waits")`
 
 	r3, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
 		ChangeID: "rev", RequestRevision: r2.RequestRevision, Prompt: r1.Prompt,
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     r1.Summary,
 			Ambiguities: question(r1.Ambiguities[0].Question),
@@ -250,7 +255,9 @@ choice = AmbiguityChoiceCard(1, "Shipping changes who waits")`
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, r1.RequestRevision, r3.RequestRevision, "request_revision is a digest of the card's content alone")
+	assert.Equal(t, r1.RequestRevision, r3.RequestRevision, "request_revision is a digest of the card's content alone, without the revision note")
+	require.NotNil(t, r3.RevisionNote, "the revision keeps the note it was sent with")
+	assert.Equal(t, "Revise the change.", *r3.RevisionNote)
 	assert.Nil(t, r3.UIComposition, "a revision sent without a composition carries none")
 }
 
@@ -274,6 +281,7 @@ func TestReviseChangeConcurrentRevisionsSaveOnlyOne(t *testing.T) {
 			check01 := "check_01"
 			cards[i], results[i] = cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
 				ChangeID: "chg", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.",
+				RevisionNote: "Revise the change.",
 				Analysis: &gensurla.CP1RevisionAnalysis{
 					Summary:     "Refunds up to $100 are instant.",
 					Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -377,6 +385,7 @@ func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.
 		ChangeID:        "chg-story-saved",
 		RequestRevision: confirmed.RequestRevision,
 		Prompt:          "Refunds up to $60 are instant.",
+		RevisionNote:    "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     "Refunds up to $60 of item subtotal are instant; larger refunds wait for a manager.",
 			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
@@ -445,6 +454,7 @@ func TestStoryWithActorsAndNoFlowsSurvivesReloadAndIdenticalRevision(t *testing.
 	example := analysis.Examples[0]
 	revised, err := reopened.ReviseChange(alice, &gensurla.ReviseChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: loaded.RequestRevision, Prompt: card.Prompt,
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary: analysis.Summary, Ambiguities: analysis.Ambiguities,
 			Examples: []*gensurla.CP1RevisionAnalysisExample{{
@@ -576,6 +586,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 			ChangeID:         "chg-http",
 			RequestRevision:  mcpProposed.RequestRevision,
 			Prompt:           "Refunds up to $50 are instant.",
+			RevisionNote:     "Revise the change.",
 			StoryRefreshOpID: &opV2,
 			Analysis:         revAnalysis,
 		}),
@@ -596,6 +607,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 		ChangeID:        "chg-http",
 		RequestRevision: httpProposed.RequestRevision,
 		Prompt:          "Refunds up to $50 are instant.",
+		RevisionNote:    "Revise the change.",
 		Analysis:        revAnalysis,
 	})
 	require.NoError(t, err)
@@ -628,6 +640,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 		ChangeID:         "chg-http",
 		RequestRevision:  keptV1.RequestRevision,
 		Prompt:           "Refunds up to $50 are instant.",
+		RevisionNote:     "Revise the change.",
 		StoryRefreshOpID: &opZero,
 		Analysis:         revAnalysis,
 	})
@@ -646,6 +659,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 		ChangeID:        "chg-http",
 		RequestRevision: plainHTTP.RequestRevision,
 		Prompt:          "Refunds up to $50 are instant.",
+		RevisionNote:    "Revise the change.",
 		Analysis:        revAnalysis,
 	})
 	require.NoError(t, err)
@@ -803,6 +817,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 			_, err = cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
 				ChangeID: existing.ChangeID, RequestRevision: existing.RequestRevision,
 				Prompt:           "Refunds up to $60 are instant.",
+				RevisionNote:     "Revise the change.",
 				StoryRefreshOpID: &opID, Analysis: revAnalysis,
 			})
 			assertServiceError(t, err, "unprocessable")
@@ -927,4 +942,89 @@ func proposalCard(t *testing.T, change *gensurla.ChangeCardResult) *gensurla.Cha
 		RequestRevision:    p.RequestRevision,
 		UIComposition:      p.UIComposition,
 	}
+}
+
+// TestReviseChangeRecordsTheRevisionNote verifies the note revise_change
+// records: a blank note is refused without changing the card; the proposed
+// revision, get_change and a reload return the note; adopting the proposal
+// keeps it on the confirmed revision; and the note is not part of
+// request_revision, so card and proposal files saved before notes were
+// recorded still load with the digests they were saved with.
+func TestReviseChangeRecordsTheRevisionNote(t *testing.T) {
+	user := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	cardsDir := t.TempDir()
+	options := buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), CardsDir: cardsDir})
+	cp := newControlPlane(t, options)
+	confirmed := saveStoredCardBuildFixture(t, cp, nil)
+	require.Nil(t, confirmed.RevisionNote, "a card propose_change made has no note")
+	kept := confirmed.Examples[0].ID
+	payload := func(note string) *gensurla.ReviseChangePayload {
+		return &gensurla.ReviseChangePayload{
+			ChangeID: "chg", RequestRevision: confirmed.RequestRevision,
+			Prompt:       "Refunds up to $60 are instant, and legal must pre-approve each refund rule.",
+			RevisionNote: note,
+			Analysis: &gensurla.CP1RevisionAnalysis{
+				Summary:     "Refunds up to $60 are instant; legal pre-approves refund rules.",
+				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+				Examples: []*gensurla.CP1RevisionAnalysisExample{{
+					PriorID: &kept, Scenario: "Refund at the limit", InputSummary: "Order total $60.00",
+					ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
+				}},
+				RemovedExampleIds: []string{}, PreservedBehaviors: []string{},
+			},
+		}
+	}
+
+	_, err := cp.ReviseChange(user, payload("  "))
+	assertRefused(t, err, "unprocessable")
+	unchanged, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	assert.Nil(t, unchanged.ProposedRevision, "a refused revision saves nothing")
+
+	note := "Legal requires pre-approval of refund rules."
+	revised, err := cp.ReviseChange(user, payload(note))
+	require.NoError(t, err)
+	require.NotNil(t, revised.ProposedRevision)
+	require.NotNil(t, revised.ProposedRevision.RevisionNote)
+	assert.Equal(t, note, *revised.ProposedRevision.RevisionNote)
+	assert.Nil(t, revised.RevisionNote, "the confirmed revision in force keeps its own (absent) note")
+
+	require.NoError(t, cp.Close())
+	reopened := newControlPlane(t, options)
+	reloaded, err := reopened.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	require.NotNil(t, reloaded.ProposedRevision.RevisionNote, "the note survives a reload")
+	assert.Equal(t, note, *reloaded.ProposedRevision.RevisionNote)
+
+	adopted, err := reopened.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: reloaded.ProposedRevision.RequestRevision,
+		Answers: map[string]string{}, Examples: reloaded.ProposedRevision.Examples,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, adopted.RevisionNote, "adopting keeps the note")
+	assert.Equal(t, note, *adopted.RevisionNote)
+	assert.Equal(t, reloaded.ProposedRevision.Prompt, adopted.Prompt)
+
+	// A file saved before notes were recorded has no RevisionNote key. Its
+	// revisions decode with the digests they were saved with.
+	_, err = reopened.ReviseChange(user, func() *gensurla.ReviseChangePayload {
+		p := payload(note)
+		p.RequestRevision = adopted.RequestRevision
+		return p
+	}())
+	require.NoError(t, err)
+	raw, err := os.ReadFile(reopened.cards.path("chg"))
+	require.NoError(t, err)
+	var value map[string]any
+	require.NoError(t, json.Unmarshal(raw, &value))
+	delete(value["card"].(map[string]any), "RevisionNote")
+	delete(value["proposed"].(map[string]any)["card"].(map[string]any), "RevisionNote")
+	older, err := json.Marshal(value)
+	require.NoError(t, err)
+	record, err := decodeCardBytes("chg", filepath.Base(reopened.cards.path("chg")), true, older)
+	require.NoError(t, err)
+	assert.Nil(t, record.card.RevisionNote)
+	assert.Equal(t, adopted.RequestRevision, record.card.RequestRevision)
+	require.NotNil(t, record.proposed)
+	assert.Nil(t, record.proposed.card.RevisionNote)
 }

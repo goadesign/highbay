@@ -176,6 +176,7 @@ project references. Agreed, Needs you and Next keep the current context and
 decision visible; on a phone, Next moves to the bottom of the viewport.
 The frame previews at most two lines of the agreed summary. **Read full
 summary** opens Agree at the complete saved summary, keeping unsaved edits.
+On Describe, with no change open for editing, it shows no agreement.
 
 | View | What it is for |
 | --- | --- |
@@ -257,11 +258,19 @@ Questions only you can answer
 ```
 
 `deterministic` means code can check the outcome directly; `model_judged`
-means checking it needs judgment. Surla cannot tell whether the analysis is
+means checking it needs judgment. This is a label saved with the example, for
+you and the test writer. Verification runs the scenarios of the selected test
+suite, not the card's examples: the tests Surla accepted for the build or,
+when verification settings are stored, the operator's evaluator. The label
+does not choose how a scenario is run or whether it runs. Surla cannot tell whether the analysis is
 complete or correct. You decide that when you confirm the card.
 
-The guide can revise the change at any time with `revise_change`. Before you
-confirm, the revision replaces the card's content and waits for your answers.
+The guide can revise the change at any time with `revise_change`. A revision
+restates the whole request as it now stands, so **Requested change** holds
+every requirement that still applies, with additions, changes and removals
+applied, and its **Revision note** says what this revision changed and why.
+Before you confirm, the revision replaces the card's content and waits for
+your answers.
 After you confirm, it waits beside the agreed revision as a **proposed
 revision**; see [Going back](#going-back).
 

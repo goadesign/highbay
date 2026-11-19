@@ -80,6 +80,7 @@ func generationNativeRevision(
 	revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		Prompt:           "Generate the order lookup service with its revised description.",
+		RevisionNote:     "Revise the change.",
 		StoryRefreshOpID: refreshed.OpID,
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary:     "Keep order lookup and update its description.",

@@ -40,7 +40,7 @@ const preserved = () => page.$("#surla-preserved-draft");
 const outcome = (id) => editor().querySelector('textarea[data-example-id="' + id + '"][data-field="expected_outcome"]');
 const read = async () => (await api(origin, "GET", "/changes/chg-rev-ui", undefined, input.guide)).body;
 async function revise(card, summary, analysis) {
-  const out = await api(origin, "POST", "/changes/revise", { change_id: "chg-rev-ui", request_revision: card.request_revision, prompt: summary, analysis: { summary, ...analysis } }, input.guide);
+  const out = await api(origin, "POST", "/changes/revise", { change_id: "chg-rev-ui", request_revision: card.request_revision, prompt: summary, revision_note: "Revise the change.", analysis: { summary, ...analysis } }, input.guide);
   expect(out.status === 200, "could not revise: " + JSON.stringify(out));
   return out.body;
 }

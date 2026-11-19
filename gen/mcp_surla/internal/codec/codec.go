@@ -247,8 +247,12 @@ func ValidateApproveMergeResultOperatorEvaluatorTestsTransport(value *ApproveMer
 
 // ApproveMergeResultProposedRevisionItemTransport stores JSON fields until they have been validated.
 type ApproveMergeResultProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -534,8 +538,14 @@ type ApproveMergeResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -1086,8 +1096,12 @@ func ValidateConfirmIntentResultOperatorEvaluatorTestsTransport(value *ConfirmIn
 
 // ConfirmIntentResultProposedRevisionItemTransport stores JSON fields until they have been validated.
 type ConfirmIntentResultProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -1373,8 +1387,14 @@ type ConfirmIntentResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -1769,8 +1789,12 @@ func ValidateDeclineRevisionResultOperatorEvaluatorTestsTransport(value *Decline
 
 // DeclineRevisionResultProposedRevisionItemTransport stores JSON fields until they have been validated.
 type DeclineRevisionResultProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -2056,8 +2080,14 @@ type DeclineRevisionResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -3621,8 +3651,12 @@ func ValidateGetChangeResultOperatorEvaluatorTestsTransport(value *GetChangeResu
 
 // GetChangeResultProposedRevisionItemTransport stores JSON fields until they have been validated.
 type GetChangeResultProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -3908,8 +3942,14 @@ type GetChangeResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -7743,8 +7783,12 @@ func ValidateProposeChangeResultOperatorEvaluatorTestsTransport(value *ProposeCh
 
 // ProposeChangeResultProposedRevisionItemTransport stores JSON fields until they have been validated.
 type ProposeChangeResultProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -8030,8 +8074,14 @@ type ProposeChangeResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -10345,8 +10395,15 @@ type ReviseChangePayloadTransport struct {
 	// when the change shows one waiting (proposed_revision.request_revision),
 	// otherwise the change's own.
 	RequestRevision *string `json:"request_revision"`
-	// The user's revised feature request.
+	// The change's complete feature request as it now stands, restated in full:
+	// every requirement that still applies, with this and earlier revisions'
+	// additions, changes and removals applied, so a dropped or replaced
+	// requirement no longer appears. Never only the difference; that goes in
+	// revision_note.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, in the user's terms, for example "Legal
+	// requires pre-approval before a listing goes live".
+	RevisionNote *string `json:"revision_note"`
 	// op_id of a succeeded refresh_story operation whose evaluated draft this
 	// revision adopts. When omitted, the revision keeps every snapshot field of
 	// the revision it revises: design, Stories, architecture, go.mod and made-from
@@ -10371,6 +10428,9 @@ func ValidateReviseChangePayloadTransport(value *ReviseChangePayloadTransport) (
 	}
 	if value.Prompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
+	}
+	if value.RevisionNote == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision_note", "body"))
 	}
 	if value.Analysis == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
@@ -10571,8 +10631,12 @@ func ValidateReviseChangeResultOperatorEvaluatorTestsTransport(value *ReviseChan
 
 // ReviseChangeResultProposedRevisionItemTransport stores JSON fields until they have been validated.
 type ReviseChangeResultProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -10858,8 +10922,14 @@ type ReviseChangeResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -15750,6 +15820,7 @@ func EncodeApproveMergeResult(in *surla.ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -15932,6 +16003,7 @@ func EncodeConfirmIntentResult(in *surla.ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -16033,6 +16105,7 @@ func EncodeDeclineRevisionResult(in *surla.ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -16437,6 +16510,7 @@ func EncodeGetChangeResult(in *surla.ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -17152,6 +17226,7 @@ func EncodeProposeChangeResult(in *surla.ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -17478,6 +17553,7 @@ func DecodeReviseChangePayload(data []byte) (out *surla.ReviseChangePayload, err
 			ChangeID:         *body.ChangeID,
 			RequestRevision:  *body.RequestRevision,
 			Prompt:           *body.Prompt,
+			RevisionNote:     *body.RevisionNote,
 			StoryRefreshOpID: body.StoryRefreshOpID,
 		}
 		out.Analysis = decodeReviseChangePayloadCP1RevisionAnalysisTransportToCP1RevisionAnalysis(body.Analysis)
@@ -17493,6 +17569,7 @@ func EncodeReviseChangeResult(in *surla.ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -19497,6 +19574,7 @@ func encodeOperatorEvaluatorTestsToVerifyChangeResultOperatorEvaluatorTestsTrans
 func encodeProposedRevisionItemToApproveMergeResultProposedRevisionItemTransport(v *surla.ProposedRevisionItem) *ApproveMergeResultProposedRevisionItemTransport {
 	res := &ApproveMergeResultProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}
@@ -19546,6 +19624,7 @@ func encodeProposedRevisionItemToApproveMergeResultProposedRevisionItemTransport
 func encodeProposedRevisionItemToConfirmIntentResultProposedRevisionItemTransport(v *surla.ProposedRevisionItem) *ConfirmIntentResultProposedRevisionItemTransport {
 	res := &ConfirmIntentResultProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}
@@ -19595,6 +19674,7 @@ func encodeProposedRevisionItemToConfirmIntentResultProposedRevisionItemTranspor
 func encodeProposedRevisionItemToDeclineRevisionResultProposedRevisionItemTransport(v *surla.ProposedRevisionItem) *DeclineRevisionResultProposedRevisionItemTransport {
 	res := &DeclineRevisionResultProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}
@@ -19644,6 +19724,7 @@ func encodeProposedRevisionItemToDeclineRevisionResultProposedRevisionItemTransp
 func encodeProposedRevisionItemToGetChangeResultProposedRevisionItemTransport(v *surla.ProposedRevisionItem) *GetChangeResultProposedRevisionItemTransport {
 	res := &GetChangeResultProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}
@@ -19693,6 +19774,7 @@ func encodeProposedRevisionItemToGetChangeResultProposedRevisionItemTransport(v 
 func encodeProposedRevisionItemToProposeChangeResultProposedRevisionItemTransport(v *surla.ProposedRevisionItem) *ProposeChangeResultProposedRevisionItemTransport {
 	res := &ProposeChangeResultProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}
@@ -19742,6 +19824,7 @@ func encodeProposedRevisionItemToProposeChangeResultProposedRevisionItemTranspor
 func encodeProposedRevisionItemToReviseChangeResultProposedRevisionItemTransport(v *surla.ProposedRevisionItem) *ReviseChangeResultProposedRevisionItemTransport {
 	res := &ReviseChangeResultProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}

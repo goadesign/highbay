@@ -41,8 +41,15 @@ type ReviseChangeRequestBody struct {
 	// when the change shows one waiting (proposed_revision.request_revision),
 	// otherwise the change's own.
 	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
-	// The user's revised feature request.
+	// The change's complete feature request as it now stands, restated in full:
+	// every requirement that still applies, with this and earlier revisions'
+	// additions, changes and removals applied, so a dropped or replaced
+	// requirement no longer appears. Never only the difference; that goes in
+	// revision_note.
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
+	// What this revision changes and why, in the user's terms, for example "Legal
+	// requires pre-approval before a listing goes live".
+	RevisionNote string `form:"revision_note" json:"revision_note" xml:"revision_note"`
 	// op_id of a succeeded refresh_story operation whose evaluated draft this
 	// revision adopts. When omitted, the revision keeps every snapshot field of
 	// the revision it revises: design, Stories, architecture, go.mod and made-from
@@ -246,8 +253,14 @@ type ProposeChangeResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -302,8 +315,14 @@ type ReviseChangeResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -358,8 +377,14 @@ type ConfirmIntentResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -414,8 +439,14 @@ type GetChangeResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -470,8 +501,14 @@ type DeclineRevisionResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -672,8 +709,14 @@ type ApproveMergeResponseBody struct {
 	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -4681,8 +4724,12 @@ type UnverifiedApprovalItemResponseBody struct {
 // ProposedRevisionItemResponseBody is used to define fields on response body
 // types.
 type ProposedRevisionItemResponseBody struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `form:"revision_note,omitempty" json:"revision_note,omitempty" xml:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Domain questions the user answers when adopting this revision.
@@ -9002,6 +9049,7 @@ func NewReviseChangeRequestBody(p *surla.ReviseChangePayload) *ReviseChangeReque
 		ChangeID:         p.ChangeID,
 		RequestRevision:  p.RequestRevision,
 		Prompt:           p.Prompt,
+		RevisionNote:     p.RevisionNote,
 		StoryRefreshOpID: p.StoryRefreshOpID,
 	}
 	if p.Analysis != nil {
@@ -9252,6 +9300,7 @@ func NewProposeChangeChangeCardResultOK(body *ProposeChangeResponseBody) *surla.
 		ChangeID:        *body.ChangeID,
 		Status:          *body.Status,
 		Prompt:          *body.Prompt,
+		RevisionNote:    body.RevisionNote,
 		Summary:         *body.Summary,
 		ConfirmedBy:     body.ConfirmedBy,
 		RequestRevision: *body.RequestRevision,
@@ -9379,6 +9428,7 @@ func NewReviseChangeChangeCardResultOK(body *ReviseChangeResponseBody) *surla.Ch
 		ChangeID:        *body.ChangeID,
 		Status:          *body.Status,
 		Prompt:          *body.Prompt,
+		RevisionNote:    body.RevisionNote,
 		Summary:         *body.Summary,
 		ConfirmedBy:     body.ConfirmedBy,
 		RequestRevision: *body.RequestRevision,
@@ -9521,6 +9571,7 @@ func NewConfirmIntentChangeCardResultOK(body *ConfirmIntentResponseBody) *surla.
 		ChangeID:        *body.ChangeID,
 		Status:          *body.Status,
 		Prompt:          *body.Prompt,
+		RevisionNote:    body.RevisionNote,
 		Summary:         *body.Summary,
 		ConfirmedBy:     body.ConfirmedBy,
 		RequestRevision: *body.RequestRevision,
@@ -9648,6 +9699,7 @@ func NewGetChangeChangeCardResultOK(body *GetChangeResponseBody) *surla.ChangeCa
 		ChangeID:        *body.ChangeID,
 		Status:          *body.Status,
 		Prompt:          *body.Prompt,
+		RevisionNote:    body.RevisionNote,
 		Summary:         *body.Summary,
 		ConfirmedBy:     body.ConfirmedBy,
 		RequestRevision: *body.RequestRevision,
@@ -9745,6 +9797,7 @@ func NewDeclineRevisionChangeCardResultOK(body *DeclineRevisionResponseBody) *su
 		ChangeID:        *body.ChangeID,
 		Status:          *body.Status,
 		Prompt:          *body.Prompt,
+		RevisionNote:    body.RevisionNote,
 		Summary:         *body.Summary,
 		ConfirmedBy:     body.ConfirmedBy,
 		RequestRevision: *body.RequestRevision,
@@ -10748,6 +10801,7 @@ func NewApproveMergeChangeCardResultOK(body *ApproveMergeResponseBody) *surla.Ch
 		ChangeID:        *body.ChangeID,
 		Status:          *body.Status,
 		Prompt:          *body.Prompt,
+		RevisionNote:    body.RevisionNote,
 		Summary:         *body.Summary,
 		ConfirmedBy:     body.ConfirmedBy,
 		RequestRevision: *body.RequestRevision,

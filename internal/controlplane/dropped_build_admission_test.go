@@ -59,6 +59,7 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 		}
 		revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
 			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Prompt: card.Prompt,
+			RevisionNote:     "Revise the change.",
 			StoryRefreshOpID: op,
 			Analysis: &gensurla.CP1RevisionAnalysis{
 				Summary: card.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},

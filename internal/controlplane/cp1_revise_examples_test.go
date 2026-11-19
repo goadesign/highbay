@@ -33,7 +33,8 @@ func withProposalAnalysis(t *testing.T, p *gensurla.ProposeChangePayload, analys
 func withRevisionAnalysis(t *testing.T, p *gensurla.ReviseChangePayload, analysisJSON string) *gensurla.ReviseChangePayload {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
-		"change_id": p.ChangeID, "request_revision": p.RequestRevision, "prompt": p.Prompt, "analysis": json.RawMessage(analysisJSON),
+		"change_id": p.ChangeID, "request_revision": p.RequestRevision, "prompt": p.Prompt, "revision_note": p.RevisionNote,
+		"analysis": json.RawMessage(analysisJSON),
 	})
 	require.NoError(t, err)
 	decoded, err := gensurla.DecodeReviseChangePayload(raw)
@@ -133,6 +134,7 @@ func TestReviseChangePreservesSurvivingPriorExamples_Decision1A(t *testing.T) {
 		ChangeID:        "search-feature",
 		RequestRevision: confirmed.RequestRevision,
 		Prompt:          "Search products with fast filtering.",
+		RevisionNote:    "Revise the change.",
 	}, revisionJSON))
 	require.NoError(t, err)
 	require.Len(t, revised.Examples, 2)
@@ -196,6 +198,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 			ChangeID:        "chg-gap",
 			RequestRevision: card1Conf.RequestRevision,
 			Prompt:          "Revised feature.",
+			RevisionNote:    "Revise the change.",
 		}, revisionJSON))
 		require.NoError(t, err)
 		revised = proposalCard(t, revised)
@@ -241,6 +244,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 			ChangeID:        "chg-retired",
 			RequestRevision: card1.RequestRevision,
 			Prompt:          "Revised feature.",
+			RevisionNote:    "Revise the change.",
 		}, revisionJSON))
 		require.NoError(t, err)
 		require.Len(t, revised.Examples, 2)
@@ -285,6 +289,7 @@ func TestReviseChangeRejectsOmittedPriorExampleID_Decision1A(t *testing.T) {
 		ChangeID:        "chg-omission",
 		RequestRevision: card1.RequestRevision,
 		Prompt:          "Revised feature.",
+		RevisionNote:    "Revise the change.",
 	}, omissionJSON))
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, `prior example ID "check_02" is omitted from both examples and removed_example_ids`)
@@ -410,6 +415,7 @@ func TestReviseChangeRejectsInvalidPriorAccounting_Decision1A(t *testing.T) {
 				ChangeID:        "chg-test",
 				RequestRevision: card1.RequestRevision,
 				Prompt:          "Revised feature.",
+				RevisionNote:    "Revise the change.",
 			}, tc.reviseJSON))
 			assertServiceError(t, err, "unprocessable")
 			assert.ErrorContains(t, err, tc.wantErr)
@@ -514,6 +520,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: confirmedR1.RequestRevision,
 		Prompt:          "Remove custom and add a new row.",
+		RevisionNote:    "Revise the change.",
 	}, reviseR2JSON))
 	require.NoError(t, err)
 	r2 = proposalCard(t, r2)
@@ -536,6 +543,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: confirmedR2.RequestRevision,
 		Prompt:          "Remove padded check_01 and add a row.",
+		RevisionNote:    "Revise the change.",
 	}, reviseR3JSON))
 	require.NoError(t, err)
 	r3 = proposalCard(t, r3)
@@ -548,6 +556,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: r3.RequestRevision,
 		Prompt:          "Add another row in R4.",
+		RevisionNote:    "Revise the change.",
 	}, reviseR4JSON))
 	require.NoError(t, err)
 	r4 = proposalCard(t, r4)

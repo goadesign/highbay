@@ -59,8 +59,9 @@ func (c *ControlPlane) ReviseChange(
 	}
 	if strings.TrimSpace(p.ChangeID) == "" ||
 		strings.TrimSpace(p.RequestRevision) == "" ||
-		strings.TrimSpace(p.Prompt) == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New("change_id, request_revision, and prompt are required"))
+		strings.TrimSpace(p.Prompt) == "" ||
+		strings.TrimSpace(p.RevisionNote) == "" {
+		return nil, gensurla.MakeUnprocessable(errors.New("change_id, request_revision, prompt, and revision_note are required"))
 	}
 
 	// Phase 1: read the latest saved revision. A supplied operation replaces
@@ -115,10 +116,14 @@ func (c *ControlPlane) ReviseChange(
 	// Every revision enters needs_confirmation so the user explicitly reviews
 	// and confirms the revised summary, decisions, and examples before it
 	// reaches downstream checkpoints.
+	// The revision keeps its own copy of the note rather than pointing into
+	// the caller's payload.
+	note := p.RevisionNote
 	revised := &gensurla.ChangeCardResult{
 		ChangeID:           p.ChangeID,
 		Status:             StatusNeedsConfirmation,
 		Prompt:             p.Prompt,
+		RevisionNote:       &note,
 		Summary:            p.Analysis.Summary,
 		Ambiguities:        ambiguities,
 		Examples:           examples,
@@ -369,6 +374,7 @@ func proposedRevisionItem(record storedChangeCard) (*gensurla.ProposedRevisionIt
 	card := record.proposed.card
 	return &gensurla.ProposedRevisionItem{
 		Prompt:             card.Prompt,
+		RevisionNote:       card.RevisionNote,
 		Summary:            card.Summary,
 		Ambiguities:        card.Ambiguities,
 		Examples:           card.Examples,

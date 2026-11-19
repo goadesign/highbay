@@ -442,7 +442,7 @@ type policyHTTPRequest struct{ operation, method, path, body string }
 func policyHTTPRequests(card *gensurla.ChangeCardResult, propose, confirm string) []policyHTTPRequest {
 	commit := strings.Repeat("a", 40)
 	revision := card.RequestRevision
-	revise := fmt.Sprintf(`{"change_id":"change","request_revision":%q,"prompt":"Keep refunds bounded","analysis":{"summary":"Bound refunds","ambiguities":[],"examples":[{"prior_id":"check_01","scenario":"refund","input_summary":"refund 10","expected_outcome":"refund 10","verification_kind":"deterministic"}],"removed_example_ids":[],"preserved_behaviors":[]}}`, revision)
+	revise := fmt.Sprintf(`{"change_id":"change","request_revision":%q,"prompt":"Keep refunds bounded","revision_note":"Revise the change.","analysis":{"summary":"Bound refunds","ambiguities":[],"examples":[{"prior_id":"check_01","scenario":"refund","input_summary":"refund 10","expected_outcome":"refund 10","verification_kind":"deterministic"}],"removed_example_ids":[],"preserved_behaviors":[]}}`, revision)
 	return []policyHTTPRequest{
 		{"drop_build", http.MethodPost, "/changes/change/build/drop", `{"started_at":"2026-01-02T03:04:05Z"}`},
 		{"update_draft", http.MethodPost, "/workspace/draft/update", ""},

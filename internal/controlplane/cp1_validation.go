@@ -413,6 +413,7 @@ func (c *ControlPlane) confirm(principal Principal, p *gensurla.ConfirmIntentPay
 		ChangeID:           existing.ChangeID,
 		Status:             StatusConfirmed,
 		Prompt:             existing.Prompt,
+		RevisionNote:       existing.RevisionNote,
 		Summary:            existing.Summary,
 		Ambiguities:        existing.Ambiguities,
 		Answers:            maps.Clone(p.Answers),

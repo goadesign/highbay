@@ -34,7 +34,7 @@ async function propose(changeId, summary, outcome) {
 }
 async function revise(card, summary, outcome) {
   const out = await api(origin, "POST", "/changes/revise", {
-    change_id: card.change_id, request_revision: card.request_revision, prompt: summary,
+    change_id: card.change_id, request_revision: card.request_revision, prompt: summary, revision_note: "Revise the change.",
     analysis: { ...analysis(summary, outcome), examples: [{ prior_id: card.examples[0].id, scenario: "Refund under $50", input_summary: "$40 subtotal", expected_outcome: outcome, verification_kind: "deterministic" }], removed_example_ids: [] },
   }, input.guide);
   expect(out.status === 200, "guide could not revise " + card.change_id + ": " + JSON.stringify(out));

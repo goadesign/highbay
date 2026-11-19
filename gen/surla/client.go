@@ -142,7 +142,7 @@ func (c *Client) ProposeChange(ctx context.Context, p *ProposeChangePayload) (re
 // ReviseChange may return the following errors:
 //   - "not_found" (type *goa.ServiceError): No Change Card exists with this change_id.
 //   - "conflict" (type *goa.ServiceError): request_revision does not name the latest revision (the waiting proposal's, when one waits); read the change with get_change.
-//   - "unprocessable" (type *goa.ServiceError): The request could not be accepted: change_id, request_revision or prompt is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.
+//   - "unprocessable" (type *goa.ServiceError): The request could not be accepted: change_id, request_revision, prompt or revision_note is blank, an ambiguity repeats an option, the analysis does not account for every example of the revision it revises exactly once, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing when the revision being revised has no design. The message says which; the card did not change.
 //   - "drafted_before_drop" (type *goa.ServiceError): A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error

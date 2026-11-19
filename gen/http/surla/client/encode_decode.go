@@ -6581,6 +6581,7 @@ func unmarshalUnverifiedApprovalItemResponseBodyToSurlaUnverifiedApprovalItem(v 
 func unmarshalProposedRevisionItemResponseBodyToSurlaProposedRevisionItem(v *ProposedRevisionItemResponseBody) *surla.ProposedRevisionItem {
 	res := &surla.ProposedRevisionItem{
 		Prompt:          *v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         *v.Summary,
 		RequestRevision: *v.RequestRevision,
 	}

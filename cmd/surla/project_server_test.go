@@ -178,6 +178,25 @@ func initializedProject(t *testing.T, root, directory string) *project.State {
 	return state
 }
 
+// TestSettingsHelpExamplesDecode keeps each example `surla help <kind>`
+// prints accepted by that kind's strict loader, so the help cannot drift from
+// the settings format.
+func TestSettingsHelpExamplesDecode(t *testing.T) {
+	example := func(kind string) []byte {
+		text := settingsHelp[kind]
+		_, after, found := strings.Cut(text, "Example:")
+		require.True(t, found, kind)
+		return []byte(strings.TrimSpace(after))
+	}
+	var verification verificationFile
+	require.NoError(t, decodeSettings(example("verification"), &verification))
+	_, err := verificationConfig(verification, "", "")
+	assert.NoError(t, err)
+	var promotion promotionFile
+	require.NoError(t, decodeSettings(example("promotion"), &promotion))
+	assert.NoError(t, validatePromotionFile(promotion))
+}
+
 // TestProjectSettingsPersistAndRejectStorageFields proves stopped-server management and startup snapshot behavior.
 func TestProjectSettingsPersistAndRejectStorageFields(t *testing.T) {
 	dir := isolateServeWorkspace(t)

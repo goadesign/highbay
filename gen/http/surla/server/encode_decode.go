@@ -4740,6 +4740,7 @@ func marshalSurlaUnverifiedApprovalItemToUnverifiedApprovalItemResponseBody(v *s
 func marshalSurlaProposedRevisionItemToProposedRevisionItemResponseBody(v *surla.ProposedRevisionItem) *ProposedRevisionItemResponseBody {
 	res := &ProposedRevisionItemResponseBody{
 		Prompt:          v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         v.Summary,
 		RequestRevision: v.RequestRevision,
 	}

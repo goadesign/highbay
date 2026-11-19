@@ -41,19 +41,20 @@ type Service interface {
 	// card without ambiguities. Surla runs no model for this step and cannot judge
 	// whether the analysis is complete or correct.
 	ProposeChange(context.Context, *ProposeChangePayload) (res *ChangeCardResult, err error)
-	// Save the next revision of an existing Checkpoint 1 Change Card from a
-	// revised feature request and the guide's analysis of it. Only the guide
-	// revises a change; only the user confirms or adopts a revision, with
-	// confirm_intent on the views page. The request is bound to the latest
-	// revision: the proposed revision's request_revision when one waits, otherwise
-	// the card's. On a card that was never confirmed, the new revision replaces
-	// it. On a confirmed card, the new revision is saved as the proposed revision
-	// beside the confirmed one, replacing any earlier proposal, and the confirmed
-	// revision stays in force with its answers, confirmation, approval, Stories
-	// and design source until the user adopts the proposal with confirm_intent or
-	// declines it. The analysis accounts for every example of the revision it
-	// revises exactly once, keeping or editing it through prior_id or dropping it
-	// through removed_example_ids. Surla keeps the IDs of kept examples, gives new
+	// Save the next revision of an existing Checkpoint 1 Change Card from the
+	// change's complete feature request as it now stands, a note saying what this
+	// revision changes and why, and the guide's analysis. Only the guide revises a
+	// change; only the user confirms or adopts a revision, with confirm_intent on
+	// the views page. The request is bound to the latest revision: the proposed
+	// revision's request_revision when one waits, otherwise the card's. On a card
+	// that was never confirmed, the new revision replaces it. On a confirmed card,
+	// the new revision is saved as the proposed revision beside the confirmed one,
+	// replacing any earlier proposal, and the confirmed revision stays in force
+	// with its answers, confirmation, approval, Stories and design source until
+	// the user adopts the proposal with confirm_intent or declines it. The
+	// analysis accounts for every example of the revision it revises exactly once,
+	// keeping or editing it through prior_id or dropping it through
+	// removed_example_ids. Surla keeps the IDs of kept examples, gives new
 	// examples the lowest check_NN ID neither card uses, adopts the evaluated
 	// draft's design, Stories, architecture, go.mod and made-from list when
 	// story_refresh_op_id is given, without reading any file, or keeps every
@@ -961,8 +962,14 @@ type ChangeCardResult struct {
 	ChangeID string
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status string
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt string
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -1624,8 +1631,12 @@ type ProposeChangePayload struct {
 // source, and architecture preview, verification and approval keep working on
 // it. A later revise_change naming this request_revision replaces it.
 type ProposedRevisionItem struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt string
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string
 	// Plain-English summary of the proposed change.
 	Summary string
 	// Domain questions the user answers when adopting this revision.
@@ -1740,8 +1751,15 @@ type ReviseChangePayload struct {
 	// when the change shows one waiting (proposed_revision.request_revision),
 	// otherwise the change's own.
 	RequestRevision string
-	// The user's revised feature request.
+	// The change's complete feature request as it now stands, restated in full:
+	// every requirement that still applies, with this and earlier revisions'
+	// additions, changes and removals applied, so a dropped or replaced
+	// requirement no longer appears. Never only the difference; that goes in
+	// revision_note.
 	Prompt string
+	// What this revision changes and why, in the user's terms, for example "Legal
+	// requires pre-approval before a listing goes live".
+	RevisionNote string
 	// op_id of a succeeded refresh_story operation whose evaluated draft this
 	// revision adopts. When omitted, the revision keeps every snapshot field of
 	// the revision it revises: design, Stories, architecture, go.mod and made-from
@@ -4022,8 +4040,14 @@ type jsonChangeCardResultTransport struct {
 	ChangeID *string `json:"change_id"`
 	// Checkpoint status (needs_confirmation or confirmed).
 	Status *string `json:"status"`
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it. Absent on
+	// a card propose_change made and on revisions saved before notes were
+	// recorded. Confirming or adopting keeps it. It is saved with the revision but
+	// is not part of request_revision, which covers prompt and the rest of the
+	// card's content.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change from propose_change or
 	// revise_change. confirm_intent does not rewrite this text; when status is
 	// confirmed, answers records the owner's resolutions for ambiguities.
@@ -5708,8 +5732,12 @@ func validatejsonProposeChangePayloadTransport(value *jsonProposeChangePayloadTr
 
 // jsonProposedRevisionItemTransport stores JSON fields until they have been validated.
 type jsonProposedRevisionItemTransport struct {
-	// The user's feature request for this revision.
+	// The change's complete feature request as this revision states it.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, as revise_change recorded it; absent on
+	// a revision saved before notes were recorded. It is not part of
+	// request_revision.
+	RevisionNote *string `json:"revision_note,omitempty"`
 	// Plain-English summary of the proposed change.
 	Summary *string `json:"summary"`
 	// Domain questions the user answers when adopting this revision.
@@ -6034,8 +6062,15 @@ type jsonReviseChangePayloadTransport struct {
 	// when the change shows one waiting (proposed_revision.request_revision),
 	// otherwise the change's own.
 	RequestRevision *string `json:"request_revision"`
-	// The user's revised feature request.
+	// The change's complete feature request as it now stands, restated in full:
+	// every requirement that still applies, with this and earlier revisions'
+	// additions, changes and removals applied, so a dropped or replaced
+	// requirement no longer appears. Never only the difference; that goes in
+	// revision_note.
 	Prompt *string `json:"prompt"`
+	// What this revision changes and why, in the user's terms, for example "Legal
+	// requires pre-approval before a listing goes live".
+	RevisionNote *string `json:"revision_note"`
 	// op_id of a succeeded refresh_story operation whose evaluated draft this
 	// revision adopts. When omitted, the revision keeps every snapshot field of
 	// the revision it revises: design, Stories, architecture, go.mod and made-from
@@ -6060,6 +6095,9 @@ func validatejsonReviseChangePayloadTransport(value *jsonReviseChangePayloadTran
 	}
 	if value.Prompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
+	}
+	if value.RevisionNote == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision_note", "body"))
 	}
 	if value.Analysis == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
@@ -16367,6 +16405,7 @@ func EncodeChangeCardResult(in *ChangeCardResult) ([]byte, error) {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -16455,6 +16494,7 @@ func ValidateChangeCardResultValue(in *ChangeCardResult) error {
 			ChangeID:        &in.ChangeID,
 			Status:          &in.Status,
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			ConfirmedBy:     in.ConfirmedBy,
 			RequestRevision: &in.RequestRevision,
@@ -16547,6 +16587,7 @@ func DecodeChangeCardResult(data []byte) (out *ChangeCardResult, err error) {
 			ChangeID:        *body.ChangeID,
 			Status:          *body.Status,
 			Prompt:          *body.Prompt,
+			RevisionNote:    body.RevisionNote,
 			Summary:         *body.Summary,
 			ConfirmedBy:     body.ConfirmedBy,
 			RequestRevision: *body.RequestRevision,
@@ -21273,6 +21314,7 @@ func EncodeProposedRevisionItem(in *ProposedRevisionItem) ([]byte, error) {
 	{
 		body = &jsonProposedRevisionItemTransport{
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			RequestRevision: &in.RequestRevision,
 		}
@@ -21345,6 +21387,7 @@ func ValidateProposedRevisionItemValue(in *ProposedRevisionItem) error {
 	{
 		body = &jsonProposedRevisionItemTransport{
 			Prompt:          &in.Prompt,
+			RevisionNote:    in.RevisionNote,
 			Summary:         &in.Summary,
 			RequestRevision: &in.RequestRevision,
 		}
@@ -21421,6 +21464,7 @@ func DecodeProposedRevisionItem(data []byte) (out *ProposedRevisionItem, err err
 	{
 		out = &ProposedRevisionItem{
 			Prompt:          *body.Prompt,
+			RevisionNote:    body.RevisionNote,
 			Summary:         *body.Summary,
 			RequestRevision: *body.RequestRevision,
 		}
@@ -22128,6 +22172,7 @@ func EncodeReviseChangePayload(in *ReviseChangePayload) ([]byte, error) {
 			ChangeID:         &in.ChangeID,
 			RequestRevision:  &in.RequestRevision,
 			Prompt:           &in.Prompt,
+			RevisionNote:     &in.RevisionNote,
 			StoryRefreshOpID: in.StoryRefreshOpID,
 		}
 		body.Analysis = encodeCP1RevisionAnalysisToCP1RevisionAnalysisTransport(in.Analysis)
@@ -22163,6 +22208,7 @@ func ValidateReviseChangePayloadValue(in *ReviseChangePayload) error {
 			ChangeID:         &in.ChangeID,
 			RequestRevision:  &in.RequestRevision,
 			Prompt:           &in.Prompt,
+			RevisionNote:     &in.RevisionNote,
 			StoryRefreshOpID: in.StoryRefreshOpID,
 		}
 		body.Analysis = encodeCP1RevisionAnalysisToCP1RevisionAnalysisTransport(in.Analysis)
@@ -22202,6 +22248,7 @@ func DecodeReviseChangePayload(data []byte) (out *ReviseChangePayload, err error
 			ChangeID:         *body.ChangeID,
 			RequestRevision:  *body.RequestRevision,
 			Prompt:           *body.Prompt,
+			RevisionNote:     *body.RevisionNote,
 			StoryRefreshOpID: body.StoryRefreshOpID,
 		}
 		out.Analysis = decodeCP1RevisionAnalysisTransportToCP1RevisionAnalysis(body.Analysis)
@@ -28727,6 +28774,7 @@ func decodeProjectTeamTransportToProjectTeam(v *jsonProjectTeamTransport) *Proje
 func decodeProposedRevisionItemTransportToProposedRevisionItem(v *jsonProposedRevisionItemTransport) *ProposedRevisionItem {
 	res := &ProposedRevisionItem{
 		Prompt:          *v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         *v.Summary,
 		RequestRevision: *v.RequestRevision,
 	}
@@ -30205,6 +30253,7 @@ func encodeProjectTeamToProjectTeamTransport(v *ProjectTeam) *jsonProjectTeamTra
 func encodeProposedRevisionItemToProposedRevisionItemTransport(v *ProposedRevisionItem) *jsonProposedRevisionItemTransport {
 	res := &jsonProposedRevisionItemTransport{
 		Prompt:          &v.Prompt,
+		RevisionNote:    v.RevisionNote,
 		Summary:         &v.Summary,
 		RequestRevision: &v.RequestRevision,
 	}
@@ -34864,7 +34913,7 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 		case "prompt":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The user's feature request for this revision.",
+				typed[key], "The change's complete feature request as this revision states it.",
 			); err != nil {
 				return err
 			}
@@ -34879,6 +34928,13 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "SHA-256 digest of the canonical versioned Change Card.",
+			); err != nil {
+				return err
+			}
+		case "revision_note":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this revision changes and why, as revise_change recorded it. Absent on a card propose_change made and on revisions saved before notes were recorded. Confirming or adopting keeps it. It is saved with the revision but is not part of request_revision, which covers prompt and the rest of the card's content.",
 			); err != nil {
 				return err
 			}
@@ -34929,6 +34985,7 @@ func validateChangeCardResultJSONValue(path string, value any, description strin
 				"prompt",
 				"proposed_revision",
 				"request_revision",
+				"revision_note",
 				"status",
 				"stories",
 				"summary",
@@ -35098,7 +35155,7 @@ func validateChangeCardResultJSONValue21(path string, value any, description str
 		case "prompt":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The user's feature request for this revision.",
+				typed[key], "The change's complete feature request as this revision states it.",
 			); err != nil {
 				return err
 			}
@@ -35106,6 +35163,13 @@ func validateChangeCardResultJSONValue21(path string, value any, description str
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "SHA-256 digest of this proposed revision: confirm_intent adopts it, decline_revision declines it, and revise_change replaces it when given this value.",
+			); err != nil {
+				return err
+			}
+		case "revision_note":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this revision changes and why, as revise_change recorded it; absent on a revision saved before notes were recorded. It is not part of request_revision.",
 			); err != nil {
 				return err
 			}
@@ -35138,6 +35202,7 @@ func validateChangeCardResultJSONValue21(path string, value any, description str
 				"preserved_behaviors",
 				"prompt",
 				"request_revision",
+				"revision_note",
 				"stories",
 				"summary",
 				"ui_composition",
@@ -39272,7 +39337,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 		case "prompt":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The user's revised feature request.",
+				typed[key], "The change's complete feature request as it now stands, restated in full: every requirement that still applies, with this and earlier revisions' additions, changes and removals applied, so a dropped or replaced requirement no longer appears. Never only the difference; that goes in revision_note.",
 			); err != nil {
 				return err
 			}
@@ -39280,6 +39345,13 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "request_revision of the latest revision you read: the proposed revision's when the change shows one waiting (proposed_revision.request_revision), otherwise the change's own.",
+			); err != nil {
+				return err
+			}
+		case "revision_note":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What this revision changes and why, in the user's terms, for example \"Legal requires pre-approval before a listing goes live\".",
 			); err != nil {
 				return err
 			}
@@ -39296,6 +39368,7 @@ func validateReviseChangePayloadJSONValue(path string, value any, description st
 				"change_id",
 				"prompt",
 				"request_revision",
+				"revision_note",
 				"story_refresh_op_id",
 			})
 		}
@@ -43200,6 +43273,11 @@ func checkChangeCardResultChangeCardResultValue(in *ChangeCardResult, field stri
 		if !utf8.ValidString(string(in.Prompt)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "prompt", false))
 		}
+		if in.RevisionNote != nil {
+			if !utf8.ValidString(string(*in.RevisionNote)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "revision_note", false))
+			}
+		}
 		if !utf8.ValidString(string(in.Summary)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "summary", false))
 		}
@@ -43494,6 +43572,11 @@ func checkChangeCardResultProposedRevisionItemValue(in *ProposedRevisionItem, fi
 	if in != nil {
 		if !utf8.ValidString(string(in.Prompt)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "prompt", false))
+		}
+		if in.RevisionNote != nil {
+			if !utf8.ValidString(string(*in.RevisionNote)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "revision_note", false))
+			}
 		}
 		if !utf8.ValidString(string(in.Summary)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "summary", false))
@@ -45614,6 +45697,9 @@ func checkReviseChangePayloadReviseChangePayloadValue(in *ReviseChangePayload, f
 		}
 		if !utf8.ValidString(string(in.Prompt)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "prompt", false))
+		}
+		if !utf8.ValidString(string(in.RevisionNote)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "revision_note", false))
 		}
 		if in.StoryRefreshOpID != nil {
 			if !utf8.ValidString(string(*in.StoryRefreshOpID)) {

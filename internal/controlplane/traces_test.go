@@ -377,6 +377,7 @@ func TestCP1FailuresProduceSafeSavedRecovery(t *testing.T) {
 	reference := "private-analysis-reference"
 	_, err = cp.ReviseChange(ctx, &gensurla.ReviseChangePayload{
 		ChangeID: "existing", RequestRevision: seed.RequestRevision, Prompt: "private-feature-request",
+		RevisionNote: "Revise the change.",
 		Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary: "private-analysis-summary", Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
 			Examples: []*gensurla.CP1RevisionAnalysisExample{{

@@ -1438,6 +1438,9 @@ func ValidateReviseChangePayloadTransport(body *ReviseChangePayloadTransport) (e
 	if body.Prompt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
 	}
+	if body.RevisionNote == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("revision_note", "body"))
+	}
 	if body.Analysis == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
 	}

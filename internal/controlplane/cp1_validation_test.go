@@ -165,12 +165,12 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 		{"configure_model provider without held settings on configured host", handler, http.MethodPost, "/cp1/model", "alice-token", map[string]any{"provider": "openai", "model_name": "gpt-5.4-mini"}, http.StatusUnprocessableEntity, false, "provider openai needs OPENAI_API_KEY: export it"},
 		{"propose duplicate change_id", handler, http.MethodPost, "/changes/propose", "alice-token", map[string]any{"change_id": "chg", "prompt": "p", "analysis": proposalAnalysis}, http.StatusConflict, false, `change_id "chg" already exists`},
 		{"propose blank prompt", handler, http.MethodPost, "/changes/propose", "alice-token", map[string]any{"change_id": "blank", "prompt": "  ", "analysis": proposalAnalysis}, http.StatusUnprocessableEntity, false, "change_id and prompt are required"},
-		{"revise unknown change_id", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "missing", "request_revision": strings.Repeat("0", 64), "prompt": "p", "analysis": revisionAnalysis("check_01")}, http.StatusNotFound, false, `unknown change_id "missing"`},
-		{"revise another owner's card", handler, http.MethodPost, "/changes/revise", "bob-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision, "prompt": "p", "analysis": revisionAnalysis("check_01")}, http.StatusForbidden, false, `principal "bob@example.com" is not the owner of change_id "chg"`},
-		{"revise with an unknown prior example", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision, "prompt": "p", "analysis": revisionAnalysis("check_09")}, http.StatusUnprocessableEntity, false, `invalid analysis: examples[0].prior_id references unknown prior example ID "check_09"`},
+		{"revise unknown change_id", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "missing", "request_revision": strings.Repeat("0", 64), "prompt": "p", "revision_note": "n", "analysis": revisionAnalysis("check_01")}, http.StatusNotFound, false, `unknown change_id "missing"`},
+		{"revise another owner's card", handler, http.MethodPost, "/changes/revise", "bob-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision, "prompt": "p", "revision_note": "n", "analysis": revisionAnalysis("check_01")}, http.StatusForbidden, false, `principal "bob@example.com" is not the owner of change_id "chg"`},
+		{"revise with an unknown prior example", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "chg", "request_revision": pending.RequestRevision, "prompt": "p", "revision_note": "n", "analysis": revisionAnalysis("check_09")}, http.StatusUnprocessableEntity, false, `invalid analysis: examples[0].prior_id references unknown prior example ID "check_09"`},
 		{"get_change unknown", handler, http.MethodGet, "/changes/missing", "alice-token", nil, http.StatusNotFound, false, `unknown change_id "missing"`},
 		{"get_change wrong owner", handler, http.MethodGet, "/changes/chg", "bob-token", nil, http.StatusForbidden, false, `principal "bob@example.com" is not the owner of change_id "chg"`},
-		{"revise stale revision", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "chg", "request_revision": strings.Repeat("0", 64), "prompt": "p", "analysis": revisionAnalysis("check_01")}, http.StatusConflict, false, "request_revision mismatch"},
+		{"revise stale revision", handler, http.MethodPost, "/changes/revise", "alice-token", map[string]any{"change_id": "chg", "request_revision": strings.Repeat("0", 64), "prompt": "p", "revision_note": "n", "analysis": revisionAnalysis("check_01")}, http.StatusConflict, false, "request_revision mismatch"},
 		{"confirm invalid answer", handler, http.MethodPost, "/changes/confirm", "alice-token", map[string]any{
 			"change_id":        "chg",
 			"request_revision": pending.RequestRevision,
@@ -398,7 +398,7 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 		field.revise(revised, placeholder)
 		revise := &gensurla.ReviseChangePayload{
 			ChangeID: "chg-revise", RequestRevision: current.RequestRevision,
-			Prompt: "Refunds up to $50 are instant.", Analysis: revised,
+			Prompt: "Refunds up to $50 are instant.", RevisionNote: "Revise the change.", Analysis: revised,
 		}
 		args = withText(t, reviseArgs(t, revise), blank.value)
 		field.revise(revised, blank.value)
@@ -470,7 +470,7 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 
 				revise := &gensurla.ReviseChangePayload{
 					ChangeID: changeID, RequestRevision: proposed.RequestRevision,
-					Prompt: "Refunds up to $50 are instant, tax included.", Analysis: revision(tc.text),
+					Prompt: "Refunds up to $50 are instant, tax included.", RevisionNote: "Revise the change.", Analysis: revision(tc.text),
 				}
 				ok, msg = send(t, entry, revise, reviseArgs(t, revise))
 				require.True(t, ok, msg)

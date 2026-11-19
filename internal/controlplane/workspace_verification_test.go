@@ -804,6 +804,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	}
 	revised, err := cp.ReviseChange(asCaller("alice@example.com", CallerGuide), &gensurla.ReviseChangePayload{
 		ChangeID: card2.ChangeID, RequestRevision: card2.RequestRevision, Prompt: card2.Prompt,
+		RevisionNote:     "Revise the change.",
 		StoryRefreshOpID: &opID, Analysis: &gensurla.CP1RevisionAnalysis{
 			Summary: card2.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
 			Examples: examples, RemovedExampleIds: []string{}, PreservedBehaviors: card2.PreservedBehaviors,
