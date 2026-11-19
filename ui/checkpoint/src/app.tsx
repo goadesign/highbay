@@ -1178,7 +1178,14 @@ export function bootstrapViewsPage() {
   // update and all reads on which its action depends. Saved evidence remains
   // visible while any of these facts are unknown.
   function runInputsKnown(run: VerificationStatusResult): boolean {
+    const listed = changeList?.changes.find((item) => item.change_id === run.change_id);
+    const ed = activeEditor?.card.change_id === run.change_id ? activeEditor : null;
+    // A confirmation can reach this page before its change-list notification.
+    // A retained dirty editor may instead have the fresh card waiting beside it.
+    const cardMatchesList = ed === null || [ed.card, ed.incomingCard].some((card) =>
+      card !== null && card.request_revision === listed?.request_revision && card.status === listed.status);
     return sessionState === "active" && !document.hidden && changeList !== null && listError === null &&
+      !hasPending("list_changes", "") && cardMatchesList &&
       !waitTroubleShown && editorRequest === null && cardRefresh === null &&
       runObservationGeneration.get(run.run_id) === verificationGeneration &&
       !hasPending("get_verification", run.run_id) &&

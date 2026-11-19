@@ -510,6 +510,73 @@ page.close();
 `)
 }
 
+// TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement
+// holds owner notifications across an in-page refinement. Neither the old list
+// nor a pending replacement can name the current agreement for saved proof.
+func TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement(t *testing.T) {
+	cp, earlier, runsDir, candidate := selectedInputsFixture(t)
+	older, latest := strings.Repeat("1", 32), strings.Repeat("2", 32)
+	accepted := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	writeListedRunAt(t, runsDir, pageOwner, earlier, older, accepted, true, candidate)
+	example := *earlier.Examples[0]
+	example.ExpectedOutcome = "The manager reviews the refund before deciding"
+	card, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
+		ChangeID: earlier.ChangeID, RequestRevision: earlier.RequestRevision,
+		Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&example},
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, earlier.RequestRevision, card.RequestRevision)
+	writeListedRunAt(t, runsDir, pageOwner, card, latest, accepted.Add(time.Minute), true, candidate)
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, map[string]any{
+		"older": older, "latest": latest, "earlier": earlier.RequestRevision, "listed": card.RequestRevision,
+	}, `
+await control(origin, "hold", { key: "GET /change-updates" });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-cp1-editor")?.dataset.requestRevision === input.listed &&
+  page.sent("GET", "/change-updates").some((r) => r.status === undefined) && !page.$("#surla-build-loading"),
+  "the original agreement and held update read did not settle");
+page.$("#surla-refine-agreement").open = true;
+page.type(page.$('textarea[data-field="expected_outcome"]'), "The manager reviews the refund and records the reason");
+page.$("#surla-confirm-submit").click();
+await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === 200), "in-page refinement did not save");
+const revised = JSON.parse(page.sent("POST", "/changes/confirm").findLast((r) => r.status === 200).answer);
+expect(revised.request_revision !== input.listed && revised.status === "confirmed", "the refinement did not produce a confirmed revision");
+await until(() => page.$("#surla-cp1-editor").dataset.requestRevision === revised.request_revision, "the page did not mount its new agreement");
+expect(JSON.parse(page.sent("GET", "/changes").findLast((r) => r.status === 200).answer).changes[0].request_revision === input.listed,
+  "the list caught up before the held owner notification");
+page.$("#surla-nav-cp4").click();
+const reviewed = (id) => page.$("#surla-result-view").dataset.runId === id &&
+  page.sent("GET", "/verifications/" + id + "/review").some((r) => r.status === 200 && JSON.parse(r.answer).inputs_current === false) &&
+  !page.$("#surla-cp4-verification").hasAttribute("aria-busy");
+await until(() => reviewed(input.latest), "Check did not read the selected saved run against the revised agreement");
+const unknown = () => page.text("#surla-cp4-inputs").includes("not known") && !page.$("#surla-cp4-input-difference");
+expect(unknown(), "a stale list named the just-replaced agreement as current");
+expect(page.text("#surla-cp4-title").includes("passed"), "unknown currentness hid the saved verdict");
+page.$("#surla-cp4-run-" + input.older).click();
+await until(() => reviewed(input.older), "the earlier saved run did not load");
+expect(unknown(), "the earlier run treated the stale list as the current agreement");
+await control(origin, "hold", { key: "GET /changes" });
+const lists = page.sent("GET", "/changes").length;
+await control(origin, "release", { key: "GET /change-updates" });
+await until(() => page.sent("GET", "/changes").length > lists &&
+  page.sent("GET", "/changes").slice(lists).some((r) => r.status === undefined), "the replacement list was not held");
+expect(unknown(), "a pending list exposed a stale current-agreement explanation");
+await control(origin, "release", { key: "GET /changes" });
+const namesRevisedAgreement = (used) => {
+  const codes = page.$$("#surla-cp4-input-difference code").map((node) => node.textContent);
+  return page.text("#surla-cp4-inputs").includes("does not match") && codes.length === 2 &&
+    used.startsWith(codes[0]) && revised.request_revision.startsWith(codes[1]);
+};
+await until(() => namesRevisedAgreement(input.earlier), "the fresh list did not identify the revised agreement for the older run");
+page.$("#surla-cp4-run-" + input.latest).click();
+await until(() => namesRevisedAgreement(input.listed), "the prior agreement's run did not name the newly confirmed agreement");
+expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0,
+  "reading saved proof approved or started verification");
+page.close();
+`)
+}
+
 // ListVerifications preserves the actual owner result and captures only the
 // armed answer. The HTTP answer-later gate controls its later delivery.
 func (s *selectedInputsListRead) ListVerifications(
