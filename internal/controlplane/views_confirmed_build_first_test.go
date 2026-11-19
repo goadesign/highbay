@@ -53,6 +53,12 @@ func TestViewsPageConfirmedBuildLeadsTheFoldedAgreement(t *testing.T) {
 	runPageScript(t, ps, map[string]any{"card": json.RawMessage(wireCard)}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Build was not ready");
+const next = () => page.text("#surla-frame-next dd");
+expect(next().includes("Build controls below") && !page.$("#surla-frame-next button"), "initial Build did not point to its existing controls");
+page.$("#surla-nav-changes").click();
+expect(!page.$("#surla-agreement-details") && !page.$("#surla-read-full-summary"), "Describe exposed a hidden editor’s agreement");
+expect(page.text(".surla-frame-summary") === "No confirmed agreement opened", "Describe labeled a hidden agreement as open");
+page.$("#surla-nav-build").click();
 const editor = page.$("#surla-cp1-editor");
 const build = page.$("#surla-build-section");
 const agreement = page.$("#surla-agreement-details");
@@ -89,6 +95,7 @@ expect(warning && warning.textContent.includes("earlier revision") && submit.get
 expect(!submit.disabled && submit.textContent.includes("Refine Confirmed Answers & Examples"), "the explicit refinement action is missing");
 expect(page.sent("POST", "/changes/confirm").length === 0, "editing or refreshing submitted the draft");
 page.$("#surla-nav-changes").click();
+expect(page.text(".surla-frame-summary") === input.card.summary, "Describe lost its protected editor’s agreement");
 const summary = page.$("#surla-agreement-summary");
 // jsdom has no layout or scrolling; native browser coverage owns that proof.
 summary.scrollIntoView = () => {};

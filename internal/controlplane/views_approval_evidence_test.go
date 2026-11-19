@@ -12,10 +12,12 @@ import (
 	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
+	"github.com/stretchr/testify/require"
 )
 
-// TestViewsPageApprovalEvidencePreservesCoverageMeaning renders the owning
-// request's recorded context, including an expected test absent from a report.
+// TestViewsPageApprovalEvidencePreservesCoverageMeaning compares Check and
+// Approve against a saved run, including a test absent from the report and
+// model-judged examples with and without a writer's coverage statement.
 func TestViewsPageApprovalEvidencePreservesCoverageMeaning(t *testing.T) {
 	for _, mode := range []string{"mapped", "evaluator", "empty", "not_recorded"} {
 		t.Run(mode, func(t *testing.T) {
@@ -50,35 +52,91 @@ func TestViewsPageApprovalEvidencePreservesCoverageMeaning(t *testing.T) {
 				if mode == "evaluator" {
 					req.Plan.Tests = verify.TestsEvaluator
 				} else {
-					req.StoryContext.TestCoverage = &verifyrun.TestCoverageSnapshot{Report: 1,
-						Answers:            []*gensurla.ConfirmedAnswer{{ID: "tax", Question: "Does the limit include tax?", Answer: "No"}, {ID: "destination", Question: "Where does the refund go?", Answer: "Original payment"}},
-						Examples:           []*gensurla.ExampleItem{{ID: "check_01", Scenario: "Refund at the limit", InputSummary: "$50 before tax", ExpectedOutcome: "Refund", VerificationKind: "deterministic"}},
-						CoverageStatements: []*gensurla.TestCoverageStatement{{Scenario: "a", QuestionIds: []gensurla.TestCoverageReference{"tax"}, ExampleIds: []gensurla.TestCoverageReference{"check_01"}, Explanation: "Checks the agreed refund limit."}}}
+					req.StoryContext.TestCoverage = &verifyrun.TestCoverageSnapshot{
+						Report: 1,
+						Answers: []*gensurla.ConfirmedAnswer{
+							{ID: "tax", Question: "Does the limit include tax?", Answer: "No"},
+							{ID: "destination", Question: "Where does the refund go?", Answer: "Original payment"},
+						},
+						Examples: []*gensurla.ExampleItem{
+							{ID: "check_01", Scenario: "Recorded refund at the limit", InputSummary: "$50 before tax", ExpectedOutcome: "Refund", VerificationKind: "deterministic"},
+							{ID: "check_02", Scenario: "Recorded refund explanation", InputSummary: "Refund rejected", ExpectedOutcome: "Explain the refund rule", VerificationKind: "model_judged"},
+							{ID: "check_03", Scenario: "Recorded refund guidance", InputSummary: "Refund needs review", ExpectedOutcome: "Explain the next step", VerificationKind: "model_judged"},
+						},
+						CoverageStatements: []*gensurla.TestCoverageStatement{
+							{Scenario: "a", QuestionIds: []gensurla.TestCoverageReference{"tax"}, ExampleIds: []gensurla.TestCoverageReference{"check_01", "check_03"}, Explanation: "Checks the agreed refund limit and next step."},
+						},
+					}
 				}
 			})
 			ps := startPageServer(t, cp)
-			runPageScript(t, ps, map[string]any{"mode": mode, "run": runID}, `
+			runPageScript(t, ps, map[string]any{
+				"mode": mode, "run": runID, "currentExample": card.Examples[0].ExpectedOutcome,
+			}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-nav-cp5"), "the change did not open");
+await until(() => page.$("#surla-nav-cp4"), "the change did not open");
+const coverageDetails = (selector, name) => {
+  const term = page.$$(selector + " dt").find((term) => term.textContent === name);
+  return term?.nextElementSibling.textContent ?? "";
+};
+const checkLimits = (selector) => {
+  const limits = page.text(selector);
+  expect(/no separate.*check_project.*attached/i.test(limits), "separate builder check results were presented as run evidence");
+  if (input.mode === "evaluator") {
+    expect(limits.includes("A passed test does not prove that a particular Story flow was covered"), "unknown mapping lost its explanation");
+  }
+  if (input.mode === "mapped") {
+    expect(limits.includes("Recorded draft") && limits.includes("Draft, no required test"), "the recorded draft exclusion disappeared");
+    expect(limits.includes("Recorded refund explanation") && limits.includes("Recorded refund guidance"), "the recorded model-judged examples were omitted from the limits");
+    expect(/no separate.*example.*verdict/i.test(limits) && !limits.includes("Not run"), "the limits misstate whether individual examples were judged");
+  }
+};
+const checkCoverage = (selector) => {
+  const coverage = page.text(selector);
+  expect(!coverage.includes(input.currentExample), "the run's coverage was backfilled from today's card");
+  if (input.mode === "empty") {
+    expect(coverage.includes("This agreement has no confirmed answers or examples."), "recorded empty coverage basis was treated as absent");
+  } else if (input.mode === "mapped") {
+    expect(coverage.includes("Test writer's stated coverage") && coverage.includes("Surla did not judge them") && coverage.includes("Original payment"), "writer attribution or the recorded answer was lost");
+    expect(coverageDetails(selector, "Where does the refund go?").includes("Not stated"), "an unclaimed answer acquired a writer relation");
+    expect(coverageDetails(selector, "Recorded refund at the limit").includes("Deterministic check"), "the deterministic example lost its classification");
+    const unstated = coverageDetails(selector, "Recorded refund explanation");
+    expect(unstated.includes("Model-judged check") && unstated.includes("Not stated") && !unstated.includes("Not run"), "a model-judged example without a statement acquired an execution verdict");
+    const stated = coverageDetails(selector, "Recorded refund guidance");
+    expect(stated.includes("Model-judged check") && stated.includes("Checks the agreed refund limit and next step.") && stated.includes("Run result: Passed"), "the stated model-judged example lost its writer relation or the declared scenario outcome");
+  }
+};
+page.$("#surla-nav-cp4").click();
+const reviewPath = "/verifications/" + input.run + "/review";
+await until(() => page.$("#surla-result-view").dataset.runId === input.run &&
+  page.sent("GET", reviewPath).some((request) => request.status === 200) &&
+  page.$("#surla-cp4-evidence-limits") && !page.$("#surla-cp4-verification").hasAttribute("aria-busy"),
+  "Check did not load the selected run's recorded review");
+checkCoverage("#surla-cp4-coverage");
+checkLimits("#surla-cp4-evidence-limits");
+const boundReport = page.text("#surla-cp4-test-binding").match(/\breport \d+\b/i)?.[0].toLowerCase();
+expect(boundReport === (["mapped", "empty"].includes(input.mode) ? "report 1" : undefined), "Check did not distinguish a recorded report number from missing evidence");
+if (input.mode === "evaluator") {
+  await until(() => page.text("#surla-cp4-inputs").includes("does not match"), "an owner-negative source mismatch lost its generic warning");
+  expect(!page.$("#surla-cp4-input-difference"), "Check invented a visible cause for the evaluator mismatch");
+}
 page.$("#surla-nav-cp5").click();
 await until(() => page.$("#surla-approval-stage")?.dataset.runId === input.run && !page.$("#surla-cp5-observation-status"), "owner review did not settle");
 const stage = page.text("#surla-approval-stage");
+checkCoverage("#surla-approval-coverage");
+checkLimits(".surla-approval-exclusions");
 if (input.mode === "not_recorded") {
   expect(stage.includes("Story context was not recorded for this run") && !page.$(".surla-flow-evidence"), "missing run context was backfilled from current state");
 } else if (input.mode === "empty") {
   expect(stage.includes("This agreement recorded no Story flows") && !stage.includes("Story context was not recorded"), "recorded empty Story was treated as absent");
-  expect(page.text("#surla-approval-coverage").includes("This agreement has no confirmed answers or examples."), "recorded empty coverage basis was treated as absent");
 } else {
   const rows = page.$$(".surla-flow-evidence tbody tr");
-  expect(rows.length === 2 && stage.includes("Recorded draft") && stage.includes("Draft, no required test"), "finished/draft coverage was lost");
+  expect(rows.length === 2, "finished flows were lost or included a draft");
   if (input.mode === "evaluator") {
     expect(rows.every((row) => row.textContent.includes("Mapping not recorded for this evaluator") && row.textContent.includes("Coverage not recorded")), "evaluator results invented flow coverage");
-    expect(stage.includes("A passed test does not prove that a particular Story flow was covered"), "unknown mapping lost its explanation");
     expect(page.text("#surla-approval-coverage").includes("configured evaluator. Test-writer coverage: Not stated."), "operator tests acquired invented writer statements");
   } else {
     expect(rows[0].textContent.includes("Passed") && rows[1].textContent.includes("Not reported"), "missing expected scenario was presented as a pass or exclusion");
-    const coverage = page.text("#surla-approval-coverage");
-    expect(coverage.includes("Test writer's stated coverage") && coverage.includes("Surla did not judge them") && coverage.includes("Checks the agreed refund limit.") && coverage.includes("Run result: Passed") && coverage.includes("Original payment") && coverage.includes("Not stated"), "writer attribution, outcome or unclaimed requirement was lost");
   }
 }
 const otherIds = page.$$(".surla-approval-test-list code").map((node) => node.textContent);
@@ -88,6 +146,87 @@ page.close();
 `)
 		})
 	}
+}
+
+// TestViewsPageCheckKeepsFrozenEvidenceWithSelectedRun releases a saved
+// review after selection changes. Copies of the same candidate still retain
+// their separate report numbers and examples.
+func TestViewsPageCheckKeepsFrozenEvidenceWithSelectedRun(t *testing.T) {
+	cp, card, runsDir, candidate := selectedInputsFixture(t)
+	older, latest := strings.Repeat("1", 32), strings.Repeat("2", 32)
+	const laterExample = "Explain the revised refund rule"
+	example := *card.Examples[0]
+	example.Scenario = laterExample
+	example.VerificationKind = "model_judged"
+	current, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+		Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&example},
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, card.RequestRevision, current.RequestRevision)
+	accepted := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	for _, run := range []struct {
+		id     string
+		card   *gensurla.ChangeCardResult
+		report int
+		at     time.Time
+	}{
+		{id: older, card: card, report: 1, at: accepted},
+		{id: latest, card: current, report: 2, at: accepted.Add(time.Minute)},
+	} {
+		writeListedRunAt(t, runsDir, pageOwner, run.card, run.id, run.at, true, candidate)
+		editVerificationRequest(t, runsDir, run.id, func(req *verifyrun.Request) {
+			req.Plan.Tests = verify.TestsWritten
+			req.StoryContext = verifyrun.StoryContext{
+				State: verifyrun.StoryRecorded, BuildNumber: run.report,
+				BuildStartedAt: run.at.Add(-time.Second), Stories: []designeval.StorySummary{},
+				TestCoverage: &verifyrun.TestCoverageSnapshot{
+					Report: run.report, Answers: []*gensurla.ConfirmedAnswer{}, Examples: run.card.Examples,
+					CoverageStatements: []*gensurla.TestCoverageStatement{},
+				},
+			}
+		})
+	}
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, map[string]any{
+		"older": older, "latest": latest, "earlierExample": card.Examples[0].Scenario, "laterExample": laterExample,
+		"earlierRevision": card.RequestRevision, "currentRevision": current.RequestRevision,
+	}, `
+const page = await openPage(origin, { link: input.link });
+const coverage = () => page.text("#surla-cp4-coverage");
+const binding = () => page.text("#surla-cp4-test-binding");
+const selected = () => page.$("#surla-result-view").dataset.runId;
+const latestEvidence = () => selected() === input.latest && coverage().includes(input.laterExample) &&
+  !coverage().includes(input.earlierExample) && /\breport 2\b/i.test(binding()) && !/\breport 1\b/i.test(binding());
+await until(() => page.$("#surla-nav-cp4"), "the change did not open");
+page.$("#surla-nav-cp4").click();
+await until(() => latestEvidence() && page.$("#surla-cp4-run-" + input.older), "Check did not show the latest selected run's frozen evidence");
+const earlierPath = "/verifications/" + input.older + "/review";
+expect(page.sent("GET", earlierPath).length === 0, "Check read a review for an unselected run");
+await control(origin, "answer-later", { key: "GET " + earlierPath });
+page.$("#surla-cp4-run-" + input.older).click();
+await until(() => selected() === input.older && page.sent("GET", earlierPath).some((r) => r.status === undefined), "the earlier selected run did not request its own review");
+expect(!coverage().includes(input.laterExample) && !/\breport 2\b/i.test(binding()), "the pending review displayed a different run's frozen evidence");
+expect(page.text("#surla-cp4-title").includes("passed") && page.text("#surla-cp4-verification").includes("holdout-1"), "the pending review hid the declared results");
+page.$("#surla-cp4-run-" + input.latest).click();
+await until(latestEvidence, "the latest run could not be reviewed independently");
+await control(origin, "release", { key: "GET " + earlierPath });
+await until(() => page.sent("GET", earlierPath).some((r) => r.status === 200), "the held review did not finish");
+await sleep(0);
+expect(latestEvidence(), "the late review changed the selected run's evidence");
+page.$("#surla-cp4-run-" + input.older).click();
+await until(() => selected() === input.older && coverage().includes(input.earlierExample) &&
+  !coverage().includes(input.laterExample) && /\breport 1\b/i.test(binding()), "selecting the earlier run did not restore its report and examples");
+const revisions = () => page.$$("#surla-cp4-input-difference code").map((node) => node.textContent);
+await until(() => {
+  const [used, current] = revisions();
+  return page.text("#surla-cp4-inputs").includes("does not match") && used && current && used !== current &&
+    input.earlierRevision.startsWith(used) && input.currentRevision.startsWith(current);
+},
+  "Check did not identify the run's agreement and the confirmed current agreement");
+expect(!/test.*commit/i.test(page.text("#surla-cp4-input-difference")), "a changed agreement also acquired an unobserved tests mismatch");
+page.close();
+`)
 }
 
 // TestViewsPageDelayedReviewCannotReplaceTheSelectedRun releases an earlier

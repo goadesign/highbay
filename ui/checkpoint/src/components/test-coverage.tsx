@@ -30,6 +30,7 @@ export function TestCoverage({ id, heading, answers, examples, statements, repor
   return <section id={id} className="surla-test-coverage" aria-labelledby={id + "-title"}>
     <Heading id={id + "-title"}>Test writer's stated coverage</Heading>
     <p>These statements come from the test writer. Surla did not judge them.</p>
+    {examples.length > 0 ? <p>Example check types describe the check needed, not a recorded outcome.</p> : null}
     {answers.length + examples.length === 0 ? <p>This agreement has no confirmed answers or examples.</p> : <dl>
       {answers.map((answer) => <React.Fragment key={"question-" + answer.id}>
         <dt>{answer.question}</dt>
@@ -39,7 +40,8 @@ export function TestCoverage({ id, heading, answers, examples, statements, repor
       </React.Fragment>)}
       {examples.map((example) => <React.Fragment key={"example-" + example.id}>
         <dt>{example.scenario}</dt>
-        <dd><p>Input: {example.input_summary}</p><p>Expected: {example.expected_outcome}</p>
+        <dd><p>{example.verification_kind === "model_judged" ? "Model-judged check" : "Deterministic check"}.</p>
+          <p>Input: {example.input_summary}</p><p>Expected: {example.expected_outcome}</p>
           {statedRelations(statements.filter((row) => row.example_ids.includes(example.id)))}
         </dd>
       </React.Fragment>)}

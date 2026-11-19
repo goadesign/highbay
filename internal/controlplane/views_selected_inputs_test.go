@@ -14,6 +14,7 @@ import (
 	"time"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/designeval"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
 	"github.com/stretchr/testify/assert"
@@ -31,16 +32,32 @@ type selectedInputsListRead struct {
 }
 
 // TestViewsPageAcceptedTestsRefreshOpenedBuildAndSelectedProof follows a second
-// accepted test commit without changing views or reloading the page. Returning
-// to the recorded commit restores the owner match in both opened surfaces.
+// accepted test commit without changing views or reloading the page. The
+// mismatch names both reports without changing the saved report's binding.
 func TestViewsPageAcceptedTestsRefreshOpenedBuildAndSelectedProof(t *testing.T) {
 	cp, card, runsDir, candidate := selectedInputsFixture(t)
 	runID := strings.Repeat("1", 32)
 	writeListedRunAt(t, runsDir, pageOwner, card, runID,
 		time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC), true, candidate)
-	setListedRunSource(t, runsDir, runID, verify.TestsWritten)
+	editVerificationRequest(t, runsDir, runID, func(req *verifyrun.Request) {
+		req.Plan.Tests = verify.TestsWritten
+		req.StoryContext = verifyrun.StoryContext{
+			State: verifyrun.StoryRecorded, BuildNumber: 1,
+			BuildStartedAt: req.AcceptedAt.Add(-time.Minute), Stories: []designeval.StorySummary{},
+			TestCoverage: &verifyrun.TestCoverageSnapshot{
+				Report: 1, Answers: []*gensurla.ConfirmedAnswer{}, Examples: card.Examples,
+				CoverageStatements: []*gensurla.TestCoverageStatement{},
+			},
+		}
+	})
 	ps := startPageServer(t, cp)
 	selectedInputsActions(t, ps, cp, card.ChangeID)
+	user := asCaller(pageOwner, CallerUser)
+	build := mustStartedBuild(t, cp, user, card.ChangeID)
+	ps.act("drop-current-build", func() {
+		_, err := cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: build.StartedAt})
+		require.NoError(t, err)
+	})
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
 const review = () => page.$("#surla-build-review-check");
@@ -61,14 +78,36 @@ expect(page.doc.activeElement === page.$("#surla-cp5-title"), "Review result did
 const verdict = page.text("#surla-cp4-title");
 const details = page.text("#surla-cp4-details");
 expect(verdict === "The check passed: 2 of 2 scenarios.", "the saved passing verdict is missing");
+const binding = () => page.text("#surla-cp4-test-binding");
+const difference = () => page.text("#surla-cp4-input-difference");
+expect(/\breport 1\b/i.test(binding()) && !difference(), "the original run lost its recorded report or claimed a mismatch");
 await control(origin, "act", { key: "accept-t2" });
-await until(() => page.text("#surla-cp4-inputs").includes("does not match") && (page.$("#surla-cp5-approve")?.disabled ?? true), "the selected terminal run did not follow second acceptance");
+const testsChanged = () => {
+  const [used, current] = difference().toLowerCase().split("current accepted tests");
+  return page.text("#surla-cp4-inputs").includes("does not match") &&
+    /\breport 1\b/.test(used) && used.includes("2222222") &&
+    /\breport 2\b/.test(current ?? "") && current.includes("3333333");
+};
+await until(() => testsChanged() && (page.$("#surla-cp5-approve")?.disabled ?? true), "the selected run did not name its recorded tests and the current accepted tests");
+expect(/\breport 1\b/i.test(binding()) && !/\breport 2\b/i.test(binding()), "the new acceptance replaced the selected run's report number");
 expect(page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details, "freshness changed the saved report or selection");
 page.$("#surla-cp5-approve")?.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "a stale selected report submitted approval");
+const listPath = "/changes/chg-selected-inputs/verifications";
+await control(origin, "answer-later", { key: "GET " + listPath });
+page.$("#surla-load-verifications").click();
+await until(() => page.$("#surla-load-verifications").disabled && page.text("#surla-cp4-inputs").includes("not known"), "a pending input read did not make currentness unknown");
+expect(!difference() && /\breport 1\b/i.test(binding()), "pending currentness kept an exact mismatch or hid the frozen report");
+await control(origin, "release", { key: "GET " + listPath });
+await until(testsChanged, "the exact mismatch did not return after the owner confirmed it");
 await control(origin, "act", { key: "accept-t1" });
-await until(() => page.text("#surla-cp4-inputs").includes("matches the agreed revision") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the selected report did not regain its current owner match");
+await until(() => page.text("#surla-cp4-inputs").includes("matches the agreed revision") && !difference() && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the selected report did not regain its current owner match");
 expect(page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details, "restoring freshness replaced historical evidence");
+await control(origin, "act", { key: "accept-t2" });
+await until(testsChanged, "the second acceptance did not restore the tests mismatch");
+await control(origin, "act", { key: "drop-current-build" });
+await until(() => page.text("#surla-cp4-inputs").includes("does not match") && !difference(), "the dropped build was still described as the current accepted tests");
+expect(/\breport 1\b/i.test(binding()) && page.text("#surla-cp4-title") === verdict, "dropping the build hid the saved evidence");
 expect(page.sent("POST", "/changes/verify").length === 0, "reading saved proof started verification");
 page.close();
 `)
@@ -96,6 +135,10 @@ expect(!page.$("#surla-build-review-check").classList.contains("shadcn-btn-prima
 page.$("#surla-build-review-check").click();
 await until(() => page.$("#surla-result-view").dataset.runId === input.latest && page.$("#surla-cp4-run-" + input.older) && page.text("#surla-cp4-inputs").includes("does not match"), "Build did not open the exact latest identity with its stale observation");
 expect(page.doc.activeElement === page.$("#surla-cp5-title"), "reviewing a stale passed check did not focus its blocked approval");
+const row = (id) => page.text("#surla-cp4-run-" + id).replaceAll("’", "'");
+expect(row(input.older).includes("Tests' commit") && row(input.older).includes("2222222") &&
+  row(input.latest).includes("Tests' commit") && row(input.latest).includes("3333333"), "run rows did not identify their own tests commits");
+expect(!/\breport \d+\b/i.test(page.text("#surla-cp4-test-binding")), "a historical run without coverage inherited the build's current report number");
 const listPath = "/changes/chg-selected-inputs/verifications";
 await control(origin, "answer-later", { key: "GET " + listPath });
 const listsBeforeSelection = page.sent("GET", listPath).length;
@@ -467,6 +510,73 @@ page.close();
 `)
 }
 
+// TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement
+// holds owner notifications across an in-page refinement. Neither the old list
+// nor a pending replacement can name the current agreement for saved proof.
+func TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement(t *testing.T) {
+	cp, earlier, runsDir, candidate := selectedInputsFixture(t)
+	older, latest := strings.Repeat("1", 32), strings.Repeat("2", 32)
+	accepted := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
+	writeListedRunAt(t, runsDir, pageOwner, earlier, older, accepted, true, candidate)
+	example := *earlier.Examples[0]
+	example.ExpectedOutcome = "The manager reviews the refund before deciding"
+	card, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
+		ChangeID: earlier.ChangeID, RequestRevision: earlier.RequestRevision,
+		Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&example},
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, earlier.RequestRevision, card.RequestRevision)
+	writeListedRunAt(t, runsDir, pageOwner, card, latest, accepted.Add(time.Minute), true, candidate)
+	ps := startPageServer(t, cp)
+	runPageScript(t, ps, map[string]any{
+		"older": older, "latest": latest, "earlier": earlier.RequestRevision, "listed": card.RequestRevision,
+	}, `
+await control(origin, "hold", { key: "GET /change-updates" });
+const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#surla-cp1-editor")?.dataset.requestRevision === input.listed &&
+  page.sent("GET", "/change-updates").some((r) => r.status === undefined) && !page.$("#surla-build-loading"),
+  "the original agreement and held update read did not settle");
+page.$("#surla-refine-agreement").open = true;
+page.type(page.$('textarea[data-field="expected_outcome"]'), "The manager reviews the refund and records the reason");
+page.$("#surla-confirm-submit").click();
+await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === 200), "in-page refinement did not save");
+const revised = JSON.parse(page.sent("POST", "/changes/confirm").findLast((r) => r.status === 200).answer);
+expect(revised.request_revision !== input.listed && revised.status === "confirmed", "the refinement did not produce a confirmed revision");
+await until(() => page.$("#surla-cp1-editor").dataset.requestRevision === revised.request_revision, "the page did not mount its new agreement");
+expect(JSON.parse(page.sent("GET", "/changes").findLast((r) => r.status === 200).answer).changes[0].request_revision === input.listed,
+  "the list caught up before the held owner notification");
+page.$("#surla-nav-cp4").click();
+const reviewed = (id) => page.$("#surla-result-view").dataset.runId === id &&
+  page.sent("GET", "/verifications/" + id + "/review").some((r) => r.status === 200 && JSON.parse(r.answer).inputs_current === false) &&
+  !page.$("#surla-cp4-verification").hasAttribute("aria-busy");
+await until(() => reviewed(input.latest), "Check did not read the selected saved run against the revised agreement");
+const unknown = () => page.text("#surla-cp4-inputs").includes("not known") && !page.$("#surla-cp4-input-difference");
+expect(unknown(), "a stale list named the just-replaced agreement as current");
+expect(page.text("#surla-cp4-title").includes("passed"), "unknown currentness hid the saved verdict");
+page.$("#surla-cp4-run-" + input.older).click();
+await until(() => reviewed(input.older), "the earlier saved run did not load");
+expect(unknown(), "the earlier run treated the stale list as the current agreement");
+await control(origin, "hold", { key: "GET /changes" });
+const lists = page.sent("GET", "/changes").length;
+await control(origin, "release", { key: "GET /change-updates" });
+await until(() => page.sent("GET", "/changes").length > lists &&
+  page.sent("GET", "/changes").slice(lists).some((r) => r.status === undefined), "the replacement list was not held");
+expect(unknown(), "a pending list exposed a stale current-agreement explanation");
+await control(origin, "release", { key: "GET /changes" });
+const namesRevisedAgreement = (used) => {
+  const codes = page.$$("#surla-cp4-input-difference code").map((node) => node.textContent);
+  return page.text("#surla-cp4-inputs").includes("does not match") && codes.length === 2 &&
+    used.startsWith(codes[0]) && revised.request_revision.startsWith(codes[1]);
+};
+await until(() => namesRevisedAgreement(input.earlier), "the fresh list did not identify the revised agreement for the older run");
+page.$("#surla-cp4-run-" + input.latest).click();
+await until(() => namesRevisedAgreement(input.listed), "the prior agreement's run did not name the newly confirmed agreement");
+expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0,
+  "reading saved proof approved or started verification");
+page.close();
+`)
+}
+
 // ListVerifications preserves the actual owner result and captures only the
 // armed answer. The HTTP answer-later gate controls its later delivery.
 func (s *selectedInputsListRead) ListVerifications(
@@ -499,16 +609,29 @@ func selectedInputsFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardRes
 	return cp, card, runsDir, candidate
 }
 
-// selectedInputsActions changes only the saved checker verdict through the
-// shared fixture boundary; normal wait/list reads deliver these changes.
+// selectedInputsActions changes the saved accepted report. As with the
+// checker fixture, the normal wait/list reads deliver these changes.
 func selectedInputsActions(t *testing.T, ps *pageServer, cp *ControlPlane, changeID string) {
 	t.Helper()
-	for _, selected := range []struct{ name, commit string }{
-		{name: "accept-t1", commit: strings.Repeat("2", 40)},
-		{name: "accept-t2", commit: strings.Repeat("3", 40)},
+	for _, selected := range []struct {
+		name, commit string
+		report       int
+	}{
+		{name: "accept-t1", commit: strings.Repeat("2", 40), report: 1},
+		{name: "accept-t2", commit: strings.Repeat("3", 40), report: 2},
 	} {
 		ps.act(selected.name, func() {
 			saveListedTestState(t, cp, changeID, testsAccepted, selected.commit)
+			if selected.report == 1 {
+				return
+			}
+			cp.mu.Lock()
+			defer cp.mu.Unlock()
+			saved, found, err := cp.cards.loadOpenBuild()
+			require.NoError(t, err)
+			require.True(t, found)
+			saved.ReportNumber = selected.report
+			require.NoError(t, cp.cards.saveOpenBuild(saved))
 		})
 	}
 }

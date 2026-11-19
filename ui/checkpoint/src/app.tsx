@@ -1158,7 +1158,7 @@ export function bootstrapViewsPage() {
           selectedRunId = activeResult?.kind === "cp5-approval" && card?.change_id === changeId && approval !== undefined
             ? savedApprovalEvidenceRun(card, approval)?.run_id ?? null : loadedIds[0];
         }
-        if (activeResult?.kind === "cp5-approval" && selectedVerificationChangeId === changeId && selectedRunId !== null) {
+        if (selectedVerificationChangeId === changeId && selectedRunId !== null && isViewingSelectedRun(selectedRunId)) {
           readApprovalReview(selectedRunId, changeId);
         }
       },
@@ -1178,10 +1178,18 @@ export function bootstrapViewsPage() {
   // update and all reads on which its action depends. Saved evidence remains
   // visible while any of these facts are unknown.
   function runInputsKnown(run: VerificationStatusResult): boolean {
+    const listed = changeList?.changes.find((item) => item.change_id === run.change_id);
+    const ed = activeEditor?.card.change_id === run.change_id ? activeEditor : null;
+    // A confirmation can reach this page before its change-list notification.
+    // A retained dirty editor may instead have the fresh card waiting beside it.
+    const cardMatchesList = ed === null || [ed.card, ed.incomingCard].some((card) =>
+      card !== null && card.request_revision === listed?.request_revision && card.status === listed.status);
     return sessionState === "active" && !document.hidden && changeList !== null && listError === null &&
+      !hasPending("list_changes", "") && cardMatchesList &&
       !waitTroubleShown && editorRequest === null && cardRefresh === null &&
       runObservationGeneration.get(run.run_id) === verificationGeneration &&
       !hasPending("get_verification", run.run_id) &&
+      !hasPending("review_verification", run.run_id) &&
       !hasPending("list_verifications", run.change_id) &&
       !hasPending("get_build", run.change_id) &&
       !hasPending("start_build", run.change_id) &&
@@ -1311,6 +1319,12 @@ export function bootstrapViewsPage() {
   // displayedApprovalReview never borrows another selected run's observation.
   function displayedApprovalReview(): VerificationReview | null {
     return selectedReview !== null && selectedReview.runId === selectedRunId ? selectedReview.review : null;
+  }
+
+  // isViewingSelectedRun binds evidence reads to the explicit Check/Approve selection.
+  function isViewingSelectedRun(runId: string): boolean {
+    return selectedRunId === runId &&
+      (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval");
   }
 
   // approvalReviewFresh validates the observation's identity and transport
@@ -2130,6 +2144,7 @@ export function bootstrapViewsPage() {
         selectedRunId !== null
           ? "Showing the saved verification result."
           : "Showing saved verification runs for Change Card " + changeId + ".";
+      if (selectedRunId !== null) readVerification(selectedRunId, changeId);
       syncAllRegions();
       return;
     }
@@ -2275,8 +2290,8 @@ export function bootstrapViewsPage() {
     const review = displayedApprovalReview();
     const onApproval = activeResult?.kind === "cp5-approval";
     const fresh = run !== null && approvalReviewFresh(run);
-    let attention = "Review the current stage.";
-    let next: React.ReactNode = <span>Choose the step you need.</span>;
+    let attention = "Nothing now.";
+    let next: React.ReactNode = null;
     if (onApproval) {
       attention = review?.approval.state === "blocked" ? "Approval unavailable."
         : review?.approval.state === "unverified" ? "Saved approval needs checking." : review?.approval.state === "recorded"
@@ -2322,7 +2337,7 @@ export function bootstrapViewsPage() {
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
-      if (buildReadError !== null) {
+      if (buildReadError !== null && (activeEditor.card.status === "confirmed" || build !== null)) {
         attention = "Current build facts could not be read.";
         next = <span>Refresh Build below to read its current state.</span>;
       } else if (build !== null) {
@@ -2362,13 +2377,156 @@ export function bootstrapViewsPage() {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
       attention = "Read the saved test evidence, then review the result for approval.";
     }
-    const agreed = activeEditor?.card.status === "confirmed" ? activeEditor.card.summary : "No confirmed agreement opened";
+    const onDescribe = activeResult?.kind === "changes";
+    if (next === null) {
+      // Recovery takes precedence over guidance based on retained observations.
+      const teamError = teamFactsError();
+      const teamLoading = hasPending("get_team", "");
+      const teamStarting = hasPending("start_team_agents", "");
+      const teamRoles = teamSnapshot?.roles ?? [];
+      const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou)
+        : teamLoading || teamSnapshot === null ? "Waiting for Team status."
+        : teamRoles.some((role) => role.state === "unknown" || role.state === "error") ? "Team status unknown."
+        : "Nothing now.";
+      let step: string | React.ReactElement;
+      if (sessionState !== "active") {
+        attention = "The session ended.";
+        step = "Run surla in your project folder to reopen this project.";
+      } else if (listError !== null) {
+        attention = "The changes could not be read.";
+        step = onDescribe ? "Choose Read the changes again below." : "Open Describe to retry reading changes.";
+      } else if (waitTroubleShown) {
+        attention = "Updates are unavailable.";
+        step = "Wait for Surla to reconnect.";
+      } else if (teamError !== null) {
+        attention = "Team status could not be read.";
+        step = activeResult?.kind === "team" ? "Choose Retry team read below." : "Open Team to retry reading roles.";
+      } else if (lastOpenAttempt !== null && lastOpenAttempt !== activeEditor?.card.change_id && cardLoadErrors.has(lastOpenAttempt)) {
+        attention = "The Change Card could not be opened.";
+        step = onDescribe ? "Try opening the change again below." : "Open Describe and try opening the change again.";
+      } else if (activeEditor !== null && cardLoadErrors.has(activeEditor.card.change_id)) {
+        attention = "The latest saved Change Card could not be read.";
+        step = editorRequest !== null ? "Wait for the current Change Card request."
+          : cp1Active && activeEditor.formError !== null
+          ? "Choose Load Latest Card to review the saved card alongside your edits."
+          : <Button onClick={handleLoadLatestCard}>Load Latest Card</Button>;
+      } else if (onDescribe) {
+        if (editorRequest === "get_change") {
+          step = "Wait for the Change Card to open.";
+        } else if (changeList === null) {
+          step = "Wait for Surla to read the changes.";
+        } else if (changeList.changes.length > 0) {
+          step = "Open a change from the list below.";
+        } else if (teamStarting) {
+          step = "Wait for the guide to start.";
+        } else if (teamLoading || teamSnapshot === null) {
+          step = "Wait for Team status.";
+        } else {
+          const guide = teamRoles.find((role) => role.role === "guide");
+          if (guide === undefined || guide.state === "not_started" || guide.state === "ended") {
+            if (teamNeedsYou === undefined) attention = "The guide is not running.";
+            step = "Open Team and choose Start agents.";
+          } else if (guide.state === "starting") {
+            step = "Wait for the guide to start.";
+          } else if (guide.state === "unknown" || guide.state === "error") {
+            if (teamNeedsYou === undefined) {
+              attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
+            }
+            step = "Open Team and refresh to check the guide’s status.";
+          } else if (guide.state === "needs_you") {
+            step = "In Team, choose Show guide pane to address the guide’s request.";
+          } else {
+            step = "In Team, choose Show guide pane and describe your change.";
+          }
+        }
+      } else if (cp1Active && activeEditor !== null) {
+        const ed = activeEditor;
+        if (editorRequest !== null) {
+          step = "Wait for the current Change Card request.";
+        } else if (ed.incomingCard !== null) {
+          attention = "A newer saved revision is available.";
+          step = "Choose Switch to Incoming Card to review it and keep your unsaved edits.";
+        } else if (editorStage === "agree" && ed.card.proposed_revision !== undefined) {
+          attention = "A proposed revision is waiting for your decision.";
+          step = "Review the proposal below, then choose Adopt or Decline.";
+        } else if (ed.formError !== null) {
+          attention = "The Change Card request failed.";
+          step = "Choose Load Latest Card to review the saved card alongside your edits.";
+        } else if (ed.card.status === "needs_confirmation") {
+          attention = "This change needs confirmation.";
+          step = "Review the questions and examples below, then confirm the change.";
+        } else if (editorStage === "build") {
+          step = "Review the Build controls below for this change.";
+        } else if (ed.preservedDraft !== null) {
+          attention = "You have edits from an earlier revision.";
+          step = "Review the saved card and reapply any of the preserved edits you still need.";
+        } else if (hasUnsavedEdits()) {
+          attention = "You have unsaved refinements.";
+          step = "Save or discard your refinements below.";
+        } else {
+          step = "Review Agreement details, then open Build when you’re ready.";
+        }
+      } else if (activeResult?.kind === "cp2-architecture-preview" && activeEditor !== null) {
+        const card = activeEditor.card;
+        if (hasPending("preview_architecture", card.change_id)) {
+          step = "Wait for Surla to evaluate the design.";
+        } else if (previewErrors.has(card.change_id)) {
+          attention = "The architecture preview could not be loaded.";
+          step = card.status === "needs_confirmation" ? "Open Agree to confirm the change."
+            : "Use the Evaluate the design control below to try again.";
+        } else if (shownPreview?.request_revision === card.request_revision) {
+          step = "Review the architecture preview for this revision.";
+        } else {
+          step = "Evaluate the design below for the current revision.";
+        }
+      } else if (activeResult?.kind === "team") {
+        const needsStart = teamNeedsYou === undefined && (
+          teamRoles.length === 0 || teamRoles.some((role) => role.state === "not_started" || role.state === "ended")
+        );
+        step = teamStarting ? "Wait for agents to start."
+          : teamLoading || teamSnapshot === null ? "Wait for Team status."
+          : needsStart ? "Choose Start agents below to prepare the guide."
+          : "Review role status and use Show pane to contact an agent.";
+      } else if (activeResult?.kind === "story") {
+        if (storyEvaluationError !== null) {
+          attention = "The Story draft could not be read.";
+          step = "Choose Read the draft again below.";
+        } else {
+          step = storyEvaluation === null ? "Wait for Surla to read the Story draft."
+            : storyEvaluation.state === "none" ? "Ask the guide to refresh the Story."
+            : storyEvaluation.state === "running" ? "Wait for the Story evaluation."
+            : storyEvaluation.state === "failed" ? "Ask the guide to fix the Story and refresh it."
+            : "Review the current draft and any saved Story below.";
+        }
+      } else if (activeResult?.kind === "live") {
+        if (liveTargetError !== null || modelConnectionError !== null) {
+          attention = liveTargetError !== null ? "The live target could not be read." : "The model connection could not be read.";
+          step = liveTargetError !== null ? "Choose Read the live target again below."
+            : "Choose Read the model connection again below.";
+        } else {
+          const target = liveTarget?.live_target;
+          step = target === undefined ? "Wait for Surla to read the live target."
+            : target.state === "running" ? "Review the running service and its prompt drafts below."
+            : target.state === "starting" ? "Wait for the live target to start."
+            : target.state === "none" ? "Ask the builder to start a live target to try prompts."
+            : "Review the last live target’s status below.";
+        }
+      } else {
+        step = "Open Describe to find a change.";
+      }
+      next = typeof step === "string" ? <span>{step}</span> : step;
+    }
+
+    const agreedCard = (!onDescribe || editorOpen) && activeEditor?.card.status === "confirmed"
+      ? activeEditor.card : null;
     flushSync(() => {
       navRoot.render(
         <WorkspaceFrame project={projectName ?? "Project"}
           journey={tabs.filter((tab) => journeyIds.has(tab.id))}
           references={tabs.filter((tab) => !journeyIds.has(tab.id))}
-          agreed={agreed} onReadFullSummary={activeEditor?.card.status === "confirmed" ? handleReadFullSummary : null}
+          agreed={agreedCard?.summary ?? "No confirmed agreement opened"}
+          onReadFullSummary={agreedCard !== null ? handleReadFullSummary : null}
           attention={attention} next={next}
           diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
             traceOpen = !traceOpen;
@@ -2665,12 +2823,15 @@ export function bootstrapViewsPage() {
       ? listedIds.map((id) => runsById.get(id)).filter((r): r is VerificationStatusResult => Boolean(r))
       : null;
     const loadedCard = activeEditor ? activeEditor.card : null;
+    const current = changeList?.changes.find((item) => item.change_id === effectiveChangeId);
     return (
       <VerificationView
         changeId={effectiveChangeId}
         build={activeResult?.kind === "cp5-approval" && build?.in_force === false ? null : build}
         run={displayedRun}
         inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
+        review={displayedRun !== null && displayedRun.run_id === selectedRunId ? displayedApprovalReview() : null}
+        currentAgreementRevision={current?.status === "confirmed" ? current.request_revision : null}
         listedRuns={listedRuns}
         loadedCard={loadedCard}
         checking={displayedRun ? hasPending("get_verification", displayedRun.run_id) || hasPending("review_verification", displayedRun.run_id) : false}
@@ -3060,7 +3221,9 @@ export function bootstrapViewsPage() {
     activeResult = { kind: stage };
     rootEl.dataset.state = stage;
     statusEl.textContent = "Showing the saved verification result.";
-    if (reviewing || !runInputsKnown(target)) readVerification(target.run_id, target.change_id);
+    if (reviewing || !runInputsKnown(target) || displayedApprovalReview() === null) {
+      readVerification(target.run_id, target.change_id);
+    }
     syncAllRegions();
   }
 
@@ -3077,7 +3240,7 @@ export function bootstrapViewsPage() {
   // readVerification coalesces a read invalidated while pending into one
   // replacement. A same-generation failure waits for an explicit retry.
   function readVerification(runID: string, changeId: string) {
-    if (activeResult?.kind === "cp5-approval" && selectedRunId === runID) {
+    if (isViewingSelectedRun(runID)) {
       readApprovalReview(runID, changeId);
       return;
     }
@@ -3143,7 +3306,7 @@ export function bootstrapViewsPage() {
     runRequestErrors.delete(runId);
     const finish = () => {
       const again = runReadAgain.delete(runId) || generation !== verificationGeneration;
-      if (again && sessionState === "active" && activeResult?.kind === "cp5-approval" && selectedRunId === runId) {
+      if (again && sessionState === "active" && isViewingSelectedRun(runId)) {
         readApprovalReview(runId, changeId);
       }
     };
@@ -3248,7 +3411,7 @@ export function bootstrapViewsPage() {
               ? "Showing saved verification runs for Change Card " + requestedChangeId + "."
               : "No saved verification runs found for Change Card " + requestedChangeId + ".";
         }
-        if (selectedRunId !== null && (generation !== verificationGeneration || activeResult?.kind === "cp5-approval")) {
+        if (selectedRunId !== null && (generation !== verificationGeneration || isViewingSelectedRun(selectedRunId))) {
           readVerification(selectedRunId, requestedChangeId);
         }
       },

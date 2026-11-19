@@ -20,6 +20,76 @@ func pageTeamSnapshot(state string) gensurla.TeamSnapshot {
 	}}
 }
 
+// TestViewsPageDescribeGuideStatusControlsNext follows the same Team reads
+// as Describe and checks that their guidance yields to an existing card.
+func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
+	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
+		Team: "page-team", Roles: []*gensurla.TeamRoleState{},
+	}}
+	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+	ps := startPageServer(t, cp)
+	for _, state := range []string{"unknown", "starting", "working", "ended", "not_started"} {
+		ps.act(state, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			next := pageTeamSnapshot("working")
+			next.Roles[0].State = state
+			f.snapshot = next
+		})
+	}
+	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
+await control(origin, "hold", { key: "GET /team" });
+const page = await openPage(origin, { link: input.link });
+const next = () => page.text("#surla-frame-next dd");
+const attention = () => page.text(".surla-frame-attention dd");
+await until(() => page.$("#surla-change-list-empty") && page.sent("GET", "/team").length === 1, "empty Describe did not begin reading Team");
+expect(next() === "Wait for Team status.", "pending Team read was treated as an absent guide");
+expect(attention() === "Waiting for Team status.", "unread Team status appeared settled on Describe");
+page.$("#surla-nav-team").click();
+expect(attention() === "Waiting for Team status.", "unread Team status appeared settled on Team");
+page.$("#surla-nav-changes").click();
+await control(origin, "release", { key: "GET /team" });
+await until(() => next().includes("Start agents"), "a fresh Team read with no guide did not guide startup");
+page.$("#surla-nav-team").click();
+expect(next().includes("Start agents") && page.$("#surla-team-start"), "Team did not show its existing startup control");
+page.$("#surla-nav-changes").click();
+
+await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team unavailable." } });
+await control(origin, "act", { key: "unknown" });
+await until(() => next().includes("Open Team to retry"), "a failed Team read still used its previous empty observation");
+expect(attention() === "Team status could not be read.", "failed Team status appeared settled on Describe");
+page.$("#surla-nav-team").click();
+await until(() => page.$("#surla-team-role-guide")?.dataset.state === "unknown", "Team did not retry its failed read");
+page.$("#surla-nav-changes").click();
+expect(next().includes("refresh to check the guide’s status"), "unknown guide appeared ready or absent");
+await control(origin, "act", { key: "starting" });
+await until(() => next().includes("Wait for the guide to start"), "a starting guide did not tell the user to wait");
+await control(origin, "act", { key: "working" });
+await until(() => next().includes("Show guide pane and describe your change"), "a working guide did not lead to its existing pane");
+await control(origin, "act", { key: "ended" });
+await until(() => next().includes("Start agents"), "an ended guide did not lead to the existing startup control");
+page.$("#surla-nav-team").click();
+for (const state of ["ended", "not_started"]) {
+  if (state === "not_started") await control(origin, "act", { key: state });
+  await until(() => page.$("#surla-team-role-guide")?.dataset.state === state && !page.$("#surla-team-loading"), "Team did not read " + state);
+  expect(next().includes("Start agents") && page.$("#surla-team-start").classList.contains("surla-btn-primary"), "Team guidance missed its startup control for " + state);
+}
+page.$("#surla-nav-changes").click();
+
+await propose("chg-guide-next", "Route refunds to a manager.", "Auto-approved");
+await until(() => page.$("#surla-open-change-chg-guide-next"), "the existing card did not become available");
+expect(next().includes("Open a change"), "guide startup hid the existing card’s next step");
+await control(origin, "reply", { key: "GET /changes/chg-guide-next", status: 503, body: { name: "unavailable", message: "Card unavailable." } });
+page.$("#surla-open-change-chg-guide-next").click();
+await until(() => page.$("#surla-change-open-error"), "the failed card read did not appear");
+expect(next().includes("Try opening the change again"), "card recovery did not take precedence over ordinary guidance");
+page.$("#surla-open-change-chg-guide-next").click();
+await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-guide-next", "the existing card remained unavailable without a running guide");
+expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0, "guidance performed an agent action");
+page.close();
+`)
+}
+
 // TestViewsPageAttentionUsesOnlyTheCurrentLiveRegion follows permission,
 // question and recovery facts on empty Describe without overwriting unrelated
 // operation feedback. Herdr's done status is exposed by the owner as waiting.
@@ -52,6 +122,7 @@ expect(live.getAttribute("role") === "status" && live.getAttribute("aria-live") 
 expect(live.textContent === "", "idle roles invented an attention state");
 await control(origin, "act", { key: "guide-permission" });
 await until(() => page.text("#surla-team-attention-guide").includes("Guide needs you: permission"), "real permission attention was suppressed");
+expect(page.text(".surla-frame-attention dd").includes("Guide needs you: permission") && page.text("#surla-frame-next dd").includes("Show guide pane"), "Describe did not surface the guide’s reported blocker and pane");
 expect(page.$("#surla-team-attention") === live, "attention arrived in a newly mounted live region");
 expect(page.status() === operation, "team attention overwrote operation feedback");
 await control(origin, "act", { key: "two-roles" });
@@ -60,6 +131,7 @@ expect(!live.textContent.includes("permission"), "replaced permission attention 
 await control(origin, "act", { key: "guide-done" });
 await until(() => !page.$("#surla-team-attention-guide"), "done guide retained an attention line");
 expect(page.text("#surla-team-attention-builder").includes("Builder needs you: sign-in required"), "guide recovery hid another role's real blocker");
+expect(page.text(".surla-frame-attention dd").includes("Builder needs you: sign-in required"), "Describe lost the builder’s current request");
 await control(origin, "act", { key: "all-done" });
 await until(() => live.textContent === "", "recovered roles retained stale attention");
 expect(page.status() === operation && !page.status().includes("needs you"), "recovery left a duplicate stale status or replaced operation feedback");
@@ -76,7 +148,9 @@ func TestViewsPageTeamFollowsAttentionAndShowsPane(t *testing.T) {
 	snapshot := pageTeamSnapshot("needs_you")
 	snapshot.Roles[2].Assignment = "no_work"
 	f := &teamServiceFixture{snapshot: snapshot}
-	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
+	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
+	buildableChange(t, cp, "chg-team-attention")
 	ps := startPageServer(t, cp)
 	ps.act("builder-working", func() {
 		f.mu.Lock()
@@ -85,8 +159,14 @@ func TestViewsPageTeamFollowsAttentionAndShowsPane(t *testing.T) {
 	})
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-team-attention-builder"), "builder attention is missing outside Team");
+await until(() => page.$("#surla-team-attention-builder") && page.$("#surla-build-section")?.dataset.state === "not_started" && !page.$("#surla-build-loading"), "the eligible build or builder attention did not arrive");
 expect(page.text("#surla-team-attention-builder").includes("Builder needs you: question"), "attention reason is missing");
+const attention = () => page.text(".surla-frame-attention dd");
+expect(attention().includes("Builder needs you: question"), "unstarted Build hid the builder’s request");
+for (const stage of ["changes", "cp1", "cp2", "story", "live"]) {
+  page.$("#surla-nav-" + stage).click();
+  expect(attention().includes("Builder needs you: question"), stage + " hid the builder’s request");
+}
 page.$("#surla-team-attention-show-pane-builder").click();
 await until(() => page.sent("POST", "/team/pane").some((r) => r.status === 204), "Show pane did not complete with 204");
 expect(page.sent("POST", "/team/pane").length === 1, "Show pane was repeated");
@@ -95,6 +175,7 @@ await until(() => !page.$("#surla-team-attention-show-pane-builder").disabled, "
 expect(page.sent("POST", "/team/agents").length === 0, "a read or pane action started agents");
 page.$("#surla-nav-team").click();
 await until(() => page.state() === "team" && page.$("#surla-team-role-builder"), "Team did not open");
+expect(attention().includes("Builder needs you: question"), "Team hid the builder’s request");
 expect(page.text("#surla-team-role-builder").includes("Chorus watcher absent") && page.text("#surla-team-role-builder").includes("Assignment unread"), "independent facts were inferred from terminal state");
 expect(page.text("#surla-team-role-test_writer").includes("Status unknown") && page.text("#surla-team-role-test_writer").includes("Chorus watcher held"), "unknown terminal hid a known watcher");
 expect(page.text("#surla-team-role-test_writer").includes("No work now"), "the declared no_work assignment fact is missing");
@@ -103,6 +184,7 @@ page.$("#surla-team-attention-show-pane-builder").focus();
 await control(origin, "act", { key: "builder-working" });
 await until(() => !page.$("#surla-team-attention-builder"), "attention did not clear through updates");
 await until(() => page.$("#surla-team-role-builder").dataset.state === "working", "Team did not follow the same update");
+expect(attention() === "Team status unknown.", "another role’s unknown status appeared settled");
 await until(() => page.doc.activeElement === page.$("#surla-team-title"), "removed attention control lost focus");
 const teamReads = page.sent("GET", "/team").length;
 expect(teamReads <= page.sent("GET", "/changes").length + 2, "Team introduced an independent polling loop");
@@ -156,11 +238,16 @@ expect(page.text("#surla-team-read-error") === "Could not read the project team.
 expect(page.$("#surla-team-read-error").getAttribute("role") === "alert", "the failed Team read is not announced as an alert");
 expect(page.text("#surla-team-stale").includes("Last-read"), "retained facts are presented as current");
 expect(page.text("#surla-team-attention-builder").includes("Last read:"), "global attention is presented as current after read failure");
+expect(page.text(".surla-frame-attention dd") === "Team status could not be read.", "Team frame presented retained attention as current");
 expect(page.$("#surla-team-role-builder").dataset.state === "needs_you", "failed read discarded known facts");
 page.$("#surla-team-refresh").click();
 await until(() => !page.$("#surla-team-read-error"), "retry did not recover");
 expect(!page.text("#surla-team-attention-builder").includes("Last read:"), "recovered facts remain marked stale");
+await control(origin, "hold", { key: "POST /team/agents" });
 page.$("#surla-team-start").click();
+await until(() => page.sent("POST", "/team/agents").length === 1, "the explicit start request did not begin");
+expect(page.$("#surla-team-start").disabled && page.text("#surla-frame-next dd") === "Wait for agents to start.", "pending startup was presented as another action");
+await control(origin, "release", { key: "POST /team/agents" });
 await until(() => page.$("#surla-team-start-receipt"), "explicit start receipt is missing");
 expect(page.text("#surla-team-start-receipt").includes("This start (begun ") && page.text("#surla-team-start-receipt").includes("Choose the builder in the open team dialog."), "receipt is not dated owner text");
 await until(() => page.$("#surla-team-role-builder").dataset.state === "working" && !page.$("#surla-team-attention-builder"), "current facts were replaced by the historical start receipt");

@@ -7,6 +7,7 @@ import {
 } from "../types";
 import { SavedResultCommits } from "./build";
 import { TestCoverage } from "./test-coverage";
+import { RunEvidenceLimits, RunTestBinding } from "./run-evidence";
 import { Alert, Button } from "./shadcn";
 
 // ApprovalStageProps binds evidence and currentness to one selected run.
@@ -70,8 +71,6 @@ export function ApprovalStage(props: ApprovalStageProps) {
   const coverage = context?.state === "recorded" ? context.test_coverage : null;
   const names = new Set(mapping?.state === "mapped" ? mapping.required_tests.map((test) => test.scenario) : []);
   const other = report?.scenarios.filter((test) => !names.has(test.id)) ?? [];
-  const drafts = stories?.flatMap((story) => story.flows.filter((flow) => !flow.complete)
-    .map((flow) => ({ story: story.name, flow }))) ?? [];
 
   return <section className="surla-approval-stage" id="surla-approval-stage"
     aria-labelledby="surla-cp5-title" aria-busy={props.loading || props.busy ? "true" : undefined}
@@ -92,6 +91,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
     <dl className="surla-approval-binding">
       <div><dt>Agreement</dt><dd><code>{run.request_revision.slice(0, 12)}</code></dd></div>
       <div><dt>Builder’s commit</dt><dd><code>{run.candidate_commit.slice(0, 12)}</code></dd></div>
+      <div><dt>Selected tests</dt><dd><RunTestBinding run={run} review={review} /></dd></div>
       <div><dt>Run</dt><dd><code>{run.run_id.slice(0, 12)}</code></dd></div>
     </dl>
     {props.unsaved ? <Alert id="surla-cp5-approval-dirty-warning" variant="warning" role="status">
@@ -143,18 +143,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
               ? "Agreed answers and examples were not recorded for this run. Coverage: Not stated."
               : "This run uses the configured evaluator. Test-writer coverage: Not stated."}</p>
           </section> : null}
-        <section className="surla-approval-exclusions" aria-labelledby="surla-approval-exclusions-title">
-          <h3 id="surla-approval-exclusions-title">What this run does not establish</h3>
-          {drafts.length > 0 ? <><p>These draft flows were excluded from the required tests:</p>
-            <ul>{drafts.map(({ story, flow }) => <li key={JSON.stringify([story, flow.key])}>
-              <strong>{flow.title}</strong> · {story} · Draft, no required test
-            </li>)}</ul></> : null}
-          {mapping?.state === "not_recorded_for_evaluator" ? <p>
-            Test mapping was not recorded for this evaluator. A passed test does not prove that a particular Story flow was covered.
-          </p> : null}
-          <p>Passing the declared checks does not establish all product behavior, usability or requirements the tests do not express.</p>
-          {run.test_source.source === "written_tests" ? <p>{run.test_source.notice}</p> : null}
-        </section>
+        <RunEvidenceLimits id="surla-approval-exclusions" run={run} review={review} />
         {other.length > 0 ? <section aria-labelledby="surla-approval-other-tests-title">
           <h3 id="surla-approval-other-tests-title">{mapping?.state === "mapped" ? "Other declared tests" : "Declared test results"}</h3>
           <ul className="surla-approval-test-list">{other.map((test) => <li key={test.id}>
