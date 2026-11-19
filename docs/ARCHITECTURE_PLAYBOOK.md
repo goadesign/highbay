@@ -212,6 +212,13 @@ build's change ID and start time before stopping its workers. The same cleanup
 follows a drop or a manual merge observed by the supervisor. Build reads
 report state without performing cleanup.
 
+Before a Git worktree read or content merge, the merge owner checks attribute
+and configuration sources. Attribute files, custom default merge drivers,
+command hooks and configuration that candidate commits can replace require
+manual merge. This prevents content handling during a server merge from
+selecting those commands. Unused filter definitions, external configuration
+includes, trusted filesystem hooks and signing keep their existing behavior.
+
 The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a version of the change list that changes whenever a card, a change's latest verification run, a build as `get_build` shows it, the team, the Story evaluation or the live target changes, and the page then reads again. The page sends a build or a window action only when the user acts.
 
 ### The test writer's working copy and the report checker

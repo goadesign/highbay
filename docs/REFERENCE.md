@@ -1618,6 +1618,16 @@ returns the branch and its current tip without merging again. Surla stops
 only the workers for that build. The team supervisor also stops them after
 it observes a manual merge or a drop.
 
+Server Merge refuses Git attribute files in the project, approved input trees,
+or local, global or system attribute locations. It also refuses a configured
+custom default merge driver, command hooks, and Git configuration stored in
+or included from the working tree. These settings can run content handlers
+while Git reads or merges the candidate. Use the page's manual merge
+instructions for those repositories. Unused filter or driver definitions,
+external configuration includes, installed filesystem hooks and commit
+signing remain supported. The refusal leaves the branch and tracked files
+unchanged; Surla does not silently discard the configured behavior.
+
 | Refusal | Recovery |
 | --- | --- |
 | `not_found` (`404`) | Find the owned change before merging. |
@@ -1625,7 +1635,7 @@ it observes a manual merge or a drop.
 | `detached_head` (`409`) | Check out the local branch that should receive the result. |
 | `dirty_worktree` (`409`) | Commit or stash the tracked changes named in the refusal. |
 | `working_copy_busy` (`409`) | Finish the other Git or Surla operation, then retry. |
-| `merge_conflict` (`409`) | Read the reported Git and restoration outcomes and resolve the cause before retrying. |
+| `merge_conflict` (`409`) | Read the Git and restoration outcomes. If Surla names an unsupported Git configuration, review it and merge the approved commits manually. |
 
 ### Diagnostics
 
