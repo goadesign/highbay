@@ -27,20 +27,22 @@ export interface TeamStageProps {
   loading: boolean;
   // error is why the facts are not current; retained facts are stale while it is set.
   error: TeamFactsError | null;
-  // starting prevents a second Start agents request while one is pending.
+  // starting prevents a second Start workers request while one is pending.
   starting: boolean;
+  // canStartWorkers reports that a registered worker has a build assignment.
+  canStartWorkers: boolean;
   // disabled prevents actions after the browser session has ended.
   disabled: boolean;
   // showing identifies the roles with an outstanding Show pane request.
   showing: readonly Role[];
-  // startReceipt records what Start agents returned at that action's time.
+  // startReceipt records what Start workers returned at that action's time.
   startReceipt: { at: string; result: ProjectTeam } | null;
   // actionError is the owner's unchanged refusal or request failure text.
   actionError: string | null;
   // onRefresh asks the page to read the team again.
   onRefresh: () => void;
-  // onStartAgents asks the owner to start missing agents after an explicit click.
-  onStartAgents: () => void;
+  // onStartWorkers asks the owner to start missing workers after an explicit click.
+  onStartWorkers: () => void;
   // onShowPane asks the owner to show the selected registered role's pane.
   onShowPane: (role: Role) => void;
   // onFocusedControlRemoved lets the page restore focus to the current view
@@ -126,35 +128,35 @@ export function TeamStageView({
   loading,
   error,
   starting,
+  canStartWorkers,
   disabled,
   showing,
   startReceipt,
   actionError,
   onRefresh,
-  onStartAgents,
+  onStartWorkers,
   onShowPane,
   onFocusedControlRemoved,
 }: TeamStageProps) {
   const herdrAvailable = snapshot?.herdr_mode !== "unavailable";
-  const needsStart = error === null && snapshot !== null && (
-    snapshot.roles.length === 0 ||
-    snapshot.roles.some((role) => role.state === "not_started" || role.state === "ended")
-  ) && !snapshot.roles.some((role) => role.state === "needs_you");
+  const needsStart = error === null && snapshot !== null &&
+    snapshot.roles.some((role) => role.role !== "guide" && (role.state === "not_started" || role.state === "ended")) &&
+    !snapshot.roles.some((role) => role.state === "needs_you");
 
   return (
     <Card id="surla-team-stage" className="surla-card" role="region" aria-labelledby="surla-team-title">
       <div className="surla-region-header">
         <h2 id="surla-team-title" tabIndex={-1}>Project team</h2>
         <div className="surla-field-row">
-          <Button
+          {canStartWorkers || starting ? <Button
             id="surla-team-start"
             variant={needsStart ? "primary" : "default"}
             disabled={disabled || starting}
             aria-busy={starting}
-            onClick={onStartAgents}
+            onClick={onStartWorkers}
           >
-            {starting ? "Starting agents…" : "Start agents"}
-          </Button>
+            {starting ? "Starting workers…" : "Start workers"}
+          </Button> : null}
           <Button
             id="surla-team-refresh"
             variant={error !== null ? "primary" : "default"}
@@ -181,9 +183,7 @@ export function TeamStageView({
           {error !== null ? <p id="surla-team-stale">Last-read team facts; they could not be refreshed.</p> : null}
           <p id="surla-team-name">Team: <strong>{snapshot.team}</strong></p>
           {snapshot.roles.length === 0 ? (
-            <p id="surla-team-empty">
-              No agents are registered. {herdrAvailable ? "Start agents prepares the guide; building adds the required roles." : null}
-            </p>
+            <p id="surla-team-empty">No agents are registered.</p>
           ) : (
             <ul id="surla-team-roles" className="surla-trace-list">
               {snapshot.roles.map((role) => (
