@@ -82,12 +82,8 @@ func (runtime projectRuntime) readProjectStatus(ctx context.Context) (*genprojec
 		return nil, err
 	}
 	client := projectClient(state)
-	identity, err := confirmProject(ctx, state, client)
-	if err != nil {
+	if _, err := confirmProject(ctx, state, client); err != nil {
 		return nil, fmt.Errorf("%s: %w", projectHolder(state), err)
-	}
-	if err := confirmBuild(identity); err != nil {
-		return nil, err
 	}
 	return client.Status(ctx)
 }

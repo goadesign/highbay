@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
+	genproject "github.com/goadesign/surla/gen/project"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,19 +34,23 @@ func TestStatusWithoutAProjectLeavesNoState(t *testing.T) {
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
-// TestStatusVerifiesServerOwnership covers a stale port where there is no
-// store writer and an answering writer whose identity is for another project.
+// TestStatusVerifiesServerOwnership covers a stale port, another project's
+// identity, and a current project serving the typed status from another build.
 func TestStatusVerifiesServerOwnership(t *testing.T) {
-	for _, held := range []bool{false, true} {
-		name := "stale port"
-		if held {
-			name = "identity mismatch"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		held     bool
+		mismatch bool
+	}{
+		{name: "stale port"},
+		{name: "identity mismatch", held: true, mismatch: true},
+		{name: "compatible server from another build", held: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			isolateServeWorkspace(t)
 			state, err := fixtureProjectState("")
 			require.NoError(t, err)
-			if held {
+			if tc.held {
 				owner, err := openFixtureProjectCards(state)
 				require.NoError(t, err)
 				t.Cleanup(func() { assert.NoError(t, owner.Close()) })
@@ -53,15 +59,30 @@ func TestStatusVerifiesServerOwnership(t *testing.T) {
 			management := strings.Repeat("a", 64)
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: management}))
 			api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				calls.Add(1)
+				call := calls.Add(1)
 				assert.Equal(t, http.MethodGet, r.Method)
-				assert.Equal(t, "/project/identity", r.URL.Path)
 				assert.True(t, r.Header.Get("Authorization") == "Bearer "+management, "the holder receives its management credential")
 				w.Header().Set("Content-Type", "application/json")
+				if call == 2 {
+					assert.Equal(t, "/project/status", r.URL.Path)
+					assert.NoError(t, json.NewEncoder(w).Encode(genprojectserver.NewStatusResponseBody(&genproject.ProjectStatus{
+						ProjectName: filepath.Base(state.Record.Directory),
+						Directory:   state.Record.Directory,
+						HerdrMode:   "unavailable",
+						Stage:       "describe",
+					})))
+					return
+				}
+				assert.Equal(t, "/project/identity", r.URL.Path)
+				id := state.Record.ID
+				if tc.mismatch {
+					id = "different-project"
+				}
 				assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-					"project_id": "different-project",
+					"project_id": id,
 					"directory":  state.Record.Directory,
 					"owner":      state.Record.Owner,
+					"build":      strings.Repeat("b", 64),
 				}))
 			}))
 			require.NoError(t, api.Listener.Close())
@@ -72,7 +93,7 @@ func TestStatusVerifiesServerOwnership(t *testing.T) {
 
 			var output bytes.Buffer
 			err = runWithRuntime([]string{"status", "--json"}, &output, testProjectRuntime())
-			if held {
+			if tc.mismatch {
 				require.ErrorIs(t, err, errWrongProject)
 				assert.Empty(t, output.String())
 				assert.False(t, strings.Contains(err.Error(), management), "errors contain no management credential")
@@ -80,6 +101,11 @@ func TestStatusVerifiesServerOwnership(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			if tc.held {
+				assert.Contains(t, output.String(), `"running":true`)
+				assert.EqualValues(t, 2, calls.Load(), "status follows the authenticated identity")
+				return
+			}
 			assert.JSONEq(t, `{"running":false}`, output.String())
 			assert.Zero(t, calls.Load(), "no credential goes to a listener without the store writer lock")
 			_, err = os.Stat(state.CardsDir())
