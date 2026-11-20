@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	genproject "github.com/goadesign/surla/gen/project"
+	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/surla/internal/testwriter"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -61,8 +63,14 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 	}
 	space, tab := record.Space, record.Tab
 	var adopted bool
-	if s.team.dependencies.HerdrAvailable && p.HcTerminalID != nil && *p.HcTerminalID != "" {
-		pane := s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client)
+	if s.team.dependencies.HerdrAvailable {
+		var pane guidePane
+		if p.HcTerminalID != nil && *p.HcTerminalID != "" && len(p.AncestorPids) > 0 {
+			pane = s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client, p.AncestorPids)
+		}
+		if pane.terminal == "" && len(p.AncestorPids) > 0 {
+			pane = s.findSessionGuidePane(ctx, record, handle, p)
+		}
 		if pane.terminal != "" {
 			err := s.team.dependencies.Host.LabelGuide(ctx, pane.terminal, record.Directory, pane.swarm, pane.client, handle, pane.space, pane.tab)
 			if err == nil {
@@ -81,7 +89,9 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 			s.setTeamConnection(connection)
 		}
 		s.openCompanion(ctx)
-	} else if p.HcTerminalID != nil && *p.HcTerminalID != "" && mode != herdrUnavailable {
+	} else if (p.HcTerminalID != nil && *p.HcTerminalID != "" ||
+		p.Client != nil && *p.Client != "" ||
+		len(p.AncestorPids) > 0) && mode != herdrUnavailable {
 		// This caller has no adopted tab even if another guide already does.
 		mode = herdrAvailable
 	}
@@ -90,7 +100,9 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 }
 
 // findGuidePane applies the live pane, local tab and conflict checks before any labeling.
-func (s *Server) findGuidePane(ctx context.Context, record Record, handle, address string, client *string) guidePane {
+func (s *Server) findGuidePane(
+	ctx context.Context, record Record, handle, address string, client *string, ancestorPids []int,
+) guidePane {
 	host := s.team.dependencies.Host
 	spaces, err := host.Spaces(ctx)
 	if err != nil {
@@ -103,7 +115,7 @@ func (s *Server) findGuidePane(ctx context.Context, record Record, handle, addre
 		for _, tab := range space.Tabs {
 			for _, pane := range tab.Terminals {
 				if pane.Terminal == address && pane.Pane != "" && safeSpaceID(tab.ID) {
-					return s.validateGuideTab(ctx, record, space, tab, handle, address, client)
+					return s.validateGuideTab(ctx, record, space, tab, handle, address, client, ancestorPids)
 				}
 			}
 		}
@@ -111,14 +123,143 @@ func (s *Server) findGuidePane(ctx context.Context, record Record, handle, addre
 	return guidePane{}
 }
 
+// findSessionGuidePane adopts a unique local model pane inside record.Directory
+// only when OS process lineage (p.AncestorPids) ties the requesting session to
+// that pane, re-validating every predicate immediately before labeling.
+func (s *Server) findSessionGuidePane(
+	ctx context.Context, record Record, handle string, p *genproject.AttachGuidePayload,
+) guidePane {
+	if len(p.AncestorPids) == 0 {
+		return guidePane{}
+	}
+	host := s.team.dependencies.Host
+	spaces, err := host.Spaces(ctx)
+	if err != nil {
+		return guidePane{}
+	}
+	type candidatePane struct {
+		space    TeamSpace
+		tab      TeamTab
+		terminal string
+	}
+	var matches []candidatePane
+	for _, space := range spaces {
+		if space.Machine != nil || !safeSpaceID(space.ID) {
+			continue
+		}
+		for _, tab := range space.Tabs {
+			if !safeSpaceID(tab.ID) {
+				continue
+			}
+			for _, pane := range tab.Terminals {
+				if pane.Terminal == "" || pane.Pane == "" {
+					continue
+				}
+				target, err := host.ReadTerminal(ctx, pane.Terminal)
+				if err != nil || target.Address != pane.Terminal || !roleRunning(target, s.team.dependencies.Shell) {
+					continue
+				}
+				if role := target.Labels["chorus.role"]; role != "" && role != "guide" {
+					continue
+				}
+				if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
+					continue
+				}
+				if !paneMatchesPIDs(target, p.AncestorPids) {
+					continue
+				}
+				observed, conflict := observedGuideClient(target)
+				if conflict {
+					continue
+				}
+				if p.Client != nil && *p.Client != "" {
+					want := normalizeGuideClient(*p.Client)
+					if want == "" || (observed != "" && observed != want) {
+						continue
+					}
+				} else if observed == "" {
+					continue
+				}
+				matches = append(matches, candidatePane{space: space, tab: tab, terminal: pane.Terminal})
+				if len(matches) > 1 {
+					return guidePane{}
+				}
+			}
+		}
+	}
+	if len(matches) != 1 {
+		return guidePane{}
+	}
+	unique := matches[0]
+	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, p.Client, p.AncestorPids)
+}
+
+// paneMatchesPIDs reports whether target's shell PID or foreground PID is in pids.
+func paneMatchesPIDs(target TeamTerminal, pids []int) bool {
+	if target.PID > 0 && slices.Contains(pids, target.PID) {
+		return true
+	}
+	return target.Foreground != nil && target.Foreground.PID > 0 && slices.Contains(pids, target.Foreground.PID)
+}
+
+// guidePaneInProject reports whether cwd is at or inside projectDir and lies
+// outside the builder (.surla-build) and test-writer (.surla-tests) copies.
+func guidePaneInProject(projectDir, cwd string) bool {
+	if projectDir == "" || !filepath.IsAbs(cwd) {
+		return false
+	}
+	within, err := abspath.Within(projectDir, cwd)
+	if err != nil || !within {
+		return false
+	}
+	for _, folder := range []string{testwriter.BuilderRole.Folder, testwriter.TestsRole.Folder} {
+		inCopy, err := abspath.Within(filepath.Join(projectDir, folder), cwd)
+		if err == nil && inCopy {
+			return false
+		}
+	}
+	resolvedRoot, err := abspath.Eval(projectDir)
+	if err != nil {
+		return false
+	}
+	resolvedCwd, err := abspath.EvalMissing(cwd)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolvedCwd)
+	if err != nil {
+		return false
+	}
+	for part := range strings.SplitSeq(filepath.ToSlash(rel), "/") {
+		if part == testwriter.BuilderRole.Folder || part == testwriter.TestsRole.Folder {
+			return false
+		}
+	}
+	return true
+}
+
 // validateGuideTab preserves any existing project/swarm and avoids replacing
-// another live guide or splitting a single team across several tabs.
+// another live guide or splitting a single team across several tabs. Both
+// direct and fallback paths must prove OS process lineage (ancestorPids) and
+// a foreground working directory inside record.Directory on the final read.
 func (s *Server) validateGuideTab(
-	ctx context.Context, record Record, space TeamSpace, tab TeamTab, handle, address string, client *string,
+	ctx context.Context,
+	record Record,
+	space TeamSpace,
+	tab TeamTab,
+	handle, address string,
+	client *string,
+	ancestorPids []int,
 ) guidePane {
 	host := s.team.dependencies.Host
 	target, err := host.ReadTerminal(ctx, address)
 	if err != nil || target.Address != address || !roleRunning(target, s.team.dependencies.Shell) {
+		return guidePane{}
+	}
+	if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
+		return guidePane{}
+	}
+	if len(ancestorPids) == 0 || !paneMatchesPIDs(target, ancestorPids) {
 		return guidePane{}
 	}
 	if v := target.Labels["herdr.space"]; v != "" && v != space.ID {
@@ -133,7 +274,18 @@ func (s *Server) validateGuideTab(
 	if owner := target.Labels["chorus.handle"]; owner != "" && owner != handle && target.Labels["chorus.project"] != "" {
 		return guidePane{}
 	}
-	key := guideClient(target, client)
+	observed, conflict := observedGuideClient(target)
+	if conflict {
+		return guidePane{}
+	}
+	key := observed
+	if client != nil && *client != "" {
+		want := normalizeGuideClient(*client)
+		if want == "" || (observed != "" && observed != want) {
+			return guidePane{}
+		}
+		key = want
+	}
 	if key == "" {
 		return guidePane{}
 	}
@@ -198,28 +350,55 @@ func guideTabConflict(t TeamTerminal, root, swarm string) bool {
 		t.Labels["chorus.swarm"] != "" && t.Labels["chorus.swarm"] != swarm
 }
 
-// guideClient normalizes the known local client aliases without guessing an
-// unrecognized pane's agent program.
-func guideClient(terminal TeamTerminal, client *string) string {
-	var candidates []string
-	if client != nil {
-		candidates = append(candidates, *client)
-	}
-	candidates = append(candidates, terminal.Labels["chorus.agent"])
-	if terminal.Foreground != nil && len(terminal.Foreground.Argv) > 0 {
-		candidates = append(candidates, filepath.Base(terminal.Foreground.Argv[0]))
-	}
-	for _, candidate := range candidates {
-		switch key := strings.ToLower(candidate); key {
-		case "agy", "antigravity-cli":
-			return "antigravity"
-		case "agent", "cursor-agent":
-			return "cursor"
-		case "claude", "codex", "antigravity", "cursor", "gemini", "opencode":
-			return key
+// observedGuideClient derives the canonical client family reported by terminal's
+// own label and foreground argv without trusting a caller-supplied override.
+// It reports conflict when an explicit chorus.agent label is unrecognized or
+// disagrees with the active foreground client program.
+func observedGuideClient(terminal TeamTerminal) (string, bool) {
+	rawLabel := strings.TrimSpace(terminal.Labels["chorus.agent"])
+	labelClient := ""
+	if rawLabel != "" {
+		labelClient = normalizeGuideClient(rawLabel)
+		if labelClient == "" {
+			return "", true
 		}
 	}
-	return ""
+	var fgClient string
+	if terminal.Foreground != nil {
+		for _, arg := range terminal.Foreground.Argv {
+			if arg != "" && !strings.HasPrefix(arg, "-") {
+				if key := normalizeGuideClient(filepath.Base(arg)); key != "" {
+					fgClient = key
+					break
+				}
+			}
+		}
+	}
+	if labelClient != "" && fgClient != "" && labelClient != fgClient {
+		return "", true
+	}
+	if fgClient != "" {
+		return fgClient, false
+	}
+	return labelClient, false
+}
+
+// normalizeGuideClient maps known CLI and MCP clientInfo names to canonical client keys.
+func normalizeGuideClient(candidate string) string {
+	switch key := strings.ToLower(strings.TrimSpace(candidate)); key {
+	case "agy", "antigravity-cli":
+		return "antigravity"
+	case "agent", "cursor-agent":
+		return "cursor"
+	case "claude-code":
+		return "claude"
+	case "codex-cli", "codex-mcp-client":
+		return "codex"
+	case "claude", "codex", "antigravity", "cursor", "gemini", "opencode":
+		return key
+	default:
+		return ""
+	}
 }
 
 // openCompanion opens the installed overlay once. If the user already opened

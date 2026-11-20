@@ -170,6 +170,7 @@ test('parseStatus reads running, stopped and failed answers', () => {
   const got = mod.parseStatus({ code: 0, stdout: JSON.stringify(running), stderr: '' });
   assert.equal(got.status.projectName, 'homes');
   assert.equal(got.status.directory, '/work/homes');
+  assert.equal(got.status.herdrMode, 'attached');
   assert.equal(got.status.roles.length, 3);
 });
 
@@ -190,6 +191,12 @@ test('stageLine and roleLine describe the project for people', () => {
   assert.equal(mod.stageLine({ stage: 'build', changeTitle: 'Add listings' }), 'Build · Add listings');
   assert.equal(mod.stageLine({ stage: 'describe', changeTitle: '' }), 'Describe');
   assert.equal(mod.stageLine({ stage: 'later', changeTitle: '' }), 'Unknown stage');
+  assert.equal(mod.roleLine(running.roles[0]), 'Coding agent: working');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'attached'), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'available'), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'unavailable'), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'builder', state: 'unknown', attention: 'none' }, 'available'), 'Builder: status unknown');
   assert.equal(mod.roleLine(running.roles[1]), 'Builder: needs you (permission)');
   assert.equal(mod.roleLine(running.roles[2]), 'Test writer: not started');
 });
@@ -245,7 +252,7 @@ test('a running project shows its stage, roles and pane shortcuts', async () => 
   assert.equal(calls.exec[0].options.cwd, '/work/homes');
   const root = view.render(cx);
   const shown = texts(root);
-  for (const text of ['Surla · homes', 'Build · Add listings', 'The builder needs you.', 'Guide: working', 'Builder: needs you (permission)', 'Test writer: not started', 'Open Page']) {
+  for (const text of ['Surla · homes', 'Build · Add listings', 'The builder needs you.', 'Coding agent: working', 'Builder: needs you (permission)', 'Test writer: not started', 'Open Surla Window']) {
     assert.ok(shown.includes(text), text);
   }
   const ids = walk(root).map(node => node.id).filter(Boolean);
@@ -266,7 +273,33 @@ test('a running project shows its stage, roles and pane shortcuts', async () => 
   assert.deepEqual(calls.closed, ['ov1']);
 });
 
-test('Open Page runs surla in the project folder and reports a failure', async () => {
+test('Open Surla Window shows Opening, then Opened in browser, and clears on next poll', async () => {
+  const state = { spaces: [space], deferred: [] };
+  const { mod } = load(state);
+  const view = new mod.SurlaCompanion();
+  const cx = fakeCx();
+  view.init(undefined, cx);
+  state.deferred.shift().resolve({ code: 0, stdout: JSON.stringify({ ...running, herdr_mode: 'available', roles: [{ role: 'guide', handle: 'guide-1', state: 'unknown', attention: 'none', watcher: 'unknown', assignment: 'no_work' }] }), stderr: '' });
+  await tick();
+  assert.ok(texts(view.render(cx)).includes('Coding agent: status unknown'));
+  assert.ok(texts(view.render(cx)).includes('Open Surla Window'));
+
+  walk(view.render(cx)).find(node => node.id === 'surla-open').handlers.click({}, cx);
+  assert.ok(texts(view.render(cx)).includes('Opening…'));
+
+  state.deferred.shift().resolve({ code: 0, stdout: '', stderr: '' });
+  await tick();
+  state.deferred.shift().resolve({ code: 0, stdout: JSON.stringify(running), stderr: '' });
+  await tick();
+  assert.ok(texts(view.render(cx)).includes('Opened in browser'));
+
+  cx.timers[0].handler(cx);
+  state.deferred.shift().resolve({ code: 0, stdout: JSON.stringify(running), stderr: '' });
+  await tick();
+  assert.ok(!texts(view.render(cx)).includes('Opened in browser'));
+});
+
+test('Start Surla runs surla in the project folder and reports a failure', async () => {
   const { mod, calls } = load({
     spaces: [space],
     answers: { '': { code: 1, stdout: '', stderr: 'surla: no project here\n' } },
@@ -331,7 +364,7 @@ test('a space switch during a status read reads the new folder and drops the old
   assert.equal(calls.exec.length, 2, 'a remote space runs nothing');
 });
 
-test('an Open Page failure stays with the folder it was for', async () => {
+test('a Start Surla failure stays with the folder it was for', async () => {
   const payments = { id: 'sp2', active: false, machine: null, folder: '/work/payments', tabs: [{ id: 'tb2' }] };
   const state = { spaces: [space, payments], deferred: [] };
   const { mod, calls } = load(state);

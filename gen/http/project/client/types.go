@@ -21,6 +21,8 @@ type AttachGuideRequestBody struct {
 	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
 	// Invoking coding-agent client.
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Invoking process and ancestor OS process IDs.
+	AncestorPids []int `form:"ancestor_pids,omitempty" json:"ancestor_pids,omitempty" xml:"ancestor_pids,omitempty"`
 }
 
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
@@ -424,6 +426,12 @@ func NewAttachGuideRequestBody(p *project.AttachGuidePayload) *AttachGuideReques
 	body := &AttachGuideRequestBody{
 		HcTerminalID: p.HcTerminalID,
 		Client:       p.Client,
+	}
+	if p.AncestorPids != nil {
+		body.AncestorPids = make([]int, len(p.AncestorPids))
+		for i, val := range p.AncestorPids {
+			body.AncestorPids[i] = val
+		}
 	}
 	return body
 }

@@ -21,6 +21,8 @@ type AttachGuideRequestBody struct {
 	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
 	// Invoking coding-agent client.
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Invoking process and ancestor OS process IDs.
+	AncestorPids []int `form:"ancestor_pids,omitempty" json:"ancestor_pids,omitempty" xml:"ancestor_pids,omitempty"`
 }
 
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
@@ -728,6 +730,12 @@ func NewAttachGuidePayload(body *AttachGuideRequestBody) *project.AttachGuidePay
 		HcTerminalID: body.HcTerminalID,
 		Client:       body.Client,
 	}
+	if body.AncestorPids != nil {
+		v.AncestorPids = make([]int, len(body.AncestorPids))
+		for i, val := range body.AncestorPids {
+			v.AncestorPids[i] = val
+		}
+	}
 
 	return v
 }
@@ -753,6 +761,14 @@ func ValidateAttachGuideRequestBody(body *AttachGuideRequestBody) (err error) {
 	if body.Client != nil {
 		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if len(body.AncestorPids) > 64 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.ancestor_pids", body.AncestorPids, len(body.AncestorPids), 64, false))
+	}
+	for _, e := range body.AncestorPids {
+		if e < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.ancestor_pids[*]", e, 1, true))
 		}
 	}
 	return

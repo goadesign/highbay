@@ -104,7 +104,7 @@ func TestBuildLegacyCardNamesTheGuideStep(t *testing.T) {
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "records no design")
-	assert.ErrorContains(t, err, "guide to propose a revision from its draft")
+	assert.ErrorContains(t, err, "your coding agent to propose a revision from its draft")
 	assertNoBuildSaved(t, cp, "chg")
 }
 

@@ -2,6 +2,7 @@
 package controlplane
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -63,7 +64,7 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 		}
 	}
 
-	check("describe", "The guide needs your attention.", nil)
+	check("describe", "Your coding agent needs your attention.", nil)
 	guide.State, guide.Attention = "waiting", "none"
 	confirmed := saveCard(t, cp, nil)
 	check("build", "Start a build for the current agreement.", confirmed)
@@ -122,4 +123,34 @@ func saveStatusProposal(t *testing.T, cp *ControlPlane, owner, id string) *gensu
 	require.NoError(t, err)
 	saveMetadataRecord(t, cp, storedChangeCard{card: card, owner: owner})
 	return card
+}
+
+func TestOpenViewsHandoffCopyReflectsOpenerCapabilities(t *testing.T) {
+	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", Kind: CallerGuide})
+
+	unconfigured := newControlPlane(t, Options{})
+	res, err := unconfigured.OpenViews(ctx)
+	require.NoError(t, err)
+	assert.False(t, res.Opened)
+	assert.Contains(t, res.Message, "Open Surla Window in the Herdr companion")
+	assert.NotContains(t, res.Message, "brought it to the front")
+
+	failing := newControlPlane(t, Options{
+		OpenViews: func(context.Context) error { return assert.AnError },
+	})
+	res, err = failing.OpenViews(ctx)
+	require.NoError(t, err)
+	assert.False(t, res.Opened)
+	assert.Contains(t, res.Message, "Open Surla Window in the Herdr companion")
+	assert.NotContains(t, res.Message, "brought it to the front")
+
+	succeeding := newControlPlane(t, Options{
+		OpenViews: func(context.Context) error { return nil },
+	})
+	res, err = succeeding.OpenViews(ctx)
+	require.NoError(t, err)
+	assert.True(t, res.Opened)
+	assert.Contains(t, res.Message, "Opened Surla views in the user's default browser.")
+	assert.Contains(t, res.Message, "Open Surla Window in the Herdr companion")
+	assert.NotContains(t, res.Message, "brought it to the front")
 }

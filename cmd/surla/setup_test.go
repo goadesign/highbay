@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/skills"
 )
 
@@ -61,6 +62,7 @@ func TestSetupRegistersEveryDetectedClientOnce(t *testing.T) {
 	require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
 
 	stdio := map[string]any{"command": testExecutable, "args": []any{"stdio"}}
+	geminiStdio := map[string]any{"command": testExecutable, "args": []any{"stdio"}, "trust": true}
 	jsonConfigs := []struct {
 		path, serversKey string
 		want             map[string]any
@@ -68,7 +70,7 @@ func TestSetupRegistersEveryDetectedClientOnce(t *testing.T) {
 		{".claude.json", "mcpServers", stdio},
 		{".cursor/mcp.json", "mcpServers", stdio},
 		{".gemini/config/mcp_config.json", "mcpServers", stdio},
-		{".gemini/settings.json", "mcpServers", stdio},
+		{".gemini/settings.json", "mcpServers", geminiStdio},
 		{".codeium/windsurf/mcp_config.json", "mcpServers", stdio},
 		{".copilot/mcp-config.json", "mcpServers", map[string]any{"type": "local", "command": testExecutable, "args": []any{"stdio"}, "tools": []any{"*"}}},
 		{"Library/Application Support/Code/User/mcp.json", "servers", map[string]any{"type": "stdio", "command": testExecutable, "args": []any{"stdio"}}},
@@ -77,9 +79,13 @@ func TestSetupRegistersEveryDetectedClientOnce(t *testing.T) {
 		servers, _ := readTestJSON(t, filepath.Join(home, c.path))[c.serversKey].(map[string]any)
 		assert.Equal(t, c.want, servers["surla"], c.path)
 	}
+	claudePerms, _ := readTestJSON(t, filepath.Join(home, ".claude", "settings.json"))["permissions"].(map[string]any)
+	assert.Equal(t, []any{"mcp__surla__*", "mcp__chorus__*"}, claudePerms["allow"])
+	_, cursorConfigErr := os.Stat(filepath.Join(home, ".cursor", "cli-config.json"))
+	assert.ErrorIs(t, cursorConfigErr, os.ErrNotExist, "Cursor cli-config.json is updated only when already present")
 	codex, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
 	require.NoError(t, err)
-	assert.Equal(t, "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\n", string(codex))
+	assert.Equal(t, "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [\"HC_TERMINAL_ID\"]\n", string(codex))
 	for _, dir := range []string{".agents", ".claude", ".codex", ".cursor", ".gemini/config", ".gemini", ".codeium/windsurf", ".copilot"} {
 		skill, err := os.ReadFile(filepath.Join(home, dir, "skills", "surla", "SKILL.md"))
 		require.NoError(t, err, dir)
@@ -96,6 +102,7 @@ func TestSetupRegistersEveryDetectedClientOnce(t *testing.T) {
 	assert.Equal(t, []string{"main.js", "mod.json"}, names, "only runtime files are installed")
 	keys := readTestJSON(t, filepath.Join(herdrHome, "keys.json"))
 	assert.Equal(t, map[string]any{"cmd-k": "app.palette", "cmd-alt-shift-s": "mod.open:surla"}, keys["global"])
+	assert.Contains(t, out.String(), "Configured Surla tool permissions in "+filepath.Join(home, ".claude", "settings.json"))
 	assert.Contains(t, out.String(), "Added Herdr shortcut cmd-alt-shift-s")
 
 	// A second run finds everything in place and writes nothing.
@@ -104,6 +111,7 @@ func TestSetupRegistersEveryDetectedClientOnce(t *testing.T) {
 	require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
 	assert.Equal(t, before, snapshotTree(t, home))
 	assert.Equal(t, 8, strings.Count(out.String(), "is already registered in"), out.String())
+	assert.Contains(t, out.String(), "Surla tool permissions are already configured in "+filepath.Join(home, ".claude", "settings.json"))
 	assert.NotContains(t, out.String(), "Installed")
 	assert.Contains(t, out.String(), "Herdr shortcut cmd-alt-shift-s already opens the Surla companion.")
 }
@@ -134,30 +142,40 @@ func TestSetupDetectsClientsByEnvironmentAndPath(t *testing.T) {
 	home := t.TempDir()
 	claudeDir := filepath.Join(t.TempDir(), "claude")
 	codexDir := filepath.Join(t.TempDir(), "codex")
+	geminiHome := filepath.Join(t.TempDir(), "gemini-home")
 	env := testSetupEnvironment(home)
 	env.goos = "linux"
 	env.getenv = func(name string) string {
-		return map[string]string{"CLAUDE_CONFIG_DIR": claudeDir, "CODEX_HOME": codexDir}[name]
+		return map[string]string{
+			"CLAUDE_CONFIG_DIR": claudeDir,
+			"CODEX_HOME":        codexDir,
+			"GEMINI_CLI_HOME":   geminiHome,
+		}[name]
 	}
 	env.onPath = func(name string) bool { return name == "claude" || name == "codex" || name == "gemini" }
 
-	jsonTargets, tomlTargets, skillTargets := setupTargets(env)
+	jsonTargets, tomlTargets, permTargets, skillTargets := setupTargets(env)
 	var paths []string
 	for _, target := range jsonTargets {
 		paths = append(paths, target.path)
 	}
-	assert.Equal(t, []string{filepath.Join(claudeDir, ".claude.json"), filepath.Join(home, ".gemini", "settings.json")}, paths)
+	assert.Equal(t, []string{
+		filepath.Join(claudeDir, ".claude.json"),
+		filepath.Join(geminiHome, ".gemini", "settings.json"),
+	}, paths)
 	assert.Equal(t, []string{filepath.Join(codexDir, "config.toml")}, tomlTargets)
+	require.Len(t, permTargets, 1)
+	assert.Equal(t, filepath.Join(claudeDir, "settings.json"), permTargets[0].path)
 	assert.Equal(t, []string{
 		filepath.Join(home, ".agents", "skills", "surla", "SKILL.md"),
 		filepath.Join(claudeDir, "skills", "surla", "SKILL.md"),
 		filepath.Join(codexDir, "skills", "surla", "SKILL.md"),
-		filepath.Join(home, ".gemini", "skills", "surla", "SKILL.md"),
+		filepath.Join(geminiHome, ".gemini", "skills", "surla", "SKILL.md"),
 	}, skillTargets)
 
 	// Antigravity's ~/.gemini/config alone does not make Gemini CLI a target.
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".gemini", "config"), 0o755))
-	jsonTargets, _, _ = setupTargets(testSetupEnvironment(home))
+	jsonTargets, _, _, _ = setupTargets(testSetupEnvironment(home))
 	require.Len(t, jsonTargets, 1)
 	assert.Equal(t, filepath.Join(home, ".gemini", "config", "mcp_config.json"), jsonTargets[0].path)
 }
@@ -260,7 +278,7 @@ func TestSetupJSONConfigFollowsSymlinkAndKeepsPermissions(t *testing.T) {
 }
 
 func TestSetupCodexConfigMerge(t *testing.T) {
-	const table = "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\n"
+	const table = "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [\"HC_TERMINAL_ID\"]\n"
 	cases := []struct {
 		name, content, want string
 		changed             bool
@@ -268,39 +286,72 @@ func TestSetupCodexConfigMerge(t *testing.T) {
 	}{
 		{name: "missing file", want: table, changed: true},
 		{
-			name:    "appends after other settings",
+			name:    "appends after other settings and pre-approves chorus table",
 			content: "# my settings\nmodel = \"gpt\"\n\n[mcp_servers.chorus]\nurl = \"http://127.0.0.1:9440/mcp\"\n\n",
-			want:    "# my settings\nmodel = \"gpt\"\n\n[mcp_servers.chorus]\nurl = \"http://127.0.0.1:9440/mcp\"\n\n" + table,
+			want:    "# my settings\nmodel = \"gpt\"\n\n[mcp_servers.chorus]\ndefault_tools_approval_mode = \"approve\"\nurl = \"http://127.0.0.1:9440/mcp\"\n\n" + table,
 			changed: true,
 		},
 		{
-			name:    "replaces values in place and keeps other keys",
-			content: "[mcp_servers.surla]\ncommand = 'old/surla' # pinned\nargs = [\"serve\", \"-x\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
-			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\" # pinned\nargs = [\"stdio\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
+			name:    "keeps existing chorus approval mode when already set",
+			content: "[mcp_servers.chorus]\ndefault_tools_approval_mode = \"prompt\"\nurl = \"http://127.0.0.1:9440/mcp\"\n\n" + table,
+			changed: false,
+		},
+		{
+			name:    "adds chorus approval mode even when surla already matches",
+			content: "[mcp_servers.chorus]\nurl = \"http://127.0.0.1:9440/mcp\"\n\n" + table,
+			want:    "[mcp_servers.chorus]\ndefault_tools_approval_mode = \"approve\"\nurl = \"http://127.0.0.1:9440/mcp\"\n\n" + table,
 			changed: true,
+		},
+		{
+			name:    "replaces command and args while preserving explicit approval mode and other keys",
+			content: "[mcp_servers.surla]\ncommand = 'old/surla' # pinned\nargs = [\"serve\", \"-x\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [\"CUSTOM_VAR\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\" # pinned\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [\"CUSTOM_VAR\", \"HC_TERMINAL_ID\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
+			changed: true,
+		},
+		{
+			name:    "splices HC_TERMINAL_ID into structured env_vars array without overwriting tables",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"local\" }]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"local\" }, \"HC_TERMINAL_ID\"]\n",
+			changed: true,
+		},
+		{
+			name:    "splices HC_TERMINAL_ID into multiline structured env_vars with comments",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"remote\" } # keep comment\n]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"remote\" }, # keep comment\n  \"HC_TERMINAL_ID\"\n]\n",
+			changed: true,
+		},
+		{
+			name:    "recognizes structured HC_TERMINAL_ID entry without rewriting",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [{ name = \"HC_TERMINAL_ID\", source = \"local\" }]\n",
+			changed: false,
+		},
+		{
+			name:    "keeps user env_vars untouched when HC_TERMINAL_ID already present",
+			content: "[mcp_servers.surla]\ncommand = '/opt/surla/bin/surla'\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = ['CUSTOM_VAR', 'HC_TERMINAL_ID']\n",
+			changed: false,
 		},
 		{
 			name:    "adds missing keys after the header",
 			content: "[mcp_servers.surla]\nstartup_timeout_sec = 30\n",
-			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\nstartup_timeout_sec = 30\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [\"HC_TERMINAL_ID\"]\nstartup_timeout_sec = 30\n",
 			changed: true,
 		},
 		{
 			name:    "adds a key after a header at the end of the file",
 			content: "[mcp_servers.surla]",
-			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [\"HC_TERMINAL_ID\"]\n",
 			changed: true,
 		},
 		{
 			name:    "replaces dotted keys",
 			content: "[mcp_servers]\nsurla.command = \"old\"\nsurla.args = []\n",
-			want:    "[mcp_servers]\nsurla.command = \"/opt/surla/bin/surla\"\nsurla.args = [\"stdio\"]\n",
+			want:    "[mcp_servers]\nsurla.command = \"/opt/surla/bin/surla\"\nsurla.args = [\"stdio\"]\nsurla.default_tools_approval_mode = \"approve\"\nsurla.env_vars = [\"HC_TERMINAL_ID\"]\n",
 			changed: true,
 		},
 		{
 			name:    "replaces a multiline array with comments",
 			content: "[mcp_servers.surla]\nargs = [\n  \"serve\", # old ]\n  \"-x\",\n] # end\ncommand = \"/opt/surla/bin/surla\"\n",
-			want:    "[mcp_servers.surla]\nargs = [\"stdio\"] # end\ncommand = \"/opt/surla/bin/surla\"\n",
+			want:    "[mcp_servers.surla]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [\"HC_TERMINAL_ID\"]\nargs = [\"stdio\"] # end\ncommand = \"/opt/surla/bin/surla\"\n",
 			changed: true,
 		},
 		{name: "already registered", content: "# keep\n" + table, changed: false},
@@ -311,6 +362,8 @@ func TestSetupCodexConfigMerge(t *testing.T) {
 		{name: "servers as a string", content: "mcp_servers = \"x\"\n", wantErr: "mcp_servers is not a table"},
 		{name: "url transport", content: "[mcp_servers.surla]\nurl = \"http://old\"\n", wantErr: "has a url"},
 		{name: "command not a string", content: "[mcp_servers.surla]\ncommand = 3\n", wantErr: "command is not a string"},
+		{name: "env_vars not an array", content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\nenv_vars = \"HC_TERMINAL_ID\"\n", wantErr: "env_vars is not an array"},
+		{name: "env_vars non-string item", content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\nenv_vars = [1]\n", wantErr: "env_vars must contain strings"},
 		{name: "invalid TOML", content: "[mcp_servers.surla\n", wantErr: "is not valid TOML"},
 		{name: "duplicate key", content: "a = 1\na = 2\n", wantErr: "is not valid TOML"},
 	}
@@ -452,4 +505,169 @@ func TestSetupRefusesTemporaryExecutable(t *testing.T) {
 	for _, c := range cases {
 		assert.Equal(t, c.want, temporaryExecutable(c.executable, c.tempDirs...), c.name)
 	}
+}
+
+func TestSetupPermissionsAllowJSON(t *testing.T) {
+	t.Run("claude settings preserves existing keys and refuses malformed JSON", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), ".claude", "settings.json")
+		writeTestFile(t, path, `{"model":"opus","permissions":{"allow":["Bash(git status)"],"deny":["Bash(rm -rf *)"]}}`)
+		target := permissionsJSONTarget{
+			path:              path,
+			rules:             []string{"mcp__surla__*", "mcp__chorus__*"},
+			createWhenMissing: true,
+		}
+		changed, present, err := mergePermissionsAllowJSON(target)
+		require.NoError(t, err)
+		assert.True(t, changed)
+		assert.True(t, present)
+		root := readTestJSON(t, path)
+		assert.Equal(t, "opus", root["model"])
+		perms := root["permissions"].(map[string]any)
+		assert.Equal(t, []any{"Bash(git status)", "mcp__surla__*", "mcp__chorus__*"}, perms["allow"])
+		assert.Equal(t, []any{"Bash(rm -rf *)"}, perms["deny"])
+
+		changed, present, err = mergePermissionsAllowJSON(target)
+		require.NoError(t, err)
+		assert.False(t, changed)
+		assert.True(t, present)
+
+		for _, bad := range []struct{ content, wantErr string }{
+			{`{`, "parse JSON"},
+			{`{"permissions":[]}`, "permissions must be a JSON object"},
+			{`{"permissions":{"allow":{}}}`, "permissions.allow must be a JSON array"},
+			{`{"permissions":{"allow":[1]}}`, "permissions.allow must contain strings"},
+		} {
+			badPath := filepath.Join(t.TempDir(), "settings.json")
+			writeTestFile(t, badPath, bad.content)
+			_, _, err := mergePermissionsAllowJSON(permissionsJSONTarget{
+				path: badPath, rules: []string{"mcp__surla__*"}, createWhenMissing: true,
+			})
+			assert.ErrorContains(t, err, bad.wantErr)
+			raw, readErr := os.ReadFile(badPath)
+			require.NoError(t, readErr)
+			assert.Equal(t, bad.content, string(raw))
+		}
+	})
+
+	t.Run("gemini settings preserves explicit trust false and tool filter arrays across repeat setup", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, ".gemini", "settings.json")
+		writeTestFile(t, path, `{"mcpServers":{"surla":{"command":"/old/surla","args":["stdio"],"trust":false,"includeTools":["list_changes","get_change"],"excludeTools":["open_views"],"timeout":15000},"other":{"command":"npx"}}}`)
+
+		var out bytes.Buffer
+		require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
+		assert.Contains(t, out.String(), "Registered the surla MCP server in "+path)
+
+		servers := readTestJSON(t, path)["mcpServers"].(map[string]any)
+		assert.Equal(t, map[string]any{
+			"command":      testExecutable,
+			"args":         []any{"stdio"},
+			"trust":        false,
+			"includeTools": []any{"list_changes", "get_change"},
+			"excludeTools": []any{"open_views"},
+			"timeout":      float64(15000),
+		}, servers["surla"])
+		assert.Equal(t, map[string]any{"command": "npx"}, servers["other"])
+
+		// Repeat setupGlobal run preserves everything untouched and reports already registered.
+		before := snapshotTree(t, home)
+		out.Reset()
+		require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
+		assert.Equal(t, before, snapshotTree(t, home))
+		assert.Contains(t, out.String(), "The surla MCP server is already registered in "+path)
+	})
+
+	t.Run("cursor cli-config updates existing files including deny-only configs and respects deny rules", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "cli-config.json")
+		target := permissionsJSONTarget{
+			path:              path,
+			rules:             []string{"Mcp(surla:*)", "Mcp(chorus:*)"},
+			createWhenMissing: false,
+		}
+		changed, present, err := mergePermissionsAllowJSON(target)
+		require.NoError(t, err)
+		assert.False(t, changed)
+		assert.False(t, present)
+		_, statErr := os.Stat(path)
+		assert.ErrorIs(t, statErr, os.ErrNotExist)
+
+		writeTestFile(t, path, `{"version":1}`)
+		changed, present, err = mergePermissionsAllowJSON(target)
+		require.NoError(t, err)
+		assert.True(t, changed)
+		assert.True(t, present)
+		parsed := readTestJSON(t, path)
+		assert.Equal(t, float64(1), parsed["version"])
+		assert.Equal(t, []any{"Mcp(surla:*)", "Mcp(chorus:*)"}, parsed["permissions"].(map[string]any)["allow"])
+
+		writeTestFile(t, path, `{"version":1,"permissions":{"deny":["Shell(rm)","Mcp(chorus:*)"]}}`)
+		changed, present, err = mergePermissionsAllowJSON(target)
+		require.NoError(t, err)
+		assert.True(t, changed)
+		assert.True(t, present)
+		perms := readTestJSON(t, path)["permissions"].(map[string]any)
+		assert.Equal(t, []any{"Mcp(surla:*)"}, perms["allow"])
+		assert.Equal(t, []any{"Shell(rm)", "Mcp(chorus:*)"}, perms["deny"])
+	})
+
+	t.Run("tool-specific denials preserve deny scope while setupGlobal approves remaining worker tools", func(t *testing.T) {
+		home := t.TempDir()
+		claudeSettings := filepath.Join(home, ".claude", "settings.json")
+		cursorConfig := filepath.Join(home, ".cursor", "cli-config.json")
+		writeTestFile(t, claudeSettings,
+			`{"permissions":{"deny":["mcp__surla__open_views","mcp__surla__start_live_target"]}}`)
+		writeTestFile(t, cursorConfig,
+			`{"version":1,"permissions":{"deny":["Mcp(surla:open_views)","Mcp(surla:start_live_target)"]}}`)
+
+		var out bytes.Buffer
+		require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
+
+		claudePerms := readTestJSON(t, claudeSettings)["permissions"].(map[string]any)
+		assert.Equal(t, []any{"mcp__surla__*", "mcp__chorus__*"}, claudePerms["allow"])
+		assert.Equal(t, []any{"mcp__surla__open_views", "mcp__surla__start_live_target"}, claudePerms["deny"])
+
+		cursorPerms := readTestJSON(t, cursorConfig)["permissions"].(map[string]any)
+		assert.Equal(t, []any{"Mcp(surla:*)", "Mcp(chorus:*)"}, cursorPerms["allow"])
+		assert.Equal(t, []any{"Mcp(surla:open_views)", "Mcp(surla:start_live_target)"}, cursorPerms["deny"])
+
+		// Effective client precedence (deny > allow): denied tools stay blocked while required worker tools are approved.
+		effectiveAllowed := func(client string, perms map[string]any, server, tool string) bool {
+			for _, item := range perms["deny"].([]any) {
+				if permissionRuleBlocksTool(client, item.(string), server, tool) {
+					return false
+				}
+			}
+			for _, item := range perms["allow"].([]any) {
+				if permissionRuleBlocksTool(client, item.(string), server, tool) {
+					return true
+				}
+			}
+			return false
+		}
+		for _, tc := range []struct {
+			client string
+			perms  map[string]any
+		}{
+			{"claude", claudePerms},
+			{"cursor", cursorPerms},
+		} {
+			assert.False(t, effectiveAllowed(tc.client, tc.perms, "surla", "open_views"))
+			assert.False(t, effectiveAllowed(tc.client, tc.perms, "surla", "start_live_target"))
+			for _, role := range []string{"builder", "test_writer"} {
+				for _, tool := range requiredSurlaTools(role) {
+					assert.True(t, effectiveAllowed(tc.client, tc.perms, "surla", tool), "%s must approve %s for %s", tc.client, tool, role)
+				}
+			}
+		}
+
+		repo, buildDir, testsDir := initTrustGitRepoWithWorktrees(t)
+		env := []string{"HOME=" + home}
+		for _, client := range []string{"claude", "cursor"} {
+			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+				{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: client, RequireChorus: true},
+				{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: client, RequireChorus: true},
+			}))
+		}
+	})
 }

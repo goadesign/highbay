@@ -161,7 +161,7 @@ missing worker registration or credential never grants guide access.
 Generated schemas and the control plane's operation policy still enforce each caller's tools.
 
 The Herdr companion reads `surla status --json` for the shown local project
-and Herdr labels for pane focus. Its **Open Page** action runs the ordinary
+and Herdr labels for pane focus. Its **Open Surla Window** action runs the ordinary
 browser-opening entrypoint. It holds no user credential and changes no
 shipped workspace layout.
 

@@ -129,7 +129,7 @@ Without `-global`, setup explains the flag and writes nothing. Unlike
 Open Herdr once before setup so it creates its configuration folder. Setup
 skips companion installation if that folder does not exist. When it exists,
 setup installs the Surla floating companion in `mods/surla/`. It shows the current project stage and role attention,
-focuses live panes, and offers **Open Page**. It reads project status and
+focuses live panes, and offers **Open Surla Window**. It reads project status and
 holds no Surla browser-session credential. It does not change Herdr's shipped
 workspace layout. On macOS, setup adds `cmd-alt-shift-s` to the global section
 of Herdr's `keys.json` when that shortcut is free. Existing bindings are
@@ -151,13 +151,14 @@ the guide. In Herdr, a compatible live model pane can be adopted in place.
 The guide calls [`open_views`](#open_views) to open the page without receiving
 a browser credential.
 
-Setup does not populate provider settings or `HC_TERMINAL_ID` in the MCP
-registration. Surla uses only the environment the client passes to the
-stdio process: provider settings enable hand-over, and `HC_TERMINAL_ID`
-enables attempting live Herdr adoption. This forwarding has not been
-live-verified with real coding-agent clients; registration alone does not
-prove it. Bare `surla` remains the operator path for handing over settings
-from a known shell environment.
+Setup does not populate provider settings in the MCP registration; for Codex,
+setup adds `HC_TERMINAL_ID` to `mcp_servers.surla.env_vars` so direct CLI
+spawns can forward the Herdr terminal identifier. `surla stdio` uses the
+environment and direct OS process lineage observed at bind time (omitting
+inherited daemon terminal IDs and lineage when spawned by `codex app-server`,
+which leaves shared-daemon sessions external) to attempt live Herdr adoption.
+Bare `surla` remains the operator path for handing over settings from a known
+shell environment.
 
 The physical working folder determines the role. A folder inside
 `.surla-build` or `.surla-tests`, including nested modules, connects only as
@@ -790,7 +791,7 @@ applied the text. Refusals take these shapes:
 
 | Cause | HTTP | MCP |
 | --- | --- | --- |
-| No credential, or one the server does not hold (for example after a restart) | `401` with the message `session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion` | The same `401` on `POST /mcp` |
+| No credential, or one the server does not hold (for example after a restart) | `401` with the message `session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion` | The same `401` on `POST /mcp` |
 | The caller's kind may not call the operation | `403` `forbidden`, message `caller may not call <operation>` | A tool error result (`isError: true`) with the same message |
 | A field the route does not declare, at any depth, or a structurally invalid value | `400`, such as `decode_payload` naming the field (`json: unknown field "id"`), `missing_field` or `invalid_pattern` | A tool error starting with `invalid arguments:` that names the field |
 | A named domain refusal, listed with each operation | The status the route declares, such as `404` `not_found`, `409` `conflict` or `422` `unprocessable` | A tool error result with the same message |
@@ -2265,10 +2266,12 @@ without launching an agent or creating a space.
 ### `attach_guide`
 
 `POST /project/attach-guide` lets a local management client register an
-existing coding session as the guide. Send the session's `hc_terminal_id`
-and `client` when attaching in Herdr. Surla adopts the pane only if it is a
-running local model pane in a tab with compatible project and team labels.
-Outside Herdr, omit the terminal ID. The result includes `team`, the guide's
+existing coding session as the guide. Send `hc_terminal_id`, `client` and
+`ancestor_pids` when attaching a direct session in Herdr. Surla adopts the pane
+only if it is a running local model pane inside the project folder with
+matching client and OS lineage facts and compatible project and team labels.
+Outside Herdr (or when spawned by a shared daemon without direct lineage), omit
+the terminal ID and ancestor PIDs. The result includes `team`, the guide's
 `handle`, `adopted_herdr` and `herdr_mode`. The integration gives the coding
 agent its role credential from `agents/<handle>` in the private project
 state folder. The project serves MCP at `/mcp` and authenticates the agent
@@ -2425,7 +2428,7 @@ after a failed read of the changes or the team, a lost update connection or
 an ended session, it names the recovery instead, such as
 `Reconnecting: shop`. Before the exchange succeeds, the title is `Surla`.
 Reloading or closing the tab ends the session. Ask the guide to call
-[`open_views`](#open_views), or use **Open Page** in the Herdr companion, to
+[`open_views`](#open_views), or use **Open Surla Window** in the Herdr companion, to
 open a fresh session. Bare `surla` remains an operator fallback.
 Opening a fresh link in the same tab reloads the page through the normal link
 exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form

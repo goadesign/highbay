@@ -41,7 +41,6 @@ import (
 
 	genmcpserver "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/server"
 	genmcp "github.com/goadesign/surla/gen/mcp_surla"
-	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/controlplane"
@@ -144,7 +143,7 @@ const stdioBindTimeout = 2 * time.Minute
 var (
 	// errStdioServerStopped is a worker's answer when its project server is
 	// not running: only the user starts it.
-	errStdioServerStopped = errors.New("this project's Surla server is not running; ask the user to reopen Surla from their guide's coding agent (/surla) or with Start Surla in the Herdr companion, then call the tool again")
+	errStdioServerStopped = errors.New("this project's Surla server is not running; ask the user to reopen Surla from their project coding agent (/surla) or with Start Surla in the Herdr Surla panel, then call the tool again")
 	// stdioClientNames maps a word in the MCP clientInfo name to the client
 	// attach_guide accepts.
 	stdioClientNames = []string{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}
@@ -278,13 +277,7 @@ func bindStdioGuide(
 	if err := handOverModelSettings(ctx, state, modelsettings.Select(os.Environ()), diagnostics); err != nil {
 		return nil, err
 	}
-	payload := &genproject.AttachGuidePayload{}
-	if terminal != "" {
-		payload.HcTerminalID = &terminal
-	}
-	if client != "" {
-		payload.Client = &client
-	}
+	payload := buildAttachGuidePayload(ctx, terminal, client)
 	attached, err := management.AttachGuide(ctx, payload)
 	if err != nil {
 		return nil, fmt.Errorf("attach this agent as the project's guide: %w", err)

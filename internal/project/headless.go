@@ -293,7 +293,17 @@ func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, er
 		args = append(args, "--model", *choice.Model)
 	}
 	switch choice.Client {
-	case "claude", "antigravity":
+	case "claude":
+		if choice.Thinking != nil {
+			args = append(args, "--effort", *choice.Thinking)
+		}
+		if choice.Yolo {
+			args = append(args, "--dangerously-skip-permissions")
+		} else {
+			args = append(args, "--allowedTools", "mcp__surla__*")
+		}
+		args = append(args, "--print")
+	case "antigravity":
 		if choice.Thinking != nil {
 			args = append(args, "--effort", *choice.Thinking)
 		}
@@ -309,6 +319,9 @@ func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, er
 			args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 		}
 	case "cursor":
+		if !choice.Yolo {
+			args = append(args, "--trust")
+		}
 		args = append(args, "--print")
 		if choice.Yolo {
 			args = append(args, "--yolo")

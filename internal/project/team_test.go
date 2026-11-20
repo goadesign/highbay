@@ -143,9 +143,15 @@ func attachFixtureGuide(t *testing.T, server *Server, host *teamFixture) *genpro
 	host.spaces = []TeamSpace{{
 		ID: "space-guide", Tabs: []TeamTab{{ID: "tab-guide", Terminals: []TeamPane{{Terminal: "t-guide", Pane: "p-guide"}}}},
 	}}
-	host.terminals = []TeamTerminal{{Address: "t-guide", State: "live", Foreground: &TeamForeground{Argv: []string{"agy"}}}}
+	host.terminals = []TeamTerminal{{
+		Address: "t-guide", PID: 4200, State: "live",
+		Foreground: &TeamForeground{PID: 4201, Cwd: server.state.Record.Directory, Argv: []string{"agy"}},
+	}}
 	address := "t-guide"
-	result, err := server.AttachGuide(teamContext(server.state), &genproject.AttachGuidePayload{HcTerminalID: &address})
+	result, err := server.AttachGuide(teamContext(server.state), &genproject.AttachGuidePayload{
+		HcTerminalID: &address,
+		AncestorPids: []int{4202, 4201, 4200},
+	})
 	require.NoError(t, err)
 	require.True(t, result.AdoptedHerdr)
 	return result

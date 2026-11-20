@@ -58,6 +58,25 @@ type (
 		// Count is how many local spaces match; it is always at least 2.
 		Count int
 	}
+	// PolicyRefusalKind identifies which explicit client setting blocked worker startup.
+	PolicyRefusalKind string
+	// TeamPolicyRefusal is the Team owner's bounded refusal to start non-Yolo
+	// workers when an explicit setting in a coding client's configuration
+	// blocks required Surla/Chorus MCP operations or folder trust. It omits raw
+	// filesystem paths so StartTeamAgents and StartBuild's BuildStartStep
+	// (<= 512 characters) present the exact setting and retry step.
+	TeamPolicyRefusal struct {
+		// Kind selects the bounded recovery message template.
+		Kind PolicyRefusalKind
+		// Client names the coding-agent client ("codex", "claude", "gemini", "cursor").
+		Client string
+		// Server names the blocked MCP server ("surla" or "chorus") when applicable.
+		Server string
+		// List names the blocking permission or filter list ("deny", "ask", "excludeTools", "includeTools").
+		List string
+		// Detail holds a bounded setting or rule value such as "prompt" or "Mcp(*:get_builder_assignment)".
+		Detail string
+	}
 	// TeamBinding associates the one team owner with its immutable resource owner.
 	// The composition root binds it once before New; it never creates user credentials.
 	TeamBinding struct {
@@ -105,6 +124,27 @@ type (
 	AssignmentReader func(context.Context) (TeamAssignments, error)
 )
 
+const (
+	// PolicyCodexServerDisabled reports `[mcp_servers.<srv>] enabled = false` in Codex config.toml.
+	PolicyCodexServerDisabled PolicyRefusalKind = "codex_server_disabled"
+	// PolicyCodexServerApproval reports a non-`approve` `default_tools_approval_mode` in Codex config.toml.
+	PolicyCodexServerApproval PolicyRefusalKind = "codex_server_approval"
+	// PolicyCodexProjectUntrusted reports a non-`trusted` `trust_level` in Codex config.toml.
+	PolicyCodexProjectUntrusted PolicyRefusalKind = "codex_project_untrusted"
+	// PolicyClaudePermission reports a blocking rule in Claude `settings.json` `permissions.deny` or `ask`.
+	PolicyClaudePermission PolicyRefusalKind = "claude_permission"
+	// PolicyCursorPermission reports a blocking rule in Cursor `cli-config.json` `permissions.deny` or `ask`.
+	PolicyCursorPermission PolicyRefusalKind = "cursor_permission"
+	// PolicyGeminiServerUntrusted reports `mcpServers.<srv>.trust == false` in Gemini `settings.json`.
+	PolicyGeminiServerUntrusted PolicyRefusalKind = "gemini_server_untrusted"
+	// PolicyGeminiToolFiltered reports `excludeTools` or `includeTools` blocking a required tool in Gemini `settings.json`.
+	PolicyGeminiToolFiltered PolicyRefusalKind = "gemini_tool_filtered"
+	// PolicyGeminiFolderUntrusted reports `DO_NOT_TRUST` in Gemini `trustedFolders.json`.
+	PolicyGeminiFolderUntrusted PolicyRefusalKind = "gemini_folder_untrusted"
+	// PolicyConfigUnusable reports a malformed, unreadable, or worktree-aliased client configuration file.
+	PolicyConfigUnusable PolicyRefusalKind = "config_unusable"
+)
+
 // HasWork reports whether the named worker role ("builder" or "test_writer")
 // currently has work on the open build.
 func (a TeamAssignments) HasWork(role string) bool {
@@ -142,8 +182,116 @@ func (e *TeamSpaceConflict) Error() string {
 	return fmt.Sprintf("%d Herdr spaces match this project", e.Count)
 }
 
+// Error returns the bounded policy refusal text for internal callers and tests.
+func (e *TeamPolicyRefusal) Error() string {
+	return e.Step("then start the build workers again.")
+}
+
+// Step formats the bounded recovery instruction naming the client configuration
+// file, exact setting to update, and caller-supplied retry action. Every result
+// fits within BuildStartStep's 512-character contract without suggesting Yolo.
+func (e *TeamPolicyRefusal) Step(retry string) string {
+	server := boundedPolicyText(e.Server, 16)
+	list := boundedPolicyText(e.List, 16)
+	detail := boundedPolicyText(e.Detail, 48)
+	var step string
+	switch e.Kind {
+	case PolicyCodexServerDisabled:
+		step = fmt.Sprintf(
+			"Codex disables MCP server %q in config.toml ([mcp_servers.%s] enabled = false). Set enabled = true on [mcp_servers.%s] in your Codex config.toml, %s",
+			server, server, server, retry,
+		)
+	case PolicyCodexServerApproval:
+		step = fmt.Sprintf(
+			"Codex requires interactive approval for MCP server %q in config.toml ([mcp_servers.%s] default_tools_approval_mode = %q). Set default_tools_approval_mode = \"approve\" on [mcp_servers.%s] in your Codex config.toml, %s",
+			server, server, detail, server, retry,
+		)
+	case PolicyCodexProjectUntrusted:
+		step = fmt.Sprintf(
+			"Codex marks this project folder (or an ancestor folder) as %q in config.toml. Set trust_level = \"trusted\" for it in your Codex config.toml, %s",
+			detail, retry,
+		)
+	case PolicyClaudePermission:
+		step = fmt.Sprintf(
+			"Claude Code blocks required %s MCP tools via permissions.%s (%q) in settings.json. Remove or narrow that entry in permissions.%s in your Claude settings.json, %s",
+			server, list, detail, list, retry,
+		)
+	case PolicyCursorPermission:
+		step = fmt.Sprintf(
+			"Cursor blocks required %s MCP tools via permissions.%s (%q) in cli-config.json. Remove or narrow that entry in permissions.%s in ~/.cursor/cli-config.json, %s",
+			server, list, detail, list, retry,
+		)
+	case PolicyGeminiServerUntrusted:
+		step = fmt.Sprintf(
+			"Gemini CLI marks MCP server %q as untrusted in settings.json (mcpServers.%s.trust is false). Set mcpServers.%s.trust to true in your Gemini settings.json, %s",
+			server, server, server, retry,
+		)
+	case PolicyGeminiToolFiltered:
+		if list == "includeTools" {
+			step = fmt.Sprintf(
+				"Gemini CLI omits required %s tool %q from mcpServers.%s.includeTools in settings.json. Include %q (or remove includeTools) in your Gemini settings.json, %s",
+				server, detail, server, detail, retry,
+			)
+		} else {
+			step = fmt.Sprintf(
+				"Gemini CLI excludes required %s tool %q via mcpServers.%s.excludeTools in settings.json. Remove %q from excludeTools in your Gemini settings.json, %s",
+				server, detail, server, detail, retry,
+			)
+		}
+	case PolicyGeminiFolderUntrusted:
+		step = fmt.Sprintf(
+			"Gemini CLI marks this project folder (or an ancestor folder) as DO_NOT_TRUST in trustedFolders.json. Set it to \"TRUST_FOLDER\" in your Gemini trustedFolders.json, %s",
+			retry,
+		)
+	case PolicyConfigUnusable:
+		clientName := policyClientDisplayName(e.Client)
+		switch {
+		case clientName != "" && detail != "":
+			step = fmt.Sprintf(
+				"%s configuration file %s could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, %s",
+				clientName, detail, retry,
+			)
+		case clientName != "":
+			step = fmt.Sprintf(
+				"%s configuration could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, %s",
+				clientName, retry,
+			)
+		default:
+			step = "A coding-agent configuration file could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, " + retry
+		}
+	default:
+		step = "A coding-agent permission setting prevented starting the workers; update that client setting, " + retry
+	}
+	return boundedPolicyText(step, 512)
+}
+
+// policyClientDisplayName maps a client key to its user-facing product name.
+func policyClientDisplayName(client string) string {
+	switch client {
+	case "claude":
+		return "Claude Code"
+	case "codex":
+		return "Codex"
+	case "gemini":
+		return "Gemini CLI"
+	case "cursor":
+		return "Cursor"
+	default:
+		return ""
+	}
+}
+
+// boundedPolicyText clamps s to at most maxRunes Unicode code points.
+func boundedPolicyText(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes])
+}
+
 // StartTeamAgents uses the project owner's existing repeatable team preparation
-// and maps its typed space conflict to the user transport's actionable error.
+// and maps its typed space and client-policy refusals to actionable user errors.
 func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTeamAgentsPayload) (*gensurla.ProjectTeam, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
@@ -155,6 +303,10 @@ func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTea
 		return nil, gensurla.MakeAmbiguousSpace(fmt.Errorf(
 			"%d Herdr spaces match this project. %s", conflict.Count, duplicateTeamSpacesStep(),
 		))
+	}
+	var policy *TeamPolicyRefusal
+	if errors.As(err, &policy) {
+		return nil, gensurla.MakeUnprocessable(errors.New(policy.Step("then choose Start workers again.")))
 	}
 	return result, err
 }

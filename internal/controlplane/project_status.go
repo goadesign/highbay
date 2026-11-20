@@ -200,7 +200,7 @@ func (c *ControlPlane) projectBuildMerged(ctx context.Context, passed []verifyru
 func projectRoleAttention(role string) string {
 	switch role {
 	case "guide":
-		return "The guide needs your attention."
+		return "Your coding agent needs your attention."
 	case "builder":
 		return "The builder needs your attention."
 	case "test_writer":

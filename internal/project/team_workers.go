@@ -13,6 +13,7 @@ import (
 	"github.com/goadesign/surla/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type (
@@ -94,6 +95,9 @@ func (s *Server) StartAgents(ctx context.Context, requested map[string]*gensurla
 		return startResult(record, s.herdrMode(record.Tab), roles, nil, "No build workers need work."), nil
 	}
 	if !s.team.dependencies.HerdrAvailable {
+		if err := s.prepareWorkerTrust(ctx, record, requestedRoles, choices, false); err != nil {
+			return nil, err
+		}
 		if err := s.saveChoices(ctx, choices); err != nil {
 			return nil, err
 		}
@@ -181,13 +185,16 @@ func (s *Server) startHerdrWorkers(
 			return nil, guideAlreadyRunning()
 		}
 	}
-	space, err := s.workerSpace(ctx, record)
+	space, spaceExists, err := s.findWorkerSpace(ctx, record)
 	if err != nil {
 		return nil, userTeamError(err)
 	}
-	live, err := s.liveTeam(ctx, record, space, roles)
-	if err != nil {
-		return nil, userTeamError(teamUnavailable(ctx, "terminals", "herdr"))
+	var live map[string]liveRole
+	if spaceExists {
+		live, err = s.liveTeam(ctx, record, space, roles)
+		if err != nil {
+			return nil, userTeamError(teamUnavailable(ctx, "terminals", "herdr"))
+		}
 	}
 	var rosterRoles []launcherRole
 	tab := ""
@@ -199,6 +206,30 @@ func (s *Server) startHerdrWorkers(
 		role, _ := guideRole(roles)
 		rosterRoles = append(rosterRoles, role)
 	}
+	rosterRoles = append(rosterRoles, workers...)
+	missing := make(map[string]*gensurla.RoleAgentChoice, len(choices))
+	var missingRoles []launcherRole
+	for _, role := range rosterRoles {
+		choice, ok := choices[role.Role]
+		if !ok || choice == nil {
+			continue
+		}
+		if _, running := live[role.Role]; !running {
+			missing[role.Role] = choice
+			missingRoles = append(missingRoles, role)
+		}
+	}
+	if len(missing) > 0 {
+		if err := s.prepareWorkerTrust(ctx, record, missingRoles, missing, true); err != nil {
+			return nil, err
+		}
+	}
+	if !spaceExists {
+		space, err = s.createWorkerSpace(ctx, record)
+		if err != nil {
+			return nil, userTeamError(err)
+		}
+	}
 	if explicitGuide {
 		guide, _ := guideRole(roles)
 		if _, err := s.registerAgent(guide.Handle, agentRecord{Role: "guide", Folder: guide.Folder}); err != nil {
@@ -208,7 +239,6 @@ func (s *Server) startHerdrWorkers(
 	if err := s.saveChoices(ctx, choices); err != nil {
 		return nil, err
 	}
-	rosterRoles = append(rosterRoles, workers...)
 	roster, err := teamRoster(record, rosterRoles)
 	if err != nil {
 		return nil, userTeamError(teamUnavailable(ctx, "roster", "role_folder"))
@@ -226,12 +256,6 @@ func (s *Server) startHerdrWorkers(
 		}
 	}
 	s.setTeamConnection(connection)
-	missing := make(map[string]*gensurla.RoleAgentChoice, len(choices))
-	for role, choice := range choices {
-		if _, running := live[role]; !running {
-			missing[role] = choice
-		}
-	}
 	if len(missing) > 0 {
 		if err := host.LaunchWorkers(ctx, space.ID, missing); err != nil {
 			return nil, userTeamError(teamUnavailable(ctx, "launch_workers", "chorus"))
@@ -258,12 +282,12 @@ func (s *Server) startHerdrWorkers(
 	return startResult(record, s.herdrMode(tab), roles, live, "Build workers were requested in Herdr."), nil
 }
 
-// workerSpace reuses the saved local space or finds its unique named replacement.
-func (s *Server) workerSpace(ctx context.Context, record Record) (TeamSpace, error) {
+// findWorkerSpace locates the saved local space or its unique named replacement without creating one.
+func (s *Server) findWorkerSpace(ctx context.Context, record Record) (TeamSpace, bool, error) {
 	host := s.team.dependencies.Host
 	spaces, err := host.Spaces(ctx)
 	if err != nil {
-		return TeamSpace{}, teamUnavailable(ctx, "spaces", "herdr")
+		return TeamSpace{}, false, teamUnavailable(ctx, "spaces", "herdr")
 	}
 	var matched TeamSpace
 	matches := 0
@@ -273,21 +297,26 @@ func (s *Server) workerSpace(ctx context.Context, record Record) (TeamSpace, err
 		}
 		if record.Space != "" && space.ID == record.Space {
 			if !safeSpaceID(space.ID) {
-				return TeamSpace{}, teamUnavailable(ctx, "saved_space", "saved_space")
+				return TeamSpace{}, false, teamUnavailable(ctx, "saved_space", "saved_space")
 			}
-			return space, nil
+			return space, true, nil
 		}
 		if safeSpaceID(space.ID) && space.Name == record.Team && space.Folder == record.Directory {
 			matched, matches = space, matches+1
 		}
 	}
 	if matches > 1 {
-		return TeamSpace{}, &controlplane.TeamSpaceConflict{Count: matches}
+		return TeamSpace{}, false, &controlplane.TeamSpaceConflict{Count: matches}
 	}
 	if matches == 1 {
-		return matched, nil
+		return matched, true, nil
 	}
-	created, err := host.CreateSpace(ctx, record.Team, record.Directory)
+	return TeamSpace{}, false, nil
+}
+
+// createWorkerSpace creates a new local space for record once launch admission succeeds.
+func (s *Server) createWorkerSpace(ctx context.Context, record Record) (TeamSpace, error) {
+	created, err := s.team.dependencies.Host.CreateSpace(ctx, record.Team, record.Directory)
 	if err != nil || !safeSpaceID(created.ID) || created.Machine != nil {
 		return TeamSpace{}, teamUnavailable(ctx, "create_space", "herdr")
 	}
@@ -527,6 +556,57 @@ func activeTeamState(state string) bool {
 		return true
 	}
 	return false
+}
+
+// prepareWorkerTrust checks explicit client restrictions and pre-populates
+// missing user-scoped folder trust for the project root and each role folder
+// about to launch. Any explicit policy restriction or unusable client
+// configuration returns a typed refusal before spaces, rosters or worker
+// processes are created.
+func (s *Server) prepareWorkerTrust(
+	ctx context.Context,
+	record Record,
+	roles []launcherRole,
+	choices map[string]*gensurla.RoleAgentChoice,
+	requireChorus bool,
+) error {
+	prepare := s.team.dependencies.PrepareWorkerTrust
+	if prepare == nil || len(roles) == 0 {
+		return nil
+	}
+	var targets []WorkerTrustTarget
+	for _, role := range roles {
+		choice := choices[role.Role]
+		if choice == nil || choice.Client == "" || role.Folder == "" {
+			continue
+		}
+		target := WorkerTrustTarget{
+			Role:          role.Role,
+			ProjectDir:    record.Directory,
+			Folder:        role.Folder,
+			Client:        choice.Client,
+			Yolo:          choice.Yolo,
+			RequireChorus: requireChorus,
+		}
+		if !slices.Contains(targets, target) {
+			targets = append(targets, target)
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	if err := prepare(ctx, targets); err != nil {
+		var policyErr *controlplane.TeamPolicyRefusal
+		if errors.As(err, &policyErr) {
+			return policyErr
+		}
+		if ctx.Err() != nil || s.team.closed {
+			return userTeamError(teamUnavailable(ctx, "worker_trust", "stopping"))
+		}
+		trace.SpanFromContext(ctx).AddEvent("team.worker_trust_failed")
+		return &controlplane.TeamPolicyRefusal{Kind: controlplane.PolicyConfigUnusable}
+	}
+	return nil
 }
 
 // sameBuild compares the saved change and timestamp, regardless of time location.

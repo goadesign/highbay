@@ -120,10 +120,92 @@ func TestOneBuildRefusesLegacyMetadataBeforeEffects(t *testing.T) {
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "old", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "conflict")
 	assert.ErrorContains(t, err, "The agreed revision records no design")
-	assert.ErrorContains(t, err, "Ask the guide to propose a revision from its draft, adopt it, then build.")
+	assert.ErrorContains(t, err, "Ask your coding agent to propose a revision from its draft, adopt it, then build.")
 	_, statErr := os.Stat(filepath.Join(cp.cards.dir, openBuildRecordFile))
 	assert.ErrorIs(t, statErr, os.ErrNotExist)
 	read, err := cp.GetChange(asCaller("alice@example.com", CallerGuide), &gensurla.GetChangePayload{ChangeID: "old"})
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, read.RequestRevision)
+}
+
+func TestBuildAndTeamStartSurfaceBoundedPolicyRefusal(t *testing.T) {
+	refusals := []struct {
+		name       string
+		refusal    *TeamPolicyRefusal
+		wantSubstr string
+	}{
+		{
+			name: "codex untrusted project",
+			refusal: &TeamPolicyRefusal{
+				Kind:   PolicyCodexProjectUntrusted,
+				Client: "codex",
+				Detail: "untrusted",
+			},
+			wantSubstr: `Set trust_level = "trusted" for it in your Codex config.toml`,
+		},
+		{
+			name: "cursor wildcard permission with long detail clamped within BuildStartStep",
+			refusal: &TeamPolicyRefusal{
+				Kind:   PolicyCursorPermission,
+				Client: "cursor",
+				Server: "surla",
+				List:   "deny",
+				Detail: "Mcp(*:get_builder_assignment_" + string(make([]byte, 300)) + ")",
+			},
+			wantSubstr: "Remove or narrow that entry in permissions.deny in ~/.cursor/cli-config.json",
+		},
+		{
+			name: "gemini excluded tool",
+			refusal: &TeamPolicyRefusal{
+				Kind:   PolicyGeminiToolFiltered,
+				Client: "gemini",
+				Server: "surla",
+				List:   "excludeTools",
+				Detail: "get_builder_assignment",
+			},
+			wantSubstr: "excludeTools in your Gemini settings.json",
+		},
+		{
+			name: "unusable client configuration file",
+			refusal: &TeamPolicyRefusal{
+				Kind:   PolicyConfigUnusable,
+				Client: "claude",
+				Detail: "settings.json",
+			},
+			wantSubstr: "Claude Code configuration file settings.json could not be read or safely used.",
+		},
+	}
+
+	for _, tc := range refusals {
+		t.Run(tc.name, func(t *testing.T) {
+			team := &teamServiceFixture{
+				start: func(context.Context) (*gensurla.ProjectTeam, error) {
+					return nil, tc.refusal
+				},
+			}
+			cp := newBuildControlPlane(t, Options{
+				Team: &TeamBinding{Owner: "alice@example.com", Service: team},
+			})
+			card := buildableChange(t, cp, "x")
+			user := asCaller("alice@example.com", CallerUser)
+
+			started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+				ChangeID:        "x",
+				RequestRevision: card.RequestRevision,
+			})
+			require.NoError(t, err)
+			unavailable, ok := started.Team.AsUnavailable()
+			require.True(t, ok, "expected BuildTeamUnavailable outcome")
+			assert.Contains(t, string(unavailable.Step), tc.wantSubstr)
+			assert.Contains(t, string(unavailable.Step), "Team → Start workers on the views page to start the team agents for this saved build")
+			assert.NotContains(t, string(unavailable.Step), "The project team could not be prepared.")
+			_, encodeErr := gensurla.EncodeStartBuildResult(started)
+			require.NoError(t, encodeErr, "BuildStartStep must satisfy 1..512 UTF-8 schema bounds")
+
+			_, teamErr := cp.StartTeamAgents(user, &gensurla.StartTeamAgentsPayload{})
+			assertRefused(t, teamErr, "unprocessable")
+			assert.ErrorContains(t, teamErr, tc.wantSubstr)
+			assert.ErrorContains(t, teamErr, "then choose Start workers again.")
+		})
+	}
 }

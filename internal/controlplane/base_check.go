@@ -30,7 +30,7 @@ type designHistory struct {
 // Callers pass only the revision/build's immutable history, never the live list.
 func checkDesignBase(ctx context.Context, dir, commit string, saved *madeFromSnapshot) error {
 	if saved == nil {
-		return gensurla.MakeConflict(errors.New("The agreed revision records no design, so there is nothing to build from. Ask the guide to propose a revision from its draft, adopt it, then build."))
+		return gensurla.MakeConflict(errors.New("The agreed revision records no design, so there is nothing to build from. Ask your coding agent to propose a revision from its draft, adopt it, then build."))
 	}
 	history, err := readDesignHistory(ctx, dir, commit, *saved, nil)
 	if err != nil {
@@ -40,7 +40,7 @@ func checkDesignBase(ctx context.Context, dir, commit string, saved *madeFromSna
 	for _, file := range paths {
 		version := designFileVersion(history.design, file)
 		if !history.current(file, version, saved.Entries[file]) {
-			return gensurla.MakeDesignChangedOutside(fmt.Errorf("%s in commit %s is not a version this revision was made from: it was changed outside Surla. Commit the design change in the project folder, then ask the guide to call update_draft, refresh_story and revise_change; adopt the revision, then build.", file, commit))
+			return gensurla.MakeDesignChangedOutside(fmt.Errorf("%s in commit %s is not a version this revision was made from: it was changed outside Surla. Commit the design change in the project folder, then ask your coding agent to call update_draft, refresh_story and revise_change; adopt the revision, then build.", file, commit))
 		}
 	}
 	return nil

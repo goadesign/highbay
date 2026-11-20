@@ -531,3 +531,62 @@ func TestStdioGuideBindErrorsRetryTheTool(t *testing.T) {
 	assert.NotContains(t, reply.Error.Message, strings.Repeat("b", 64))
 	assert.Nil(t, guide.currentRelay())
 }
+
+func TestStdioLineageInspectorAttachPayload(t *testing.T) {
+	t.Run("direct CLI session keeps HcTerminalID and AncestorPids", func(t *testing.T) {
+		tree := map[int]struct {
+			ppid int
+			args string
+		}{
+			900: {800, "/opt/surla/bin/surla stdio"},
+			800: {700, "node /usr/local/bin/claude"},
+			700: {1, "-zsh"},
+		}
+		inspector := stdioLineageInspector{
+			selfPID:  func() int { return 900 },
+			selfPPID: func() int { return 800 },
+			parentProcess: func(_ context.Context, pid int) (int, string, error) {
+				entry, ok := tree[pid]
+				if !ok {
+					return 0, "", os.ErrNotExist
+				}
+				return entry.ppid, entry.args, nil
+			},
+		}
+
+		payload := inspector.attachPayload(t.Context(), "t-herdr", "claude")
+		require.NotNil(t, payload.HcTerminalID)
+		assert.Equal(t, "t-herdr", *payload.HcTerminalID)
+		require.NotNil(t, payload.Client)
+		assert.Equal(t, "claude", *payload.Client)
+		assert.Equal(t, []int{900, 800, 700}, payload.AncestorPids)
+	})
+
+	t.Run("shared codex app-server omits HcTerminalID and AncestorPids to stay external", func(t *testing.T) {
+		tree := map[int]struct {
+			ppid int
+			args string
+		}{
+			73900: {73230, "/opt/surla/bin/surla stdio"},
+			73230: {2239, "/Users/dev/.codex/bin/codex app-server --listen unix:// --managed-daemon"},
+			2239:  {1, "/Users/dev/.codex/bin/codex app-server daemon pid-update-loop"},
+		}
+		inspector := stdioLineageInspector{
+			selfPID:  func() int { return 73900 },
+			selfPPID: func() int { return 73230 },
+			parentProcess: func(_ context.Context, pid int) (int, string, error) {
+				entry, ok := tree[pid]
+				if !ok {
+					return 0, "", os.ErrNotExist
+				}
+				return entry.ppid, entry.args, nil
+			},
+		}
+
+		payload := inspector.attachPayload(t.Context(), "t-stale-daemon-launch", "codex")
+		assert.Nil(t, payload.HcTerminalID, "daemon's launch HC_TERMINAL_ID must be dropped")
+		assert.Nil(t, payload.AncestorPids, "daemon's launch ancestors must be dropped")
+		require.NotNil(t, payload.Client)
+		assert.Equal(t, "codex", *payload.Client)
+	})
+}

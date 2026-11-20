@@ -39,7 +39,10 @@ func TestAttachGuideAdoptsExistingPaneAndKeepsItsCredential(t *testing.T) {
 
 	host.overlays, host.calls = nil, nil
 	address := "t-guide"
-	again, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{HcTerminalID: &address})
+	again, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+		HcTerminalID: &address,
+		AncestorPids: []int{4202, 4201, 4200},
+	})
 	require.NoError(t, err)
 	assert.Equal(t, result, again)
 	assert.NotContains(t, host.calls, "companion", "an overlay closed between attaches stays closed")
@@ -63,12 +66,15 @@ func TestAttachGuideRefusesConflictedPanes(t *testing.T) {
 			host.spaces = []TeamSpace{{
 				ID: "space", Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "target", Pane: "pane"}}}},
 			}}
-			host.terminals = []TeamTerminal{{Address: "target", State: "live", Foreground: &TeamForeground{Argv: []string{"codex"}}}}
+			host.terminals = []TeamTerminal{{
+				Address: "target", PID: 4200, State: "live",
+				Foreground: &TeamForeground{PID: 4201, Cwd: state.Record.Directory, Argv: []string{"codex"}},
+			}}
 			switch scenario {
 			case "not live":
 				host.terminals[0].State = "finished"
 			case "idle shell":
-				host.terminals[0].Foreground = &TeamForeground{Argv: []string{"zsh"}}
+				host.terminals[0].Foreground = &TeamForeground{PID: 4201, Cwd: state.Record.Directory, Argv: []string{"zsh"}}
 			case "no model pane":
 				host.spaces[0].Tabs[0].Terminals[0].Pane = ""
 			case "remote":
@@ -88,7 +94,10 @@ func TestAttachGuideRefusesConflictedPanes(t *testing.T) {
 			s, err := NewServer(state, func() {}, deps)
 			require.NoError(t, err)
 			address := "target"
-			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{HcTerminalID: &address})
+			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: &address,
+				AncestorPids: []int{4202, 4201, 4200},
+			})
 			require.NoError(t, err)
 			assert.False(t, result.AdoptedHerdr)
 			assert.Equal(t, "available", result.HerdrMode)
@@ -337,6 +346,633 @@ func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, host.choices, 1)
 			assert.Equal(t, choice, host.choices[0]["builder"])
+		})
+	}
+}
+
+func TestAttachGuideLiveClientFallback(t *testing.T) {
+	stale := "t45"
+	cases := []struct {
+		name         string
+		terminalID   *string
+		client       string
+		ancestorPids []int
+		setup        func(t *testing.T, state *State, host *teamFixture)
+		wantAdopted  bool
+		wantTerminal string
+		wantAgent    string
+	}{
+		{
+			name:         "missing HcTerminalID adopts unique Codex pane matching AncestorPids",
+			client:       "codex-mcp-client",
+			ancestorPids: []int{52099, 52010, 51000},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-live", Tabs: []TeamTab{{ID: "tab-live", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t52", PID: 51000, State: "live",
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"/opt/homebrew/bin/codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted:  true,
+			wantTerminal: "t52",
+			wantAgent:    "codex",
+		},
+		{
+			name:         "missing HcTerminalID adopts node-launched Claude pane in project subdirectory via AncestorPids",
+			client:       "claude-code",
+			ancestorPids: []int{60199, 60100},
+			setup: func(t *testing.T, state *State, host *teamFixture) {
+				sub := filepath.Join(state.Record.Directory, "cmd", "api")
+				require.NoError(t, os.MkdirAll(sub, 0o755))
+				host.spaces = []TeamSpace{{
+					ID: "space-claude", Tabs: []TeamTab{{ID: "tab-claude", Terminals: []TeamPane{{Terminal: "t60", Pane: "p60"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t60", PID: 60000, State: "live",
+					Foreground: &TeamForeground{PID: 60100, Argv: []string{"node", "/usr/local/bin/claude"}, Cwd: sub},
+				}}
+			},
+			wantAdopted:  true,
+			wantTerminal: "t60",
+			wantAgent:    "claude",
+		},
+		{
+			name:         "external session with unrelated AncestorPids never adopts single matching Herdr pane",
+			client:       "codex",
+			ancestorPids: []int{99200, 99100},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-herdr", Tabs: []TeamTab{{ID: "tab-herdr", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t52", PID: 51000, State: "live",
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:   "shared daemon or external session without lineage evidence never adopts active Herdr pane",
+			client: "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-herdr", Tabs: []TeamTab{{ID: "tab-herdr", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t52", PID: 51000, State: "live",
+					Status:     &TeamStatus{State: "working"},
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "stale live HcTerminalID in another directory is rejected without adopting foreign pane",
+			terminalID:   &stale,
+			client:       "codex",
+			ancestorPids: []int{99200, 99100},
+			setup: func(t *testing.T, _ *State, host *teamFixture) {
+				otherRepo := t.TempDir()
+				host.spaces = []TeamSpace{{
+					ID: "space-other", Tabs: []TeamTab{{ID: "tab-other", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 45000, State: "live",
+					Foreground: &TeamForeground{PID: 45010, Argv: []string{"codex"}, Cwd: otherRepo},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "stale live HcTerminalID running another client is rejected",
+			terminalID:   &stale,
+			client:       "codex",
+			ancestorPids: []int{45099, 45010, 45000},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-other-client", Tabs: []TeamTab{{ID: "tab-other-client", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 45000, State: "live",
+					Foreground: &TeamForeground{PID: 45010, Argv: []string{"claude"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "stale live HcTerminalID with zero PIDs fails closed when AncestorPids is required",
+			terminalID:   &stale,
+			client:       "codex",
+			ancestorPids: []int{99200, 99100},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-zero", Tabs: []TeamTab{{ID: "tab-zero", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 0, State: "live",
+					Foreground: &TeamForeground{PID: 0, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:       "live direct HcTerminalID without AncestorPids is refused",
+			terminalID: &stale,
+			client:     "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-direct", Tabs: []TeamTab{{ID: "tab-direct", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 45000, State: "live",
+					Foreground: &TeamForeground{PID: 45010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "live direct HcTerminalID with empty Cwd is refused",
+			terminalID:   &stale,
+			client:       "codex",
+			ancestorPids: []int{45099, 45010, 45000},
+			setup: func(_ *testing.T, _ *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-nocwd", Tabs: []TeamTab{{ID: "tab-nocwd", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 45000, State: "live",
+					Foreground: &TeamForeground{PID: 45010, Argv: []string{"codex"}, Cwd: ""},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "stale live HcTerminalID falls back to actual session pane proven by AncestorPids",
+			terminalID:   &stale,
+			client:       "codex",
+			ancestorPids: []int{52099, 52010, 51000},
+			setup: func(t *testing.T, state *State, host *teamFixture) {
+				otherRepo := t.TempDir()
+				host.spaces = []TeamSpace{
+					{ID: "space-stale", Tabs: []TeamTab{{ID: "tab-stale", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}}},
+					{ID: "space-live", Tabs: []TeamTab{{ID: "tab-live", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}}},
+				}
+				host.terminals = []TeamTerminal{
+					{Address: "t45", PID: 45000, State: "live", Foreground: &TeamForeground{PID: 45010, Argv: []string{"codex"}, Cwd: otherRepo}},
+					{Address: "t52", PID: 51000, State: "live", Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+				}
+			},
+			wantAdopted:  true,
+			wantTerminal: "t52",
+			wantAgent:    "codex",
+		},
+		{
+			name:         "refuses adoption when two panes match AncestorPids",
+			client:       "codex",
+			ancestorPids: []int{52099, 52010},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-ambig",
+					Tabs: []TeamTab{
+						{ID: "tab-1", Terminals: []TeamPane{{Terminal: "t1", Pane: "p1"}}},
+						{ID: "tab-2", Terminals: []TeamPane{{Terminal: "t2", Pane: "p2"}}},
+					},
+				}}
+				host.terminals = []TeamTerminal{
+					{Address: "t1", PID: 52010, State: "live", Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+					{Address: "t2", PID: 52010, State: "live", Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+				}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "refuses adoption when pane cwd is inside .surla-build",
+			client:       "codex",
+			ancestorPids: []int{52099, 52010},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-worker", Tabs: []TeamTab{{ID: "tab-worker", Terminals: []TeamPane{{Terminal: "t-build", Pane: "p-build"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-build", PID: 52000, State: "live",
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: filepath.Join(state.Record.Directory, ".surla-build")},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "refuses adoption when pane cwd is inside .surla-tests",
+			client:       "claude",
+			ancestorPids: []int{60099, 60010},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-tests", Tabs: []TeamTab{{ID: "tab-tests", Terminals: []TeamPane{{Terminal: "t-tests", Pane: "p-tests"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-tests", PID: 60000, State: "live",
+					Foreground: &TeamForeground{PID: 60010, Argv: []string{"claude"}, Cwd: filepath.Join(state.Record.Directory, ".surla-tests", "eval")},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "refuses adoption when pane cwd belongs to another repo",
+			client:       "codex",
+			ancestorPids: []int{52099, 52010},
+			setup: func(t *testing.T, _ *State, host *teamFixture) {
+				other := t.TempDir()
+				host.spaces = []TeamSpace{{
+					ID: "space-other", Tabs: []TeamTab{{ID: "tab-other", Terminals: []TeamPane{{Terminal: "t-other", Pane: "p-other"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-other", PID: 52000, State: "live",
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: other},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "refuses adoption when live pane client family differs from connecting client",
+			client:       "claude",
+			ancestorPids: []int{52099, 52010},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-mismatch", Tabs: []TeamTab{{ID: "tab-mismatch", Terminals: []TeamPane{{Terminal: "t-codex", Pane: "p-codex"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-codex", PID: 52000, State: "live",
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "refuses adoption when pane is an idle shell",
+			client:       "codex",
+			ancestorPids: []int{52099, 52000},
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-shell", Tabs: []TeamTab{{ID: "tab-shell", Terminals: []TeamPane{{Terminal: "t-shell", Pane: "p-shell"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-shell", PID: 52000, State: "live",
+					Foreground: &TeamForeground{PID: 52000, Argv: []string{"zsh"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			deps.CompanionInstalled = true
+			connected := 0
+			deps.Connect = func(context.Context) (TeamConnection, error) {
+				connected++
+				return TeamConnection{Endpoint: "http://chorus.test"}, nil
+			}
+			host := deps.Host.(*teamFixture)
+			tc.setup(t, state, host)
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			client := tc.client
+			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: tc.terminalID,
+				Client:       &client,
+				AncestorPids: tc.ancestorPids,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantAdopted, result.AdoptedHerdr)
+			if tc.wantAdopted {
+				assert.Equal(t, "attached", result.HerdrMode)
+				assert.Contains(t, host.calls, "label")
+				assert.Contains(t, host.calls, "companion")
+				assert.Equal(t, 1, connected)
+				for _, term := range host.terminals {
+					if term.Address == tc.wantTerminal {
+						assert.Equal(t, tc.wantAgent, term.Labels["chorus.agent"])
+						assert.Equal(t, "guide", term.Labels["chorus.role"])
+					}
+				}
+			} else {
+				assert.Equal(t, "available", result.HerdrMode)
+				assert.NotContains(t, host.calls, "label")
+				assert.NotContains(t, host.calls, "companion")
+				assert.Zero(t, connected)
+				assert.Empty(t, state.Record.Space)
+				assert.Empty(t, state.Record.Tab)
+			}
+		})
+	}
+}
+
+func TestAttachGuideLineageAdoptionReusedByBuildWorkers(t *testing.T) {
+	directID := "t-codex"
+	for _, mode := range []struct {
+		name       string
+		terminalID *string
+	}{
+		{name: "fallback_scan", terminalID: nil},
+		{name: "direct_terminal_id", terminalID: &directID},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			host.spaces = []TeamSpace{{
+				ID:   "space-adopted",
+				Tabs: []TeamTab{{ID: "tab-adopted", Terminals: []TeamPane{{Terminal: "t-codex", Pane: "p-codex"}}}},
+			}}
+			host.terminals = []TeamTerminal{{
+				Address: "t-codex", PID: 41000, State: "live",
+				Foreground: &TeamForeground{PID: 41055, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+			}}
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			client := "codex"
+			// Without AncestorPids, even a live direct HcTerminalID must stay unattached.
+			unproven, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: mode.terminalID,
+				Client:       &client,
+			})
+			require.NoError(t, err)
+			require.False(t, unproven.AdoptedHerdr)
+			assert.Equal(t, "available", unproven.HerdrMode)
+			assert.Empty(t, state.Record.Space)
+
+			attached, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: mode.terminalID,
+				Client:       &client,
+				AncestorPids: []int{41099, 41055, 41000},
+			})
+			require.NoError(t, err)
+			require.True(t, attached.AdoptedHerdr)
+			assert.Equal(t, "attached", attached.HerdrMode)
+
+			fixtureAssignments(s, true)
+			builderDir := filepath.Join(state.Record.Directory, ".surla-build")
+			writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+			require.NoError(t, os.MkdirAll(builderDir, 0o755))
+			require.NoError(t, os.MkdirAll(writerDir, 0o755))
+			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+				BuilderFolder: builderDir, TestWriterFolder: writerDir,
+			}))
+
+			started, err := s.StartAgents(t.Context(), nil)
+			require.NoError(t, err)
+			assert.Zero(t, host.creates, "Build must reuse the adopted guide space without creating a second space")
+			assert.Equal(t, "space-adopted", started.Space)
+			assert.Equal(t, "attached", started.HerdrMode)
+			rawRoster, err := os.ReadFile(filepath.Join(deps.RosterDirectory, "space-adopted.json"))
+			require.NoError(t, err)
+			var roster launcherRoster
+			require.NoError(t, json.Unmarshal(rawRoster, &roster))
+			require.Len(t, roster.Roles, 3)
+			assert.Equal(t, "guide", roster.Roles[0].Role)
+			require.NotNil(t, roster.Roles[1].Place)
+			assert.Equal(t, attached.Handle, roster.Roles[1].Place.Beside)
+			assert.Equal(t, "right", roster.Roles[1].Place.Direction)
+		})
+	}
+}
+
+type mutatingReadTerminalHost struct {
+	*teamFixture
+	reads  int
+	onRead func(readCount int)
+}
+
+func (h *mutatingReadTerminalHost) ReadTerminal(ctx context.Context, address string) (TeamTerminal, error) {
+	h.reads++
+	if h.onRead != nil {
+		h.onRead(h.reads)
+	}
+	return h.teamFixture.ReadTerminal(ctx, address)
+}
+
+func TestAttachGuideRefusesPaneChangedBetweenScanAndFinalValidation(t *testing.T) {
+	for _, mutation := range []string{"lineage_pid", "cwd"} {
+		t.Run(mutation, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			baseHost := deps.Host.(*teamFixture)
+			baseHost.spaces = []TeamSpace{{
+				ID:   "space-race",
+				Tabs: []TeamTab{{ID: "tab-race", Terminals: []TeamPane{{Terminal: "t-race", Pane: "p-race"}}}},
+			}}
+			baseHost.terminals = []TeamTerminal{{
+				Address: "t-race", PID: 41000, State: "live",
+				Foreground: &TeamForeground{PID: 41055, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+			}}
+			otherDir := t.TempDir()
+			wrapper := &mutatingReadTerminalHost{
+				teamFixture: baseHost,
+				onRead: func(readCount int) {
+					if readCount == 2 {
+						switch mutation {
+						case "lineage_pid":
+							baseHost.terminals[0].PID = 88000
+							baseHost.terminals[0].Foreground.PID = 88055
+						case "cwd":
+							baseHost.terminals[0].Foreground.Cwd = otherDir
+						}
+					}
+				},
+			}
+			deps.Host = wrapper
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			client := "codex"
+			res, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				Client:       &client,
+				AncestorPids: []int{41099, 41055, 41000},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, 2, wrapper.reads, "scan read + final validation read")
+			assert.False(t, res.AdoptedHerdr)
+			assert.Equal(t, "available", res.HerdrMode)
+			assert.NotContains(t, baseHost.calls, "label")
+			assert.Empty(t, state.Record.Space)
+			assert.Empty(t, state.Record.Tab)
+		})
+	}
+}
+
+func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *testing.T) {
+	state := testState(t)
+	deps := fixtureTeamDependencies(state)
+	host := deps.Host.(*teamFixture)
+	host.spaces = nil
+	var prepared [][]WorkerTrustTarget
+	var trustErr error
+	deps.PrepareWorkerTrust = func(_ context.Context, targets []WorkerTrustTarget) error {
+		prepared = append(prepared, targets)
+		return trustErr
+	}
+	s, err := NewServer(state, func() {}, deps)
+	require.NoError(t, err)
+	fixtureAssignments(s, true)
+	builderDir := filepath.Join(state.Record.Directory, ".surla-build")
+	writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+	require.NoError(t, os.MkdirAll(builderDir, 0o755))
+	require.NoError(t, os.MkdirAll(writerDir, 0o755))
+	require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+		BuilderFolder: builderDir, TestWriterFolder: writerDir,
+	}))
+
+	// Refused choice must not prepare trust.
+	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+		"builder": {Client: "codex", Program: "/missing"},
+	})
+	require.Error(t, err)
+	assert.Empty(t, prepared)
+
+	// Explicit TeamPolicyRefusal returns before creating a space, saving choices, or writing a roster.
+	trustErr = &controlplane.TeamPolicyRefusal{
+		Kind:   controlplane.PolicyCodexProjectUntrusted,
+		Client: "codex",
+		Detail: "untrusted",
+	}
+	_, err = s.StartAgents(t.Context(), nil)
+	require.Error(t, err)
+	var policyRefusal *controlplane.TeamPolicyRefusal
+	require.ErrorAs(t, err, &policyRefusal)
+	assert.Contains(t, policyRefusal.Error(), `trust_level = "trusted"`)
+	assert.Zero(t, host.creates, "policy refusal must not create a Herdr space")
+	assert.NotContains(t, host.calls, "launch")
+	assert.NoDirExists(t, deps.RosterDirectory)
+	assert.Empty(t, state.Record.SavedChoices)
+
+	// Unresolved preflight config errors are also surfaced as actionable refusals before launch.
+	prepared = nil
+	trustErr = assert.AnError
+	_, err = s.StartAgents(t.Context(), nil)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &policyRefusal)
+	assert.Equal(t, controlplane.PolicyConfigUnusable, policyRefusal.Kind)
+	assert.Zero(t, host.creates, "unusable config refusal must not create a Herdr space")
+	assert.NotContains(t, host.calls, "launch")
+
+	// Clean preflight launches workers with exact role-scoped targets.
+	prepared = nil
+	trustErr = nil
+	_, err = s.StartAgents(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, prepared, 1)
+	assert.Equal(t, []WorkerTrustTarget{
+		{Role: "builder", ProjectDir: state.Record.Directory, Folder: builderDir, Client: "codex", Yolo: false, RequireChorus: true},
+		{Role: "test_writer", ProjectDir: state.Record.Directory, Folder: writerDir, Client: "claude", Yolo: false, RequireChorus: true},
+	}, prepared[0])
+	assert.Equal(t, 1, host.creates)
+	assert.Contains(t, host.calls, "launch")
+}
+
+func TestAttachGuideRefusesConflictingStaleAgentLabel(t *testing.T) {
+	direct := "t-pane"
+	codexClient := "codex"
+	claudeClient := "claude"
+
+	t.Run("positive direct session with consistent label and foreground adopts pane", func(t *testing.T) {
+		state := testState(t)
+		deps := fixtureTeamDependencies(state)
+		host := deps.Host.(*teamFixture)
+		host.spaces = []TeamSpace{{
+			ID: "space-ok", Tabs: []TeamTab{{ID: "tab-ok", Terminals: []TeamPane{{Terminal: direct, Pane: "p-ok"}}}},
+		}}
+		host.terminals = []TeamTerminal{{
+			Address: direct, PID: 51000, State: "live",
+			Labels:     map[string]string{"chorus.agent": "codex"},
+			Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+		}}
+		s, err := NewServer(state, func() {}, deps)
+		require.NoError(t, err)
+
+		res, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+			HcTerminalID: &direct,
+			Client:       &codexClient,
+			AncestorPids: []int{52099, 52010, 51000},
+		})
+		require.NoError(t, err)
+		assert.True(t, res.AdoptedHerdr)
+		assert.Equal(t, "attached", res.HerdrMode)
+		assert.Contains(t, host.calls, "label")
+	})
+
+	for _, tc := range []struct {
+		name       string
+		terminalID *string
+		client     *string
+		labelAgent string
+		fgArgv     []string
+	}{
+		{
+			name:       "direct HcTerminalID matching shell PID with stale codex label and claude foreground (codex caller)",
+			terminalID: &direct,
+			client:     &codexClient,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "direct HcTerminalID matching shell PID with stale codex label and claude foreground (claude caller)",
+			terminalID: &direct,
+			client:     &claudeClient,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "direct HcTerminalID matching shell PID with stale codex label and claude foreground (omitted client)",
+			terminalID: &direct,
+			client:     nil,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "fallback scan matching shell PID with stale codex label and claude foreground",
+			terminalID: nil,
+			client:     &codexClient,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "unrecognized explicit chorus.agent label conflicts even when foreground matches caller",
+			terminalID: &direct,
+			client:     &codexClient,
+			labelAgent: "custom-foreign-agent",
+			fgArgv:     []string{"codex"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			host.spaces = []TeamSpace{{
+				ID: "space-conflict", Tabs: []TeamTab{{ID: "tab-conflict", Terminals: []TeamPane{{Terminal: direct, Pane: "p-conflict"}}}},
+			}}
+			host.terminals = []TeamTerminal{{
+				Address: direct, PID: 51000, State: "live",
+				Labels:     map[string]string{"chorus.agent": tc.labelAgent},
+				Foreground: &TeamForeground{PID: 60010, Argv: tc.fgArgv, Cwd: state.Record.Directory},
+			}}
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			res, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: tc.terminalID,
+				Client:       tc.client,
+				AncestorPids: []int{52099, 51000},
+			})
+			require.NoError(t, err)
+			assert.False(t, res.AdoptedHerdr)
+			assert.NotContains(t, host.calls, "label")
+			assert.Empty(t, state.Record.Space)
+			assert.Empty(t, state.Record.Tab)
 		})
 	}
 }

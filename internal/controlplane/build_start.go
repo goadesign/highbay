@@ -236,7 +236,7 @@ func (c *ControlPlane) StartBuild(
 	}
 	if draftedBeforeDrop(record, provenance) {
 		c.mu.Unlock()
-		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
 	}
 	if currentFound && hasProvenance && buildDropped(provenance, current) != (openProgress.Taking.Kind() == gensurla.BuildTakingKindDropped) {
 		c.mu.Unlock()
@@ -518,6 +518,14 @@ func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
 			Step:  gensurla.BuildStartStep(duplicateTeamSpacesStep()),
 		})
 	}
+	var policy *TeamPolicyRefusal
+	if errors.As(err, &policy) {
+		return gensurla.NewTeamUnavailable(&gensurla.BuildTeamUnavailable{
+			Step: gensurla.BuildStartStep(policy.Step(
+				"then use Team → Start workers on the views page to start the team agents for this saved build.",
+			)),
+		})
+	}
 	var unavailable *goa.ServiceError
 	if errors.As(err, &unavailable) && unavailable.Name == "window_busy" {
 		return gensurla.NewTeamWindowBusy(&gensurla.BuildTeamWindowBusy{
@@ -593,7 +601,7 @@ func (c *ControlPlane) checkDraftAfterDrop(record storedChangeCard) error {
 		return err
 	}
 	if draftedBeforeDrop(record, provenance) {
-		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
 	}
 	return nil
 }

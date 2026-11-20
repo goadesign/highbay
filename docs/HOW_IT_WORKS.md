@@ -15,7 +15,7 @@ Each has its own credential, so the server always knows who is calling.
 | Who or what | What it is | Trusted for |
 | --- | --- | --- |
 | You, the user | The person who describes the goal to a coding agent and acts on the page in a browser. | The only one who confirms a change, starts a build, approves a result and can request a merge. |
-| The guide | The coding agent you talk to about what should change. | Writing the Story (described below) and proposing the change. Surla checks the proposal's shape, not whether it is right: you judge that when you confirm it. |
+| The guide | The coding agent you talk to about what should change (registered internally under the `guide` role). | Writing the Story (described below) and proposing the change. Surla checks the proposal's shape, not whether it is right: you judge that when you confirm it. |
 | The builder | The coding agent that writes the application's code, in its own working copy of the project (`.surla-build`). | Nothing on its word: its work counts only when Surla verifies a commit of it. |
 | The test writer | The coding agent that writes the tests for a build, in its own working copy of the project. | Nothing on its word: its tests count only when Surla's check accepts them. |
 | The server | The project's Surla server. The guide's first Surla call starts or attaches to one for each project folder. It keeps the record of what was agreed, built, accepted and approved, and it runs every check. | Deciding, from the files the agents produce, whether work is done. |
@@ -116,26 +116,29 @@ session if it has not discovered the integration yet.
 
 Open your project folder in the agent and invoke `/surla` (`$surla` in
 Codex). Its first Surla tool call starts or attaches to the server for that
-physical folder and attaches the current session as the guide. Discovery
-alone starts no server. If you invoke `/surla` without a request yet, the
-guide opens the page and asks what you would like to build. Once you state a
-goal in an empty folder, the guide can call
+physical folder and attaches the current session as the project's guide (the
+internal role Surla assigns to your coding agent). Discovery alone starts no
+server. If you invoke `/surla` without a request yet, your coding agent opens
+the browser window and asks what you would like to build. Once you state a
+goal in an empty folder, your coding agent can call
 [`init_project`](REFERENCE.md#init_project) with `dir: "."` to create the
 starter and its first Git commit in place, deriving a default Go module path
 from the folder name unless you gave one, and puts open product questions on
 the Change Card rather than asking a checklist in chat.
 
-In Herdr, when the client forwards its terminal identity, Surla can adopt the
-guide's existing local pane and space if their project and team labels are
-compatible. You keep the conversation already open. Without Herdr, the server runs in the background; the same MCP tools
+In Herdr, when the client's terminal identity or process lineage matches its
+live pane in the project folder, Surla can adopt your coding agent's existing
+local pane and space if their project and team labels are compatible. You keep
+the conversation already open. Without Herdr, the server runs in the background; the same MCP tools
 and browser decisions remain available. Bare `surla` remains an operator
 entrypoint that opens the page without starting agents or a team launcher.
 
-The guide calls [`open_views`](REFERENCE.md#open_views) to open a fresh page
-in your browser. Ask it to open the page again after a reload or close. The
-Herdr companion also offers **Open Page**, alongside the current stage, role
-attention and pane focus buttons. Setup installs the companion as a floating
-window; it does not change Herdr's workspace layout.
+Your coding agent calls [`open_views`](REFERENCE.md#open_views) to open a fresh
+session in your default browser. Ask it to open the page again after a reload
+or close. The Herdr companion (`Cmd+Alt+Shift+S` on macOS) also offers **Open
+Surla Window**, alongside the current stage, role attention and pane focus
+buttons. Setup installs the companion as a floating window; it does not change
+Herdr's workspace layout.
 
 For terminal operation and browser automation, `surla --print-link` prints
 the one-use URL and expiry as JSON, and `surla status --json` reads the
@@ -762,7 +765,7 @@ with configured tests, only the builder is assigned. If the merged build is
 for an earlier agreement, **Build current agreed revision** remains the primary
 next step.
 
-After a build is dropped, the page tells you to ask the guide to refresh its
+After a build is dropped, the page tells you to ask your coding agent to refresh its
 draft and propose a revision from that refresh, then adopt that revision
 before building. This also applies to a never-built change whose agreed
 revision was drafted before another change’s build was dropped. A proposal
