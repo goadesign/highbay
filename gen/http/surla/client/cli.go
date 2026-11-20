@@ -491,13 +491,7 @@ func BuildInitProjectPayload(surlaInitProjectBody *string) (*surla.InitProjectPa
 		}
 		err = json.Unmarshal([]byte(*surlaInitProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dir\": \"shop\",\n      \"module_path\": \"example.com/shop\"\n   }'")
-		}
-		if utf8.RuneCountInString(body.ModulePath) < 3 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.module_path", body.ModulePath, utf8.RuneCountInString(body.ModulePath), 3, true))
-		}
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dir\": \".\",\n      \"module_path\": \"example.com/shop\"\n   }'")
 		}
 	}
 	v := &surla.InitProjectPayload{

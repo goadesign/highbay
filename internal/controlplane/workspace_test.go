@@ -398,8 +398,9 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, err)
 		defer cp.Close()
 
+		shopModule := "example.com/shop"
 		_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-			ModulePath: "example.com/shop",
+			ModulePath: &shopModule,
 		})
 		var svcErr *goa.ServiceError
 		require.ErrorAs(t, err, &svcErr)
@@ -425,21 +426,25 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		defer cp.Close()
 
 		badDir := "../escape"
+		strPtr := func(s string) *string { return &s }
 		cases := []struct {
-			modulePath string
+			name       string
+			modulePath *string
 			dir        *string
 			wantErr    string
 		}{
-			{"example.com/shop", &badDir, "direct child directory"},
-			{"not a path", nil, "module_path"},
-			{"example.com/my-shop", nil, "must end in a service name"},
-			{"example.com/Shop", nil, "must end in a service name"},
-			{"example.com/1shop", nil, "must end in a service name"},
-			{"example.com/func", nil, "must end in a service name"},
-			{"example.com/main", nil, "must end in a service name"},
+			{"explicit_module_bad_dir", strPtr("example.com/shop"), &badDir, "direct child directory"},
+			{"omitted_module_bad_dir", nil, &badDir, "single child directory name"},
+			{"blank_module_path", strPtr("   "), nil, "module_path must not be blank"},
+			{"not_a_path", strPtr("not a path"), nil, "module_path"},
+			{"hyphenated_service", strPtr("example.com/my-shop"), nil, "must end in a service name"},
+			{"uppercase_service", strPtr("example.com/Shop"), nil, "must end in a service name"},
+			{"digit_prefix_service", strPtr("example.com/1shop"), nil, "must end in a service name"},
+			{"keyword_service", strPtr("example.com/func"), nil, "must end in a service name"},
+			{"main_service", strPtr("example.com/main"), nil, "must end in a service name"},
 		}
 		for _, tc := range cases {
-			t.Run(tc.modulePath, func(t *testing.T) {
+			t.Run(tc.name, func(t *testing.T) {
 				_, err := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
 					ModulePath: tc.modulePath,
 					Dir:        tc.dir,
@@ -476,8 +481,9 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		corruptCardName := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.json"
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, corruptCardName), []byte(`{"card":{}}trailing`), 0o600))
 
+		shopModule := "example.com/shop"
 		_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-			ModulePath: "example.com/shop",
+			ModulePath: &shopModule,
 		})
 		var svcErr *goa.ServiceError
 		require.ErrorAs(t, err, &svcErr)
@@ -539,6 +545,13 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, json.Unmarshal(rawHTTPBody, &errResp))
 		assert.True(t, errResp.Fault)
 		assert.Contains(t, errResp.Message, "go mod tidy")
+
+		// Short/empty explicit module_path is rejected structurally with HTTP 400 (MinLength(3)).
+		shortReq := httptest.NewRequest(http.MethodPost, "/workspace/init", strings.NewReader(`{"module_path":""}`))
+		shortReq.Header.Set("Content-Type", "application/json")
+		shortRec := httptest.NewRecorder()
+		handler.ServeHTTP(shortRec, shortReq)
+		assert.Equal(t, http.StatusBadRequest, shortRec.Code)
 
 		// 2. Verify MCP tools/call init_project returns JSON-RPC -32603 internal error without leaking Log or Tail.
 		mcpBody := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"init_project","arguments":{"module_path":"example.com/shop"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`
@@ -612,8 +625,9 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 			}
 		}
 
+		shopModule := "example.com/shop"
 		_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-			ModulePath: "example.com/shop",
+			ModulePath: &shopModule,
 		})
 		var svcErr *goa.ServiceError
 		require.ErrorAs(t, err, &svcErr)
@@ -648,8 +662,9 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, err)
 		defer cp.Close()
 
+		paddedModule := " \t example.com/shop \n"
 		res, err := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-			ModulePath: " \t example.com/shop \n",
+			ModulePath: &paddedModule,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "shop", res.ServiceName)
@@ -709,7 +724,8 @@ func TestInitProjectUsesSavedSourceToProtectAnExistingProject(t *testing.T) {
 				require.NoError(t, os.Remove(filepath.Join(workspace, "design", "design.go")))
 				require.NoError(t, os.Remove(filepath.Join(workspace, "design")))
 			}
-			result, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: "example.com/shop"})
+			shopModule := "example.com/shop"
+			result, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: &shopModule})
 			if withSource {
 				assertServiceError(t, err, "conflict")
 				assert.ErrorContains(t, err, "Change Cards that captured existing design files")
@@ -770,8 +786,9 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 
 		initDone := make(chan error, 1)
 		go func() {
+			shopModule := "example.com/shop"
 			_, initErr := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-				ModulePath: "example.com/shop",
+				ModulePath: &shopModule,
 			})
 			initDone <- initErr
 		}()
@@ -839,8 +856,9 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 
 		initDone := make(chan error, 1)
 		go func() {
+			shopModule := "example.com/shop"
 			_, initErr := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-				ModulePath: "example.com/shop",
+				ModulePath: &shopModule,
 			})
 			initDone <- initErr
 		}()

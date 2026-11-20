@@ -296,14 +296,60 @@ func TestInitProjectEmptyDirStillUsesChild(t *testing.T) {
 	opts := inPlaceInitOptions(t)
 	cp := newControlPlane(t, opts)
 	empty := ""
+	shopModule := "example.com/shop"
 	result, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{
-		ModulePath: "example.com/shop", Dir: &empty,
+		ModulePath: &shopModule, Dir: &empty,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(opts.WorkspaceDir, "shop"), result.Dir)
 	assert.NoDirExists(t, filepath.Join(opts.WorkspaceDir, ".git"))
 	require.NoError(t, cp.Close())
 	assert.Equal(t, result.Dir, newControlPlane(t, opts).currentWorkspaceDir())
+}
+
+// TestInitProjectDerivesDefaultModulePath verifies omitted module_path
+// derivation across in-place and child directories, plus blank and invalid dir
+// refusals.
+func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
+	t.Parallel()
+	dot := "."
+	child := "billing-api"
+	cases := []struct {
+		name        string
+		wsName      string
+		dir         *string
+		wantService string
+		wantModule  string
+		wantInPlace bool
+	}{
+		{name: "both_omitted_in_place", wsName: "House-Market", dir: nil, wantService: "housemarket", wantModule: "example.com/housemarket", wantInPlace: true},
+		{name: "dot_leading_digits", wsName: "2026-refunds", dir: &dot, wantService: "refunds", wantModule: "example.com/refunds", wantInPlace: true},
+		{name: "dot_digits_only_fallback", wsName: "12345", dir: &dot, wantService: "app", wantModule: "example.com/app", wantInPlace: true},
+		{name: "dot_go_keyword_suffix", wsName: "default", dir: &dot, wantService: "defaultsvc", wantModule: "example.com/defaultsvc", wantInPlace: true},
+		{name: "dot_main_suffix", wsName: "main", dir: &dot, wantService: "mainsvc", wantModule: "example.com/mainsvc", wantInPlace: true},
+		{name: "child_dir_derived", wsName: "workspace", dir: &child, wantService: "billingapi", wantModule: "example.com/billingapi", wantInPlace: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := realTempDir(t)
+			ws := filepath.Join(root, tc.wsName)
+			require.NoError(t, os.Mkdir(ws, 0o755))
+			opts := inPlaceInitOptions(t)
+			opts.WorkspaceDir = ws
+			opts.NewGenerator = func() scaffold.Generator { return &fakeInitGenerator{pkg: tc.wantService} }
+			cp := newControlPlane(t, opts)
+			res, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{Dir: tc.dir})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantService, res.ServiceName)
+			assert.Equal(t, tc.wantModule, res.ModulePath)
+			wantDir := ws
+			if !tc.wantInPlace {
+				wantDir = filepath.Join(ws, *tc.dir)
+			}
+			assert.Equal(t, wantDir, res.Dir)
+		})
+	}
 }
 
 // inPlaceInitOptions reuses the scaffold's fake command and generator, and
@@ -353,8 +399,9 @@ func inPlaceTestGuide() context.Context {
 // initInPlaceForTest calls the service entry point with a root destination.
 func initInPlaceForTest(cp *ControlPlane) (*gensurla.InitProjectResult, error) {
 	root := "."
+	shopModule := "example.com/shop"
 	return cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{
-		ModulePath: "example.com/shop", Dir: &root,
+		ModulePath: &shopModule, Dir: &root,
 	})
 }
 

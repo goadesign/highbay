@@ -1159,7 +1159,7 @@ and session credential stay with the server and browser.
 
 #### `init_project`
 
-`POST /workspace/init`. **Input:** `module_path`, `dir?`. **Output:**
+`POST /workspace/init`. **Input:** `module_path?`, `dir?`. **Output:**
 `InitProjectResult` (`dir`, `module_path`, `service_name`, `commit`).
 
 Creates the [`surla init`](#surla-init) starter and runs `go mod tidy`,
@@ -1167,14 +1167,22 @@ Creates the [`surla init`](#surla-init) starter and runs `go mod tidy`,
 `Initial scaffold` with its Git identity and makes the starter its active
 workspace. With an MCP `progressToken`, the server reports each phase.
 
-Omit `dir` or pass an empty string to create a child folder named for the
-service. A named child must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$` and cannot
-start with `.surla`. Pass `dir: "."` to initialize the bound folder in
-place. It may already contain `.claude`, `.codex`, `.cursor`, `.gemini`,
-`.agents`, `.vscode`, `.mcp.json` or `.DS_Store`. Surla preserves those
-entries and refuses other existing entries or collisions with generated
-files in this mode. It publishes the checked starter with `.git` last and
-resumes interrupted publication on restart.
+Omit `module_path` to derive `example.com/<service>` from the target folder's
+name (lowercased ASCII letters and non-leading digits up to 48 characters,
+appending `svc` for `main` or a Go keyword and falling back to
+`example.com/app` when the name has no ASCII letter). When supplied,
+`module_path` must be at least three characters (`400` when shorter) and end in
+a valid service name.
+
+Pass `dir: "."` (or omit both `module_path` and `dir`) to initialize the bound
+folder in place. When `module_path` is given and `dir` is omitted or empty,
+Surla creates a child folder named for the service. A named child must match
+`^[a-zA-Z0-9][a-zA-Z0-9._-]*$` and cannot start with `.surla`. In-place mode
+may already contain `.claude`, `.codex`, `.cursor`, `.gemini`, `.agents`,
+`.vscode`, `.mcp.json` or `.DS_Store`. Surla preserves those entries and
+refuses other existing entries or collisions with generated files in this mode.
+It publishes the checked starter with `.git` last and resumes interrupted
+publication on restart.
 
 | Refusal | When |
 | --- | --- |

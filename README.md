@@ -247,11 +247,14 @@ were handed over, or to a model gateway; see
 ## Start a project
 
 Open an existing project or an empty folder in your coding agent and invoke
-`/surla` (`$surla` in Codex). Tell the guide the service you want and its Go
-module path, for example `example.com/shop`. In an empty folder, the guide
-calls [`init_project`](docs/REFERENCE.md#init_project) with `dir: "."` to
-create the starter and its first Git commit in place. Agent configuration
-folders can stay; the operation refuses conflicting project files.
+`/surla` (`$surla` in Codex). Describe what you want to build (if you invoke
+`/surla` alone, the guide opens the page and asks what you would like to
+build). In an empty folder, the guide calls
+[`init_project`](docs/REFERENCE.md#init_project) with `dir: "."` to create the
+starter and its first Git commit in place, deriving a default Go module path
+from the folder name unless you specify one. Open product questions go onto the
+Change Card for you to answer on the page. Agent configuration folders can
+stay; the operation refuses conflicting project files.
 
 The starter has a Goa and Goa-AI service, architecture diagrams declared with
 [Model](https://github.com/goadesign/model), a first Story in

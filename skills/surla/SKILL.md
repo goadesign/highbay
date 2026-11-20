@@ -14,22 +14,33 @@ registered.
 
 ## Start
 
-1. Call a Surla tool from the folder the user is working in. Your first Surla
-   tool call attaches this session to that folder's project as its guide and
-   starts the project's server if it is not running. You never start, stop,
+1. Call `list_changes` from the folder the user is working in, and call
+   `open_views` so the user has the project's browser page open. Your first
+   Surla tool call attaches this session to that folder's project as its guide
+   and starts the project's server if it is not running. You never start, stop,
    initialize, verify or approve with the `surla` command, and never ask it
    for a page link; the one command you may run is the read-only
    `surla status --json` described under Team.
-2. If the folder holds no project yet and is empty (agent settings folders
-   such as `.claude` or `.agents` are fine), call `init_project` with
-   `dir: "."` and the user's module path to create the project in place. If
-   the folder already holds other files, ask the user where the project
-   should go instead.
-3. Read the `surla://golden-path` resource, then `list_changes` and
-   `get_change` to see where the project stands.
+2. If the user has not yet said what they want to build or change (for example,
+   they invoked `/surla` or `$surla` alone), ask one short, plain question—such
+   as "What would you like to build?" (or "What would you like to change?" in
+   an existing project)—and wait. Do not ask for a Go module path, folder name
+   or requirements checklist.
+3. Once the user states a goal, if the folder holds no project yet and is empty
+   (agent settings folders such as `.claude` or `.agents` are fine), call
+   `init_project` with `dir: "."` right away to create the starter in place.
+   Omit `module_path` unless the user already gave one: Surla derives a default
+   Go module path from the folder name. Ask where the project should go only
+   when unrelated existing files block in-place initialization.
+4. Read the `surla://golden-path` resource, plus `get_change` for any existing
+   Change Card, to see where the project stands.
 
 ## Work on a change with the user
 
+- Turn the user's goal directly into a Story and a Change Card instead of
+  interviewing them in chat first. Put open product questions—such as target
+  users, policy thresholds or edge cases—into the analysis's `ambiguities` with
+  concrete options so the user answers and confirms them on the views page.
 - Call `update_draft` before each new change and whenever you are told a
   design file changed. Work only in the draft folder it returns; never edit
   the project folder or copy design files between it and the draft.

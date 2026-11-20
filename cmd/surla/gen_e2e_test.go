@@ -112,8 +112,9 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		&bearerDoer{client: srv.Client(), token: "test-token"},
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
+	shopModule := "example.com/shop"
 	args, err := gensurla.EncodeInitProjectPayload(&gensurla.InitProjectPayload{
-		ModulePath: "example.com/shop",
+		ModulePath: &shopModule,
 	})
 	require.NoError(t, err)
 	call := &genmcpsurla.ToolsCallPayload{Name: "init_project", Arguments: args}

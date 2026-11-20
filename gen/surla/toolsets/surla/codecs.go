@@ -7798,17 +7798,17 @@ var getVerificationResultFields = []tools.FieldMetadata{
 var initProjectPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Go module path and optional directory for initializing a new Surla starter project in the bound workspace.",
+		Description: "Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("module_path")},
 		JSONType:    "string",
-		Description: "Go module path of the new service (for example example.com/shop).",
+		Description: "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("dir")},
 		JSONType:    "string",
-		Description: "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.",
+		Description: "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.",
 	},
 }
 var initProjectResultFields = []tools.FieldMetadata{
@@ -19379,7 +19379,7 @@ func MarshalInitProjectPayload(v *InitProjectPayload) ([]byte, error) {
 	_ = in
 	var out *toolhttp.InitProjectPayloadTransport
 	out = &toolhttp.InitProjectPayloadTransport{
-		ModulePath: &in.ModulePath,
+		ModulePath: in.ModulePath,
 		Dir:        in.Dir,
 	}
 	return json.Marshal(out)
@@ -19406,7 +19406,7 @@ func UnmarshalInitProjectPayload(data []byte) (*InitProjectPayload, error) {
 	_ = in
 	var out *InitProjectPayload
 	out = &InitProjectPayload{
-		ModulePath: *in.ModulePath,
+		ModulePath: in.ModulePath,
 		Dir:        in.Dir,
 	}
 	return out, nil
@@ -26509,14 +26509,14 @@ func validateInitProjectPayloadJSONValue(path string, value any, description str
 		case "dir":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.",
+				typed[key], "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.",
 			); err != nil {
 				return err
 			}
 		case "module_path":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Go module path of the new service (for example example.com/shop).",
+				typed[key], "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.",
 			); err != nil {
 				return err
 			}

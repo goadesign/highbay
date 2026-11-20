@@ -223,8 +223,9 @@ func TestSyncDirTreeFDFollowedByRemoveOwnedStagingDirAndFailedWALCleanup(t *test
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpObstacle, "keep"), 0o700))
 
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
+	shopModule := "example.com/shop"
 	_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
-		ModulePath: "example.com/shop",
+		ModulePath: &shopModule,
 	})
 	require.Error(t, err)
 
@@ -425,14 +426,15 @@ func TestNewAndInitProjectPreserveSignificantPathWhitespace(t *testing.T) {
 
 		alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 		paddedDir := " shop "
+		shopModule := "example.com/shop"
 		_, err = cp.InitProject(alice, &gensurla.InitProjectPayload{
-			ModulePath: "example.com/shop",
+			ModulePath: &shopModule,
 			Dir:        &paddedDir,
 		})
 		require.ErrorContains(t, err, "single child directory name")
 
 		initRes, err := cp.InitProject(alice, &gensurla.InitProjectPayload{
-			ModulePath: "example.com/shop",
+			ModulePath: &shopModule,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "shop", filepath.Base(initRes.Dir))
@@ -609,7 +611,8 @@ func TestInitProjectAcceptsAnotherSpellingOfTheWorkspace(t *testing.T) {
 	assert.Equal(t, ws, cp.initialWorkspaceRoot, "the stored spelling")
 
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	initRes, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: "example.com/shop"})
+	shopModule := "example.com/shop"
+	initRes, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: &shopModule})
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(ws, "shop"), initRes.Dir)
 }

@@ -55,10 +55,12 @@ var (
 )
 
 // InitProject builds and commits a new starter outside the workspace. It
-// publishes into a new direct child directory by default, or into the initial
-// workspace root with dir ".". A write-ahead record allows startup to finish
-// publication after an interruption. The result names the active workspace and
-// its initial Git commit.
+// publishes into the initial workspace root when dir is "." (or when both dir
+// and module_path are omitted), or into a new direct child directory. When
+// module_path is omitted, it derives example.com/<service> from the target
+// folder name. A write-ahead record allows startup to finish publication after
+// an interruption. The result names the active workspace and its initial Git
+// commit.
 func (c *ControlPlane) InitProject(
 	ctx context.Context,
 	p *gensurla.InitProjectPayload,
@@ -70,18 +72,28 @@ func (c *ControlPlane) InitProject(
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.init_project")
 	defer span.End()
 
-	if p == nil || strings.TrimSpace(p.ModulePath) == "" {
-		recordInitRefused(span, "invalid_payload")
-		return nil, gensurla.MakeUnprocessable(errors.New("module_path is required"))
+	if p == nil {
+		p = &gensurla.InitProjectPayload{}
 	}
-	modulePath := strings.TrimSpace(p.ModulePath)
-	layout, err := scaffold.LayoutForModule(modulePath)
-	if err != nil {
-		recordInitRefused(span, "invalid_module_path")
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("module_path %w", err))
+	var (
+		modulePath string
+		layout     scaffold.Layout
+		targetBase = "."
+	)
+	if p.ModulePath != nil {
+		modulePath = strings.TrimSpace(*p.ModulePath)
+		if modulePath == "" {
+			recordInitRefused(span, "invalid_payload")
+			return nil, gensurla.MakeUnprocessable(errors.New("module_path must not be blank"))
+		}
+		var err error
+		layout, err = scaffold.LayoutForModule(modulePath)
+		if err != nil {
+			recordInitRefused(span, "invalid_module_path")
+			return nil, gensurla.MakeUnprocessable(fmt.Errorf("module_path %w", err))
+		}
+		targetBase = layout.Service
 	}
-	serviceName := layout.Service
-	targetBase := serviceName
 	if p.Dir != nil && *p.Dir != "" {
 		targetBase = *p.Dir
 	}
@@ -89,13 +101,32 @@ func (c *ControlPlane) InitProject(
 	if !inPlace {
 		if err := validateInitDirName(targetBase); err != nil {
 			recordInitRefused(span, "invalid_dir_name")
+			if p.ModulePath == nil {
+				return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+					"pass \".\" (or omit dir) to initialize the workspace root, or pass a single child directory name: %w",
+					err,
+				))
+			}
 			return nil, gensurla.MakeUnprocessable(fmt.Errorf(
 				"omit dir to create the direct child directory %q, pass a single child directory name, or pass \".\" to initialize the workspace root: %w",
-				serviceName,
+				layout.Service,
 				err,
 			))
 		}
 	}
+	if p.ModulePath == nil {
+		sourceName := targetBase
+		if inPlace {
+			sourceName = filepath.Base(c.initialWorkspaceRoot)
+		}
+		modulePath = defaultInitModulePath(sourceName)
+		var err error
+		layout, err = scaffold.LayoutForModule(modulePath)
+		if err != nil {
+			return nil, failInitFault(span, "derive default module path failed", err)
+		}
+	}
+	serviceName := layout.Service
 	if !scaffold.ValidVersion(c.surlaVersion) {
 		recordInitRefused(span, "surla_version_unavailable")
 		return nil, gensurla.MakeNotImplemented(errors.New(
@@ -965,6 +996,31 @@ func isConflictError(err error) bool {
 		return se != nil && se.GoaErrorName() == "conflict"
 	}
 	return false
+}
+
+// defaultInitModulePath derives example.com/<service> from a folder name when
+// module_path is omitted, keeping lowercase ASCII letters and non-leading digits.
+func defaultInitModulePath(base string) string {
+	var b strings.Builder
+	for i := range len(base) {
+		ch := base[i]
+		if 'A' <= ch && ch <= 'Z' {
+			ch += 'a' - 'A'
+		}
+		if 'a' <= ch && ch <= 'z' || b.Len() > 0 && '0' <= ch && ch <= '9' {
+			b.WriteByte(ch)
+			if b.Len() == 48 {
+				break
+			}
+		}
+	}
+	name := b.String()
+	if name == "" {
+		name = "app"
+	} else if !designeval.ValidServiceName(name) {
+		name += "svc"
+	}
+	return "example.com/" + name
 }
 
 // contextBackgroundForCleanup returns a background context for post-durability
