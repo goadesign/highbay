@@ -207,8 +207,8 @@ func TestViewsPageShellNavigation(t *testing.T) {
 			require.NoError(t, response.Body.Close())
 			if tc.name == "bare address" {
 				assert.Contains(t, string(body), "request must come from the project's own page")
-				assert.Contains(t, string(body), "run surla in your project folder to open it")
-				assert.Contains(t, string(body), "surla --print-link to get a link without opening a browser")
+				assert.Contains(t, string(body), "ask your coding agent to open Surla views, or choose Open Page in the Herdr companion")
+				assert.NotContains(t, string(body), "run surla")
 			}
 		})
 	}

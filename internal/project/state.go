@@ -184,7 +184,7 @@ func Open(dir string) (*State, error) {
 // StartLock bounds waiting for a concurrent start and keeps start/attach/stop decisions serialized.
 func (s *State) StartLock(ctx context.Context) (*Lock, error) {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
-		return nil, fmt.Errorf("project state folder %s could not be created: %w; make %s a folder this account can write, then run surla again", s.Dir, err, filepath.Dir(s.Dir))
+		return nil, fmt.Errorf("project state folder %s could not be created: %w; make %s a folder this account can write, then try again", s.Dir, err, filepath.Dir(s.Dir))
 	}
 	if err := privateDirectory(s.Dir); err != nil {
 		return nil, stateFolderError(s.Dir, err)
@@ -250,7 +250,7 @@ func (s *State) initialize(owner string, freePort func() (int, error)) (bool, er
 	port := 0
 	for attempt := 0; port == 0; attempt++ {
 		if attempt == freePortAttempts {
-			return false, fmt.Errorf("no free loopback port that another Surla project has not saved was found in %d tries; run surla again", freePortAttempts)
+			return false, fmt.Errorf("no free loopback port that another Surla project has not saved was found in %d tries; try again", freePortAttempts)
 		}
 		offered, err := freePort()
 		if err != nil {
@@ -429,22 +429,22 @@ func recordReadError(dir, project string, err error) error {
 // state folder dir, and the step that repairs it: a record this account cannot read
 // gets its permissions back, and a damaged one is restored, or its folder set aside so
 // the project folder starts again as a new, empty project. Discovery walks up through
-// parent folders, so project can be a parent of the folder where surla runs; the step
-// names project as the folder to run surla in, since a run in a subfolder would create
-// a new project for that subfolder instead.
+// parent folders, so project can be a parent of the folder where Surla starts; the step
+// names project as the folder to start Surla in, since a start in a subfolder would
+// create a new project for that subfolder instead.
 func stateFileError(dir, project string, err error) error {
 	path := filepath.Join(dir, "project.json")
 	if errors.Is(err, errNotPrivateFile) || errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.ELOOP) {
-		return fmt.Errorf("the record of the Surla project in %s cannot be read: %s: %w; make it a regular file of this account that only this account can read and write (chmod 600 %s, and chown it to this account if another account owns it), then run surla again", project, path, err, path)
+		return fmt.Errorf("the record of the Surla project in %s cannot be read: %s: %w; make it a regular file of this account that only this account can read and write (chmod 600 %s, and chown it to this account if another account owns it), then try again", project, path, err, path)
 	}
-	return fmt.Errorf("the record of the Surla project in %s is damaged: %s: %w; restore it from a backup and run surla again, or move the folder %s out of %s and run surla in %s to start that project folder again as a new, empty Surla project", project, path, err, dir, filepath.Dir(dir), project)
+	return fmt.Errorf("the record of the Surla project in %s is damaged: %s: %w; restore it from a backup and try again, or move the folder %s out of %s, then start Surla in %s again to make that project folder a new, empty Surla project", project, path, err, dir, filepath.Dir(dir), project)
 }
 
 // stateFolderError names a private Surla state folder this account cannot use and its
 // repair: either one project's state folder or the operator folder that holds them all,
 // which must both be folders of this account that only this account can open.
 func stateFolderError(dir string, err error) error {
-	return fmt.Errorf("the Surla state folder %s cannot be used: %w; make it a folder of this account that only this account can open (chmod 700 %s, and chown -R it to this account if another account owns it), then run surla again", dir, err, dir)
+	return fmt.Errorf("the Surla state folder %s cannot be used: %w; make it a folder of this account that only this account can open (chmod 700 %s, and chown -R it to this account if another account owns it), then try again", dir, err, dir)
 }
 
 // projectDirectory derives one private state folder from the canonical folder identity.

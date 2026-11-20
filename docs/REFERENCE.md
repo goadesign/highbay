@@ -281,18 +281,19 @@ The server refuses a state folder that is not private to your account, holds no 
 belongs to another project folder, lies inside the project folder, or is not
 named by its physical path.
 
-When `surla`, `surla stop` or a settings command cannot use a project's
-record or state folder, it names them and the repair. `<record>` is the
+When `surla`, `surla stop`, a settings command or a coding agent's first Surla
+tool call cannot use a project's record or state folder, the error names them
+and the repair; then try again the same way. `<record>` is the
 `project.json` in the project's state folder, and the folder that holds
 every project's state folder is `<UserConfigDir>/surla/operator`:
 
 | What cannot be used | The error |
 | --- | --- |
-| The record cannot be read, for example because it is not a private file of this account | `the record of the Surla project in <project folder> cannot be read: <record>: <cause>; make it a regular file of this account that only this account can read and write (chmod 600 <record>, and chown it to this account if another account owns it), then run surla again` |
-| The record is damaged | `the record of the Surla project in <project folder> is damaged: <record>: <cause>; restore it from a backup and run surla again, or move the folder <state folder> out of <UserConfigDir>/surla/operator and run surla in <project folder> to start that project folder again as a new, empty Surla project` |
-| `<UserConfigDir>/surla/operator` exists but is not a folder of this account that only this account can open; it is checked before any record is read | `prepare operator storage root <folder>: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then run surla again` |
-| A project's state folder is closed to this account or owned by another, or a new project cannot list the folder that holds them | `the Surla state folder <folder> cannot be used: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then run surla again` |
-| The project's state folder cannot be created | `project state folder <folder> could not be created: <cause>; make <UserConfigDir>/surla/operator a folder this account can write, then run surla again` |
+| The record cannot be read, for example because it is not a private file of this account | `the record of the Surla project in <project folder> cannot be read: <record>: <cause>; make it a regular file of this account that only this account can read and write (chmod 600 <record>, and chown it to this account if another account owns it), then try again` |
+| The record is damaged | `the record of the Surla project in <project folder> is damaged: <record>: <cause>; restore it from a backup and try again, or move the folder <state folder> out of <UserConfigDir>/surla/operator, then start Surla in <project folder> again to make that project folder a new, empty Surla project` |
+| `<UserConfigDir>/surla/operator` exists but is not a folder of this account that only this account can open; it is checked before any record is read | `prepare operator storage root <folder>: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then try again` |
+| A project's state folder is closed to this account or owned by another, or a new project cannot list the folder that holds them | `the Surla state folder <folder> cannot be used: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then try again` |
+| The project's state folder cannot be created | `project state folder <folder> could not be created: <cause>; make <UserConfigDir>/surla/operator a folder this account can write, then try again` |
 
 **Starting, attaching and failures.** A start lock serializes simultaneous
 commands. A running server is attached to only after it proves the project's
@@ -789,7 +790,7 @@ applied the text. Refusals take these shapes:
 
 | Cause | HTTP | MCP |
 | --- | --- | --- |
-| No credential, or one the server does not hold (for example after a restart) | `401` with the message `open the project views with surla; session or credential is no longer valid` | The same `401` on `POST /mcp` |
+| No credential, or one the server does not hold (for example after a restart) | `401` with the message `session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion` | The same `401` on `POST /mcp` |
 | The caller's kind may not call the operation | `403` `forbidden`, message `caller may not call <operation>` | A tool error result (`isError: true`) with the same message |
 | A field the route does not declare, at any depth, or a structurally invalid value | `400`, such as `decode_payload` naming the field (`json: unknown field "id"`), `missing_field` or `invalid_pattern` | A tool error starting with `invalid arguments:` that names the field |
 | A named domain refusal, listed with each operation | The status the route declares, such as `404` `not_found`, `409` `conflict` or `422` `unprocessable` | A tool error result with the same message |
@@ -1189,7 +1190,7 @@ publication on restart.
 | --- | --- |
 | `unprocessable` (`422`) | `module_path` or `dir` is invalid. |
 | `conflict` (`409`) | The workspace already holds a project or durable work based on it, the child destination exists, or the in-place destination contains an entry the operation cannot preserve. |
-| `not_implemented` (`501`) | The `surla` binary was built without an exact module version; install a tagged or pseudo-versioned release. |
+| `not_implemented` (`501`) | The `surla` binary was built without an exact module version. Install a tagged or pseudo-versioned release, stop the running project server with `surla stop` in the project folder (it keeps the version it started with, and a new `surla` refuses to attach to an older server), restart the coding agent so its `surla stdio` is the new build, then call `init_project` again. |
 
 #### `generate_code`
 
@@ -1449,7 +1450,7 @@ Verification does not use the choice.
 | Refusal | When |
 | --- | --- |
 | `400` | An unknown provider or another schema violation. |
-| `unprocessable` (`422`) | An invalid combination or gateway address, or the server holds no request settings for the chosen provider: `provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway.` The previous choice stays in force. |
+| `unprocessable` (`422`) | An invalid combination or gateway address, or the server holds no request settings for the chosen provider: `provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway.` The previous choice stays in force. |
 
 #### `get_model_connection`
 

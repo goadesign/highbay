@@ -17,7 +17,6 @@ import (
 	strconv "strconv"
 	utf8 "unicode/utf8"
 
-	rawjson "goa.design/goa-ai/runtime/agent/rawjson"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -203,13 +202,6 @@ type TeamRoleState struct {
 	Assignment string
 }
 
-type TeamSpaceConflict struct {
-	// Error name.
-	Name string
-	// Number of local spaces matching the team's name and physical folder.
-	Count int
-}
-
 type TeamUnavailable struct {
 	// Error name.
 	Name string
@@ -221,23 +213,6 @@ type TeamUnavailable struct {
 	// project's private record or an agent credential could not be read or
 	// written), or role_folder (a role's working folder could not be read).
 	Cause string
-}
-
-// Error returns an error description.
-func (e *TeamSpaceConflict) Error() string {
-	return ""
-}
-
-// ErrorName returns the error name.
-//
-// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
-func (e *TeamSpaceConflict) ErrorName() string {
-	return e.GoaErrorName()
-}
-
-// GoaErrorName returns the error name.
-func (e *TeamSpaceConflict) GoaErrorName() string {
-	return e.Name
 }
 
 // Error returns an error description.
@@ -265,11 +240,6 @@ func MakeForbidden(err error) *goa.ServiceError {
 // MakeUnprocessable builds a goa.ServiceError from an error.
 func MakeUnprocessable(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unprocessable", false, false, false)
-}
-
-// MakeWindowBusy builds a goa.ServiceError from an error.
-func MakeWindowBusy(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "window_busy", false, false, false)
 }
 
 // jsonProjectIdentityTransport stores JSON fields until they have been validated.
@@ -553,33 +523,6 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 	return err
 }
 
-// jsonTeamSpaceConflictTransport stores JSON fields until they have been validated.
-type jsonTeamSpaceConflictTransport struct {
-	// Error name.
-	Name *string `json:"name"`
-	// Number of local spaces matching the team's name and physical folder.
-	Count *teamSpaceConflictIntTransport `json:"count"`
-}
-
-// validatejsonTeamSpaceConflictTransport checks decoded JSON before it becomes a service value.
-func validatejsonTeamSpaceConflictTransport(value *jsonTeamSpaceConflictTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if value.Count == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
-	}
-	if value.Count != nil {
-		if int(*value.Count) < 2 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", int(*value.Count), 2, true))
-		}
-	}
-	return err
-}
-
 // jsonTeamUnavailableTransport stores JSON fields until they have been validated.
 type jsonTeamUnavailableTransport struct {
 	// Error name.
@@ -610,26 +553,6 @@ func validatejsonTeamUnavailableTransport(value *jsonTeamUnavailableTransport) (
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *value.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
 		}
 	}
-	return err
-}
-
-// teamSpaceConflictIntTransport stores JSON fields until they have been validated.
-type teamSpaceConflictIntTransport int
-
-// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
-// declared range. Decimal and exponent spellings do not change its value.
-func (value *teamSpaceConflictIntTransport) UnmarshalJSON(data []byte) error {
-	number, err := rawjson.DecodeInteger[int](data)
-	if err != nil {
-		return fmt.Errorf("decode teamSpaceConflictIntTransport integer: %w", err)
-	}
-	*value = teamSpaceConflictIntTransport(number)
-	return nil
-}
-
-// ValidateteamSpaceConflictIntTransport checks decoded JSON before it becomes a service value.
-func ValidateteamSpaceConflictIntTransport(value teamSpaceConflictIntTransport) (err error) {
-
 	return err
 }
 
@@ -715,14 +638,6 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 func validateProjectTeamRoleOriginal(value *ProjectTeamRole) (err error) {
 	if !(value.Role == "guide" || value.Role == "builder" || value.Role == "test_writer") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.role", value.Role, []any{"guide", "builder", "test_writer"}))
-	}
-	return err
-}
-
-// validateTeamSpaceConflictOriginal checks the original typed value before JSON conversion.
-func validateTeamSpaceConflictOriginal(value *TeamSpaceConflict) (err error) {
-	if value.Count < 2 {
-		err = goa.MergeErrors(err, goa.InvalidRangeError("value.count", value.Count, 2, true))
 	}
 	return err
 }
@@ -1253,94 +1168,6 @@ func DecodeTeamRoleState(data []byte) (out *TeamRoleState, err error) {
 			Attention:  *body.Attention,
 			Watcher:    *body.Watcher,
 			Assignment: *body.Assignment,
-		}
-	}
-	return out, nil
-}
-
-// EncodeTeamSpaceConflict turns a service value into JSON using the field names in the Goa design.
-func EncodeTeamSpaceConflict(in *TeamSpaceConflict) ([]byte, error) {
-	if err := checkTeamSpaceConflictValue(in); err != nil {
-		return nil, fmt.Errorf("encode TeamSpaceConflict JSON: %w", err)
-	}
-	if err := validateTeamSpaceConflictOriginal(in); err != nil {
-		return nil, fmt.Errorf("validate TeamSpaceConflict value: %w", err)
-	}
-	var body *jsonTeamSpaceConflictTransport
-	{
-		body = &jsonTeamSpaceConflictTransport{
-			Name: &in.Name,
-		}
-		count := teamSpaceConflictIntTransport(in.Count)
-		body.Count = &count
-	}
-	if err := validatejsonTeamSpaceConflictTransport(body); err != nil {
-		return nil, fmt.Errorf("validate TeamSpaceConflict JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode TeamSpaceConflict JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateTeamSpaceConflictValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateTeamSpaceConflictValue(in *TeamSpaceConflict) error {
-	if err := checkTeamSpaceConflictValue(in); err != nil {
-		return fmt.Errorf("validate TeamSpaceConflict value: %w", err)
-	}
-	if err := validateTeamSpaceConflictOriginal(in); err != nil {
-		return fmt.Errorf("validate TeamSpaceConflict value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "TeamSpaceConflict")
-	}
-
-	var body *jsonTeamSpaceConflictTransport
-	{
-		body = &jsonTeamSpaceConflictTransport{
-			Name: &in.Name,
-		}
-		count := teamSpaceConflictIntTransport(in.Count)
-		body.Count = &count
-	}
-	if err := validatejsonTeamSpaceConflictTransport(body); err != nil {
-		return fmt.Errorf("validate TeamSpaceConflict value: %w", err)
-	}
-	return nil
-}
-
-// DecodeTeamSpaceConflict checks JSON field names from the Goa design and returns a service value.
-func DecodeTeamSpaceConflict(data []byte) (out *TeamSpaceConflict, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode TeamSpaceConflict JSON: %w", err)
-	}
-	if err := validateTeamSpaceConflictJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode TeamSpaceConflict JSON: %w", err)
-	}
-	var body *jsonTeamSpaceConflictTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode TeamSpaceConflict JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode TeamSpaceConflict JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode TeamSpaceConflict JSON after first value: %w", err)
-	}
-	if err := validatejsonTeamSpaceConflictTransport(body); err != nil {
-		return out, fmt.Errorf("validate TeamSpaceConflict JSON: %w", err)
-	}
-	{
-		out = &TeamSpaceConflict{
-			Name:  *body.Name,
-			Count: int(*body.Count),
 		}
 	}
 	return out, nil
@@ -1920,66 +1747,6 @@ func validateProjectTeamJSONValue4(path string, value any, description string) e
 	return nil
 }
 
-// validateTeamSpaceConflictJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateTeamSpaceConflictJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "count":
-			if err := validateTeamSpaceConflictJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Number of local spaces matching the team's name and physical folder.",
-			); err != nil {
-				return err
-			}
-		case "name":
-			if err := validateProjectIdentityJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Error name.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"count",
-				"name",
-			})
-		}
-	}
-	return nil
-}
-
-// validateTeamSpaceConflictJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateTeamSpaceConflictJSONValue2(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "integer", "null", description)
-	}
-	_, ok := value.(json.Number)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "integer", decodedJSONType(value), description)
-	}
-	return nil
-}
-
 // validateTeamUnavailableJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateTeamUnavailableJSONValue(path string, value any, description string) error {
 	field := path
@@ -2400,36 +2167,6 @@ func checkTeamRoleStateValue(in *TeamRoleState) error {
 	active := make(map[any]bool)
 	if err := checkProjectStatusTeamRoleStateValue(in, "$", active); err != nil {
 		return err
-	}
-	return nil
-}
-
-// checkTeamSpaceConflictValue checks text and cycles before conversion.
-func checkTeamSpaceConflictValue(in *TeamSpaceConflict) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkTeamSpaceConflictTeamSpaceConflictValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkTeamSpaceConflictTeamSpaceConflictValue checks one generated value on the active path.
-func checkTeamSpaceConflictTeamSpaceConflictValue(in *TeamSpaceConflict, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if !utf8.ValidString(string(in.Name)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "name", false))
-		}
 	}
 	return nil
 }

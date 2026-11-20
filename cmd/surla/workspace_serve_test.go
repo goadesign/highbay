@@ -71,7 +71,7 @@ func TestUnusableOperatorFolderNamesStep(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), opRoot)
 			assert.Contains(t, err.Error(), "chmod 700 "+opRoot)
-			assert.Contains(t, err.Error(), "run surla again")
+			assert.Contains(t, err.Error(), "then try again")
 		})
 	}
 }

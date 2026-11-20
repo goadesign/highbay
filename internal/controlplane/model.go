@@ -163,7 +163,7 @@ func (c *ControlPlane) chooseModel(choice gensurla.Connection) error {
 		if _, held := c.heldSettings[direct.Provider]; !held {
 			provider, _ := modelsettings.Lookup(direct.Provider)
 			return gensurla.MakeUnprocessable(fmt.Errorf(
-				"provider %s needs %s: export it, with any %s request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway.",
+				"provider %s needs %s: export it, with any %s request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway.",
 				provider.Name, provider.Key, provider.Prefix,
 			))
 		}

@@ -90,7 +90,7 @@ func TestModelSettingsLineNamesWhatIsHeld(t *testing.T) {
 			sel:    modelsettings.Selection{Send: map[string]map[string]string{}, NotSent: []modelsettings.Unsent{{Name: "ANTHROPIC_BASE_URL", MissingKey: "ANTHROPIC_API_KEY"}}},
 			result: &gensurla.ModelSettingsResult{Held: map[string][]string{}, Connection: noChoice()},
 			want: "No model settings are held by the project server; not sent: ANTHROPIC_BASE_URL (ANTHROPIC_API_KEY is not set). " +
-				"Live targets have no model: export a provider key in a shell and run surla there, or choose a model gateway on the views page.",
+				"Live targets have no model: export a provider key in the shell your coding agent starts from and restart the agent, or in a shell where you run surla, or choose a model gateway on the views page.",
 		},
 		{
 			name:   "nothing held, nothing unsent, a gateway",
@@ -180,12 +180,12 @@ func TestHandOverRepliesNeverPrintAValue(t *testing.T) {
 		output  string
 	}{
 		{name: "success", replies: []int{http.StatusOK}, output: "Model settings held by the project server: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (from this shell)"},
-		{name: "refused with an unchanged credential", replies: []int{http.StatusUnauthorized}, want: "project server response could not be used (HTTP 401); run surla again"},
+		{name: "refused with an unchanged credential", replies: []int{http.StatusUnauthorized}, want: "project server response could not be used (HTTP 401); try again"},
 		{name: "refused, then accepted with the changed credential", replies: []int{http.StatusUnauthorized, http.StatusOK}, rotate: true, output: "(from this shell)"},
 		{name: "refused twice with a changed credential", replies: []int{http.StatusUnauthorized, http.StatusUnauthorized}, rotate: true, want: "[surla hand_over_model_settings]: invalid response code 401"},
 		{name: "value too long", replies: []int{http.StatusBadRequest}, want: "the project server refused the model settings from this shell (HTTP 400); each ANTHROPIC_ and OPENAI_ request setting must be at most 4096 characters"},
 		{name: "server fault", replies: []int{http.StatusInternalServerError}, want: "[surla hand_over_model_settings]: invalid response code 500"},
-		{name: "connection refused", closed: true, want: "project server connection failed; run surla again"},
+		{name: "connection refused", closed: true, want: "project server connection failed; try again"},
 		{name: "deadline", hang: true, want: "project server request did not finish"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

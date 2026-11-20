@@ -208,7 +208,7 @@ func (s *Server) teamState() (TeamSelection, Record) {
 // A typed team failure becomes the page's step for its cause and stays its
 // error's cause, so a build start can give its own step for the same cause.
 func userTeamError(err error) error {
-	var conflict *genproject.TeamSpaceConflict
+	var conflict *controlplane.TeamSpaceConflict
 	if errors.As(err, &conflict) {
 		return err
 	}
@@ -218,22 +218,28 @@ func userTeamError(err error) error {
 	}
 	var unavailable *genproject.TeamUnavailable
 	if !errors.As(err, &unavailable) {
-		return gensurla.MakeTeamUnavailable(errors.New("project team could not be prepared; run surla in the project folder to see the step"))
+		return gensurla.MakeTeamUnavailable(errors.New("project team could not be prepared; try again"))
 	}
-	// Wrapping only the typed failure keeps any peer text around it out.
+	// Wrapping only the typed failure keeps any peer text around it out. A
+	// project_state failure from this server's own state carries its repair.
 	failure := gensurla.MakeTeamUnavailable(unavailable)
 	failure.Message = userTeamStep(unavailable.Cause)
+	var state *teamStateUnavailable
+	if errors.As(err, &state) {
+		failure.Message = state.repair
+	}
 	return failure
 }
 
-// userTeamStep gives the page's fixed sentence for one team failure cause. It names
-// no private path: the CLI, run in the project folder, names the folder to repair.
+// userTeamStep gives the page's fixed sentence for one team failure cause. A
+// project_state failure from this server's own state replaces it with a repair
+// naming the affected path (stateRepair); this sentence covers the rest.
 func userTeamStep(cause string) string {
 	switch cause {
 	case "stopping":
-		return "the project server is stopping; run surla in the project folder to start it again"
+		return "the project server is stopping; ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"
 	case "chorus":
-		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla)."
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then try again."
 	case "herdr":
 		// Starting agents and showing a pane both fail with this cause, so the step
 		// retries whichever action the user took.
@@ -243,11 +249,11 @@ func userTeamStep(cause string) string {
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then start the agents again"
 	case "project_state":
-		return "this project's private state could not be read or written; run surla in the project folder to see which folder to repair"
+		return "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Surla state from a backup"
 	case "role_folder":
 		return "a team role's working folder could not be read; make sure this account can open the project folder and its build working folders, then start the agents again"
 	}
-	return "project team could not be prepared; run surla in the project folder to see the step"
+	return "project team could not be prepared; try again"
 }
 
 // removeTestWriter revokes an unused test writer before withdrawing its saved role.

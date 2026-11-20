@@ -216,8 +216,8 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 			want: func(state *State) []string {
 				return []string{
 					"Surla project in " + state.Record.Directory, record(state),
-					"restore it from a backup and run surla again",
-					"move the folder " + state.Dir, "run surla in " + state.Record.Directory,
+					"restore it from a backup and try again",
+					"move the folder " + state.Dir, "start Surla in " + state.Record.Directory + " again",
 				}
 			},
 		},

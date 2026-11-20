@@ -304,6 +304,10 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 		required []string
 	}{
 		{"guide", []string{
+			"ask one short, plain question and wait; never ask for a Go module path, folder name or requirements checklist",
+			"call init_project with dir \".\" and no module path unless the user gave one",
+			"instead of interviewing them in chat: put open product questions",
+			"into the analysis's ambiguities with concrete options, which the user answers on the views page",
 			"call update_draft before each new change",
 			"Work only in the draft folder returned by update_draft or refresh_story",
 			"never edit the project folder or copy design files between it and the draft",

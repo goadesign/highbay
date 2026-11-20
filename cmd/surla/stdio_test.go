@@ -506,3 +506,28 @@ func TestStdioRetriesOnlyRequestsTheServerNeverRan(t *testing.T) {
 	defer mu.Unlock()
 	assert.Equal(t, 1, calls, "the dropped call reached the server once")
 }
+
+// TestStdioGuideBindErrorsRetryTheTool binds a guide to a real project server
+// whose published management credential no longer matches, so the first tool
+// call fails inside the bind. The agent sees the shared management error,
+// which names calling again, never typing surla.
+func TestStdioGuideBindErrorsRetryTheTool(t *testing.T) {
+	isolateServeWorkspace(t)
+	workspace, err := abspath.Eval(t.TempDir())
+	require.NoError(t, err)
+	state, err := fixtureProjectState(workspace)
+	require.NoError(t, err)
+	startStdioProjectServer(t, state)
+	require.NoError(t, state.SaveRunning(project.Running{PID: os.Getpid(), Terminal: "", ManagementCredential: strings.Repeat("b", 64)}))
+	runtime := testProjectRuntime()
+	runtime.preflight = func(bool) error { return nil }
+
+	guide, err := newStdioSession(runtime, workspace, "", io.Discard)
+	require.NoError(t, err)
+	reply := runStdioFrames(t, guide, stdioCall(1, "list_changes"))["1"]
+	require.NotNil(t, reply.Error)
+	assert.Contains(t, reply.Error.Message, "try again")
+	assert.NotContains(t, strings.ToLower(reply.Error.Message), "run surla")
+	assert.NotContains(t, reply.Error.Message, strings.Repeat("b", 64))
+	assert.Nil(t, guide.currentRelay())
+}

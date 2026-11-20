@@ -656,25 +656,13 @@ func projectClient(state *project.State) *genproject.Client {
 	teamClient := teamHTTPClient()
 	return genproject.NewClient(
 		managementEndpoint(state, client, (*genprojectclient.Client).Identity),
-		teamManagementEndpoint(state, teamClient),
+		managementEndpoint(state, client, (*genprojectclient.Client).EnsureTeam),
 		managementEndpoint(state, teamClient, (*genprojectclient.Client).AttachGuide),
 		managementEndpoint(state, client, (*genprojectclient.Client).Status),
 		managementEndpoint(state, client, (*genprojectclient.Client).Stop),
 		managementEndpoint(state, client, (*genprojectclient.Client).BrowserLink),
 		managementEndpoint(state, client, (*genprojectclient.Client).ExchangeBrowserLink),
 	)
-}
-
-// teamManagementEndpoint gives only the team request's deadline its own concrete recovery step.
-func teamManagementEndpoint(state *project.State, client *http.Client) goa.Endpoint {
-	next := managementEndpoint(state, client, (*genprojectclient.Client).EnsureTeam)
-	return func(ctx context.Context, payload any) (any, error) {
-		result, err := next(ctx, payload)
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("project team request did not finish because Herdr did not answer in time; open the Herdr app, then click Start agents on the views page: %w", context.DeadlineExceeded)
-		}
-		return result, err
-	}
 }
 
 // managementEndpoint preserves generated transport behavior without printing peer-authored
@@ -700,7 +688,9 @@ func modelSettingsEndpoint(state *project.State) goa.Endpoint {
 
 // managementCall preserves generated transport behavior without printing peer-authored
 // error text. endpoint builds the generated operation on a fresh Doer for each invocation.
-// Only declared error names select fixed CLI wording; other replies name status.
+// Only declared error names select fixed wording; other replies name status. The CLI
+// and surla stdio's guide attachment share these errors, so a retry is worded "try
+// again", which is running surla again for one and calling the tool again for the other.
 // Response status belongs to this invocation's Doer, including a changed-key retry.
 func managementCall(
 	state *project.State,
@@ -730,10 +720,6 @@ func managementCall(
 			}
 			return nil, goahttp.ErrInvalidResponse(responseErr.Service, responseErr.Method, doer.lastStatus, "")
 		}
-		var spaceConflict *genproject.TeamSpaceConflict
-		if errors.As(err, &spaceConflict) {
-			return nil, fmt.Errorf("%d Herdr spaces match this project; close duplicate spaces and run surla again (HTTP %d)", spaceConflict.Count, doer.lastStatus)
-		}
 		var unavailable *genproject.TeamUnavailable
 		if errors.As(err, &unavailable) {
 			return nil, fmt.Errorf("%s (HTTP %d)", teamUnavailableStep(state, unavailable.Cause), doer.lastStatus)
@@ -741,28 +727,27 @@ func managementCall(
 		var serviceErr *goa.ServiceError
 		if errors.As(err, &serviceErr) {
 			switch serviceErr.Name {
-			case "window_busy":
-				return nil, fmt.Errorf("a dialog is open in Herdr; close it, then run surla again (HTTP %d)", doer.lastStatus)
 			case "forbidden":
-				return nil, fmt.Errorf("project management operation is not permitted (HTTP %d); run surla again", doer.lastStatus)
+				return nil, fmt.Errorf("project management operation is not permitted (HTTP %d); try again", doer.lastStatus)
 			case "unprocessable":
 				return nil, fmt.Errorf("project management request could not be applied (HTTP %d)", doer.lastStatus)
 			}
 		}
-		return nil, fmt.Errorf("project server response could not be used (HTTP %d); run surla again", doer.lastStatus)
+		return nil, fmt.Errorf("project server response could not be used (HTTP %d); try again", doer.lastStatus)
 	}
 }
 
-// teamUnavailableStep is the CLI's fixed text for one declared team failure cause. It names
-// what could not be used and the step that repairs it; the retry is the views page's
-// Start agents, which reaches the same team operation, because the page opens regardless.
+// teamUnavailableStep is the fixed text for one team failure cause of attach_guide,
+// the only management operation that returns one. surla stdio calls it when a
+// guide's first Surla tool call attaches the agent, so the text names what could
+// not be used, its repair, and the retry: calling the Surla tool again.
 func teamUnavailableStep(state *project.State, cause string) string {
-	const retry = "then click Start agents on the views page"
+	const retry = "then call the Surla tool again"
 	switch cause {
 	case "stopping":
-		return "the project server is stopping; run surla again"
+		return "the project server is stopping; call the Surla tool again to start it"
 	case "chorus":
-		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla)."
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), " + retry
 	case "herdr":
 		return "Herdr did not complete a team command; open the Herdr app, " + retry
 	case "saved_space":
@@ -770,11 +755,11 @@ func teamUnavailableStep(state *project.State, cause string) string {
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
 	case "project_state":
-		return fmt.Sprintf("this project's private state in %s could not be read or written; make that folder and the folders in it private to this account (chmod 700) and its files too (chmod 600), %s", state.Dir, retry)
+		return fmt.Sprintf("a file in this project's private state %s could not be used: its record (project.json), its agents folder or the guide's credential in that folder. If that file lost its permissions or owner, make it this account's and usable only by it (chmod 600 on that file, or chmod 700 on the agents folder); if it is missing or damaged, restore it from a backup; %s", state.Dir, retry)
 	case "role_folder":
 		return fmt.Sprintf("a team role's working folder could not be read; make sure this account can open the project folder %s and its build working folders, %s", state.Record.Directory, retry)
 	}
-	return "project team could not be prepared; run surla again"
+	return "project team could not be prepared; call the Surla tool again"
 }
 
 // projectHTTPClient keeps management requests off proxies and refuses redirects,
@@ -833,9 +818,9 @@ func (d *managementDoer) Do(r *http.Request) (*http.Response, error) {
 	current, readErr := d.state.ReadRunning()
 	if readErr != nil || current.ManagementCredential == running.ManagementCredential {
 		if readErr != nil {
-			d.localErr = fmt.Errorf("project management access was refused; run surla again: %w", readErr)
+			d.localErr = fmt.Errorf("project management access was refused; try again: %w", readErr)
 		}
-		return nil, errors.Join(errors.New("project management access was refused; run surla again"), d.localErr, managementConnectionError(r.Context(), response.Body.Close()))
+		return nil, errors.Join(errors.New("project management access was refused; try again"), d.localErr, managementConnectionError(r.Context(), response.Body.Close()))
 	}
 	if err := response.Body.Close(); err != nil {
 		return nil, managementConnectionError(r.Context(), err)
@@ -877,7 +862,7 @@ func managementConnectionError(ctx context.Context, err error) error {
 	if errors.Is(err, context.Canceled) {
 		return fmt.Errorf("project server request did not finish: %w", context.Canceled)
 	}
-	return errors.New("project server connection failed; run surla again")
+	return errors.New("project server connection failed; try again")
 }
 
 // waitForRunning waits without network traffic while startup has not published access.
@@ -893,7 +878,7 @@ func waitForRunning(ctx context.Context, state *project.State) (project.Running,
 		}
 		select {
 		case <-ctx.Done():
-			return project.Running{}, fmt.Errorf("project server has not published management access; run surla again: %w", ctx.Err())
+			return project.Running{}, fmt.Errorf("project server has not published management access; try again: %w", ctx.Err())
 		case <-time.After(50 * time.Millisecond):
 		}
 	}

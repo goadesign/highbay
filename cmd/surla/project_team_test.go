@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
@@ -178,32 +178,48 @@ func TestTeamCommandProtocol(t *testing.T) {
 	assert.Equal(t, 50*time.Second, teamHTTPClient().Timeout)
 }
 
-// TestEnsureTeamDeclaredErrorsAreFixed drives the generated CLI decoder with hostile messages.
-func TestEnsureTeamDeclaredErrorsAreFixed(t *testing.T) {
-	for _, tc := range []struct {
-		name, body, want string
-		status           int
-	}{{"ambiguous", `{"name":"ambiguous_space","count":3}`, "3 Herdr spaces match", 409}, {"busy", `{"name":"window_busy","id":"fixture","message":"private peer output","temporary":false,"timeout":false,"fault":false}`, "a dialog is open in Herdr", 409}, {"unavailable", `{"name":"team_unavailable","cause":"herdr"}`, "Herdr did not complete a team command", 503}} {
-		t.Run(tc.name, func(t *testing.T) {
-			isolateServeWorkspace(t)
-			state, err := fixtureProjectState(t.TempDir())
-			require.NoError(t, err)
-			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.Header().Set("goa-error", strings.Split(tc.body, `"`)[3])
-				w.WriteHeader(tc.status)
-				_, err := io.WriteString(w, tc.body)
-				assert.NoError(t, err)
-			}))
-			defer api.Close()
-			state.Record.Port = api.Listener.Addr().(*net.TCPAddr).Port
-			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("a", 64)}))
-			_, err = projectClient(state).EnsureTeam(t.Context())
-			require.ErrorContains(t, err, tc.want)
-			assert.NotContains(t, err.Error(), "private peer output")
-			assert.Contains(t, err.Error(), fmt.Sprintf("HTTP %d", tc.status))
-		})
-	}
+// TestAttachGuideTeamFailureIsFixed drives the CLI decoder with the team
+// failures attach_guide's owner returns, as surla stdio meets them when a guide
+// attaches. Each names its repair and the retry is calling the Surla tool
+// again, never typing surla. project_state comes from a real project server
+// whose registered guide credential is damaged; stopping comes from a stand-in
+// reply with the owner's exact body.
+func TestAttachGuideTeamFailureIsFixed(t *testing.T) {
+	t.Run("project_state", func(t *testing.T) {
+		isolateServeWorkspace(t)
+		state, err := fixtureProjectState(t.TempDir())
+		require.NoError(t, err)
+		management := startStdioProjectServer(t, state)
+		guide, err := attachFixtureGuide(t.Context(), state, management)
+		require.NoError(t, err)
+		const garbage = "not-a-credential-value"
+		require.NoError(t, os.WriteFile(state.AgentFile(guide.Handle), []byte(garbage), 0o600))
+
+		_, err = projectClient(state).AttachGuide(t.Context(), &genproject.AttachGuidePayload{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "a file in this project's private state "+state.Dir+" could not be used")
+		assert.Contains(t, err.Error(), "chmod 600 on that file")
+		assert.Contains(t, err.Error(), "then call the Surla tool again")
+		assert.NotContains(t, err.Error(), garbage)
+		assert.NotContains(t, strings.ToLower(err.Error()), "run surla")
+	})
+	t.Run("stopping", func(t *testing.T) {
+		isolateServeWorkspace(t)
+		state, err := fixtureProjectState(t.TempDir())
+		require.NoError(t, err)
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("goa-error", "team_unavailable")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, err := io.WriteString(w, `{"name":"team_unavailable","cause":"stopping"}`)
+			assert.NoError(t, err)
+		}))
+		defer api.Close()
+		state.Record.Port = api.Listener.Addr().(*net.TCPAddr).Port
+		require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("a", 64)}))
+		_, err = projectClient(state).AttachGuide(t.Context(), &genproject.AttachGuidePayload{})
+		require.ErrorContains(t, err, "the project server is stopping; call the Surla tool again to start it (HTTP 503)")
+	})
 }
 
 // TestInstalledTeamOptions proves argument discovery against local programs

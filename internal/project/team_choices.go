@@ -62,7 +62,7 @@ func (s *Server) DismissNotice(ctx context.Context, notice string) error {
 	record.DismissedNotices = append(slices.Clone(before), notice)
 	if err := s.state.save(); err != nil {
 		record.DismissedNotices = before
-		return userTeamError(teamUnavailable(ctx, "dismiss_notice", "project_state"))
+		return userTeamError(stateUnavailable(ctx, "dismiss_notice", s.recordWriteFailure(err)))
 	}
 	return nil
 }
@@ -134,7 +134,7 @@ func (s *Server) saveChoices(ctx context.Context, choices map[string]*gensurla.R
 	record.SavedChoices = next
 	if err := s.state.save(); err != nil {
 		record.SavedChoices = before
-		return userTeamError(teamUnavailable(ctx, "save_choices", "project_state"))
+		return userTeamError(stateUnavailable(ctx, "save_choices", s.recordWriteFailure(err)))
 	}
 	return nil
 }

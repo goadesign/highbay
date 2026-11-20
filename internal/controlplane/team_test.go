@@ -16,7 +16,6 @@ import (
 	"time"
 
 	genclient "github.com/goadesign/surla/gen/http/surla/client"
-	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/verify"
 	"github.com/goadesign/surla/internal/verifyrun"
@@ -267,9 +266,7 @@ func TestTeamUserTransport(t *testing.T) {
 // ordinary user error with one actionable suffix, never peer-authored text.
 func TestTeamUserStartConflictTransport(t *testing.T) {
 	f := &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) {
-		return nil, fmt.Errorf("private peer output: %w", &genproject.TeamSpaceConflict{
-			Name: "ambiguous_space", Count: 2,
-		})
+		return nil, fmt.Errorf("private peer output: %w", &TeamSpaceConflict{Count: 2})
 	}}
 	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
 	handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {

@@ -37,7 +37,7 @@ registered.
 
 ## Work on a change with the user
 
-- Turn the user's goal directly into a Story and a Change Card instead of
+- Write the user's goal straight into a Story and a Change Card instead of
   interviewing them in chat first. Put open product questions—such as target
   users, policy thresholds or edge cases—into the analysis's `ambiguities` with
   concrete options so the user answers and confirms them on the views page.
@@ -54,6 +54,11 @@ registered.
   put what changed and why in `revision_note`.
 - When the design needs a module, run `GOWORK=off go get` and
   `GOWORK=off go mod tidy` in the draft.
+- To see how Surla reads your draft, call `refresh_story` and read the result
+  with `get_story_refresh`. To discard unsaved edits, delete the draft and
+  refresh.
+- If the builder reports that a hook reformatted a design file, run the same
+  formatter in the draft, refresh and revise.
 
 ## Follow the build
 

@@ -150,7 +150,7 @@ func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
 			return controlplane.Principal{ID: owner, CallerID: id, Kind: controlplane.CallerKind(role.Role)}, nil
 		}
 	}
-	return controlplane.Principal{}, errors.New("session or credential is no longer valid; open the project's views with surla")
+	return controlplane.Principal{}, errors.New("session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion")
 }
 
 // Handler mounts the generated project contract and guards every page, HTTP, and MCP response.
@@ -174,7 +174,7 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
 			r.Header.Get("Sec-Fetch-Dest") == "document"
 		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
-			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; run surla in your project folder to open it, or surla --print-link to get a link without opening a browser")
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion")
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/project/") {
@@ -353,7 +353,7 @@ func (s *Server) registerAgent(handle string, agent agentRecord) (string, error)
 			continue
 		}
 		if _, err := readCredential(s.state.AgentFile(existing)); err != nil {
-			return "", err
+			return "", &teamStateFailure{path: s.state.AgentFile(existing), err: err}
 		}
 		if registered.Folder == agent.Folder {
 			return existing, nil
@@ -361,7 +361,7 @@ func (s *Server) registerAgent(handle string, agent agentRecord) (string, error)
 		s.state.Record.Agents[existing] = agent
 		if err := s.state.save(); err != nil {
 			s.state.Record.Agents[existing] = registered
-			return "", err
+			return "", s.recordWriteFailure(err)
 		}
 		return existing, nil
 	}
@@ -372,19 +372,20 @@ func (s *Server) registerAgent(handle string, agent agentRecord) (string, error)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Join(s.state.Dir, "agents"), 0o700); err != nil {
-		return "", err
+	agents := filepath.Join(s.state.Dir, "agents")
+	if err := os.MkdirAll(agents, 0o700); err != nil {
+		return "", &teamStateFailure{path: agents, dir: true, write: true, err: err}
 	}
-	if err := privateDirectory(filepath.Join(s.state.Dir, "agents")); err != nil {
-		return "", err
+	if err := privateDirectory(agents); err != nil {
+		return "", &teamStateFailure{path: agents, dir: true, err: err}
 	}
 	if err := writePrivate(s.state.AgentFile(handle), []byte(token)); err != nil {
-		return "", err
+		return "", &teamStateFailure{path: s.state.AgentFile(handle), write: true, err: err}
 	}
 	s.state.Record.Agents[handle] = agent
 	if err := s.state.save(); err != nil {
 		delete(s.state.Record.Agents, handle)
-		return "", errors.Join(err, os.Remove(s.state.AgentFile(handle)))
+		return "", errors.Join(s.recordWriteFailure(err), os.Remove(s.state.AgentFile(handle)))
 	}
 	return handle, nil
 }

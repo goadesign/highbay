@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/verifyrun"
 	"go.opentelemetry.io/otel/codes"
@@ -50,6 +49,14 @@ type (
 	BuilderAndTestWriter struct {
 		BuilderFolder    string
 		TestWriterFolder string
+	}
+	// TeamSpaceConflict is the Team owner's refusal to start agents when more
+	// than one local Herdr space matches the project's team name and folder.
+	// It carries only the count, never a space name or other peer text, and the
+	// control plane turns it into the user's ambiguous_space step.
+	TeamSpaceConflict struct {
+		// Count is how many local spaces match; it is always at least 2.
+		Count int
 	}
 	// TeamBinding associates the one team owner with its immutable resource owner.
 	// The composition root binds it once before New; it never creates user credentials.
@@ -129,6 +136,12 @@ func (c *ControlPlane) ShowTeamPane(ctx context.Context, p *gensurla.ShowTeamPan
 	return team.ShowPane(ctx, p.Role)
 }
 
+// Error names the number of matching spaces; it is the only text the
+// conflict carries.
+func (e *TeamSpaceConflict) Error() string {
+	return fmt.Sprintf("%d Herdr spaces match this project", e.Count)
+}
+
 // StartTeamAgents uses the project owner's existing repeatable team preparation
 // and maps its typed space conflict to the user transport's actionable error.
 func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTeamAgentsPayload) (*gensurla.ProjectTeam, error) {
@@ -137,7 +150,7 @@ func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTea
 		return nil, err
 	}
 	result, err := team.StartAgents(ctx, p.Choices)
-	var conflict *genproject.TeamSpaceConflict
+	var conflict *TeamSpaceConflict
 	if errors.As(err, &conflict) {
 		return nil, gensurla.MakeAmbiguousSpace(fmt.Errorf(
 			"%d Herdr spaces match this project. %s", conflict.Count, duplicateTeamSpacesStep(),
