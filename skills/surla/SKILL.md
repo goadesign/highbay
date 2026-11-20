@@ -54,8 +54,9 @@ registered.
   put what changed and why in `revision_note`.
 - When the design needs a module, run `GOWORK=off go get` and
   `GOWORK=off go mod tidy` in the draft.
-- Preview an unsaved design with `surla preview -dir <draft>`. To discard
-  unsaved edits, delete the draft and refresh.
+- To see how Surla reads your draft, call `refresh_story` and read the result
+  with `get_story_refresh`. To discard unsaved edits, delete the draft and
+  refresh.
 - If the builder reports that a hook reformatted a design file, run the same
   formatter in the draft, refresh and revise.
 

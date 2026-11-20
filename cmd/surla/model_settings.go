@@ -29,7 +29,7 @@ func handOverModelSettings(ctx context.Context, state *project.State, sel models
 	}
 	result, ok := raw.(*gensurla.ModelSettingsResult)
 	if !ok {
-		return errors.New("project server returned no model settings result; run surla again")
+		return errors.New("project server returned no model settings result; try again")
 	}
 	line := modelSettingsLine(sel, result)
 	if line == "" {

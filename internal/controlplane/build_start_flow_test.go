@@ -389,7 +389,7 @@ func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 				assert.Equal(t, "Close the duplicate Herdr spaces, then start the agents.", string(ambiguous.Step))
 			}
 			if unavailable, ok := result.Team.AsUnavailable(); ok && tc.name == "unavailable herdr" {
-				assert.Equal(t, "Herdr did not complete a team command. Open the Herdr app, then start the team agents for this saved build.", string(unavailable.Step))
+				assert.Equal(t, "Herdr did not complete a team command. Open the Herdr app, then use Team → Start workers on the views page to start the team agents for this saved build.", string(unavailable.Step))
 			}
 			assert.Equal(t, []string{"register", "start"}, f.calls)
 			assert.Equal(t, result.Build, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg"))

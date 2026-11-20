@@ -145,12 +145,12 @@ func TestUserTeamErrorBoundary(t *testing.T) {
 // starts agents.
 func TestUserTeamStepNamesARealRetry(t *testing.T) {
 	for _, tc := range []struct{ cause, want string }{
-		{"stopping", "ask your coding agent to call a Surla tool, or choose Start Surla in the Herdr companion, to start it again, then try again"},
+		{"stopping", "ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"},
 		{"chorus", "Run chorus up (or chorus status to see the error), then try again."},
 		{"herdr", "open the Herdr app, then try again"},
 		{"saved_space", "Close this project's obsolete Herdr space, then start the agents again."},
 		{"roster_folder", "then start the agents again"},
-		{"project_state", "make this project's folder under Surla's operator storage (surla/operator in your user configuration folder) and everything in it private to this account"},
+		{"project_state", "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Surla state from a backup"},
 		{"role_folder", "then start the agents again"},
 		{"", "project team could not be prepared; try again"},
 	} {

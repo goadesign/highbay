@@ -261,7 +261,7 @@ func (s *Server) saveTeamLocation(team, space, tab string) error {
 	record.Team, record.Space, record.Tab = team, space, tab
 	if err := s.state.save(); err != nil {
 		record.Team, record.Space, record.Tab = oldTeam, oldSpace, oldTab
-		return err
+		return s.recordWriteFailure(err)
 	}
 	return nil
 }

@@ -1190,7 +1190,7 @@ publication on restart.
 | --- | --- |
 | `unprocessable` (`422`) | `module_path` or `dir` is invalid. |
 | `conflict` (`409`) | The workspace already holds a project or durable work based on it, the child destination exists, or the in-place destination contains an entry the operation cannot preserve. |
-| `not_implemented` (`501`) | The `surla` binary was built without an exact module version; install a tagged or pseudo-versioned release. |
+| `not_implemented` (`501`) | The `surla` binary was built without an exact module version. Install a tagged or pseudo-versioned release, stop the running project server with `surla stop` in the project folder (it keeps the version it started with, and a new `surla` refuses to attach to an older server), restart the coding agent so its `surla stdio` is the new build, then call `init_project` again. |
 
 #### `generate_code`
 

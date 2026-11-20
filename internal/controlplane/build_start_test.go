@@ -113,14 +113,14 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 // user to type surla, which neither prints a team step nor starts agents.
 func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 	for _, tc := range []struct{ name, cause, repair string }{
-		{name: "stopping", cause: "stopping", repair: "Ask your coding agent to call a Surla tool, or choose Start Surla in the Herdr companion, to start it again"},
+		{name: "stopping", cause: "stopping", repair: "Ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion; either starts the server again and opens a fresh page"},
 		{name: "herdr", cause: "herdr", repair: "Open the Herdr app"},
 		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
 		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."},
 		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
-		{name: "project state", cause: "project_state", repair: "Make this project's folder under Surla's operator storage private to this account"},
+		{name: "project state", cause: "project_state", repair: "Team → Start workers on the views page names the file and its repair"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},
-		{name: "no typed cause", repair: "The project team could not be prepared. Try again"},
+		{name: "no typed cause", repair: "The project team could not be prepared. Use Team → Start workers on the views page"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := error(gensurla.MakeTeamUnavailable(errors.New("private external reply")))

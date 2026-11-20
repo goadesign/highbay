@@ -220,19 +220,24 @@ func userTeamError(err error) error {
 	if !errors.As(err, &unavailable) {
 		return gensurla.MakeTeamUnavailable(errors.New("project team could not be prepared; try again"))
 	}
-	// Wrapping only the typed failure keeps any peer text around it out.
+	// Wrapping only the typed failure keeps any peer text around it out. A
+	// project_state failure from this server's own state carries its repair.
 	failure := gensurla.MakeTeamUnavailable(unavailable)
 	failure.Message = userTeamStep(unavailable.Cause)
+	var state *teamStateUnavailable
+	if errors.As(err, &state) {
+		failure.Message = state.repair
+	}
 	return failure
 }
 
-// userTeamStep gives the page's fixed sentence for one team failure cause. It names
-// no private path; the operator storage the project_state step points to is
-// documented in the Reference.
+// userTeamStep gives the page's fixed sentence for one team failure cause. A
+// project_state failure from this server's own state replaces it with a repair
+// naming the affected path (stateRepair); this sentence covers the rest.
 func userTeamStep(cause string) string {
 	switch cause {
 	case "stopping":
-		return "the project server is stopping; ask your coding agent to call a Surla tool, or choose Start Surla in the Herdr companion, to start it again, then try again"
+		return "the project server is stopping; ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"
 	case "chorus":
 		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then try again."
 	case "herdr":
@@ -244,7 +249,7 @@ func userTeamStep(cause string) string {
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then start the agents again"
 	case "project_state":
-		return "this project's private state could not be read or written; make this project's folder under Surla's operator storage (surla/operator in your user configuration folder) and everything in it private to this account (chmod 700 for folders, 600 for files), then try again"
+		return "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Surla state from a backup"
 	case "role_folder":
 		return "a team role's working folder could not be read; make sure this account can open the project folder and its build working folders, then start the agents again"
 	}

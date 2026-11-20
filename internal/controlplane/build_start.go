@@ -535,15 +535,15 @@ func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
 }
 
 // buildTeamStep is a saved build's step for one team failure cause: what
-// could not be used, its repair, and then Start agents, which starts the team
-// for the saved build without building again. An unknown cause, including
+// could not be used, its repair, and then Team → Start workers on the views
+// page, which starts the team for the saved build without building again. An unknown cause, including
 // none, asks for that retry alone. Each step fits BuildStartStep.
 func buildTeamStep(cause string) string {
-	const retry = "then start the team agents for this saved build."
+	const retry = "then use Team → Start workers on the views page to start the team agents for this saved build."
 	switch cause {
 	case "stopping":
-		return "The project server is stopping. Ask your coding agent to call a Surla tool, or choose Start Surla " +
-			"in the Herdr companion, to start it again, " + retry
+		return "The project server is stopping. Ask your coding agent to open Surla views, or choose Start Surla " +
+			"in the Herdr companion; either starts the server again and opens a fresh page, " + retry
 	case "chorus":
 		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), " + retry
 	case "herdr":
@@ -554,13 +554,13 @@ func buildTeamStep(cause string) string {
 		return "Herdr's launcher roster folder could not be written. Make data/chorus-launcher/rosters " +
 			"in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
 	case "project_state":
-		return "This project's private state could not be read or written. Make this project's folder under " +
-			"Surla's operator storage private to this account (chmod 700 for folders, 600 for files), " + retry
+		return "This project's private state could not be read or written. Team → Start workers on the views page " +
+			"names the file and its repair; fix it, " + retry
 	case "role_folder":
 		return "A team role's working folder could not be read. Make sure this account can open " +
 			"the project folder and its build working folders, " + retry
 	}
-	return "The project team could not be prepared. Try again: start the team agents for this saved build."
+	return "The project team could not be prepared. Use Team → Start workers on the views page to start the team agents for this saved build."
 }
 
 // checkBuildReplacement refuses another change while the open build remains,

@@ -62,7 +62,7 @@ func (s *Server) StartAgents(ctx context.Context, requested map[string]*gensurla
 	record, roles := s.currentTeam()
 	assignments, err := s.readAssignments(ctx)
 	if err != nil {
-		return nil, userTeamError(teamUnavailable(ctx, "assignments", "project_state"))
+		return nil, userTeamError(stateUnavailable(ctx, "assignments", err))
 	}
 	var requestedRoles []launcherRole
 	if choice, explicit := requested["guide"]; explicit {
@@ -202,7 +202,7 @@ func (s *Server) startHerdrWorkers(
 	if explicitGuide {
 		guide, _ := guideRole(roles)
 		if _, err := s.registerAgent(guide.Handle, agentRecord{Role: "guide", Folder: guide.Folder}); err != nil {
-			return nil, userTeamError(teamUnavailable(ctx, "register_guide", "project_state"))
+			return nil, userTeamError(stateUnavailable(ctx, "register_guide", err))
 		}
 	}
 	if err := s.saveChoices(ctx, choices); err != nil {
@@ -217,7 +217,7 @@ func (s *Server) startHerdrWorkers(
 		return nil, userTeamError(err)
 	}
 	if err := s.saveTeamLocation(record.Team, space.ID, tab); err != nil {
-		return nil, userTeamError(teamUnavailable(ctx, "save_team", "project_state"))
+		return nil, userTeamError(stateUnavailable(ctx, "save_team", err))
 	}
 	if safeSpaceID(record.Space) && record.Space != space.ID {
 		oldPath := filepath.Join(s.team.dependencies.RosterDirectory, record.Space+".json")
@@ -251,7 +251,7 @@ func (s *Server) startHerdrWorkers(
 	if guide, ok := live["guide"]; ok && explicitGuide {
 		tab = guide.tab
 		if err := s.saveTeamLocation(record.Team, space.ID, tab); err != nil {
-			return nil, userTeamError(teamUnavailable(ctx, "save_guide_tab", "project_state"))
+			return nil, userTeamError(stateUnavailable(ctx, "save_guide_tab", err))
 		}
 	}
 	record.Space, record.Tab = space.ID, tab

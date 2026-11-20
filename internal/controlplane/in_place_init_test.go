@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goa "goa.design/goa/v3/pkg"
 	"golang.org/x/mod/module"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -367,6 +368,36 @@ func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 			assert.Equal(t, wantDir, res.Dir)
 		})
 	}
+}
+
+// TestInitProjectWithoutAVersionNamesTheRestart checks the refusal of a server
+// started from a surla build without a module version. The server keeps that
+// version until it stops, and a new surla refuses to attach to an older server,
+// so the step must stop the server and restart the coding agent before the
+// retry; the guide cannot pass surla init's -surla-version flag.
+func TestInitProjectWithoutAVersionNamesTheRestart(t *testing.T) {
+	opts := inPlaceInitOptions(t)
+	opts.SurlaVersion = ""
+	cp, err := New(opts)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
+	root := "."
+	_, err = cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{Dir: &root})
+	var refusal *goa.ServiceError
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, "not_implemented", refusal.Name)
+	for _, step := range []string{
+		"install surla from a tagged or pseudo-versioned module release",
+		"stop this project's server with surla stop in the project folder",
+		"restart your coding agent so its Surla connection starts the new surla",
+		"then call init_project again",
+	} {
+		assert.Contains(t, refusal.Message, step)
+	}
+	assert.NotContains(t, refusal.Message, "-surla-version")
+	entries, err := os.ReadDir(opts.WorkspaceDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "a refused init writes nothing")
 }
 
 // inPlaceInitOptions reuses the scaffold's fake command and generator, and
