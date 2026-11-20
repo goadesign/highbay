@@ -248,7 +248,6 @@ if (input.mode === "eligible") {
     expect(page.sent("POST", mergePath).length === before + 1, "refresh or recovery retried a merge for " + name);
   }
   await control(origin, "reply", { key: "POST " + mergePath, status: 200, body: { branch: "feature/refunds", head_commit: "9".repeat(40) } });
-  await control(origin, "act", { key: "other-change" });
   await control(origin, "hold", { key: "POST " + mergePath });
   const beforeSuccess = page.sent("POST", mergePath).length;
   page.$("#surla-cp5-merge").click();
@@ -256,6 +255,11 @@ if (input.mode === "eligible") {
   expect(page.$("#surla-cp5-merge").disabled, "pending merge remained available");
   page.$("#surla-cp5-merge").click();
   expect(page.sent("POST", mergePath).length === beforeSuccess + 1, "pending merge submitted twice");
+  // The other change appears only once the merge is pending: its list update
+  // wakes the page's change wait, and a refresh in flight disables Merge, so
+  // creating it before the click could swallow that click.
+  await control(origin, "act", { key: "other-change" });
+  await until(() => page.$("#surla-cp5-merge-feedback-pending") && page.$("#surla-cp5-merge").disabled, "the list update ended the pending merge");
   page.$("#surla-nav-changes").click();
   await until(() => page.$("#surla-open-change-chg-other-merge"), "another change was not listed during the pending merge");
   page.$("#surla-open-change-chg-other-merge").click();
