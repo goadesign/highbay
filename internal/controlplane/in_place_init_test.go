@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/module"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/gitenv"
@@ -308,12 +309,17 @@ func TestInitProjectEmptyDirStillUsesChild(t *testing.T) {
 }
 
 // TestInitProjectDerivesDefaultModulePath verifies omitted module_path
-// derivation across in-place and child directories, plus blank and invalid dir
-// refusals.
+// derivation across in-place and child directories, reserved/version folder
+// names, and the 48-character length threshold.
 func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 	t.Parallel()
 	dot := "."
 	child := "billing-api"
+	a47 := strings.Repeat("a", 47)
+	a48 := strings.Repeat("a", 48)
+	a49 := strings.Repeat("a", 49)
+	v48 := "v" + strings.Repeat("9", 47)
+	v48Want := "v" + strings.Repeat("9", 44) + "svc"
 	cases := []struct {
 		name        string
 		wsName      string
@@ -327,6 +333,13 @@ func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 		{name: "dot_digits_only_fallback", wsName: "12345", dir: &dot, wantService: "app", wantModule: "example.com/app", wantInPlace: true},
 		{name: "dot_go_keyword_suffix", wsName: "default", dir: &dot, wantService: "defaultsvc", wantModule: "example.com/defaultsvc", wantInPlace: true},
 		{name: "dot_main_suffix", wsName: "main", dir: &dot, wantService: "mainsvc", wantModule: "example.com/mainsvc", wantInPlace: true},
+		{name: "dot_v1_invalid_version_suffix", wsName: "v1", dir: &dot, wantService: "v1svc", wantModule: "example.com/v1svc", wantInPlace: true},
+		{name: "dot_v2_major_version_suffix", wsName: "v2", dir: &dot, wantService: "v2svc", wantModule: "example.com/v2svc", wantInPlace: true},
+		{name: "dot_windows_reserved_name", wsName: "aux", dir: &dot, wantService: "auxsvc", wantModule: "example.com/auxsvc", wantInPlace: true},
+		{name: "len_47_below_limit", wsName: a47, dir: &dot, wantService: a47, wantModule: "example.com/" + a47, wantInPlace: true},
+		{name: "len_48_at_limit", wsName: a48, dir: &dot, wantService: a48, wantModule: "example.com/" + a48, wantInPlace: true},
+		{name: "len_49_clamped_to_48", wsName: a49, dir: &dot, wantService: a48, wantModule: "example.com/" + a48, wantInPlace: true},
+		{name: "len_48_version_clamped_with_svc", wsName: v48, dir: &dot, wantService: v48Want, wantModule: "example.com/" + v48Want, wantInPlace: true},
 		{name: "child_dir_derived", wsName: "workspace", dir: &child, wantService: "billingapi", wantModule: "example.com/billingapi", wantInPlace: false},
 	}
 	for _, tc := range cases {
@@ -342,7 +355,11 @@ func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 			res, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{Dir: tc.dir})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantService, res.ServiceName)
+			assert.LessOrEqual(t, len(res.ServiceName), 48)
 			assert.Equal(t, tc.wantModule, res.ModulePath)
+			_, pathMajor, splitOK := module.SplitPathVersion(res.ModulePath)
+			assert.True(t, splitOK)
+			assert.Empty(t, pathMajor)
 			wantDir := ws
 			if !tc.wantInPlace {
 				wantDir = filepath.Join(ws, *tc.dir)

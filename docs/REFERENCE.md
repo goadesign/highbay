@@ -1169,7 +1169,8 @@ workspace. With an MCP `progressToken`, the server reports each phase.
 
 Omit `module_path` to derive `example.com/<service>` from the target folder's
 name (lowercased ASCII letters and non-leading digits up to 48 characters,
-appending `svc` for `main` or a Go keyword and falling back to
+appending `svc`—clamped to 48 characters—for `main`, a Go keyword, a `vN`
+module-version suffix or a reserved module path name, and falling back to
 `example.com/app` when the name has no ASCII letter). When supplied,
 `module_path` must be at least three characters (`400` when shorter) and end in
 a valid service name.

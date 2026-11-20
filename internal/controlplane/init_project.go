@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
+	"golang.org/x/mod/module"
 	"golang.org/x/sys/unix"
 
 	gensurla "github.com/goadesign/surla/gen/surla"
@@ -999,7 +1000,9 @@ func isConflictError(err error) bool {
 }
 
 // defaultInitModulePath derives example.com/<service> from a folder name when
-// module_path is omitted, keeping lowercase ASCII letters and non-leading digits.
+// module_path is omitted, keeping lowercase ASCII letters and non-leading
+// digits up to 48 characters and appending "svc" (clamped to 48 characters)
+// for "main", Go keywords, Go major-version suffixes, or reserved path names.
 func defaultInitModulePath(base string) string {
 	var b strings.Builder
 	for i := range len(base) {
@@ -1016,9 +1019,12 @@ func defaultInitModulePath(base string) string {
 	}
 	name := b.String()
 	if name == "" {
-		name = "app"
-	} else if !designeval.ValidServiceName(name) {
-		name += "svc"
+		return "example.com/app"
+	}
+	candidate := "example.com/" + name
+	_, pathMajor, splitOK := module.SplitPathVersion(candidate)
+	if !designeval.ValidServiceName(name) || module.CheckPath(candidate) != nil || !splitOK || pathMajor != "" {
+		name = name[:min(len(name), 45)] + "svc"
 	}
 	return "example.com/" + name
 }
