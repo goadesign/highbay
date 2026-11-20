@@ -82,7 +82,7 @@ func stateRepair(err error) string {
 	case errors.Is(err, errNotPrivateFile), errors.Is(err, errNotPrivateFolder):
 		return fmt.Sprintf("Surla could not use %s because of its permissions or owner; make it a %s of this account that only this account can use (chmod %s %s, and chown it to this account if another account owns it), then try again", failure.path, kind, mode, failure.path)
 	case errors.Is(err, os.ErrPermission):
-		return fmt.Sprintf("Surla could not open %s; make sure this account can open the folders that hold it, starting at %s, then try again", failure.path, filepath.Dir(failure.path))
+		return fmt.Sprintf("Surla could not open %s; make sure this account can read it and open the folders that hold it, starting at %s, then try again", failure.path, filepath.Dir(failure.path))
 	case errors.Is(err, os.ErrNotExist):
 		return fmt.Sprintf("%s is missing; restore it from a backup of this project's Surla state, then try again", failure.path)
 	default:
