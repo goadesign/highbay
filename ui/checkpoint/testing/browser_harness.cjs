@@ -1060,20 +1060,111 @@ async function agreementScenario(input, facts, views) {
     measured.summary_screenshot = require("node:path").join(input.capture_directory, name + "-summary-reading.png");
     const reading = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
     fs.writeFileSync(measured.summary_screenshot, Buffer.from(reading.data, "base64"));
-    measured.end_reachable = await evaluate(views, "(" + async function reachSummaryEnd() {
+    const end = await evaluate(views, "(" + async function reachSummaryEnd() {
       const summary = document.getElementById('surla-agreement-summary');
       summary.scrollIntoView({ block: 'end' });
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const box = summary.getBoundingClientRect();
       const footer = document.getElementById('surla-frame-next');
       const bottom = getComputedStyle(footer).position === 'fixed' ? footer.getBoundingClientRect().top : innerHeight;
-      return box.bottom > 0 && box.bottom <= bottom && getComputedStyle(summary).overflowY === 'visible';
+      return { end: box.bottom, bottom, scrollY, overflow: getComputedStyle(summary).overflowY };
     }.toString() + ")()");
+    measured.end_reachable = end.end > 0 && end.end <= end.bottom && end.overflow === "visible";
+    if (!measured.end_reachable) throw new Error("The end of the agreement is outside the readable viewport at " + name + ": " + JSON.stringify(end));
     facts.agreement.push(measured);
   }
 }
 
 // main runs the scenario. Each section names the Go subtest that judges it.
+// onboardingScenario follows an empty project into its first proposal and
+// captures each surface on both viewport widths and color schemes.
+async function onboardingScenario(input, views) {
+  const variants = [
+    ["desktop-light", 1280, 900, "light"], ["desktop-dark", 1280, 900, "dark"],
+    ["phone-light", 375, 800, "light"], ["phone-dark", 375, 800, "dark"],
+  ];
+  const requireView = async (expression, message) => {
+    if ((await until(views, expression)).timed_out) throw new Error(message);
+  };
+  const press = async (key, windowsVirtualKeyCode) => {
+    const params = { key, code: key, windowsVirtualKeyCode };
+    if (key === "Enter") await views.dt.send("Input.dispatchKeyEvent", { ...params, type: "keyDown", text: "\r" }, views.sessionId);
+    else await views.dt.send("Input.dispatchKeyEvent", { ...params, type: "keyDown" }, views.sessionId);
+    await views.dt.send("Input.dispatchKeyEvent", { ...params, type: "keyUp" }, views.sessionId);
+  };
+  const capture = async (view) => {
+    for (const [variant, width, height, theme] of variants) {
+      await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 }, views.sessionId);
+      await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] }, views.sessionId);
+      await evaluate(views, "window.scrollTo(0, 0), new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))).then(() => Promise.all(document.getAnimations().filter(animation => animation instanceof CSSTransition).map(animation => animation.finished.catch(() => {}))))");
+      await requireView("document.documentElement.scrollWidth <= document.documentElement.clientWidth",
+        view + " widened the page at " + variant);
+      if (width < 600) {
+        await requireView("document.querySelector('.surla-frame-project-menu > summary').getBoundingClientRect().height >= 44",
+          "Inspect's phone target is too small");
+      }
+      const screenshot = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
+      fs.writeFileSync(require("node:path").join(input.capture_directory, view + "-" + variant + ".png"), Buffer.from(screenshot.data, "base64"));
+    }
+  };
+
+  await requireView("document.querySelector('.surla-welcome-card h2')?.textContent.includes('Describe what you want to build') && !document.querySelector('.surla-frame-slots, .surla-frame-journey, .surla-frame-context')",
+    "the connected empty project did not settle on the welcome card");
+  await capture("welcome");
+  await evaluate(views, "document.querySelector('.surla-frame-project-menu > summary').focus(), true");
+  await press("Enter", 13);
+  await requireView("document.querySelector('.surla-frame-project-menu').open", "Enter did not open Inspect");
+  await press("Tab", 9);
+  await requireView("document.activeElement.id === 'surla-nav-team'", "Tab did not reach Team in Inspect");
+  await press("Escape", 27);
+  const escaped = await evaluate(views, "({ open: document.querySelector('.surla-frame-project-menu').open, summaryFocused: document.activeElement.matches('.surla-frame-project-menu > summary'), focused: document.activeElement?.id || document.activeElement?.tagName })");
+  if (escaped.open || !escaped.summaryFocused) {
+    throw new Error("Escape did not dismiss Inspect and restore focus: " + JSON.stringify(escaped));
+  }
+  await press("Enter", 13);
+  const point = await evaluate(views, "(() => { const box = document.querySelector('.surla-welcome-card h2').getBoundingClientRect(); return {x: box.left + 10, y: box.top + 10}; })()");
+  await views.dt.send("Input.dispatchMouseEvent", { ...point, type: "mousePressed", button: "left", clickCount: 1 }, views.sessionId);
+  await views.dt.send("Input.dispatchMouseEvent", { ...point, type: "mouseReleased", button: "left", clickCount: 1 }, views.sessionId);
+  await requireView("!document.querySelector('.surla-frame-project-menu').open", "outside pointer press did not dismiss Inspect");
+  await evaluate(views, "document.querySelector('.surla-frame-project-menu > summary').focus(), true");
+  await press("Enter", 13);
+  await press("Tab", 9);
+  await press("Enter", 13);
+  await requireView("document.querySelector('.surla-frame-project-menu > summary').textContent === 'Inspect · Team' && !document.querySelector('.surla-frame-project-menu').open",
+    "choosing Team did not close Inspect and name the current view");
+  await evaluate(views, "document.getElementById('surla-nav-changes').click(), true");
+  await requireView("Boolean(document.querySelector('.surla-welcome-card'))", "returning from Team did not show the welcome card");
+
+  const proposed = await fetch(input.origin + "/changes/propose", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + input.onboarding.guide, "Content-Type": "application/json" },
+    body: JSON.stringify(input.onboarding.proposal),
+  });
+  if (!proposed.ok) throw new Error("fixture proposal was refused with HTTP " + proposed.status);
+  const opened = await until(views, "Boolean(document.querySelector('#surla-openui-workspace .shadcn-choice-group') && document.querySelector('#surla-cp1-form-card .shadcn-choice-group'))");
+  if (opened.timed_out) {
+    const displayed = await evaluate(views, "document.body.innerText.slice(0, 1800)");
+    throw new Error("the first proposal did not open both its decision aid and its remaining question: " + displayed);
+  }
+  await capture("agree");
+
+  await evaluate(views, "document.getElementById('surla-cp1-next-question').focus(), true");
+  await press("Enter", 13);
+  await requireView("document.activeElement.dataset.openuiAmbiguityId === 'refund-rules-ambiguity-01'", "Next did not focus the first question in OpenUI");
+  await requireView("document.activeElement.getBoundingClientRect().bottom <= document.getElementById('surla-frame-next').getBoundingClientRect().top",
+    "the fixed Next action covered the focused answer on the phone");
+  await press("ArrowDown", 40);
+  await requireView("document.activeElement.getAttribute('aria-pressed') === 'true' && document.activeElement.tabIndex === 0 && document.activeElement.dataset.openuiOption.includes('full amount')",
+    "arrow navigation did not focus and select the next option");
+  await press("Tab", 9);
+  await requireView("!document.activeElement.dataset.openuiAmbiguityId", "Tab stayed inside a single question's options");
+  await evaluate(views, "document.getElementById('surla-cp1-next-question').focus(), true");
+  await press("Enter", 13);
+  await requireView("document.activeElement.dataset.ambiguityId === 'refund-rules-ambiguity-02'", "Next did not advance to the fixed question");
+  await press("Enter", 13);
+  await requireView("document.getElementById('surla-cp1-next-confirm')?.disabled === false", "Next did not offer confirmation after the last answer");
+}
+
 async function main(input, facts) {
   const dt = await DevTools.connect(input.devtools);
   try {
@@ -1102,6 +1193,11 @@ async function main(input, facts) {
       target_url: targetInfo.url,
     };
 
+    if (input.onboarding) {
+      await onboardingScenario(input, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
     if (input.agreement) {
       await agreementScenario(input, facts, views);
       await dt.send("Target.closeTarget", { targetId: views.targetId });

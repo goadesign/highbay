@@ -387,9 +387,9 @@ export function BuildSectionView({
         {observations}{progress}{explanation}<div className="surla-field-row surla-build-actions">{actions}</div>
       </> : null}
       {draftedBeforeDrop === true ? <p id="surla-build-enabling-step">
-        This agreement was drafted before a build was dropped; ask the guide to refresh its draft with <code>refresh_story</code>
-        {" and propose a revision from that refresh with "}<code>revise_change</code>, then adopt that revision before building.
-        {" A proposal already waiting may predate the drop; adopting it alone may not enable Build."}
+        This agreement was drafted before a build was dropped. Ask your coding agent to refresh its draft with <code>refresh_story</code>
+        {" and propose a revision from the refresh with "}<code>revise_change</code>, then adopt that revision before building.
+        {" A proposal already waiting may predate the drop. Check that it came from the refreshed draft."}
       </p> : null}
       {!confirmed ? <p>Confirm the change before building it.</p> : !displayedCurrent ? (
         <p>A newer agreed revision is available. Review it before starting a build.</p>
@@ -540,7 +540,8 @@ export function BuildTakingView({ changeId, build, disabled, dropping, onDrop, o
         }}>
         <Alert>
           <p><strong>Drop change {changeId}?</strong></p>
-          <p>Surla will not build on it. Its commits stay on this build’s branches, your branch is unchanged, and the guide’s draft starts again from your branch; edits it has not proposed are lost.</p>
+          <p>Dropping ends this build. Its commits stay on the build’s branches. Your branch keeps its current commits,
+            and your coding agent starts a fresh draft from it. Any edits it has not proposed are lost.</p>
           <div className="surla-field-row">
             <Button id="surla-build-drop-confirm" disabled={disabled || dropping} onClick={() => {
               if (sent.current || !confirming) return;

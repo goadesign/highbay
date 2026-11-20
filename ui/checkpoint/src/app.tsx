@@ -28,7 +28,7 @@ import { ApprovalStage } from "./components/approval-stage";
 import { WorkspaceFrame } from "./components/workspace-frame";
 import { SessionEndedNotice, SignedOutReason, SignedOutView } from "./components/session";
 import { StoryStageView } from "./components/story";
-import { GlobalTeamAttention, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
+import { GlobalTeamAttention, roleHasPane, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
 import { LiveTargetStageView, ModelDraft, ServerAnswer, describeApplied } from "./components/live-target";
 import { Alert, Button, Card } from "./components/shadcn";
 import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
@@ -113,7 +113,7 @@ interface ActiveEditorState {
   // preservedDraft retains unsaved draft edits from an earlier revision.
   preservedDraft: PreservedDraft | null;
   // formError describes the latest failed editor request or invalid input.
-  formError: string | null;
+  formError: { message: string; source: "input" | "request" } | null;
   // proposalAnswers holds the user's choices for the waiting proposal's
   // questions; a re-read keeps those that still fit the proposal.
   proposalAnswers: Record<string, string>;
@@ -386,13 +386,15 @@ function describeActiveResultSubject(
   if (
     !activeResult ||
     activeResult.kind === "cp1-incoming-card" ||
-    activeResult.kind === "changes" ||
     activeResult.kind === "live" ||
     activeResult.kind === "team"
   ) {
     return null;
   }
   const label = bothRegionsShown ? "Displayed view" : "Showing";
+  if (activeResult.kind === "changes") {
+    return bothRegionsShown ? { role: "result", label, stage: "Project changes" } : null;
+  }
   if (activeResult.kind === "story") {
     let draft = "current draft not read yet";
     if (storyEvaluation !== null) {
@@ -804,7 +806,7 @@ export function bootstrapViewsPage() {
 
   // sessionEndedMessage tells the user what to do once the session is gone.
   function sessionEndedMessage(): string {
-    return "This page's Surla session has ended. Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.";
+    return "This page's Surla session has ended. Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.";
   }
 
   // start exchanges the link from the address fragment for a session, removes
@@ -843,8 +845,8 @@ export function bootstrapViewsPage() {
     rootEl.dataset.state = reason === "link-used" ? "link-used" : "signed-out";
     statusEl.textContent =
       reason === "link-used"
-        ? "This link was already used. Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion."
-        : "Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.";
+        ? "This link was already used. Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion."
+        : "Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.";
     syncAllRegions();
   }
 
@@ -935,14 +937,16 @@ export function bootstrapViewsPage() {
     return pending;
   }
 
-  // applyListChanges opens the only change on the first read and otherwise
-  // re-reads the open card or its runs only when their list entry changed.
+  // applyListChanges opens the only change on the first read or when the
+  // first proposal arrives on the empty Changes view. Later reads preserve
+  // the current editor and reconcile its saved facts by change ID.
   function applyListChanges(previous: ChangeList | null, next: ChangeList) {
+    if (activeEditor === null && next.changes.length === 1 &&
+      (previous === null || (previous.changes.length === 0 && activeResult?.kind === "changes"))) {
+      openChange(next.changes[0].change_id);
+      return;
+    }
     if (previous === null) {
-      if (next.changes.length === 1 && activeEditor === null) {
-        openChange(next.changes[0].change_id);
-        return;
-      }
       if (activeResult?.kind === "changes") {
         statusEl.textContent =
           next.changes.length === 0
@@ -1112,8 +1116,8 @@ export function bootstrapViewsPage() {
       if (after !== undefined && before?.request_revision !== after.request_revision) {
         statusEl.textContent =
           (before === undefined
-            ? "The guide proposed a new revision of this change."
-            : "The guide replaced its proposed revision of this change.") +
+            ? "Your coding agent proposed a new revision of this change."
+            : "Your coding agent replaced its proposed revision of this change.") +
           " Adopt or decline it in Agree; the agreed revision stays in force until then.";
       }
       syncAllRegions();
@@ -1751,7 +1755,7 @@ export function bootstrapViewsPage() {
       text: "Surla can use it for both workers. A second model family can give the builder and test writer different perspectives.",
     });
     if (snapshot.herdr_mode === "available") notices.push({
-      notice: "outside_herdr", title: "Your guide is outside Herdr.",
+      notice: "outside_herdr", title: "Your coding agent is outside Herdr.",
       text: "Workers will open in the project’s Herdr tab. Starting them selects that tab without bringing the Herdr window to the foreground. You can keep using this coding-agent session.",
     });
     if (snapshot.herdr_mode === "unavailable") notices.push({
@@ -1796,6 +1800,14 @@ export function bootstrapViewsPage() {
     if (sessionState !== "active") return { readFailed: false, message: "The session ended; these are last-read facts." };
     if (waitTroubleShown) return { readFailed: false, message: "Updates are unavailable; these are last-read facts." };
     return null;
+  }
+
+  // connectedGuide finds a registered guide that can still follow the project,
+  // including a guide whose terminal state Herdr cannot observe.
+  function connectedGuide(): TeamRoleState | undefined {
+    return teamSnapshot?.roles.find((role) =>
+      role.role === "guide" && role.state !== "not_started" && role.state !== "ended"
+    );
   }
 
   // showingTeamRoles derives pending controls from the registered snapshot,
@@ -2155,7 +2167,7 @@ export function bootstrapViewsPage() {
           buildSnapshot = result.build;
           buildDraftedBeforeDrop = result.drafted_before_drop;
         }
-        statusEl.textContent = "The build was dropped. Ask the guide to refresh its draft before revising; adopt the revision, then build.";
+        statusEl.textContent = "The build was dropped. Ask your coding agent to refresh its draft and propose a revision. Adopt the revision before building again.";
         readBuild(selected);
         refreshOpenCard(selected);
         refreshVerificationObservations(selected);
@@ -2174,20 +2186,21 @@ export function bootstrapViewsPage() {
   // showTeamPane sends only the registered role the user selected; the server
   // rechecks ownership and open dialogs before it changes the window.
   function showTeamPane(role: TeamRoleState["role"]) {
-    if (sessionState !== "active" || teamSnapshot?.herdr_mode === "unavailable" ||
+    if (sessionState !== "active" || !roleHasPane(role, teamSnapshot?.herdr_mode) ||
         hasPending("show_team_pane", role)) return;
     teamActionError = null;
+    const label = role === "guide" ? "coding agent" : role.replaceAll("_", " ");
     callServer(
       "show_team_pane", { role }, role,
       () => {
         if (sessionState !== "active") return;
-        statusEl.textContent = "The " + role.replaceAll("_", " ") + "'s pane is shown in Herdr.";
+        statusEl.textContent = "The " + label + "'s pane is shown in Herdr.";
         readTeam();
       },
       (message) => {
         if (sessionState !== "active") return;
         teamActionError = message;
-        statusEl.textContent = "Could not show the " + role.replaceAll("_", " ") + "'s pane. " + message;
+        statusEl.textContent = "Could not show the " + label + "'s pane. " + message;
       }
     );
   }
@@ -2443,12 +2456,12 @@ export function bootstrapViewsPage() {
       active: boolean;
       onClick: () => void;
     }[] = [];
-    tabs.push({
-      id: "surla-nav-changes",
-      label: "Describe",
-      active: activeResult?.kind === "changes",
-      onClick: showChanges,
-    });
+    const onDescribe = activeResult?.kind === "changes";
+    const changesLabel = changeList !== null && (changeList.changes.length > 0 || activeEditor !== null)
+      ? "Changes" : "Describe";
+    if (!onDescribe || changeList === null || changeList.changes.length > 0 || activeEditor !== null) {
+      tabs.push({ id: "surla-nav-changes", label: changesLabel, active: onDescribe, onClick: showChanges });
+    }
     tabs.push({
       id: "surla-nav-team",
       label: "Team",
@@ -2564,6 +2577,22 @@ export function bootstrapViewsPage() {
     const review = displayedApprovalReview();
     const onApproval = activeResult?.kind === "cp5-approval";
     const fresh = run !== null && approvalReviewFresh(run);
+    const teamError = teamFactsError();
+    const teamLoading = hasPending("get_team", "");
+    const teamStarting = hasPending("start_team_agents", "");
+    const teamRoles = teamSnapshot?.roles ?? [];
+    const herdrMode = teamSnapshot?.herdr_mode;
+    const guideInHerdr = herdrMode === "attached";
+    const herdrWorkerAvailable = herdrMode !== "unavailable";
+    const guide = connectedGuide();
+    const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
+    const teamStatusUnknown = teamRoles.some((role) => role.state === "error" ||
+      (role.state === "unknown" && (role.role !== "guide" || guideInHerdr)));
+    const showSlots = !(onDescribe && !editorOpen && listError === null &&
+      (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)) &&
+      changeList !== null && changeList.changes.length === 0 && teamError === null &&
+      !teamLoading && !teamStarting && teamSnapshot !== null && teamNeedsYou === undefined &&
+      !teamStatusUnknown && guide !== undefined && (!guideInHerdr || guide.state !== "starting"));
     let attention = "Nothing now.";
     let next: React.ReactNode = null;
     if (onApproval) {
@@ -2625,15 +2654,15 @@ export function bootstrapViewsPage() {
           next = <span>Review the current agreement before deciding to build again.</span>;
         } else if (build.taking.state === "dropped") {
           attention = "This build was dropped.";
-          next = <span>The guide prepares a fresh revision before another build.</span>;
+          next = <span>Your coding agent prepares a fresh revision before another build.</span>;
         } else if (build.taking.state === "merged") {
           attention = "The verified commits are merged.";
           next = <span>Describe the next change when you are ready.</span>;
         } else if (tests.state === "needs_changes") {
-          const needs = teamFactsError() === null ? (teamSnapshot?.roles ?? []).filter((role) => role.state === "needs_you") : [];
+          const needs = teamError === null ? teamRoles.filter((role) => role.state === "needs_you") : [];
           attention = needs.length > 0
-            ? needs.map((role) => teamAttentionText(role, teamSnapshot?.herdr_mode !== "unavailable")).join(". ")
-            : teamFactsError() !== null || teamSnapshot === null || teamSnapshot.roles.some((role) => role.state === "unknown" || role.state === "error")
+            ? needs.map((role) => teamAttentionText(role, roleHasPane(role.role, herdrMode))).join(". ")
+            : teamError !== null || teamSnapshot === null || teamStatusUnknown
             ? "Team status unknown." : "Nothing now.";
           next = <span>The test writer corrects the tests and reports again.</span>;
         } else if (tests.state === "could_not_run") {
@@ -2664,29 +2693,20 @@ export function bootstrapViewsPage() {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
       attention = "Read the saved test evidence, then review the result for approval.";
     }
-    const onDescribe = activeResult?.kind === "changes";
     if (next === null) {
       // Recovery takes precedence over guidance based on retained observations.
-      const teamError = teamFactsError();
-      const teamLoading = hasPending("get_team", "");
-      const teamStarting = hasPending("start_team_agents", "");
-      const teamRoles = teamSnapshot?.roles ?? [];
-      const herdrAvailable = teamSnapshot?.herdr_mode !== "unavailable";
-      const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
-      const guide = teamRoles.find((role) => role.role === "guide");
-      const guideNeedsConnection = guide === undefined || guide.state === "not_started" || guide.state === "ended";
       const connectGuide = "Connect your coding agent to this project’s Surla MCP server.";
-      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, herdrAvailable)
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, roleHasPane(teamNeedsYou.role, herdrMode))
         : teamLoading || teamSnapshot === null ? "Waiting for Team status."
-        : teamRoles.some((role) => role.state === "unknown" || role.state === "error") ? "Team status unknown."
+        : teamStatusUnknown ? "Team status unknown."
         : "Nothing now.";
       let step: string | React.ReactElement;
       if (sessionState !== "active") {
         attention = "The session ended.";
-        step = "Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.";
+        step = "Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.";
       } else if (listError !== null) {
         attention = "The changes could not be read.";
-        step = onDescribe ? "Choose Read the changes again below." : "Open Describe to retry reading changes.";
+        step = onDescribe ? "Choose Read the changes again below." : "Open " + changesLabel + " to retry reading changes.";
       } else if (waitTroubleShown) {
         attention = "Updates are unavailable.";
         step = "Wait for Surla to reconnect.";
@@ -2695,7 +2715,7 @@ export function bootstrapViewsPage() {
         step = activeResult?.kind === "team" ? "Choose Retry team read below." : "Open Team to retry reading roles.";
       } else if (lastOpenAttempt !== null && lastOpenAttempt !== activeEditor?.card.change_id && cardLoadErrors.has(lastOpenAttempt)) {
         attention = "The Change Card could not be opened.";
-        step = onDescribe ? "Try opening the change again below." : "Open Describe and try opening the change again.";
+        step = onDescribe ? "Try opening the change again below." : "Open " + changesLabel + " and try opening the change again.";
       } else if (activeEditor !== null && cardLoadErrors.has(activeEditor.card.change_id)) {
         attention = "The latest saved Change Card could not be read.";
         step = editorRequest !== null ? "Wait for the current Change Card request."
@@ -2711,27 +2731,29 @@ export function bootstrapViewsPage() {
           step = "Open a change from the list below.";
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
-        } else if (guideNeedsConnection) {
-          if (teamNeedsYou === undefined) attention = "Guide needed.";
+        } else if (guide === undefined) {
+          if (teamNeedsYou === undefined) attention = "Coding agent needed.";
           step = connectGuide + " Then describe your change.";
-        } else if (!herdrAvailable) {
-          step = guide.state === "needs_you" ? "Return to your coding agent to address the guide’s request."
-            : "Describe your change in your coding agent.";
+        } else if (!guideInHerdr) {
+          step = guide.state === "needs_you" ? "Return to your coding agent to address its request."
+            : guide.state === "error" ? "Return to your coding agent to check its error."
+            : teamStatusUnknown && teamNeedsYou === undefined ? "Open Team to check role status."
+            : "Describe what you want to build in your coding agent.";
         } else if (guide.state === "starting") {
-          step = "Wait for the guide to start.";
+          step = "Wait for your coding agent to start.";
         } else if (guide.state === "unknown" || guide.state === "error") {
           if (teamNeedsYou === undefined) {
-            attention = guide.state === "unknown" ? "Guide status unknown." : "The guide reported an error.";
+            attention = guide.state === "unknown" ? "Coding agent status unknown." : "Your coding agent reported an error.";
           }
-          step = "Open Team and refresh to check the guide’s status.";
+          step = "Open Team and refresh to check your coding agent’s status.";
         } else if (guide.state === "needs_you") {
-          step = "In Team, choose Show guide pane to address the guide’s request.";
+          step = "In Team, choose Show coding agent pane to address its request.";
         } else {
-          step = "In Team, choose Show guide pane and describe your change.";
+          step = "Choose Show coding agent pane below to describe your change.";
         }
       } else if (cp1Active && activeEditor !== null) {
         const ed = activeEditor;
-        if (editorRequest !== null) {
+        if (editorRequest !== null && editorRequest !== "confirm_intent") {
           step = "Wait for the current Change Card request.";
         } else if (ed.incomingCard !== null) {
           attention = "A newer saved revision is available.";
@@ -2739,9 +2761,27 @@ export function bootstrapViewsPage() {
         } else if (editorStage === "agree" && ed.card.proposed_revision !== undefined) {
           attention = "A proposed revision is waiting for your decision.";
           step = "Review the proposal below, then choose Adopt or Decline.";
-        } else if (ed.formError !== null) {
+        } else if (ed.formError?.source === "request") {
           attention = "The Change Card request failed.";
           step = "Choose Load Latest Card to review the saved card alongside your edits.";
+        } else if (ed.card.status === "needs_confirmation" && editorStage === "agree") {
+          const unanswered = unansweredQuestions(ed);
+          const question = unanswered[0];
+          const exampleIssue = firstIncompleteExample(ed);
+          const confirming = editorRequest === "confirm_intent";
+          if (question !== undefined) {
+            attention = unanswered.length === 1 ? "1 question to answer." : unanswered.length + " questions to answer.";
+            step = <Button id="surla-cp1-next-question" variant="primary"
+              onClick={() => focusDraftQuestion(question.id)}>Jump to unanswered question</Button>;
+          } else if (exampleIssue !== null) {
+            attention = "An example needs " + exampleIssue.label + ".";
+            step = <Button id="surla-cp1-next-example" variant="primary"
+              onClick={() => focusDraftExample(exampleIssue)}>Review example</Button>;
+          } else {
+            attention = confirming ? "Saving your agreement." : "Ready to confirm intent.";
+            step = <Button id="surla-cp1-next-confirm" variant="primary" disabled={confirming}
+              onClick={handleConfirmSubmit}>{confirming ? "Confirming…" : "Confirm intent"}</Button>;
+          }
         } else if (ed.card.status === "needs_confirmation") {
           attention = "This change needs confirmation.";
           step = "Review the questions and examples below, then confirm the change.";
@@ -2773,8 +2813,9 @@ export function bootstrapViewsPage() {
         step = teamStarting ? "Wait for workers to start."
           : teamLoading || teamSnapshot === null ? "Wait for Team status."
           : teamNeedsYou === undefined && teamWorkersHaveWork() ? "Use Start workers to bring up missing build workers."
-          : guideNeedsConnection ? connectGuide
-          : herdrAvailable ? "Review role status and use Show pane to contact an agent."
+          : guide === undefined ? connectGuide
+          : guideInHerdr || (herdrWorkerAvailable && teamRoles.some((role) => role.role !== "guide"))
+            ? "Review role status and use Show pane to contact an agent."
           : "Review role status below.";
       } else if (activeResult?.kind === "story") {
         if (storyEvaluationError !== null) {
@@ -2782,9 +2823,9 @@ export function bootstrapViewsPage() {
           step = "Choose Read the draft again below.";
         } else {
           step = storyEvaluation === null ? "Wait for Surla to read the Story draft."
-            : storyEvaluation.state === "none" ? "Ask the guide to refresh the Story."
+            : storyEvaluation.state === "none" ? "Ask your coding agent to refresh the Story."
             : storyEvaluation.state === "running" ? "Wait for the Story evaluation."
-            : storyEvaluation.state === "failed" ? "Ask the guide to fix the Story and refresh it."
+            : storyEvaluation.state === "failed" ? "Ask your coding agent to fix the Story and refresh it."
             : "Review the current draft and any saved Story below.";
         }
       } else if (activeResult?.kind === "live") {
@@ -2801,7 +2842,7 @@ export function bootstrapViewsPage() {
             : "Review the last live target’s status below.";
         }
       } else {
-        step = "Open Describe to find a change.";
+        step = "Open " + changesLabel + " to find a change.";
       }
       next = typeof step === "string" ? <span>{step}</span> : step;
     }
@@ -2813,9 +2854,9 @@ export function bootstrapViewsPage() {
         <WorkspaceFrame project={projectName ?? "Project"}
           journey={tabs.filter((tab) => journeyIds.has(tab.id))}
           references={tabs.filter((tab) => !journeyIds.has(tab.id))}
-          agreed={agreedCard?.summary ?? "No confirmed agreement opened"}
+          agreed={agreedCard?.summary ?? null}
           onReadFullSummary={agreedCard !== null ? handleReadFullSummary : null}
-          attention={attention} next={next}
+          showSlots={showSlots} attention={attention} next={next}
           diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
             traceOpen = !traceOpen;
             if (traceOpen && tracePage === null) loadTracePage();
@@ -2891,7 +2932,7 @@ export function bootstrapViewsPage() {
         teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
       ).find((role) => role !== undefined);
       if (attention !== undefined) {
-        step = teamAttentionText(attention, teamSnapshot?.herdr_mode !== "unavailable");
+        step = teamAttentionText(attention, roleHasPane(attention.role, teamSnapshot?.herdr_mode));
       } else if (activeEditor !== null) {
         const ed = activeEditor;
         if (ed.incomingCard !== null || ed.card.proposed_revision !== undefined) {
@@ -2906,7 +2947,7 @@ export function bootstrapViewsPage() {
       } else if (changeList === null) {
         step = "Opening project";
       } else {
-        step = changeList.changes.length === 0 ? "Ask guide to propose a change" : "Open a change";
+        step = changeList.changes.length === 0 ? "Describe your change" : "Open a change";
       }
     }
     return step + ": " + projectName;
@@ -2949,6 +2990,9 @@ export function bootstrapViewsPage() {
             onShowPane={showTeamPane}
             onFocusedControlRemoved={focusCurrentViewHeading}
           />
+        ) : null}
+        {teamActionError !== null && activeResult?.kind !== "team" ? (
+          <Alert id="surla-team-action-error" variant="destructive" role="alert">{teamActionError}</Alert>
         ) : null}
         </>
       );
@@ -3069,7 +3113,7 @@ export function bootstrapViewsPage() {
           loadingVerifications={hasPending("list_verifications", ed.card.change_id)}
           cp4Open={activeResult?.kind === "cp4-verification"}
           preservedDraft={ed.preservedDraft}
-          formError={ed.formError}
+          formError={ed.formError?.message ?? null}
           onSetAnswer={(ambId, opt) => {
             if (!activeEditor || editorRequest !== null) {
               return;
@@ -3077,6 +3121,7 @@ export function bootstrapViewsPage() {
             activeEditor = {
               ...activeEditor,
               draftAnswers: { ...activeEditor.draftAnswers, [ambId]: opt },
+              formError: activeEditor.formError?.source === "input" ? null : activeEditor.formError,
             };
             syncAllRegions();
           }}
@@ -3089,12 +3134,13 @@ export function bootstrapViewsPage() {
               draftExamples: activeEditor.draftExamples.map((item) =>
                 item.id === exId ? { ...item, [field]: value } : item
               ),
+              formError: activeEditor.formError?.source === "input" ? null : activeEditor.formError,
             };
             syncAllRegions();
           }}
           onSubmitConfirm={handleConfirmSubmit}
           onDiscardDraft={handleDiscardDraft}
-          onLoadLatestCard={handleLoadLatestCard}
+          onLoadLatestCard={ed.formError?.source === "input" ? null : handleLoadLatestCard}
           onLoadVerifications={() => handleListVerifications(ed.card.change_id)}
           onOpenStory={openStory}
           onReviewApproval={openRecordedApproval}
@@ -3171,6 +3217,11 @@ export function bootstrapViewsPage() {
             openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
             openChangeId={activeEditor ? activeEditor.card.change_id : null}
             busy={editorRequest !== null}
+            guideConnected={connectedGuide() !== undefined}
+            guideInHerdr={teamSnapshot?.herdr_mode === "attached"}
+            disabled={sessionState !== "active"}
+            showingGuide={hasPending("show_team_pane", "guide")}
+            onShowGuidePane={() => showTeamPane("guide")}
             onOpen={openChange}
             onRetry={() => void loadChanges()}
           />
@@ -3372,6 +3423,7 @@ export function bootstrapViewsPage() {
 
   // syncAllRegions synchronizes the notice, editor, result, nav, and trace regions.
   function syncAllRegions() {
+    statusEl.toggleAttribute("data-connection-warning", waitTroubleShown);
     viewEl.classList.toggle(
       "surla-split-workspace",
       Boolean(activeEditor !== null && editorOpen && activeResult !== null)
@@ -3837,14 +3889,14 @@ export function bootstrapViewsPage() {
 
   // showFormError reports a failed read, save or input check without changing
   // the saved snapshot or discarding draft text.
-  function showFormError(msg: string) {
+  function showFormError(message: string, source: "input" | "request" = "request") {
     if (!activeEditor) {
       return;
     }
-    statusEl.textContent = "Change Card request failed; unsaved edits preserved.";
+    statusEl.textContent = source === "input" ? message : "Change Card request failed; unsaved edits preserved.";
     activeEditor = {
       ...activeEditor,
-      formError: String(msg),
+      formError: { message, source },
     };
     syncAllRegions();
   }
@@ -3858,32 +3910,56 @@ export function bootstrapViewsPage() {
     }
   }
 
+  // unansweredQuestions is shared by Next's progress and confirmation
+  // validation, including questions rendered by a decision instrument.
+  function unansweredQuestions(editor: ActiveEditorState) {
+    return (editor.card.ambiguities ?? []).filter((question) =>
+      !Object.prototype.hasOwnProperty.call(editor.draftAnswers, question.id) || !editor.draftAnswers[question.id]
+    );
+  }
+
+  // focusDraftQuestion locates whichever renderer owns the current question.
+  function focusDraftQuestion(questionId: string) {
+    Array.from(editorRegionEl.querySelectorAll<HTMLButtonElement>("button[data-ambiguity-id]"))
+      .find((option) => option.dataset.ambiguityId === questionId)?.focus();
+  }
+
+  // firstIncompleteExample locates the field blocking confirmation in the
+  // same order that the user reads the example.
+  function firstIncompleteExample(editor: ActiveEditorState) {
+    for (const [index, example] of editor.draftExamples.entries()) {
+      const blank = !example.scenario.trim() ? { field: "scenario", label: "a scenario" }
+        : !example.input_summary.trim() ? { field: "input_summary", label: "an input" }
+        : !example.expected_outcome.trim() ? { field: "expected_outcome", label: "an expected result" } : null;
+      if (blank !== null) return { ...blank, exampleId: example.id, number: index + 1 };
+    }
+    return null;
+  }
+
+  // focusDraftExample locates a bound example field without interpolating its
+  // owner-provided ID into a selector.
+  function focusDraftExample(issue: { exampleId: string; field: string }) {
+    Array.from(editorRegionEl.querySelectorAll<HTMLTextAreaElement>("textarea[data-example-id]"))
+      .find((field) => field.dataset.exampleId === issue.exampleId && field.dataset.field === issue.field)?.focus();
+  }
+
   // handleConfirmSubmit sends complete answers and examples for the displayed
   // saved revision after checking that the user filled every required value.
   function handleConfirmSubmit() {
     if (!activeEditor || editorRequest !== null) {
       return;
     }
-    const ambiguities = Array.isArray(activeEditor.card.ambiguities)
-      ? activeEditor.card.ambiguities
-      : [];
-    for (let i = 0; i < ambiguities.length; i++) {
-      const ambId = ambiguities[i].id;
-      if (!Object.prototype.hasOwnProperty.call(activeEditor.draftAnswers, ambId) || !activeEditor.draftAnswers[ambId]) {
-        showFormError("Select an option for ambiguity " + ambId + " before confirming.");
-        focusResult("#surla-confirm-error");
-        return;
-      }
+    const unanswered = unansweredQuestions(activeEditor)[0];
+    if (unanswered !== undefined) {
+      showFormError("Choose an answer for “" + unanswered.question + "” before confirming.", "input");
+      focusDraftQuestion(unanswered.id);
+      return;
     }
-    for (let j = 0; j < activeEditor.draftExamples.length; j++) {
-      const item = activeEditor.draftExamples[j];
-      if (!item.scenario.trim() || !item.input_summary.trim() || !item.expected_outcome.trim()) {
-        showFormError(
-          "Example " + item.id + " requires non-empty scenario, input_summary, and expected_outcome."
-        );
-        focusResult("#surla-confirm-error");
-        return;
-      }
+    const exampleIssue = firstIncompleteExample(activeEditor);
+    if (exampleIssue !== null) {
+      showFormError("Enter " + exampleIssue.label + " for example " + exampleIssue.number + ".", "input");
+      focusDraftExample(exampleIssue);
+      return;
     }
     activeEditor = {
       ...activeEditor,

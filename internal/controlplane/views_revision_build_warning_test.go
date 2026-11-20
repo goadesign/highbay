@@ -102,7 +102,7 @@ const warning = page.$("#" + warningId);
 const action = page.$("#" + actionId);
 if (input.build) {
   expect(warning && action && action.getAttribute("aria-describedby")?.split(" ").includes(warningId), "the action has no linked build warning");
-  expect(action.closest(".surla-field-row").previousElementSibling === warning, "the build consequence is not immediately beside the action");
+  expect(action.parentElement.previousElementSibling === warning, "the build consequence is not immediately beside the action");
   expect(warning.textContent.includes("earlier revision"), "the warning does not explain the build becoming earlier");
   if (input.stored) {
     expect(warning.textContent.includes("builder’s assignment") && warning.textContent.includes("stored verification settings") && !warning.textContent.includes("acceptance again"), "the warning invented a test-writer gate for stored settings");

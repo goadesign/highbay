@@ -263,7 +263,7 @@ export function ArchitecturePreviewView({
         </div>
         <p id="surla-cp2-session-note">
           Architecture of the agreed revision’s saved design. Draft edits appear here only after
-          the guide proposes a revision and you adopt it.
+          your coding agent proposes a revision and you adopt it.
         </p>
         <p id="surla-cp2-scope-note">
           This preview shows what the design declares. It does not

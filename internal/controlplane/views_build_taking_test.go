@@ -378,7 +378,7 @@ const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"
 page.type(field, "keep my unsaved scenario");
 page.$("#surla-build-drop").click();
 await until(() => page.$("#surla-build-drop-confirm"), "Drop did not ask separately");
-expect(page.text("#surla-build-drop-question").includes("edits it has not proposed are lost") && page.text("#surla-build-drop-question").includes("your branch is unchanged"), "Drop omitted its effects");
+expect(page.text("#surla-build-drop-question").includes("edits it has not proposed are lost") && page.text("#surla-build-drop-question").includes("Your branch keeps its current commits"), "Drop omitted its effects");
 expect(page.sent("POST", path).length === 0, "opening Drop changed a build");
 page.$("#surla-build-drop-confirm").dispatchEvent(new page.win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 await until(() => !page.$("#surla-build-drop-question") && page.doc.activeElement === page.$("#surla-build-drop"), "Escape did not restore the Drop trigger");

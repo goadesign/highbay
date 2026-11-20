@@ -36,7 +36,8 @@ checkControl(page, page.$("#surla-confirm-open-story"), "the confirm view's link
 page.$("#surla-confirm-open-story").click();
 await until(() => page.$("#surla-story-stage") && page.$("#surla-story-draft").dataset.state === "succeeded", "the Story stage did not open with the current draft");
 expect(page.$("#surla-nav-story").getAttribute("aria-current") === "page", "the Story tab is not marked current");
-checkControl(page, page.$("#surla-nav-story"), "Story tab");
+page.$(".surla-frame-project-menu").open = true;
+checkControl(page, page.$("#surla-nav-story"), "Story in Inspect");
 const context = page.text("#surla-workspace-context");
 expect(context.includes("Story") && context.includes("chg-story") && context.includes("current draft succeeded"), "the context strip does not name the Story shown: " + context);
 
@@ -83,7 +84,7 @@ expect(page.doc.activeElement === summary && summary.textContent.includes("3 flo
 page.$("#surla-nav-cp1").click();
 await until(() => page.$("#surla-confirm-submit"), "returning to the change did not show the confirm view");
 page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-cp1-editor").dataset.requestRevision !== undefined && page.text("#surla-cp1-editor").includes("Agreed:"), "a change with draft flows could not be confirmed");
+await until(() => page.$("#surla-agreement-details"), "a change with draft flows could not be confirmed");
 page.close();
 `)
 }
@@ -103,15 +104,16 @@ func TestViewsPageStoryStageFollowsTheEvaluationWithoutAChange(t *testing.T) {
 	runPageScript(t, ps, map[string]any{"diagnostic": diagnostic}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-change-list-empty"), "the empty project did not show");
-checkControl(page, page.$("#surla-nav-story"), "Story tab without a change");
+page.$(".surla-frame-project-menu").open = true;
+checkControl(page, page.$("#surla-nav-story"), "Story in Inspect without a change");
 page.$("#surla-nav-story").click();
 await until(() => page.$("#surla-story-draft").dataset.state === "none", "the Story stage did not show the none state");
 const announced = () => page.text("#surla-story-draft-announcement");
 const liveRegions = () => page.$$("#surla-story-draft [role=status]").length;
 expect(announced() === "" && liveRegions() === 1, "the none state was announced or the draft has several live regions");
 expect(!page.$("#surla-story-change"), "a Story of a change is shown with no change open");
-expect(page.text("#surla-story-draft-none").includes("Ask the guide to refresh the Story"), "the none state does not name the step to take");
-expect(page.text("#surla-frame-next dd").includes("Ask the guide to refresh the Story"), "Story did not surface the available next step");
+expect(page.text("#surla-story-draft-none").includes("Ask your coding agent to refresh the Story"), "the none state does not name the step to take");
+expect(page.text("#surla-frame-next dd").includes("Ask your coding agent to refresh the Story"), "Story did not surface the available next step");
 const context = page.text("#surla-workspace-context");
 expect(context.includes("Story") && context.includes("current draft none"), "the context strip does not name what is shown: " + context);
 
@@ -168,7 +170,7 @@ const named = (kind) => Array.from(comparison.querySelectorAll('[data-difference
 expect(JSON.stringify(named("added")) === JSON.stringify(["Exchange instead of refund"]), "added flows: " + JSON.stringify(named("added")));
 expect(JSON.stringify(named("removed")) === JSON.stringify(["Partial refund"]), "removed flows: " + JSON.stringify(named("removed")));
 expect(JSON.stringify(named("changed")) === JSON.stringify(["Instant refund under the limit"]), "changed flows: " + JSON.stringify(named("changed")));
-expect(page.text("#surla-story-rule") === "The draft is not part of this change until the guide revises the change with it and you confirm the new revision.", "the rule is not stated: " + page.text("#surla-story-rule"));
+expect(page.text("#surla-story-rule") === "The draft becomes part of this change after your coding agent proposes it and you confirm the new revision.", "the rule is not stated: " + page.text("#surla-story-rule"));
 expect(page.$$("#surla-story-change .surla-story-flow").length === 3, "the change's own Story was replaced by the draft");
 page.close();
 `)

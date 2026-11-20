@@ -31,7 +31,7 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
         </Alert>
       ) : null}
       <p>
-        Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.
+        Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.
       </p>
       <p className="surla-muted">
         Reloading or reopening this page, or opening it in another tab, needs a fresh session
@@ -49,7 +49,7 @@ export function SessionEndedNotice({ unsavedLines }: { unsavedLines: string[] })
     <Alert id="surla-session-ended" variant="warning" role="alert">
       <strong>This page's Surla session has ended. </strong>
       The Surla server no longer accepts it, for example because the server restarted.
-      {" "}Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.
+      {" "}Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.
       {unsavedLines.length > 0 ? (
         <>
           <p>

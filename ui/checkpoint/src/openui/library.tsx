@@ -13,12 +13,12 @@ import {
 import {
   Alert,
   Badge,
-  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
+  ChoiceGroup,
   ResponsiveTable,
 } from "../components/shadcn";
 import { useCP1Draft } from "../context/cp1-draft";
@@ -30,6 +30,23 @@ interface ElementNodeLike {
   props?: Record<string, unknown>;
   partial?: boolean;
   hasDynamicProps?: boolean;
+}
+
+// DecisionWorkspace assigns at most one rendered choice group to a question.
+// Additional instruments can still explain the same decision.
+const ShowsQuestionChoices = React.createContext(true);
+
+// questionIndex identifies a question controlled by a decision instrument.
+// The validator checks every index against the card before rendering.
+function questionIndex(node: unknown): number | undefined {
+  if (node === null || typeof node !== "object" || !("typeName" in node) ||
+    (node.typeName !== "PolicySimulatorTable" && node.typeName !== "AmbiguityChoiceCard") ||
+    !("props" in node) || node.props === null || typeof node.props !== "object" ||
+    !("ambiguityIndex" in node.props)) {
+    return undefined;
+  }
+  const { ambiguityIndex } = node.props;
+  return typeof ambiguityIndex === "number" ? ambiguityIndex : undefined;
 }
 
 // unwrapProps extracts the evaluated props object from a nested OpenUI ElementNode.
@@ -70,6 +87,7 @@ export const PolicySimulatorTable = defineComponent({
     "Interactive policy comparison table bound to a 1-based ambiguityIndex (1..N in ambiguities). Toggling an option updates the canonical CP1 answer draft and highlights the active outcome column.",
   component: ({ props }) => {
     const draft = useCP1Draft();
+    const showsChoices = React.useContext(ShowsQuestionChoices);
     const idx = typeof props.ambiguityIndex === "number" ? props.ambiguityIndex - 1 : -1;
     const amb = draft && Array.isArray(draft.card.ambiguities) ? draft.card.ambiguities[idx] : undefined;
     if (!amb || !draft) {
@@ -94,42 +112,24 @@ export const PolicySimulatorTable = defineComponent({
             <CardTitle>{props.title}</CardTitle>
             <Badge>{"Question " + String(props.ambiguityIndex)}</Badge>
           </div>
-          <CardDescription>{amb.question}</CardDescription>
-          <details className="surla-details">
-            <summary>Details</summary>
-            <p>
-              <code>{amb.id}</code>
-            </p>
-          </details>
+          {showsChoices ? <CardDescription>{amb.question}</CardDescription> : null}
         </CardHeader>
         <CardContent>
-          <div
-            className="surla-field-row"
-            role="group"
-            aria-label={"Simulator options for " + amb.question}
-          >
-            {amb.options.map((opt) => (
-              <Button
-                key={opt}
-                variant="pill"
-                disabled={controlsDisabled}
-                data-openui-ambiguity-id={amb.id}
-                data-openui-option={opt}
-                aria-pressed={selectedOption === opt ? "true" : "false"}
-                onClick={() => draft.setAnswer(amb.id, opt)}
-              >
-                {opt}
-              </Button>
-            ))}
-          </div>
+          {showsChoices ? <ChoiceGroup label={amb.question} options={amb.options} selected={selectedOption}
+            disabled={controlsDisabled} onSelect={(option) => draft.setAnswer(amb.id, option)}
+            optionAttributes={(option) => ({
+              "data-ambiguity-id": amb.id, "data-option": option,
+              "data-openui-ambiguity-id": amb.id, "data-openui-option": option,
+            })} /> : null}
           <ResponsiveTable ariaLabel={props.title}>
             <thead>
               <tr>
-                <th>Scenario</th>
-                <th>Input</th>
+                <th scope="col">Scenario</th>
+                <th scope="col">Input</th>
                 {amb.options.map((opt, optIdx) => (
                   <th
                     key={opt}
+                    scope="col"
                     className={optIdx === selectedIdx ? "shadcn-cell-active" : ""}
                   >
                     {opt}
@@ -160,10 +160,6 @@ export const PolicySimulatorTable = defineComponent({
                       {exItem ? (
                         <div>
                           <Badge>{"Example " + String(row.exampleIndex)}</Badge>
-                          <details className="surla-details">
-                            <summary>Details</summary>
-                            <code>{exItem.id}</code>
-                          </details>
                         </div>
                       ) : null}
                     </td>
@@ -199,9 +195,10 @@ export const AmbiguityChoiceCard = defineComponent({
     "Focused decision card bound to a 1-based ambiguityIndex (1..N in ambiguities) with optional domain trade-off rationale.",
   component: ({ props }) => {
     const draft = useCP1Draft();
+    const showsChoices = React.useContext(ShowsQuestionChoices);
     const idx = typeof props.ambiguityIndex === "number" ? props.ambiguityIndex - 1 : -1;
     const amb = draft && Array.isArray(draft.card.ambiguities) ? draft.card.ambiguities[idx] : undefined;
-    if (!amb || !draft) {
+    if (!amb || !draft || (!showsChoices && !props.rationale)) {
       return null;
     }
 
@@ -218,38 +215,18 @@ export const AmbiguityChoiceCard = defineComponent({
       >
         <CardHeader>
           <div className="surla-field-row">
-            <CardTitle>{amb.question}</CardTitle>
-            <Badge>{"Question " + String(props.ambiguityIndex)}</Badge>
+            <CardTitle>{showsChoices ? amb.question : "Question " + String(props.ambiguityIndex) + " rationale"}</CardTitle>
           </div>
           {props.rationale ? <CardDescription>{props.rationale}</CardDescription> : null}
-          <details className="surla-details">
-            <summary>Details</summary>
-            <p>
-              <code>{amb.id}</code>
-            </p>
-          </details>
         </CardHeader>
-        <CardContent>
-          <div
-            className="surla-field-row"
-            role="group"
-            aria-label={"Decision card options for " + amb.question}
-          >
-            {amb.options.map((opt) => (
-              <Button
-                key={opt}
-                variant="pill"
-                disabled={controlsDisabled}
-                data-openui-ambiguity-id={amb.id}
-                data-openui-option={opt}
-                aria-pressed={selectedOption === opt ? "true" : "false"}
-                onClick={() => draft?.setAnswer(amb.id, opt)}
-              >
-                {opt}
-              </Button>
-            ))}
-          </div>
-        </CardContent>
+        {showsChoices ? <CardContent>
+          <ChoiceGroup label={amb.question} options={amb.options} selected={selectedOption}
+            disabled={controlsDisabled} onSelect={(option) => draft.setAnswer(amb.id, option)}
+            optionAttributes={(option) => ({
+              "data-ambiguity-id": amb.id, "data-option": option,
+              "data-openui-ambiguity-id": amb.id, "data-openui-option": option,
+            })} />
+        </CardContent> : null}
       </Card>
     );
   },
@@ -337,41 +314,32 @@ export const DecisionWorkspace = defineComponent({
     "Root container for a Surla CP1 Decision Workspace combining policy simulators, decision cards, workflow timelines, and impact callouts.",
   component: ({ props, renderNode }) => {
     const draft = useCP1Draft();
-    const composedRev =
-      draft?.card.ui_composition?.composed_for_revision ||
-      draft?.card.request_revision ||
-      "preview";
+    const questions = new Set<number>();
+    const instruments = props.children.map((child, index) => {
+      const question = questionIndex(child);
+      const showsChoices = question !== undefined && !questions.has(question);
+      if (question !== undefined) questions.add(question);
+      return <ShowsQuestionChoices.Provider key={index} value={showsChoices}>
+        {renderNode(child)}
+      </ShowsQuestionChoices.Provider>;
+    });
     return (
       <div className="surla-decision-workspace" data-openui-component="DecisionWorkspace">
         <div className="surla-field-row">
           <h3>{props.title}</h3>
-          <Badge variant="accent">Decision Studio</Badge>
-          <Badge variant="accent">Model-Proposed Illustration</Badge>
+          <Badge variant="outline">Model-Proposed Illustration</Badge>
         </div>
-        <p className="shadcn-card-desc">
-          Compare how each option affects concrete scenarios below. Selecting an option updates your
-          draft answer below.
-        </p>
-        <details className="surla-details">
-          <summary>Details</summary>
-          <p>
-            composed_for_revision: <code>{composedRev}</code>
-          </p>
-        </details>
+        {questions.size > 0 ? <p className="shadcn-card-desc">
+          Compare the proposed options. Your selection becomes your draft answer.
+        </p> : null}
         {draft?.localExamplesEdited ? (
           <Alert id="surla-openui-local-edit-notice" variant="warning">
             <strong>Local Examples Modified: </strong>
             You have edited the confirmation examples below. Instruments in this workspace reflect
             the model-proposed illustration for the saved revision until the change is re-analyzed.
-            <details className="surla-details">
-              <summary>Details</summary>
-              <p>
-                request_revision: <code>{draft.card.request_revision}</code>
-              </p>
-            </details>
           </Alert>
         ) : null}
-        <div className="surla-decision-grid">{renderNode(props.children)}</div>
+        <div className="surla-decision-grid">{instruments}</div>
       </div>
     );
   },
@@ -441,10 +409,8 @@ function allowedSlotComponentNames(propSchema: unknown): string[] | null {
   return single ? [single] : null;
 }
 
-export interface OpenUIValidationResult {
-  ok: boolean;
-  error?: string;
-}
+export type OpenUIValidationResult = { ok: true; questionIndices: ReadonlySet<number> }
+  | { ok: false; error: string };
 
 // projectAndValidateNode recursively verifies that an AST ElementNode matches
 // its parent slot's allowed component types, satisfies its canonical Zod v4
@@ -678,7 +644,15 @@ export function validateCompletedOpenUI(
   if (!rootCheck.ok) {
     return { ok: false, error: rootCheck.error };
   }
-  return { ok: true };
+  const questionIndices = new Set<number>();
+  const children = parsed.root.props.children;
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      const index = questionIndex(child);
+      if (index !== undefined) questionIndices.add(index);
+    }
+  }
+  return { ok: true, questionIndices };
 }
 
 // generateDecisionCatalogMarkdown exports the OpenUI component catalog that the

@@ -61,7 +61,7 @@ const next = () => page.text("#surla-frame-next dd");
 expect(next().includes("Build controls below") && !page.$("#surla-frame-next button"), "initial Build did not point to its existing controls");
 page.$("#surla-nav-changes").click();
 expect(!page.$("#surla-agreement-details") && !page.$("#surla-read-full-summary"), "Describe exposed a hidden editor’s agreement");
-expect(page.text(".surla-frame-summary") === "No confirmed agreement opened", "Describe labeled a hidden agreement as open");
+expect(!page.$(".surla-frame-agreed"), "Changes labeled a hidden agreement as open");
 page.$("#surla-nav-build").click();
 const editor = page.$("#surla-cp1-editor");
 const build = page.$("#surla-build-section");

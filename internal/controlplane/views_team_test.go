@@ -36,9 +36,29 @@ func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
 			next.Roles[0].State = state
 			next.Roles[1].Assignment = "no_work"
 			next.Roles[2].Assignment = "no_work"
+			next.Roles[2].State = "waiting"
 			f.snapshot = next
 		})
 	}
+	for _, mode := range []string{"available", "unavailable"} {
+		ps.act("external-"+mode, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			next := pageTeamSnapshot("working")
+			next.HerdrMode = mode
+			next.Roles[0].State, next.Roles[0].Watcher = "unknown", "unknown"
+			next.Roles[2].State = "waiting"
+			f.snapshot = next
+		})
+	}
+	ps.act("worker-unknown", func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		next := pageTeamSnapshot("working")
+		next.HerdrMode = "available"
+		next.Roles[0].State = "unknown"
+		f.snapshot = next
+	})
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 await control(origin, "hold", { key: "GET /team" });
 const page = await openPage(origin, { link: input.link });
@@ -64,11 +84,24 @@ expect(attention() === "Team status could not be read.", "failed Team status app
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-role-guide")?.dataset.state === "unknown", "Team did not retry its failed read");
 page.$("#surla-nav-changes").click();
-expect(next().includes("refresh to check the guide’s status"), "unknown guide appeared ready or absent");
+expect(next().includes("refresh to check your coding agent’s status"), "unknown attached coding agent appeared ready or absent");
 await control(origin, "act", { key: "starting" });
-await until(() => next().includes("Wait for the guide to start"), "a starting guide did not tell the user to wait");
+await until(() => next().includes("Wait for your coding agent to start"), "a starting coding agent did not tell the user to wait");
 await control(origin, "act", { key: "working" });
-await until(() => next().includes("Show guide pane and describe your change"), "a working guide did not lead to its existing pane");
+await until(() => !page.$(".surla-frame-slots") && page.$("#surla-empty-show-guide"), "a working attached coding agent did not lead to its existing pane");
+for (const mode of ["available", "unavailable"]) {
+  await control(origin, "act", { key: "external-" + mode });
+  await until(() => !page.$("#surla-empty-show-guide") && !page.$(".surla-frame-slots"), "external coding agent was treated as a Herdr pane");
+  expect(page.text("#surla-change-list-title").includes("Describe what you want to build") &&
+         !page.$("#surla-nav-changes") && !page.$(".surla-frame-context"), "healthy empty state kept unnecessary frame chrome");
+  page.$("#surla-nav-team").click();
+  const codingAgent = page.$("#surla-team-role-guide");
+  expect(codingAgent.textContent.includes("Attached in coding agent") && !codingAgent.textContent.includes("Chorus watcher unknown") &&
+         !page.$("#surla-team-show-guide"), "Team showed a false warning or pane action for external mode " + mode);
+  page.$("#surla-nav-changes").click();
+}
+await control(origin, "act", { key: "worker-unknown" });
+await until(() => attention() === "Team status unknown." && next().includes("Open Team"), "a genuinely unobserved worker was hidden with the external guide's expected state");
 await control(origin, "act", { key: "ended" });
 await until(() => next().includes(connectGuide), "Describe did not explain how to reconnect an ended guide");
 page.$("#surla-nav-team").click();
@@ -79,11 +112,8 @@ for (const state of ["ended", "not_started"]) {
 }
 page.$("#surla-nav-changes").click();
 
-await propose("chg-guide-next", "Route refunds to a manager.", "Auto-approved");
-await until(() => page.$("#surla-open-change-chg-guide-next"), "the existing card did not become available");
-expect(next().includes("Open a change"), "guide startup hid the existing card’s next step");
 await control(origin, "reply", { key: "GET /changes/chg-guide-next", status: 503, body: { name: "unavailable", message: "Card unavailable." } });
-page.$("#surla-open-change-chg-guide-next").click();
+await propose("chg-guide-next", "Route refunds to a manager.", "Auto-approved");
 await until(() => page.$("#surla-change-open-error"), "the failed card read did not appear");
 expect(next().includes("Try opening the change again"), "card recovery did not take precedence over ordinary guidance");
 page.$("#surla-open-change-chg-guide-next").click();
@@ -124,8 +154,8 @@ const live = page.$("#surla-team-attention"), operation = page.status();
 expect(live.getAttribute("role") === "status" && live.getAttribute("aria-live") === "polite", "attention owner is not an announced live region");
 expect(live.textContent === "", "idle roles invented an attention state");
 await control(origin, "act", { key: "guide-permission" });
-await until(() => page.text("#surla-team-attention-guide").includes("Guide needs you: permission"), "real permission attention was suppressed");
-expect(page.text(".surla-frame-attention dd").includes("Guide needs you: permission") && page.text("#surla-frame-next dd").includes("Show guide pane"), "Describe did not surface the guide’s reported blocker and pane");
+await until(() => page.text("#surla-team-attention-guide").includes("Coding agent needs you: permission"), "real permission attention was suppressed");
+expect(page.text(".surla-frame-attention dd").includes("Coding agent needs you: permission") && page.text("#surla-frame-next dd").includes("Show coding agent pane"), "Describe did not surface the coding agent’s reported blocker and pane");
 expect(page.$("#surla-team-attention") === live, "attention arrived in a newly mounted live region");
 expect(page.status() === operation, "team attention overwrote operation feedback");
 await control(origin, "act", { key: "two-roles" });

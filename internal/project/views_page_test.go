@@ -80,7 +80,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   // Recovery stays available through the agent or companion without a shell step.
   const expectRecovery = (page, selector) => {
     const text = page.text(selector);
-    expect(text.includes("coding agent") && text.includes("Open Page") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
+    expect(text.includes("coding agent") && text.includes("Open Surla Window") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
     expect(!text.includes("Run surla") && !text.includes("run surla"), "session recovery still requires a typed terminal command: " + text);
   };
   // Without a link the page explains how to open it and asks the server nothing.
