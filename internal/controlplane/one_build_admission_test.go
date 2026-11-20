@@ -120,7 +120,7 @@ func TestOneBuildRefusesLegacyMetadataBeforeEffects(t *testing.T) {
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "old", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "conflict")
 	assert.ErrorContains(t, err, "The agreed revision records no design")
-	assert.ErrorContains(t, err, "Ask the guide to propose a revision from its draft, adopt it, then build.")
+	assert.ErrorContains(t, err, "Ask your coding agent to propose a revision from its draft, adopt it, then build.")
 	_, statErr := os.Stat(filepath.Join(cp.cards.dir, openBuildRecordFile))
 	assert.ErrorIs(t, statErr, os.ErrNotExist)
 	read, err := cp.GetChange(asCaller("alice@example.com", CallerGuide), &gensurla.GetChangePayload{ChangeID: "old"})

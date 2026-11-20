@@ -29,7 +29,7 @@ const STAGES = {
 };
 
 // ROLE_TITLES names each registered role for people.
-const ROLE_TITLES = { guide: "Guide", builder: "Builder", test_writer: "Test writer" };
+const ROLE_TITLES = { guide: "Coding agent", builder: "Builder", test_writer: "Test writer" };
 
 // ROLE_STATES describes each TeamRoleState.state for people.
 const ROLE_STATES = {
@@ -103,6 +103,7 @@ export function parseStatus(result) {
   const status = {
     projectName: value.project_name,
     directory: value.directory,
+    herdrMode: value.herdr_mode,
     stage: value.stage,
     changeTitle: value.change_title,
     attention: value.attention,
@@ -126,8 +127,13 @@ export function stageLine(status) {
 }
 
 // roleLine says what one role is doing, including why it needs the user.
-export function roleLine(role) {
+// When the coding agent is attached outside Herdr, Herdr observes no pane for
+// it, so an unknown pane state still means the coding agent is attached.
+export function roleLine(role, herdrMode) {
   const title = ROLE_TITLES[role.role] ?? role.role;
+  if (role.role === "guide" && herdrMode && herdrMode !== "attached" && role.state === "unknown") {
+    return `${title}: attached`;
+  }
   const state = ROLE_STATES[role.state] ?? "unknown";
   const why = role.state === "needs_you" && role.attention && role.attention !== "none" ? ` (${role.attention})` : "";
   return `${title}: ${state}${why}`;
@@ -142,8 +148,9 @@ export default class SurlaCompanion extends View {
     // trackedFolder is the shown folder the last read was started for.
     this.trackedFolder = null;
     this.reading = false;
-    // opening and openError belong to the folder named in them.
+    // opening, opened, and openError belong to the folder named in them.
     this.opening = null;
+    this.opened = null;
     this.openError = null;
     // Herdr loads the mod once for `herdr-app check`; start no commands then.
     if (checking()) return;
@@ -183,6 +190,11 @@ export default class SurlaCompanion extends View {
       if (this.shownFolder() === folder) {
         this.result = result;
         this.resultFolder = folder;
+        const target = result.kind === "running" ? result.status.directory : folder;
+        if (this.opened && (this.opened.folder === folder || this.opened.folder === target)) {
+          if (this.opened.fresh) this.opened.fresh = false;
+          else this.opened = null;
+        }
         cx.notify();
       } else {
         this.refresh(cx);
@@ -191,10 +203,11 @@ export default class SurlaCompanion extends View {
   }
 
   // openPage runs `surla` in folder, which starts the project's server when
-  // needed and opens its views page in the browser.
+  // needed and opens its browser window.
   openPage(cx, folder) {
     if (this.opening === folder) return;
     this.opening = folder;
+    this.opened = null;
     this.openError = null;
     cx.notify();
     cx.spawn(async cx => {
@@ -207,6 +220,7 @@ export default class SurlaCompanion extends View {
       }
       if (this.opening === folder) this.opening = null;
       if (message) this.openError = { folder, message };
+      else this.opened = { folder, fresh: true };
       cx.notify();
       this.refresh(cx);
     });
@@ -265,7 +279,7 @@ export default class SurlaCompanion extends View {
           h_flex()
             .items_center()
             .gap(8)
-            .child(div().flex_1().min_w(0).truncate().child(roleLine(role)))
+            .child(div().flex_1().min_w(0).truncate().child(roleLine(role, s.herdrMode)))
             .when(Boolean(terminal), el => el.child(this.button(`surla-show-${role.role}`, "Show", t, () => run("pane.focus", { terminal })))),
         );
       }
@@ -274,12 +288,14 @@ export default class SurlaCompanion extends View {
     const target = r.kind === "running" ? r.status.directory : folder;
     const canOpen = Boolean(target) && r.kind !== "loading";
     const openError = this.openError?.folder === target ? this.openError.message : "";
-    const label = this.opening === target ? "Opening…" : r.kind === "running" ? "Open Page" : "Start Surla";
+    const openSuccess = !openError && this.opened?.folder === target ? "Opened in browser" : "";
+    const label = this.opening === target ? "Opening…" : r.kind === "running" ? "Open Surla Window" : "Start Surla";
     const footer = h_flex()
       .gap(8)
       .items_center()
       .when(canOpen, el => el.child(this.button("surla-open", label, t, cx => this.openPage(cx, target))))
-      .when(Boolean(openError), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child(openError)));
+      .when(Boolean(openError), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child(openError)))
+      .when(Boolean(openSuccess), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(openSuccess)));
     return v_flex()
       .id("surla-companion")
       .w_full()

@@ -16,7 +16,7 @@ func (c *ControlPlane) OpenViews(ctx context.Context) (*gensurla.OpenViewsResult
 	}
 	if c.openViews == nil {
 		return &gensurla.OpenViewsResult{Opened: false, Message: "This Surla server has no browser opener configured. " +
-			"The host must enable its browser-opening integration."}, nil
+			"The host must enable its browser-opening integration, or open Surla with Open Surla Window in the Herdr Surla panel."}, nil
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.views.open")
 	defer span.End()
@@ -25,8 +25,10 @@ func (c *ControlPlane) OpenViews(ctx context.Context) (*gensurla.OpenViewsResult
 		safe := errors.New("the project views could not be opened")
 		span.RecordError(safe)
 		span.SetStatus(codes.Error, "open project views")
-		return &gensurla.OpenViewsResult{Opened: false, Message: "The project views could not be opened. " +
-			"Ask your coding agent to retry opening Surla views, or choose Open Page in the Herdr companion."}, nil
+		return &gensurla.OpenViewsResult{Opened: false, Message: "The Surla browser window could not be opened. " +
+			"Ask your coding agent to try opening Surla views again, or choose Open Surla Window in the Herdr Surla panel."}, nil
 	}
-	return &gensurla.OpenViewsResult{Opened: true, Message: "Opened the project views."}, nil
+	return &gensurla.OpenViewsResult{Opened: true, Message: "Opened the Surla window in the user's browser and brought it to the front. " +
+		"Tell the user clearly that the Surla browser window is now open alongside this chat, and that they can bring it back anytime " +
+		"with Open Surla Window in the Herdr Surla panel (Cmd+Alt+Shift+S) or by asking you to reopen it."}, nil
 }

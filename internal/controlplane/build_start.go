@@ -236,7 +236,7 @@ func (c *ControlPlane) StartBuild(
 	}
 	if draftedBeforeDrop(record, provenance) {
 		c.mu.Unlock()
-		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
 	}
 	if currentFound && hasProvenance && buildDropped(provenance, current) != (openProgress.Taking.Kind() == gensurla.BuildTakingKindDropped) {
 		c.mu.Unlock()
@@ -593,7 +593,7 @@ func (c *ControlPlane) checkDraftAfterDrop(record storedChangeCard) error {
 		return err
 	}
 	if draftedBeforeDrop(record, provenance) {
-		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask the guide to call refresh_story and revise_change, adopt the revision, then build."))
+		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
 	}
 	return nil
 }

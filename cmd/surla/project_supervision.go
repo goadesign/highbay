@@ -153,12 +153,16 @@ func readTeamEvents(reader io.Reader, role string, emit func(project.TeamEvent))
 	}
 }
 
-// terminal drops unused foreground arguments rather than retaining their backing array.
+// terminal drops unused foreground arguments rather than retaining their backing array,
+// while keeping foreground working-directory identity for direct terminal reads.
 // The shared shell predicate needs only argv[0] and its first two arguments.
 func (facts teamTerminalFacts) terminal() project.TeamTerminal {
 	var foreground *project.TeamForeground
 	if facts.Foreground != nil {
-		foreground = &project.TeamForeground{Argv: slices.Clone(facts.Foreground.Argv[:min(len(facts.Foreground.Argv), 3)])}
+		foreground = &project.TeamForeground{
+			Argv: slices.Clone(facts.Foreground.Argv[:min(len(facts.Foreground.Argv), 3)]),
+			Cwd:  facts.Foreground.Cwd,
+		}
 	}
 	return project.TeamTerminal{Address: facts.Address, State: facts.State, Labels: facts.Labels.values(), Foreground: foreground, Reported: facts.Reported, Status: facts.Status, CreatedMS: facts.CreatedMS, Reason: facts.Reason}
 }

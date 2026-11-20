@@ -86,8 +86,10 @@ func projectTeamDependencies(ctx context.Context, herdrEnv []string) (project.Te
 	return project.TeamDependencies{
 		Lifetime: ctx, Host: commands, Shell: os.Getenv("SHELL"), Connect: connect,
 		HerdrAvailable: available, CompanionInstalled: err == nil && companion.Mode().IsRegular(),
-		RosterDirectory: filepath.Join(home, "data", "chorus-launcher", "rosters"),
-		DiscoverAgents:  commands.discoverAgents, WorkerEnv: herdrEnv,
+		RosterDirectory:    filepath.Join(home, "data", "chorus-launcher", "rosters"),
+		DiscoverAgents:     commands.discoverAgents,
+		PrepareWorkerTrust: bindPrepareWorkerTrust(herdrEnv),
+		WorkerEnv:          herdrEnv,
 	}, nil
 }
 

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	genproject "github.com/goadesign/surla/gen/project"
+	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/surla/internal/testwriter"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -61,8 +63,14 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 	}
 	space, tab := record.Space, record.Tab
 	var adopted bool
-	if s.team.dependencies.HerdrAvailable && p.HcTerminalID != nil && *p.HcTerminalID != "" {
-		pane := s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client)
+	if s.team.dependencies.HerdrAvailable {
+		var pane guidePane
+		if p.HcTerminalID != nil && *p.HcTerminalID != "" {
+			pane = s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client)
+		}
+		if pane.terminal == "" && p.Client != nil && *p.Client != "" {
+			pane = s.findClientGuidePane(ctx, record, handle, *p.Client)
+		}
 		if pane.terminal != "" {
 			err := s.team.dependencies.Host.LabelGuide(ctx, pane.terminal, record.Directory, pane.swarm, pane.client, handle, pane.space, pane.tab)
 			if err == nil {
@@ -81,7 +89,7 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 			s.setTeamConnection(connection)
 		}
 		s.openCompanion(ctx)
-	} else if p.HcTerminalID != nil && *p.HcTerminalID != "" && mode != herdrUnavailable {
+	} else if (p.HcTerminalID != nil && *p.HcTerminalID != "" || p.Client != nil && *p.Client != "") && mode != herdrUnavailable {
 		// This caller has no adopted tab even if another guide already does.
 		mode = herdrAvailable
 	}
@@ -109,6 +117,100 @@ func (s *Server) findGuidePane(ctx context.Context, record Record, handle, addre
 		}
 	}
 	return guidePane{}
+}
+
+// findClientGuidePane adopts a unique local model pane whose live foreground
+// or agent label matches client inside record.Directory when HC_TERMINAL_ID is
+// stripped by the MCP client or belongs to a stale background daemon terminal.
+func (s *Server) findClientGuidePane(ctx context.Context, record Record, handle, client string) guidePane {
+	wantClient := normalizeGuideClient(client)
+	if wantClient == "" {
+		return guidePane{}
+	}
+	host := s.team.dependencies.Host
+	spaces, err := host.Spaces(ctx)
+	if err != nil {
+		return guidePane{}
+	}
+	type candidatePane struct {
+		space    TeamSpace
+		tab      TeamTab
+		terminal string
+	}
+	var matches []candidatePane
+	for _, space := range spaces {
+		if space.Machine != nil || !safeSpaceID(space.ID) {
+			continue
+		}
+		for _, tab := range space.Tabs {
+			if !safeSpaceID(tab.ID) {
+				continue
+			}
+			for _, pane := range tab.Terminals {
+				if pane.Terminal == "" || pane.Pane == "" {
+					continue
+				}
+				target, err := host.ReadTerminal(ctx, pane.Terminal)
+				if err != nil || target.Address != pane.Terminal || !roleRunning(target, s.team.dependencies.Shell) {
+					continue
+				}
+				if role := target.Labels["chorus.role"]; role != "" && role != "guide" {
+					continue
+				}
+				if guideClient(target, nil) != wantClient {
+					continue
+				}
+				if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
+					continue
+				}
+				matches = append(matches, candidatePane{space: space, tab: tab, terminal: pane.Terminal})
+				if len(matches) > 1 {
+					return guidePane{}
+				}
+			}
+		}
+	}
+	if len(matches) != 1 {
+		return guidePane{}
+	}
+	unique := matches[0]
+	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, &wantClient)
+}
+
+// guidePaneInProject reports whether cwd is at or inside projectDir and lies
+// outside the builder (.surla-build) and test-writer (.surla-tests) copies.
+func guidePaneInProject(projectDir, cwd string) bool {
+	if projectDir == "" || !filepath.IsAbs(cwd) {
+		return false
+	}
+	within, err := abspath.Within(projectDir, cwd)
+	if err != nil || !within {
+		return false
+	}
+	for _, folder := range []string{testwriter.BuilderRole.Folder, testwriter.TestsRole.Folder} {
+		inCopy, err := abspath.Within(filepath.Join(projectDir, folder), cwd)
+		if err == nil && inCopy {
+			return false
+		}
+	}
+	resolvedRoot, err := abspath.Eval(projectDir)
+	if err != nil {
+		return false
+	}
+	resolvedCwd, err := abspath.EvalMissing(cwd)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolvedCwd)
+	if err != nil {
+		return false
+	}
+	for part := range strings.SplitSeq(filepath.ToSlash(rel), "/") {
+		if part == testwriter.BuilderRole.Folder || part == testwriter.TestsRole.Folder {
+			return false
+		}
+	}
+	return true
 }
 
 // validateGuideTab preserves any existing project/swarm and avoids replacing
@@ -206,20 +308,37 @@ func guideClient(terminal TeamTerminal, client *string) string {
 		candidates = append(candidates, *client)
 	}
 	candidates = append(candidates, terminal.Labels["chorus.agent"])
-	if terminal.Foreground != nil && len(terminal.Foreground.Argv) > 0 {
-		candidates = append(candidates, filepath.Base(terminal.Foreground.Argv[0]))
+	if terminal.Foreground != nil {
+		for _, arg := range terminal.Foreground.Argv {
+			if arg != "" && !strings.HasPrefix(arg, "-") {
+				candidates = append(candidates, filepath.Base(arg))
+			}
+		}
 	}
 	for _, candidate := range candidates {
-		switch key := strings.ToLower(candidate); key {
-		case "agy", "antigravity-cli":
-			return "antigravity"
-		case "agent", "cursor-agent":
-			return "cursor"
-		case "claude", "codex", "antigravity", "cursor", "gemini", "opencode":
+		if key := normalizeGuideClient(candidate); key != "" {
 			return key
 		}
 	}
 	return ""
+}
+
+// normalizeGuideClient maps known CLI and MCP clientInfo names to canonical client keys.
+func normalizeGuideClient(candidate string) string {
+	switch key := strings.ToLower(strings.TrimSpace(candidate)); key {
+	case "agy", "antigravity-cli":
+		return "antigravity"
+	case "agent", "cursor-agent":
+		return "cursor"
+	case "claude-code":
+		return "claude"
+	case "codex-cli", "codex-mcp-client":
+		return "codex"
+	case "claude", "codex", "antigravity", "cursor", "gemini", "opencode":
+		return key
+	default:
+		return ""
+	}
 }
 
 // openCompanion opens the installed overlay once. If the user already opened

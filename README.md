@@ -44,32 +44,38 @@ folder in your coding agent and say:
 > `/surla` — build a refund assistant: refunds up to $50 get instant store
 > credit; larger ones wait for a manager.
 
-Use `$surla` in Codex. Your current session becomes the **guide**, starts or
-attaches to the project's server, and opens the page where you make the human
-decisions. In an empty folder, it creates the starter and first Git commit
-through Surla. You can keep working in that conversation through the merge.
+Use `$surla` in Codex. Your current coding agent (which Surla registers under
+its internal **guide** role) starts or attaches to the project's server and
+opens the browser window where you make the human decisions. In an empty
+folder, it creates the starter and first Git commit through Surla. You can keep
+working in that conversation through the merge.
 
 Here is how that change reaches your branch:
 
 1. **Start in your agent.** Invoke `/surla` (or `$surla`) in the project
    folder and describe what you want. The first Surla tool call attaches
    this session as the guide and starts the server when needed. In Herdr,
-   when the client forwards its terminal identity, Surla can adopt your
-   existing pane and space if they can belong to this project.
-2. **Open the page.** The guide calls `open_views` to open the project's
-   browser page. If you close or reload it, ask the guide to open it again.
-3. **Describe.** The guide writes the Story, a description of your system's
-   flows in Go, and proposes a Change Card: the saved request, questions,
-   examples and behavior to preserve. It appears on the page by itself.
+   when the client forwards its terminal identity or matches a unique live
+   pane in the project folder, Surla can adopt your existing pane and space if
+   they can belong to this project.
+2. **Open the page.** Your coding agent calls `open_views` to open the project's
+   browser window and bring it to the front. If you close or reload it, ask
+   your coding agent to open it again, or click **Open Surla Window** in the
+   Herdr Surla panel (`Cmd+Alt+Shift+S` on macOS).
+3. **Describe.** Your coding agent writes the Story, a description of your
+   system's flows in Go, and proposes a Change Card: the saved request,
+   questions, examples and behavior to preserve. It appears on the page by
+   itself.
    For the refund rule, the card might ask “Does $50 mean the item subtotal, or the total with
    tax and shipping?” and “Does exactly $50.00 get instant credit?”
 4. **Agree.** On the page, answer the questions, check the examples and
-   confirm. No agent can confirm for you. If the guide later revises the
+   confirm. No agent can confirm for you. If your coding agent later revises the
    change, its proposed revision waits beside the agreed revision until you
    adopt or decline it; the agreed revision stays in force until then.
 5. **Review the architecture.** Open **Architecture** on the page to inspect
-   the agreed revision's saved design. If it needs a change, ask the guide to
-   revise the change, then review and adopt its proposal before building.
+   the agreed revision's saved design. If it needs a change, ask your coding
+   agent to revise the change, then review and adopt its proposal before
+   building.
 6. **Build.** Choose agents, models and permissions inline in **Build**,
    then press **Build this change**. Surla remembers your choices for this
    project. Defaults prefer different coding-agent families for the worker
@@ -164,7 +170,7 @@ These words appear throughout:
 | **The page** | The server's page in your browser, which the reference calls the views page. You agree on changes and approve results there. |
 | **Herdr** | An optional terminal workspace that shows the team's agents side by side. |
 | **Chorus** | The messaging and pane-launch service for teams in Herdr. |
-| **The guide** | The agent you talk to. It writes the Story and proposes changes. |
+| **The guide** | The internal role Surla assigns to your coding agent. It writes the Story and proposes changes. |
 | **The builder** | The agent that writes the application code. |
 | **The test writer** | The agent that writes the change's tests, in its own working copy of the project. |
 | **Story** | A plain description of what the system does, written as Go in the project's design, one flow at a time. |
@@ -248,8 +254,8 @@ were handed over, or to a model gateway; see
 
 Open an existing project or an empty folder in your coding agent and invoke
 `/surla` (`$surla` in Codex). Describe what you want to build (if you invoke
-`/surla` alone, the guide opens the page and asks what you would like to
-build). In an empty folder, the guide calls
+`/surla` alone, your coding agent opens the browser window and asks what you
+would like to build). In an empty folder, your coding agent calls
 [`init_project`](docs/REFERENCE.md#init_project) with `dir: "."` to create the
 starter and its first Git commit in place, deriving a default Go module path
 from the folder name unless you specify one. Open product questions go onto the
@@ -258,10 +264,10 @@ stay; the operation refuses conflicting project files.
 
 The starter has a Goa and Goa-AI service, architecture diagrams declared with
 [Model](https://github.com/goadesign/model), a first Story in
-`design/story.go`, and its required test in `eval/`. The guide refines that
-Story with you and opens the page. You review, build, approve and merge
-there. To recover a closed or reloaded page, ask the guide to open it again,
-or use **Open Page** in the Herdr companion.
+`design/story.go`, and its required test in `eval/`. Your coding agent refines
+that Story with you and opens the browser window. You review, build, approve
+and merge there. To recover a closed or reloaded page, ask your coding agent to
+open it again, or use **Open Surla Window** in the Herdr companion.
 
 The page keeps unsaved input when you open a fresh link in the same tab and
 offers **Open link** after you save or discard it. A fresh link expires two

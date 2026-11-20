@@ -63,7 +63,7 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 		}
 	}
 
-	check("describe", "The guide needs your attention.", nil)
+	check("describe", "Your coding agent needs your attention.", nil)
 	guide.State, guide.Attention = "waiting", "none"
 	confirmed := saveCard(t, cp, nil)
 	check("build", "Start a build for the current agreement.", confirmed)

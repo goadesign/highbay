@@ -150,7 +150,7 @@ func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
 			return controlplane.Principal{ID: owner, CallerID: id, Kind: controlplane.CallerKind(role.Role)}, nil
 		}
 	}
-	return controlplane.Principal{}, errors.New("session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion")
+	return controlplane.Principal{}, errors.New("session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr Surla panel")
 }
 
 // Handler mounts the generated project contract and guards every page, HTTP, and MCP response.
@@ -174,7 +174,7 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
 			r.Header.Get("Sec-Fetch-Dest") == "document"
 		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
-			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion")
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr Surla panel")
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/project/") {

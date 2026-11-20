@@ -13,6 +13,7 @@ import (
 	"github.com/goadesign/surla/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type (
@@ -97,6 +98,7 @@ func (s *Server) StartAgents(ctx context.Context, requested map[string]*gensurla
 		if err := s.saveChoices(ctx, choices); err != nil {
 			return nil, err
 		}
+		s.prepareWorkerTrust(ctx, record, requestedRoles, choices)
 		if err := s.startHeadless(ctx, requestedRoles, choices, assignments); err != nil {
 			return nil, userTeamError(err)
 		}
@@ -233,6 +235,7 @@ func (s *Server) startHerdrWorkers(
 		}
 	}
 	if len(missing) > 0 {
+		s.prepareWorkerTrust(ctx, record, rosterRoles, missing)
 		if err := host.LaunchWorkers(ctx, space.ID, missing); err != nil {
 			return nil, userTeamError(teamUnavailable(ctx, "launch_workers", "chorus"))
 		}
@@ -527,6 +530,43 @@ func activeTeamState(state string) bool {
 		return true
 	}
 	return false
+}
+
+// prepareWorkerTrust pre-populates user-scoped client trust and MCP tool
+// approval for the project root and each role folder about to launch. A custom
+// or malformed user configuration file records a span event without blocking
+// worker startup.
+func (s *Server) prepareWorkerTrust(
+	ctx context.Context, record Record, roles []launcherRole, choices map[string]*gensurla.RoleAgentChoice,
+) {
+	prepare := s.team.dependencies.PrepareWorkerTrust
+	if prepare == nil || len(roles) == 0 {
+		return
+	}
+	var targets []WorkerTrustTarget
+	add := func(folder, client string) {
+		if folder == "" || client == "" {
+			return
+		}
+		target := WorkerTrustTarget{Folder: folder, Client: client}
+		if !slices.Contains(targets, target) {
+			targets = append(targets, target)
+		}
+	}
+	for _, role := range roles {
+		choice := choices[role.Role]
+		if choice == nil {
+			continue
+		}
+		add(record.Directory, choice.Client)
+		add(role.Folder, choice.Client)
+	}
+	if len(targets) == 0 {
+		return
+	}
+	if err := prepare(ctx, targets); err != nil {
+		trace.SpanFromContext(ctx).AddEvent("team.worker_trust_skipped")
+	}
 }
 
 // sameBuild compares the saved change and timestamp, regardless of time location.

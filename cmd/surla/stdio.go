@@ -144,7 +144,7 @@ const stdioBindTimeout = 2 * time.Minute
 var (
 	// errStdioServerStopped is a worker's answer when its project server is
 	// not running: only the user starts it.
-	errStdioServerStopped = errors.New("this project's Surla server is not running; ask the user to reopen Surla from their guide's coding agent (/surla) or with Start Surla in the Herdr companion, then call the tool again")
+	errStdioServerStopped = errors.New("this project's Surla server is not running; ask the user to reopen Surla from their project coding agent (/surla) or with Start Surla in the Herdr Surla panel, then call the tool again")
 	// stdioClientNames maps a word in the MCP clientInfo name to the client
 	// attach_guide accepts.
 	stdioClientNames = []string{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}

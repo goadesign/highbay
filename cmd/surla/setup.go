@@ -60,16 +60,39 @@ type (
 		entry map[string]any
 	}
 
-	// codexEntryEdit says where mergeCodexConfig writes mcp_servers.surla in a
-	// Codex config.toml document. Zero-length ranges mean the key is absent.
+	// permissionsJSONTarget is a client settings file whose permissions.allow
+	// array pre-authorizes Surla and Chorus MCP tools.
+	permissionsJSONTarget struct {
+		// path is the settings or CLI configuration file.
+		path string
+		// rules are the allowlist entries ensured in permissions.allow.
+		rules []string
+		// createWhenMissing creates path when absent; when false, only an
+		// existing file with a permissions.allow array is updated.
+		createWhenMissing bool
+	}
+
+	// codexEntryEdit says where mergeCodexConfig writes mcp_servers.surla and
+	// optional mcp_servers.chorus defaults in a Codex config.toml document.
+	// Zero-length ranges mean the key is absent.
 	codexEntryEdit struct {
 		// command is the byte range of an existing command string, quotes included.
 		command unstable.Range
 		// args is the byte range of an existing args array.
 		args unstable.Range
+		// approvalMode is the byte range of an existing default_tools_approval_mode string.
+		approvalMode unstable.Range
+		// envVars is the byte range of an existing env_vars array.
+		envVars unstable.Range
 		// afterHeader is the offset just past the [mcp_servers.surla] header
 		// line, or 0 when the document has no such table.
 		afterHeader int
+		// afterLastSurlaLine is the offset just past the last dotted surla.*
+		// key line under [mcp_servers].
+		afterLastSurlaLine int
+		// chorusAfterHeader is the offset just past a standard
+		// [mcp_servers.chorus] header line, or 0 when absent.
+		chorusAfterHeader int
 		// dotted is true when a dotted key such as surla.command under
 		// [mcp_servers] defines part of the entry.
 		dotted bool
@@ -129,7 +152,7 @@ func runSetup(args []string, stdout io.Writer) error {
 // that defines the surla entry in a form setup cannot edit, stops setup with
 // an error naming the file; files written before it keep their changes.
 func setupGlobal(env setupEnvironment, out io.Writer) error {
-	jsonTargets, tomlTargets, skillTargets := setupTargets(env)
+	jsonTargets, tomlTargets, permTargets, skillTargets := setupTargets(env)
 	if len(jsonTargets) == 0 && len(tomlTargets) == 0 {
 		fmt.Fprintln(out, "No coding agent was found on this computer; install one, then run surla setup -global again.")
 	}
@@ -146,6 +169,15 @@ func setupGlobal(env setupEnvironment, out io.Writer) error {
 			return err
 		}
 		writeRegistration(out, path, changed)
+	}
+	for _, target := range permTargets {
+		changed, present, err := mergePermissionsAllowJSON(target)
+		if err != nil {
+			return err
+		}
+		if present {
+			writePermissions(out, target.path, changed)
+		}
 	}
 	for _, path := range skillTargets {
 		changed, err := writeIntegrationFile(path, skills.SurlaSkillMD)
@@ -232,11 +264,12 @@ func resolveExistingPrefix(path string) string {
 // installed under env.home: Claude Code, OpenAI Codex, Cursor, Antigravity,
 // Gemini CLI, Windsurf, GitHub Copilot CLI and VS Code. The universal
 // ~/.agents skill folder is always included.
-func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []string) {
+func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []permissionsJSONTarget, []string) {
 	var (
 		home         = env.home
 		jsonTargets  []mcpJSONTarget
 		tomlTargets  []string
+		permTargets  []permissionsJSONTarget
 		skillTargets = []string{skillPath(filepath.Join(home, ".agents"))}
 		stdioEntry   = func() map[string]any {
 			return map[string]any{"command": env.executable, "args": []any{"stdio"}}
@@ -251,8 +284,8 @@ func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []string) {
 		}
 	)
 
-	// Claude Code keeps user servers in .claude.json and skills in skills/,
-	// both under CLAUDE_CONFIG_DIR when it is set.
+	// Claude Code keeps user servers in .claude.json, tool permissions in
+	// settings.json, and skills in skills/, under CLAUDE_CONFIG_DIR when set.
 	claudeDir := filepath.Join(home, ".claude")
 	claudeConfig := filepath.Join(home, ".claude.json")
 	if dir := env.getenv("CLAUDE_CONFIG_DIR"); dir != "" {
@@ -261,6 +294,11 @@ func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []string) {
 	}
 	if isDir(claudeDir) || exists(claudeConfig) || env.onPath("claude") {
 		jsonTargets = append(jsonTargets, mcpJSONTarget{path: claudeConfig, serversKey: "mcpServers", entry: stdioEntry()})
+		permTargets = append(permTargets, permissionsJSONTarget{
+			path:              filepath.Join(claudeDir, "settings.json"),
+			rules:             []string{"mcp__surla__*", "mcp__chorus__*"},
+			createWhenMissing: true,
+		})
 		skillTargets = append(skillTargets, skillPath(claudeDir))
 	}
 	codexDir := cmp.Or(env.getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
@@ -279,6 +317,12 @@ func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []string) {
 		config := filepath.Join(dir, "mcp.json")
 		if filepath.Base(dir) != ".cursor" {
 			config = filepath.Join(dir, "mcp_config.json")
+		} else {
+			permTargets = append(permTargets, permissionsJSONTarget{
+				path:              filepath.Join(dir, "cli-config.json"),
+				rules:             []string{"Mcp(surla:*)", "Mcp(chorus:*)"},
+				createWhenMissing: false,
+			})
 		}
 		jsonTargets = append(jsonTargets, mcpJSONTarget{path: config, serversKey: "mcpServers", entry: stdioEntry()})
 		skillTargets = append(skillTargets, skillPath(dir))
@@ -288,7 +332,9 @@ func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []string) {
 	geminiDir := filepath.Join(home, ".gemini")
 	geminiSettings := filepath.Join(geminiDir, "settings.json")
 	if exists(geminiSettings) || isDir(filepath.Join(geminiDir, "skills")) || env.onPath("gemini") {
-		jsonTargets = append(jsonTargets, mcpJSONTarget{path: geminiSettings, serversKey: "mcpServers", entry: stdioEntry()})
+		entry := stdioEntry()
+		entry["trust"] = true
+		jsonTargets = append(jsonTargets, mcpJSONTarget{path: geminiSettings, serversKey: "mcpServers", entry: entry})
 		skillTargets = append(skillTargets, skillPath(geminiDir))
 	}
 	copilotDir := cmp.Or(env.getenv("COPILOT_HOME"), filepath.Join(home, ".copilot"))
@@ -304,7 +350,7 @@ func setupTargets(env setupEnvironment) ([]mcpJSONTarget, []string, []string) {
 		entry["type"] = "stdio"
 		jsonTargets = append(jsonTargets, mcpJSONTarget{path: filepath.Join(dir, "mcp.json"), serversKey: "servers", entry: entry})
 	}
-	return jsonTargets, tomlTargets, skillTargets
+	return jsonTargets, tomlTargets, permTargets, skillTargets
 }
 
 // skillPath is where a client whose folder is dir reads the /surla skill.
@@ -332,6 +378,108 @@ func writeRegistration(out io.Writer, path string, changed bool) {
 		return
 	}
 	fmt.Fprintf(out, "The surla MCP server is already registered in %s\n", path)
+}
+
+// writePermissions reports whether setup updated a client's tool permissions.
+func writePermissions(out io.Writer, path string, changed bool) {
+	if changed {
+		fmt.Fprintf(out, "Configured Surla tool permissions in %s\n", path)
+		return
+	}
+	fmt.Fprintf(out, "Surla tool permissions are already configured in %s\n", path)
+}
+
+// mergePermissionsAllowJSON ensures target.rules appear in permissions.allow
+// inside target.path, preserving every other key, number representation and
+// permission list. When target.createWhenMissing is false, a missing file or a
+// file without a permissions.allow array is left untouched. Malformed JSON or
+// wrong types in an active target return an error without writing.
+func mergePermissionsAllowJSON(target permissionsJSONTarget) (changed, present bool, err error) {
+	path := target.path
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if !target.createWhenMissing {
+			return false, false, nil
+		}
+		raw = nil
+	} else if err != nil {
+		return false, false, fmt.Errorf("read %s: %w", path, err)
+	}
+	root := make(map[string]any)
+	if len(bytes.TrimSpace(raw)) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&root); err != nil {
+			return false, false, fmt.Errorf("parse JSON in %s: %w", path, err)
+		}
+		if root == nil {
+			return false, false, fmt.Errorf("%s must contain a JSON object, not null", path)
+		}
+		if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+			return false, false, fmt.Errorf("%s must contain one JSON object", path)
+		}
+	} else if !target.createWhenMissing {
+		return false, false, nil
+	}
+	perms := make(map[string]any)
+	if existing, has := root["permissions"]; has {
+		var ok bool
+		perms, ok = existing.(map[string]any)
+		if !ok || perms == nil {
+			if !target.createWhenMissing {
+				return false, false, nil
+			}
+			return false, false, fmt.Errorf("%s: permissions must be a JSON object", path)
+		}
+	} else if !target.createWhenMissing {
+		return false, false, nil
+	}
+	var allow []any
+	if existing, has := perms["allow"]; has {
+		var ok bool
+		allow, ok = existing.([]any)
+		if !ok || allow == nil {
+			if !target.createWhenMissing {
+				return false, false, nil
+			}
+			return false, false, fmt.Errorf("%s: permissions.allow must be a JSON array", path)
+		}
+	} else if !target.createWhenMissing {
+		return false, false, nil
+	}
+	existingRules := make([]string, 0, len(allow))
+	for _, item := range allow {
+		s, ok := item.(string)
+		if !ok {
+			return false, false, fmt.Errorf("%s: permissions.allow must contain strings", path)
+		}
+		existingRules = append(existingRules, s)
+	}
+	added := false
+	for _, rule := range target.rules {
+		if !slices.Contains(existingRules, rule) {
+			allow = append(allow, rule)
+			existingRules = append(existingRules, rule)
+			added = true
+		}
+	}
+	if !added {
+		return false, true, nil
+	}
+	perms["allow"] = allow
+	root["permissions"] = perms
+
+	var encoded bytes.Buffer
+	encoder := json.NewEncoder(&encoded)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(root); err != nil {
+		return false, false, fmt.Errorf("encode JSON for %s: %w", path, err)
+	}
+	if err := replaceConfigFile(path, encoded.Bytes(), 0o644); err != nil {
+		return false, false, err
+	}
+	return true, true, nil
 }
 
 // mergeMCPJSONConfig sets target.serversKey["surla"] to target.entry in a JSON
@@ -405,24 +553,25 @@ func sameJSON(existing any, want map[string]any) bool {
 	return reflect.DeepEqual(existing, normalized)
 }
 
-// mergeCodexConfig sets mcp_servers.surla to command = executable and
-// args = ["stdio"] in an OpenAI Codex config.toml, leaving every other byte
+// mergeCodexConfig sets mcp_servers.surla to command = executable,
+// args = ["stdio"], default_tools_approval_mode = "approve", and
+// env_vars containing "HC_TERMINAL_ID" in an OpenAI Codex config.toml, and
+// adds default_tools_approval_mode = "approve" to an existing standard
+// [mcp_servers.chorus] table that has none yet. Every other byte stays
 // unchanged so comments, formatting, other servers and other surla keys such
-// as env survive. An existing value is replaced in place, a missing key is
-// added after the [mcp_servers.surla] header, and a missing entry is appended
-// as a new table. It reports false, writing nothing, when the entry already
-// matches. It returns an error, writing nothing, when the file is not valid
-// TOML or defines the entry in a form it cannot edit in place (an inline
-// table, an array of tables, dotted keys missing command or args, a url
-// transport, or values of the wrong type); the message names the setting to
-// write by hand.
+// as env survive. It reports false, writing nothing, when the configuration
+// already matches. It returns an error, writing nothing, when the file is not
+// valid TOML or defines the entry in a form it cannot edit in place.
 func mergeCodexConfig(path, executable string) (bool, error) {
 	content, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return false, fmt.Errorf("read %s: %w", path, err)
 	}
 	commandValue := strconv.Quote(executable)
-	const argsValue = `["stdio"]`
+	const (
+		argsValue     = `["stdio"]`
+		approvalValue = `"approve"`
+	)
 	byHand := fmt.Sprintf("set [mcp_servers.surla] command = %s and args = %s by hand", commandValue, argsValue)
 
 	// Decoding checks what the position-aware parser does not: duplicate keys,
@@ -438,59 +587,148 @@ func mergeCodexConfig(path, executable string) (bool, error) {
 			return false, fmt.Errorf("%s: mcp_servers is not a table; %s", path, byHand)
 		}
 	}
+	var (
+		surlaEntry     map[string]any
+		envVarsMatched bool
+		wantEnvVars    = `["HC_TERMINAL_ID"]`
+	)
 	if entry, ok := servers[surlaServerName].(map[string]any); ok {
+		surlaEntry = entry
 		if _, ok := entry["url"]; ok {
 			return false, fmt.Errorf("%s: mcp_servers.surla has a url; remove it and %s", path, byHand)
 		}
-		if entry["command"] == executable && reflect.DeepEqual(entry["args"], []any{"stdio"}) {
-			return false, nil
+		if rawVars, present := entry["env_vars"]; present {
+			items, ok := rawVars.([]any)
+			if !ok {
+				return false, fmt.Errorf("%s: mcp_servers.surla.env_vars is not an array; %s", path, byHand)
+			}
+			names := make([]string, 0, len(items)+1)
+			for _, item := range items {
+				name, ok := item.(string)
+				if !ok {
+					return false, fmt.Errorf("%s: mcp_servers.surla.env_vars must contain strings; %s", path, byHand)
+				}
+				names = append(names, name)
+			}
+			if slices.Contains(names, "HC_TERMINAL_ID") {
+				envVarsMatched = true
+			} else {
+				names = append(names, "HC_TERMINAL_ID")
+				quoted := make([]string, 0, len(names))
+				for _, name := range names {
+					quoted = append(quoted, strconv.Quote(name))
+				}
+				wantEnvVars = "[" + strings.Join(quoted, ", ") + "]"
+			}
 		}
 	}
+	surlaMatched := surlaEntry != nil &&
+		surlaEntry["command"] == executable &&
+		reflect.DeepEqual(surlaEntry["args"], []any{"stdio"}) &&
+		surlaEntry["default_tools_approval_mode"] == "approve" &&
+		envVarsMatched
+
+	chorusEntry, hasChorus := servers["chorus"].(map[string]any)
+	_, chorusHasApproval := chorusEntry["default_tools_approval_mode"]
+	if surlaMatched && (!hasChorus || chorusHasApproval) {
+		return false, nil
+	}
+
 	edit, err := locateCodexSurlaEntry(content)
 	if err != nil {
 		return false, fmt.Errorf("%s: %w; %s", path, err, byHand)
 	}
+	chorusNeedsApproval := hasChorus && !chorusHasApproval && edit.chorusAfterHeader > 0
+	if surlaMatched && !chorusNeedsApproval {
+		return false, nil
+	}
+
+	type replacement struct {
+		at, length int
+		text       string
+	}
+	applyReplacements := func(base []byte, edits []replacement) []byte {
+		if len(edits) == 0 {
+			return slices.Clone(base)
+		}
+		slices.SortFunc(edits, func(a, b replacement) int { return b.at - a.at })
+		result := slices.Clone(base)
+		for _, r := range edits {
+			text := r.text
+			if r.length == 0 && r.at > 0 && result[r.at-1] != '\n' {
+				text = "\n" + text
+			}
+			result = slices.Concat(result[:r.at], []byte(text), result[r.at+r.length:])
+		}
+		return result
+	}
+
+	var edits []replacement
+	if chorusNeedsApproval {
+		edits = append(edits, replacement{edit.chorusAfterHeader, 0, "default_tools_approval_mode = " + approvalValue + "\n"})
+	}
 
 	var out []byte
 	switch {
+	case surlaMatched:
+		out = applyReplacements(content, edits)
 	case edit.afterHeader == 0 && !edit.dotted:
-		out = append(out, bytes.TrimRight(content, " \t\r\n")...)
+		base := applyReplacements(content, edits)
+		out = append(out, bytes.TrimRight(base, " \t\r\n")...)
 		if len(out) > 0 {
 			out = append(out, "\n\n"...)
 		}
-		out = append(out, "[mcp_servers.surla]\ncommand = "+commandValue+"\nargs = "+argsValue+"\n"...)
+		out = append(out, "[mcp_servers.surla]\n"+
+			"command = "+commandValue+"\n"+
+			"args = "+argsValue+"\n"+
+			"default_tools_approval_mode = "+approvalValue+"\n"+
+			"env_vars = "+wantEnvVars+"\n"...)
 	case edit.afterHeader == 0 && (edit.command.Length == 0 || edit.args.Length == 0):
 		return false, fmt.Errorf("%s: mcp_servers.surla is defined with dotted keys missing command or args; %s", path, byHand)
 	default:
-		type replacement struct {
-			at, length int
-			text       string
+		keyPrefix := ""
+		insertAt := edit.afterHeader
+		if edit.dotted {
+			keyPrefix = surlaServerName + "."
+			insertAt = edit.afterLastSurlaLine
 		}
-		var edits []replacement
 		var missing string
 		if edit.command.Length > 0 {
-			edits = append(edits, replacement{int(edit.command.Offset), int(edit.command.Length), commandValue})
+			if surlaEntry["command"] != executable {
+				edits = append(edits, replacement{int(edit.command.Offset), int(edit.command.Length), commandValue})
+			}
 		} else {
-			missing += "command = " + commandValue + "\n"
+			missing += keyPrefix + "command = " + commandValue + "\n"
 		}
 		if edit.args.Length > 0 {
-			edits = append(edits, replacement{int(edit.args.Offset), int(edit.args.Length), argsValue})
+			if !reflect.DeepEqual(surlaEntry["args"], []any{"stdio"}) {
+				edits = append(edits, replacement{int(edit.args.Offset), int(edit.args.Length), argsValue})
+			}
 		} else {
-			missing += "args = " + argsValue + "\n"
+			missing += keyPrefix + "args = " + argsValue + "\n"
+		}
+		if edit.approvalMode.Length > 0 {
+			if surlaEntry["default_tools_approval_mode"] != "approve" {
+				edits = append(edits, replacement{int(edit.approvalMode.Offset), int(edit.approvalMode.Length), approvalValue})
+			}
+		} else {
+			missing += keyPrefix + "default_tools_approval_mode = " + approvalValue + "\n"
+		}
+		if edit.envVars.Length > 0 {
+			if !envVarsMatched {
+				edits = append(edits, replacement{int(edit.envVars.Offset), int(edit.envVars.Length), wantEnvVars})
+			}
+		} else {
+			missing += keyPrefix + "env_vars = " + wantEnvVars + "\n"
 		}
 		if missing != "" {
-			edits = append(edits, replacement{edit.afterHeader, 0, missing})
+			edits = append(edits, replacement{insertAt, 0, missing})
 		}
-		// Apply from the end so earlier offsets stay valid.
-		slices.SortFunc(edits, func(a, b replacement) int { return b.at - a.at })
-		out = slices.Clone(content)
-		for _, r := range edits {
-			text := r.text
-			if r.length == 0 && r.at > 0 && out[r.at-1] != '\n' {
-				text = "\n" + text
-			}
-			out = slices.Concat(out[:r.at], []byte(text), out[r.at+r.length:])
-		}
+		out = applyReplacements(content, edits)
+	}
+	var verified map[string]any
+	if err := toml.Unmarshal(out, &verified); err != nil {
+		return false, fmt.Errorf("%s: validate updated TOML: %w; %s", path, err, byHand)
 	}
 	if err := replaceConfigFile(path, out, 0o600); err != nil {
 		return false, err
@@ -499,18 +737,28 @@ func mergeCodexConfig(path, executable string) (bool, error) {
 }
 
 // locateCodexSurlaEntry parses a Codex config.toml and reports where
-// mergeCodexConfig writes mcp_servers.surla. It returns an error for invalid
-// TOML and for entries it cannot edit in place. Tables nested under the entry,
-// such as [mcp_servers.surla.env], are left as they are.
+// mergeCodexConfig writes mcp_servers.surla and any standard
+// [mcp_servers.chorus] header. It returns an error for invalid TOML and for
+// entries it cannot edit in place. Tables nested under the entry, such as
+// [mcp_servers.surla.env], are left as they are.
 func locateCodexSurlaEntry(doc []byte) (codexEntryEdit, error) {
 	var (
-		edit    codexEntryEdit
-		table   []string
-		parser  unstable.Parser
-		entry   = []string{"mcp_servers", surlaServerName}
-		command = []string{"mcp_servers", surlaServerName, "command"}
-		args    = []string{"mcp_servers", surlaServerName, "args"}
+		edit         codexEntryEdit
+		table        []string
+		parser       unstable.Parser
+		entry        = []string{"mcp_servers", surlaServerName}
+		chorusEntry  = []string{"mcp_servers", "chorus"}
+		command      = []string{"mcp_servers", surlaServerName, "command"}
+		args         = []string{"mcp_servers", surlaServerName, "args"}
+		approvalMode = []string{"mcp_servers", surlaServerName, "default_tools_approval_mode"}
+		envVars      = []string{"mcp_servers", surlaServerName, "env_vars"}
 	)
+	afterLine := func(offset int) int {
+		if nl := bytes.IndexByte(doc[offset:], '\n'); nl >= 0 {
+			return offset + nl + 1
+		}
+		return len(doc)
+	}
 	parser.Reset(doc)
 	for parser.NextExpression() {
 		expr := parser.Expression()
@@ -518,18 +766,17 @@ func locateCodexSurlaEntry(doc []byte) (codexEntryEdit, error) {
 		case unstable.Table, unstable.ArrayTable:
 			var last *unstable.Node
 			table, last = tomlKeyPath(nil, expr.Key())
+			if slices.Equal(table, chorusEntry) && expr.Kind == unstable.Table {
+				edit.chorusAfterHeader = afterLine(int(last.Raw.Offset + last.Raw.Length))
+				continue
+			}
 			if !slices.Equal(table, entry) {
 				continue
 			}
 			if expr.Kind == unstable.ArrayTable {
 				return edit, errors.New("mcp_servers.surla is defined as an array of tables")
 			}
-			end := int(last.Raw.Offset + last.Raw.Length)
-			if nl := bytes.IndexByte(doc[end:], '\n'); nl >= 0 {
-				edit.afterHeader = end + nl + 1
-			} else {
-				edit.afterHeader = len(doc)
-			}
+			edit.afterHeader = afterLine(int(last.Raw.Offset + last.Raw.Length))
 		case unstable.KeyValue:
 			key, last := tomlKeyPath(slices.Clone(table), expr.Key())
 			value := expr.Value()
@@ -544,11 +791,22 @@ func locateCodexSurlaEntry(doc []byte) (codexEntryEdit, error) {
 					return edit, errors.New("mcp_servers.surla.args is not an array")
 				}
 				edit.args = tomlValueRange(doc, expr, last)
+			case slices.Equal(key, approvalMode):
+				if value.Kind != unstable.String {
+					return edit, errors.New("mcp_servers.surla.default_tools_approval_mode is not a string")
+				}
+				edit.approvalMode = tomlValueRange(doc, expr, last)
+			case slices.Equal(key, envVars):
+				if value.Kind != unstable.Array {
+					return edit, errors.New("mcp_servers.surla.env_vars is not an array")
+				}
+				edit.envVars = tomlValueRange(doc, expr, last)
 			case slices.Equal(key, entry) || slices.Equal(key, entry[:1]):
 				return edit, errors.New("mcp_servers or mcp_servers.surla is an inline table")
 			}
 			if len(key) > 2 && slices.Equal(key[:2], entry) && len(table) < 2 {
 				edit.dotted = true
+				edit.afterLastSurlaLine = afterLine(int(expr.Raw.Offset + expr.Raw.Length))
 			}
 		}
 	}

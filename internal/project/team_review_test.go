@@ -340,3 +340,239 @@ func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
 		})
 	}
 }
+
+func TestAttachGuideLiveClientFallback(t *testing.T) {
+	stale := "t45"
+	cases := []struct {
+		name         string
+		terminalID   *string
+		client       string
+		setup        func(t *testing.T, state *State, host *teamFixture)
+		wantAdopted  bool
+		wantTerminal string
+		wantAgent    string
+	}{
+		{
+			name:   "missing HcTerminalID adopts unique Codex pane in project root",
+			client: "codex-mcp-client",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-live", Tabs: []TeamTab{{ID: "tab-live", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t52", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"/opt/homebrew/bin/codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted:  true,
+			wantTerminal: "t52",
+			wantAgent:    "codex",
+		},
+		{
+			name:   "missing HcTerminalID adopts unique node-launched Claude pane in project subdirectory",
+			client: "claude-code",
+			setup: func(t *testing.T, state *State, host *teamFixture) {
+				sub := filepath.Join(state.Record.Directory, "cmd", "api")
+				require.NoError(t, os.MkdirAll(sub, 0o755))
+				host.spaces = []TeamSpace{{
+					ID: "space-claude", Tabs: []TeamTab{{ID: "tab-claude", Terminals: []TeamPane{{Terminal: "t60", Pane: "p60"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t60", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"node", "/usr/local/bin/claude"}, Cwd: sub},
+				}}
+			},
+			wantAdopted:  true,
+			wantTerminal: "t60",
+			wantAgent:    "claude",
+		},
+		{
+			name:       "stale daemon HcTerminalID falls through and adopts unique live pane",
+			terminalID: &stale,
+			client:     "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-daemon", Tabs: []TeamTab{{ID: "tab-daemon", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
+				}}
+				host.terminals = []TeamTerminal{
+					{Address: "t45", State: "finished", Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+					{Address: "t52", State: "live", Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+				}
+			},
+			wantAdopted:  true,
+			wantTerminal: "t52",
+			wantAgent:    "codex",
+		},
+		{
+			name:   "refuses adoption when two matching panes exist",
+			client: "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-ambig",
+					Tabs: []TeamTab{
+						{ID: "tab-1", Terminals: []TeamPane{{Terminal: "t1", Pane: "p1"}}},
+						{ID: "tab-2", Terminals: []TeamPane{{Terminal: "t2", Pane: "p2"}}},
+					},
+				}}
+				host.terminals = []TeamTerminal{
+					{Address: "t1", State: "live", Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+					{Address: "t2", State: "live", Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: state.Record.Directory}},
+				}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:   "refuses adoption when pane cwd is inside .surla-build",
+			client: "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-worker", Tabs: []TeamTab{{ID: "tab-worker", Terminals: []TeamPane{{Terminal: "t-build", Pane: "p-build"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-build", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: filepath.Join(state.Record.Directory, ".surla-build")},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:   "refuses adoption when pane cwd is inside .surla-tests",
+			client: "claude",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-tests", Tabs: []TeamTab{{ID: "tab-tests", Terminals: []TeamPane{{Terminal: "t-tests", Pane: "p-tests"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-tests", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"claude"}, Cwd: filepath.Join(state.Record.Directory, ".surla-tests", "eval")},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:   "refuses adoption when pane cwd belongs to another repo",
+			client: "codex",
+			setup: func(t *testing.T, _ *State, host *teamFixture) {
+				other := t.TempDir()
+				host.spaces = []TeamSpace{{
+					ID: "space-other", Tabs: []TeamTab{{ID: "tab-other", Terminals: []TeamPane{{Terminal: "t-other", Pane: "p-other"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-other", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: other},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:   "refuses adoption when live pane client family differs from connecting client",
+			client: "claude",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-mismatch", Tabs: []TeamTab{{ID: "tab-mismatch", Terminals: []TeamPane{{Terminal: "t-codex", Pane: "p-codex"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-codex", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:   "refuses adoption when pane is an idle shell",
+			client: "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-shell", Tabs: []TeamTab{{ID: "tab-shell", Terminals: []TeamPane{{Terminal: "t-shell", Pane: "p-shell"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t-shell", State: "live",
+					Foreground: &TeamForeground{Argv: []string{"zsh"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			deps.CompanionInstalled = true
+			connected := 0
+			deps.Connect = func(context.Context) (TeamConnection, error) {
+				connected++
+				return TeamConnection{Endpoint: "http://chorus.test"}, nil
+			}
+			host := deps.Host.(*teamFixture)
+			tc.setup(t, state, host)
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			client := tc.client
+			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: tc.terminalID,
+				Client:       &client,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantAdopted, result.AdoptedHerdr)
+			if tc.wantAdopted {
+				assert.Equal(t, "attached", result.HerdrMode)
+				assert.Contains(t, host.calls, "label")
+				assert.Contains(t, host.calls, "companion")
+				assert.Equal(t, 1, connected)
+				for _, term := range host.terminals {
+					if term.Address == tc.wantTerminal {
+						assert.Equal(t, tc.wantAgent, term.Labels["chorus.agent"])
+						assert.Equal(t, "guide", term.Labels["chorus.role"])
+					}
+				}
+			} else {
+				assert.Equal(t, "available", result.HerdrMode)
+				assert.NotContains(t, host.calls, "label")
+				assert.NotContains(t, host.calls, "companion")
+				assert.Zero(t, connected)
+			}
+		})
+	}
+}
+
+func TestStartAgentsPreparesWorkerTrustBeforeLaunchWithoutBlockingOnTrustError(t *testing.T) {
+	state := testState(t)
+	deps := fixtureTeamDependencies(state)
+	host := deps.Host.(*teamFixture)
+	var prepared [][]WorkerTrustTarget
+	deps.PrepareWorkerTrust = func(_ context.Context, targets []WorkerTrustTarget) error {
+		prepared = append(prepared, targets)
+		return assert.AnError
+	}
+	s, err := NewServer(state, func() {}, deps)
+	require.NoError(t, err)
+	fixtureAssignments(s, true)
+	builderDir := filepath.Join(state.Record.Directory, ".surla-build")
+	writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+	require.NoError(t, os.MkdirAll(builderDir, 0o755))
+	require.NoError(t, os.MkdirAll(writerDir, 0o755))
+	require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+		BuilderFolder: builderDir, TestWriterFolder: writerDir,
+	}))
+
+	// Refused choice must not prepare trust.
+	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+		"builder": {Client: "codex", Program: "/missing"},
+	})
+	require.Error(t, err)
+	assert.Empty(t, prepared)
+
+	// Valid launch prepares root and worker folders and still launches when PrepareWorkerTrust errors.
+	_, err = s.StartAgents(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, prepared, 1)
+	assert.Equal(t, []WorkerTrustTarget{
+		{Folder: state.Record.Directory, Client: "codex"},
+		{Folder: builderDir, Client: "codex"},
+		{Folder: state.Record.Directory, Client: "claude"},
+		{Folder: writerDir, Client: "claude"},
+	}, prepared[0])
+	assert.Contains(t, host.calls, "launch")
+}

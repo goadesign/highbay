@@ -125,7 +125,7 @@ func TestTeamCommandProtocol(t *testing.T) {
 			}
 			return []byte(`{"terminals":[{"address":"term1"}]}`), nil
 		case "get":
-			return []byte(`{"address":"term1","state":"live","labels":{"chorus.handle":"guide"},"foreground":{"argv":["codex"]}}`), nil
+			return []byte(`{"address":"term1","state":"live","labels":{"chorus.handle":"guide"},"foreground":{"argv":["codex"],"cwd":"/project"}}`), nil
 		default:
 			return []byte(`{"overlays":["chorus-launcher"]}`), nil
 		}
@@ -158,6 +158,8 @@ func TestTeamCommandProtocol(t *testing.T) {
 	terminals, err := c.Terminals(t.Context(), "/project", "s1", []string{"guide"})
 	require.NoError(t, err)
 	require.Len(t, terminals, 1)
+	require.NotNil(t, terminals[0].Foreground)
+	assert.Equal(t, "/project", terminals[0].Foreground.Cwd)
 	overlays, err := c.Overlays(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"chorus-launcher"}, overlays)
