@@ -20,6 +20,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 
+	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testwriter"
@@ -328,13 +329,14 @@ func preflightClientWorkerTrust(
 	plan clientTrustPlan,
 	acc *preflightAccumulator,
 ) {
-	checkPath := func(path, label string, fn func(string) error) {
-		if _, err := validateConfigDestination(path, protectedRoots); err != nil {
+	checkPath := func(path, label string, fn func(resolvedPath string) error) {
+		resolved, err := validateConfigDestination(path, protectedRoots)
+		if err != nil {
 			acc.record(client, label, err)
 			return
 		}
 		if fn != nil {
-			acc.record(client, label, fn(path))
+			acc.record(client, label, fn(resolved))
 		}
 	}
 
@@ -364,7 +366,7 @@ func preflightClientWorkerTrust(
 			if len(plan.folders) == 0 {
 				return nil
 			}
-			return checkClaudeProjectTrustReadable(p)
+			return checkClaudeProjectTrustReadable(p, plan.folders)
 		})
 	case "gemini":
 		geminiDir := geminiConfigDir(home, getenv("GEMINI_CLI_HOME"))
@@ -388,62 +390,83 @@ func preflightClientWorkerTrust(
 			}
 			return checkPermissionsFilePolicy("cursor", p, plan)
 		})
+		resolvedHome, homeErr := abspath.EvalMissing(home)
+		if homeErr != nil {
+			acc.record(client, ".workspace-trusted", homeErr)
+			return
+		}
 		for _, folder := range plan.folders {
 			if slug := cursorWorkspaceSlug(folder); slug != "" {
 				marker := filepath.Join(home, ".cursor", "projects", slug, ".workspace-trusted")
-				checkPath(marker, ".workspace-trusted", nil)
+				checkPath(marker, ".workspace-trusted", func(p string) error {
+					return checkCursorWorkspaceMarker(resolvedHome, p)
+				})
 			}
 		}
 	}
-}
-
-// checkClaudeProjectTrustReadable verifies that Claude's .claude.json is absent
-// or decodes cleanly with an object `projects` map before any client write runs.
-func checkClaudeProjectTrustReadable(path string) error {
-	root, err := readConfigJSONObject(path)
-	if err != nil {
-		return err
-	}
-	if existing, present := root["projects"]; present {
-		if projects, ok := existing.(map[string]any); !ok || projects == nil {
-			return fmt.Errorf("%s: projects must be a JSON object", path)
-		}
-	}
-	return nil
 }
 
 // checkCodexWorkerPolicy inspects Codex config.toml without modifying it.
 func checkCodexWorkerPolicy(path string, requiredServers, folders []string) error {
 	content, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) || len(bytes.TrimSpace(content)) == 0 {
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
+	if len(bytes.TrimSpace(content)) == 0 {
+		return nil
+	}
 	var decoded map[string]any
 	if err := toml.Unmarshal(content, &decoded); err != nil {
 		return fmt.Errorf("%s is not valid TOML: %w", path, err)
 	}
-	if servers, ok := decoded["mcp_servers"].(map[string]any); ok {
-		for _, name := range requiredServers {
-			entry, ok := servers[name].(map[string]any)
-			if !ok {
-				continue
-			}
-			if enabled, hasEnabled := entry["enabled"].(bool); hasEnabled && !enabled {
-				return &controlplane.TeamPolicyRefusal{
-					Kind:   controlplane.PolicyCodexServerDisabled,
-					Client: "codex",
-					Server: name,
+	var shapeErr error
+	recordShape := func(err error) {
+		if err != nil && shapeErr == nil {
+			shapeErr = err
+		}
+	}
+	if rawServers, hasServers := decoded["mcp_servers"]; hasServers {
+		servers, ok := rawServers.(map[string]any)
+		if !ok || servers == nil {
+			recordShape(fmt.Errorf("%s: mcp_servers is not a table", path))
+		} else {
+			for _, name := range requiredServers {
+				rawEntry, present := servers[name]
+				if !present {
+					continue
 				}
-			}
-			if mode, hasMode := entry["default_tools_approval_mode"]; hasMode && mode != "approve" {
-				return &controlplane.TeamPolicyRefusal{
-					Kind:   controlplane.PolicyCodexServerApproval,
-					Client: "codex",
-					Server: name,
-					Detail: fmt.Sprint(mode),
+				entry, ok := rawEntry.(map[string]any)
+				if !ok || entry == nil {
+					recordShape(fmt.Errorf("%s: mcp_servers.%s is not a table", path, name))
+					continue
+				}
+				if rawEnabled, hasEnabled := entry["enabled"]; hasEnabled {
+					enabled, ok := rawEnabled.(bool)
+					if !ok {
+						recordShape(fmt.Errorf("%s: mcp_servers.%s.enabled must be a boolean", path, name))
+					} else if !enabled {
+						return &controlplane.TeamPolicyRefusal{
+							Kind:   controlplane.PolicyCodexServerDisabled,
+							Client: "codex",
+							Server: name,
+						}
+					}
+				}
+				if rawMode, hasMode := entry["default_tools_approval_mode"]; hasMode {
+					mode, ok := rawMode.(string)
+					if !ok {
+						recordShape(fmt.Errorf("%s: mcp_servers.%s.default_tools_approval_mode must be a string", path, name))
+					} else if mode != "approve" {
+						return &controlplane.TeamPolicyRefusal{
+							Kind:   controlplane.PolicyCodexServerApproval,
+							Client: "codex",
+							Server: name,
+							Detail: mode,
+						}
+					}
 				}
 			}
 		}
@@ -451,47 +474,71 @@ func checkCodexWorkerPolicy(path string, requiredServers, folders []string) erro
 	projects := map[string]any{}
 	if existing, present := decoded["projects"]; present {
 		var ok bool
-		if projects, ok = existing.(map[string]any); !ok {
-			return fmt.Errorf("%s: projects is not a table", path)
-		}
-		if err := checkCodexProjectsMapPolicy(projects, folders); err != nil {
-			return err
+		if projects, ok = existing.(map[string]any); !ok || projects == nil {
+			recordShape(fmt.Errorf("%s: projects is not a table", path))
+			projects = map[string]any{}
+		} else if err := checkCodexProjectsMapPolicy(path, projects, folders); err != nil {
+			var policyErr *controlplane.TeamPolicyRefusal
+			if errors.As(err, &policyErr) {
+				return policyErr
+			}
+			recordShape(err)
 		}
 	}
 	if len(folders) > 0 {
 		projLocs, projectsInline, err := locateCodexProjectEntries(content)
 		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		for _, folder := range folders {
-			if existing, present := projects[folder]; present {
-				entry, ok := existing.(map[string]any)
-				if !ok {
-					return fmt.Errorf("%s: projects.%q is not a table", path, folder)
+			recordShape(fmt.Errorf("%s: %w", path, err))
+		} else {
+			for _, folder := range folders {
+				if existing, present := projects[folder]; present {
+					entry, ok := existing.(map[string]any)
+					if !ok || entry == nil {
+						recordShape(fmt.Errorf("%s: projects.%q is not a table", path, folder))
+						continue
+					}
+					if rawLevel, hasLevel := entry["trust_level"]; hasLevel {
+						if _, ok := rawLevel.(string); ok {
+							continue
+						}
+					}
 				}
-				if _, hasLevel := entry["trust_level"]; hasLevel {
-					continue
+				if projectsInline || projLocs[folder].uneditable {
+					recordShape(fmt.Errorf("%s: projects or projects.%q cannot be edited in place", path, folder))
 				}
-			}
-			if projectsInline || projLocs[folder].uneditable {
-				return fmt.Errorf("%s: projects or projects.%q cannot be edited in place", path, folder)
 			}
 		}
 	}
-	return nil
+	return shapeErr
 }
 
 // checkCodexProjectsMapPolicy verifies that neither folders nor an unoverridden
-// ancestor project in projects sets trust_level to a value other than "trusted".
-func checkCodexProjectsMapPolicy(projects map[string]any, folders []string) error {
+// ancestor project in projects sets trust_level to a value other than "trusted",
+// while flagging non-table project entries or non-string trust_level values.
+func checkCodexProjectsMapPolicy(path string, projects map[string]any, folders []string) error {
+	var shapeErr error
+	for key, raw := range projects {
+		entry, ok := raw.(map[string]any)
+		if !ok || entry == nil {
+			if shapeErr == nil {
+				shapeErr = fmt.Errorf("%s: projects.%q is not a table", path, key)
+			}
+			continue
+		}
+		if rawLevel, hasLevel := entry["trust_level"]; hasLevel {
+			if _, ok := rawLevel.(string); !ok && shapeErr == nil {
+				shapeErr = fmt.Errorf("%s: projects.%q.trust_level must be a string", path, key)
+			}
+		}
+	}
 	for _, folder := range folders {
-		if entry, ok := projects[folder].(map[string]any); ok {
-			if level, hasLevel := entry["trust_level"]; hasLevel {
+		if entry, ok := projects[folder].(map[string]any); ok && entry != nil {
+			if level, ok := entry["trust_level"].(string); ok {
 				if level != "trusted" {
 					return &controlplane.TeamPolicyRefusal{
 						Kind:   controlplane.PolicyCodexProjectUntrusted,
 						Client: "codex",
-						Detail: fmt.Sprint(level),
+						Detail: level,
 					}
 				}
 				continue
@@ -502,46 +549,52 @@ func checkCodexProjectsMapPolicy(projects map[string]any, folders []string) erro
 				continue
 			}
 			entry, ok := raw.(map[string]any)
-			if !ok {
+			if !ok || entry == nil {
 				continue
 			}
-			if level, hasLevel := entry["trust_level"]; hasLevel && level != "trusted" {
+			if level, ok := entry["trust_level"].(string); ok && level != "trusted" {
 				return &controlplane.TeamPolicyRefusal{
 					Kind:   controlplane.PolicyCodexProjectUntrusted,
 					Client: "codex",
-					Detail: fmt.Sprint(level),
+					Detail: level,
 				}
 			}
 		}
 	}
-	return nil
+	return shapeErr
 }
 
 // checkPermissionsFilePolicy checks permissions.deny and permissions.ask in
-// Claude settings.json or Cursor cli-config.json against plan's required tools.
+// Claude settings.json or Cursor cli-config.json against plan's required tools,
+// rejecting wrong-shaped present permissions objects or rule lists.
 func checkPermissionsFilePolicy(client, path string, plan clientTrustPlan) error {
 	root, err := readConfigJSONObject(path)
 	if err != nil {
 		return err
 	}
-	perms, ok := root["permissions"].(map[string]any)
-	if !ok || perms == nil {
+	rawPerms, hasPerms := root["permissions"]
+	if !hasPerms {
 		return nil
+	}
+	perms, ok := rawPerms.(map[string]any)
+	if !ok || perms == nil {
+		return fmt.Errorf("%s: permissions must be a JSON object", path)
 	}
 	kind := controlplane.PolicyClaudePermission
 	if client == "cursor" {
 		kind = controlplane.PolicyCursorPermission
 	}
+	var shapeErr error
 	for _, listName := range []string{"deny", "ask"} {
-		items, ok := perms[listName].([]any)
-		if !ok {
+		rawList, hasList := perms[listName]
+		if !hasList {
 			continue
 		}
-		for _, item := range items {
-			rule, ok := item.(string)
-			if !ok {
-				continue
-			}
+		rules, _, err := extractStringsAndShapeErr(path, "permissions."+listName, rawList)
+		if err != nil && shapeErr == nil {
+			shapeErr = err
+		}
+		for _, rule := range rules {
 			for _, server := range plan.requiredServers {
 				for _, tool := range plan.requiredTools[server] {
 					if permissionRuleBlocksTool(client, rule, server, tool) {
@@ -557,34 +610,62 @@ func checkPermissionsFilePolicy(client, path string, plan clientTrustPlan) error
 			}
 		}
 	}
-	return nil
+	if rawAllow, hasAllow := perms["allow"]; hasAllow {
+		if _, _, err := extractStringsAndShapeErr(path, "permissions.allow", rawAllow); err != nil && shapeErr == nil {
+			shapeErr = err
+		}
+	}
+	return shapeErr
 }
 
 // checkGeminiSettingsPolicy checks whether Gemini settings.json marks a required
 // MCP server as untrusted (`"trust": false`) or filters out a required role tool
-// via `excludeTools` or `includeTools`.
+// via `excludeTools` or `includeTools`, rejecting wrong-shaped present fields.
 func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 	root, err := readConfigJSONObject(path)
 	if err != nil {
 		return err
 	}
-	servers, ok := root["mcpServers"].(map[string]any)
-	if !ok || servers == nil {
+	rawServers, hasServers := root["mcpServers"]
+	if !hasServers {
 		return nil
 	}
+	servers, ok := rawServers.(map[string]any)
+	if !ok || servers == nil {
+		return fmt.Errorf("%s: mcpServers must be a JSON object", path)
+	}
+	var shapeErr error
 	for _, name := range plan.requiredServers {
-		entry, ok := servers[name].(map[string]any)
-		if !ok || entry == nil {
+		rawEntry, present := servers[name]
+		if !present {
 			continue
 		}
-		if trust, hasTrust := entry["trust"].(bool); hasTrust && !trust {
-			return &controlplane.TeamPolicyRefusal{
-				Kind:   controlplane.PolicyGeminiServerUntrusted,
-				Client: "gemini",
-				Server: name,
+		entry, ok := rawEntry.(map[string]any)
+		if !ok || entry == nil {
+			if shapeErr == nil {
+				shapeErr = fmt.Errorf("%s: mcpServers.%s must be a JSON object", path, name)
+			}
+			continue
+		}
+		if rawTrust, hasTrust := entry["trust"]; hasTrust {
+			trust, ok := rawTrust.(bool)
+			if !ok {
+				if shapeErr == nil {
+					shapeErr = fmt.Errorf("%s: mcpServers.%s.trust must be a boolean", path, name)
+				}
+			} else if !trust {
+				return &controlplane.TeamPolicyRefusal{
+					Kind:   controlplane.PolicyGeminiServerUntrusted,
+					Client: "gemini",
+					Server: name,
+				}
 			}
 		}
-		if excluded, ok := entry["excludeTools"].([]any); ok {
+		if rawExclude, hasExclude := entry["excludeTools"]; hasExclude {
+			excluded, _, err := extractStringsAndShapeErr(path, "mcpServers."+name+".excludeTools", rawExclude)
+			if err != nil && shapeErr == nil {
+				shapeErr = err
+			}
 			for _, tool := range plan.requiredTools[name] {
 				if matched, blocked := geminiExcludeMatches(excluded, tool); blocked {
 					return &controlplane.TeamPolicyRefusal{
@@ -598,7 +679,11 @@ func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 			}
 		}
 		if rawInclude, hasInclude := entry["includeTools"]; hasInclude {
-			if included, ok := rawInclude.([]any); ok {
+			included, allStrings, err := extractStringsAndShapeErr(path, "mcpServers."+name+".includeTools", rawInclude)
+			if err != nil && shapeErr == nil {
+				shapeErr = err
+			}
+			if allStrings {
 				for _, tool := range plan.requiredTools[name] {
 					if !geminiIncludeMatches(included, tool) {
 						return &controlplane.TeamPolicyRefusal{
@@ -613,7 +698,7 @@ func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 			}
 		}
 	}
-	return nil
+	return shapeErr
 }
 
 // checkGeminiTrustedFoldersPolicy checks whether Gemini trustedFolders.json
@@ -623,11 +708,18 @@ func checkGeminiTrustedFoldersPolicy(path string, folders []string) error {
 	if err != nil {
 		return err
 	}
-	return checkGeminiTrustedMapPolicy(root, folders)
+	return checkGeminiTrustedMapPolicy(path, root, folders)
 }
 
-// checkGeminiTrustedMapPolicy checks decoded trustedFolders.json entries against folders.
-func checkGeminiTrustedMapPolicy(root map[string]any, folders []string) error {
+// checkGeminiTrustedMapPolicy checks decoded trustedFolders.json entries against
+// folders while rejecting non-string trust values.
+func checkGeminiTrustedMapPolicy(path string, root map[string]any, folders []string) error {
+	var shapeErr error
+	for key, raw := range root {
+		if _, ok := raw.(string); !ok && shapeErr == nil {
+			shapeErr = fmt.Errorf("%s: %q trust value must be a string", path, key)
+		}
+	}
 	for _, folder := range folders {
 		for key, raw := range root {
 			state, ok := raw.(string)
@@ -642,7 +734,7 @@ func checkGeminiTrustedMapPolicy(root map[string]any, folders []string) error {
 			}
 		}
 	}
-	return nil
+	return shapeErr
 }
 
 // mergeCodexFolderTrust adds missing [projects.<folder>] trust_level = "trusted"
@@ -663,7 +755,7 @@ func mergeCodexFolderTrust(
 				return nil, false, fmt.Errorf("%s: projects is not a table", path)
 			}
 		}
-		if err := checkCodexProjectsMapPolicy(projects, folders); err != nil {
+		if err := checkCodexProjectsMapPolicy(path, projects, folders); err != nil {
 			return nil, false, err
 		}
 
@@ -818,8 +910,14 @@ func mergeClaudeProjectTrust(
 					return nil, false, fmt.Errorf("%s: projects[%q] must be a JSON object", path, folder)
 				}
 			}
-			if entry["hasTrustDialogAccepted"] == true {
-				continue
+			if rawTrusted, hasTrusted := entry["hasTrustDialogAccepted"]; hasTrusted {
+				trusted, ok := rawTrusted.(bool)
+				if !ok {
+					return nil, false, fmt.Errorf("%s: projects[%q].hasTrustDialogAccepted must be a boolean", path, folder)
+				}
+				if trusted {
+					continue
+				}
 			}
 			entry["hasTrustDialogAccepted"] = true
 			projects[folder] = entry
@@ -849,7 +947,7 @@ func mergeGeminiTrustedFolders(
 		if err != nil {
 			return nil, false, err
 		}
-		if err := checkGeminiTrustedMapPolicy(root, folders); err != nil {
+		if err := checkGeminiTrustedMapPolicy(path, root, folders); err != nil {
 			return nil, false, err
 		}
 		changed := false
@@ -870,72 +968,4 @@ func mergeGeminiTrustedFolders(
 		return encoded, true, nil
 	})
 	return err
-}
-
-// geminiFolderAlreadyTrusted reports whether folder is already trusted by an
-// exact "TRUST_FOLDER"/"TRUST_PARENT" entry or a strict ancestor's "TRUST_PARENT".
-func geminiFolderAlreadyTrusted(root map[string]any, folder string) bool {
-	if existing, _ := root[folder].(string); existing == "TRUST_FOLDER" || existing == "TRUST_PARENT" {
-		return true
-	}
-	for key, raw := range root {
-		state, ok := raw.(string)
-		if !ok || !filepath.IsAbs(key) {
-			continue
-		}
-		if state == "TRUST_PARENT" && isStrictAncestorPath(key, folder) {
-			return true
-		}
-	}
-	return false
-}
-
-// mergeCursorTrustedWorkspaces creates ~/.cursor/projects/<slug>/.workspace-trusted
-// with O_CREAT|O_EXCL for each folder when absent, leaving existing markers untouched.
-func mergeCursorTrustedWorkspaces(ctx context.Context, home string, protectedRoots, folders []string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	for _, folder := range folders {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		slug := cursorWorkspaceSlug(folder)
-		if slug == "" {
-			continue
-		}
-		marker := filepath.Join(home, ".cursor", "projects", slug, ".workspace-trusted")
-		resolvedMarker, err := validateConfigDestination(marker, protectedRoots)
-		if err != nil {
-			return err
-		}
-		if _, err := os.Stat(resolvedMarker); err == nil {
-			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("inspect %s: %w", resolvedMarker, err)
-		}
-		encoded, err := encodeConfigJSONBytes(resolvedMarker, map[string]any{
-			"trustedAt":     now,
-			"workspacePath": folder,
-		})
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(resolvedMarker), 0o755); err != nil {
-			return fmt.Errorf("create folder for %s: %w", resolvedMarker, err)
-		}
-		file, err := os.OpenFile(resolvedMarker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if errors.Is(err, os.ErrExist) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("create %s: %w", resolvedMarker, err)
-		}
-		_, writeErr := file.Write(encoded)
-		if writeErr == nil {
-			writeErr = file.Sync()
-		}
-		if closeErr := errors.Join(writeErr, file.Close()); closeErr != nil {
-			return fmt.Errorf("write %s: %w", resolvedMarker, closeErr)
-		}
-	}
-	return nil
 }

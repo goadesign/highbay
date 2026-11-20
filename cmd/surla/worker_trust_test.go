@@ -446,6 +446,170 @@ func TestPrepareWorkerTrustCompletesIndependentPreflightChecks(t *testing.T) {
 		assert.Contains(t, step, "Claude Code configuration file settings.json could not be read or safely used.")
 		assert.NotContains(t, step, home)
 	})
+
+	t.Run("directory at Codex config.toml aborts preflight before writing earlier Claude trust", func(t *testing.T) {
+		home := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(home, ".codex", "config.toml"), 0o755))
+
+		err := prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{
+			{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "claude"},
+			{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: "codex"},
+		})
+		var policyErr *controlplane.TeamPolicyRefusal
+		require.ErrorAs(t, err, &policyErr)
+		assert.Equal(t, controlplane.PolicyConfigUnusable, policyErr.Kind)
+		assert.Equal(t, "codex", policyErr.Client)
+		assert.Equal(t, "config.toml", policyErr.Detail)
+		assert.NoFileExists(t, filepath.Join(home, ".claude.json"), "earlier client trust must not be written when another client fails preflight")
+	})
+
+	t.Run("wrong-shaped present policy and trust fields fail preflight without writing trust files", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			badClient   string
+			cleanClient string
+			wantDetail  string
+			setup       func(t *testing.T, home string)
+			verifyClean func(t *testing.T, home string)
+		}{
+			{
+				name:        "claude string permissions.deny",
+				badClient:   "claude",
+				cleanClient: "codex",
+				wantDetail:  "settings.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".claude", "settings.json"),
+						`{"permissions":{"deny":"mcp__surla__*"}}`)
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+					assert.NoFileExists(t, filepath.Join(home, ".codex", "config.toml"))
+				},
+			},
+			{
+				name:        "claude non-object permissions",
+				badClient:   "claude",
+				cleanClient: "codex",
+				wantDetail:  "settings.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":[]}`)
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+					assert.NoFileExists(t, filepath.Join(home, ".codex", "config.toml"))
+				},
+			},
+			{
+				name:        "claude non-bool hasTrustDialogAccepted",
+				badClient:   "claude",
+				cleanClient: "codex",
+				wantDetail:  ".claude.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".claude.json"),
+						fmt.Sprintf(`{"projects":{%q:{"hasTrustDialogAccepted":"true"}}}`, repo))
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".codex", "config.toml"))
+				},
+			},
+			{
+				name:        "cursor non-string rule in permissions.deny",
+				badClient:   "cursor",
+				cleanClient: "claude",
+				wantDetail:  "cli-config.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".cursor", "cli-config.json"),
+						`{"permissions":{"deny":[123]}}`)
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+				},
+			},
+			{
+				name:        "cursor directory at .workspace-trusted",
+				badClient:   "cursor",
+				cleanClient: "claude",
+				wantDetail:  ".workspace-trusted",
+				setup: func(t *testing.T, home string) {
+					marker := filepath.Join(home, ".cursor", "projects", cursorWorkspaceSlug(repo), ".workspace-trusted")
+					require.NoError(t, os.MkdirAll(marker, 0o755))
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+				},
+			},
+			{
+				name:        "gemini string trust value",
+				badClient:   "gemini",
+				cleanClient: "claude",
+				wantDetail:  "settings.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".gemini", "settings.json"),
+						`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":"false"}}}`)
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+					assert.NoFileExists(t, filepath.Join(home, ".gemini", "trustedFolders.json"))
+				},
+			},
+			{
+				name:        "gemini string excludeTools",
+				badClient:   "gemini",
+				cleanClient: "claude",
+				wantDetail:  "settings.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".gemini", "settings.json"),
+						`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"excludeTools":"get_builder_assignment"}}}`)
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+					assert.NoFileExists(t, filepath.Join(home, ".gemini", "trustedFolders.json"))
+				},
+			},
+			{
+				name:        "gemini non-string trustedFolders value",
+				badClient:   "gemini",
+				cleanClient: "claude",
+				wantDetail:  "trustedFolders.json",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".gemini", "trustedFolders.json"),
+						fmt.Sprintf(`{%q:false}`, repo))
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+				},
+			},
+			{
+				name:        "codex string enabled value",
+				badClient:   "codex",
+				cleanClient: "claude",
+				wantDetail:  "config.toml",
+				setup: func(t *testing.T, home string) {
+					writeTestFile(t, filepath.Join(home, ".codex", "config.toml"),
+						"[mcp_servers.surla]\nenabled = \"false\"\n")
+				},
+				verifyClean: func(t *testing.T, home string) {
+					assert.NoFileExists(t, filepath.Join(home, ".claude.json"))
+				},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				home := t.TempDir()
+				tc.setup(t, home)
+				// Place cleanClient FIRST in targets to prove preflight completes across all clients before writing.
+				err := prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{
+					{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: tc.cleanClient},
+					{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: tc.badClient},
+				})
+				var policyErr *controlplane.TeamPolicyRefusal
+				require.ErrorAs(t, err, &policyErr)
+				assert.Equal(t, controlplane.PolicyConfigUnusable, policyErr.Kind)
+				assert.Equal(t, tc.badClient, policyErr.Client)
+				assert.Equal(t, tc.wantDetail, policyErr.Detail)
+				tc.verifyClean(t, home)
+			})
+		}
+	})
 }
 
 func TestPrepareWorkerTrustHonorsContextOnContendedLocks(t *testing.T) {

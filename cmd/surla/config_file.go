@@ -537,9 +537,9 @@ func globMatch(pattern, value string) bool {
 
 // geminiExcludeMatches matches Gemini CLI's literal excludeTools membership check,
 // returning the exact matching entry without glob or server-prefix expansion.
-func geminiExcludeMatches(excluded []any, tool string) (string, bool) {
-	for _, item := range excluded {
-		if entry, ok := item.(string); ok && entry == tool {
+func geminiExcludeMatches(excluded []string, tool string) (string, bool) {
+	for _, entry := range excluded {
+		if entry == tool {
 			return entry, true
 		}
 	}
@@ -548,12 +548,170 @@ func geminiExcludeMatches(excluded []any, tool string) (string, bool) {
 
 // geminiIncludeMatches matches Gemini CLI's includeTools check, which accepts
 // an exact tool name or a parenthesized specialization `tool(...)`.
-func geminiIncludeMatches(included []any, tool string) bool {
+func geminiIncludeMatches(included []string, tool string) bool {
 	prefix := tool + "("
-	for _, item := range included {
-		if entry, ok := item.(string); ok && (entry == tool || strings.HasPrefix(entry, prefix)) {
+	for _, entry := range included {
+		if entry == tool || strings.HasPrefix(entry, prefix) {
 			return true
 		}
 	}
 	return false
+}
+
+// extractStringsAndShapeErr extracts string elements from a JSON array field while
+// reporting whether raw was a valid string-only JSON array.
+func extractStringsAndShapeErr(path, field string, raw any) ([]string, bool, error) {
+	items, ok := raw.([]any)
+	if !ok || items == nil {
+		return nil, false, fmt.Errorf("%s: %s must be a JSON array", path, field)
+	}
+	out := make([]string, 0, len(items))
+	var shapeErr error
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			if shapeErr == nil {
+				shapeErr = fmt.Errorf("%s: %s must contain strings", path, field)
+			}
+			continue
+		}
+		out = append(out, s)
+	}
+	return out, shapeErr == nil, shapeErr
+}
+
+// checkClaudeProjectTrustReadable verifies that Claude's .claude.json is absent
+// or decodes cleanly with valid object `projects[folder]` entries and boolean
+// `hasTrustDialogAccepted` fields before any client write runs.
+func checkClaudeProjectTrustReadable(path string, folders []string) error {
+	root, err := readConfigJSONObject(path)
+	if err != nil {
+		return err
+	}
+	rawProjects, present := root["projects"]
+	if !present {
+		return nil
+	}
+	projects, ok := rawProjects.(map[string]any)
+	if !ok || projects == nil {
+		return fmt.Errorf("%s: projects must be a JSON object", path)
+	}
+	for _, folder := range folders {
+		rawEntry, hasFolder := projects[folder]
+		if !hasFolder {
+			continue
+		}
+		entry, ok := rawEntry.(map[string]any)
+		if !ok || entry == nil {
+			return fmt.Errorf("%s: projects[%q] must be a JSON object", path, folder)
+		}
+		if rawTrusted, hasTrusted := entry["hasTrustDialogAccepted"]; hasTrusted {
+			if _, ok := rawTrusted.(bool); !ok {
+				return fmt.Errorf("%s: projects[%q].hasTrustDialogAccepted must be a boolean", path, folder)
+			}
+		}
+	}
+	return nil
+}
+
+// checkCursorWorkspaceMarker verifies that resolvedMarker is absent or a regular
+// file and that no existing parent component up to home is a non-directory.
+func checkCursorWorkspaceMarker(home, resolvedMarker string) error {
+	info, err := os.Stat(resolvedMarker)
+	if err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", resolvedMarker)
+		}
+		return nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect %s: %w", resolvedMarker, err)
+	}
+	for dir := filepath.Dir(resolvedMarker); dir != "" && dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+		st, stErr := os.Stat(dir)
+		if stErr == nil {
+			if !st.IsDir() {
+				return fmt.Errorf("%s is not a folder", dir)
+			}
+			break
+		}
+		if !errors.Is(stErr, os.ErrNotExist) {
+			return fmt.Errorf("inspect %s: %w", dir, stErr)
+		}
+		if home != "" && dir == filepath.Clean(home) {
+			break
+		}
+	}
+	return nil
+}
+
+// geminiFolderAlreadyTrusted reports whether folder is already trusted by an
+// exact "TRUST_FOLDER"/"TRUST_PARENT" entry or a strict ancestor's "TRUST_PARENT".
+func geminiFolderAlreadyTrusted(root map[string]any, folder string) bool {
+	if existing, _ := root[folder].(string); existing == "TRUST_FOLDER" || existing == "TRUST_PARENT" {
+		return true
+	}
+	for key, raw := range root {
+		state, ok := raw.(string)
+		if !ok || !filepath.IsAbs(key) {
+			continue
+		}
+		if state == "TRUST_PARENT" && isStrictAncestorPath(key, folder) {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeCursorTrustedWorkspaces creates ~/.cursor/projects/<slug>/.workspace-trusted
+// with O_CREAT|O_EXCL for each folder when absent, leaving existing regular-file markers untouched.
+func mergeCursorTrustedWorkspaces(ctx context.Context, home string, protectedRoots, folders []string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, folder := range folders {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		slug := cursorWorkspaceSlug(folder)
+		if slug == "" {
+			continue
+		}
+		marker := filepath.Join(home, ".cursor", "projects", slug, ".workspace-trusted")
+		resolvedMarker, err := validateConfigDestination(marker, protectedRoots)
+		if err != nil {
+			return err
+		}
+		if info, err := os.Stat(resolvedMarker); err == nil {
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("%s is not a regular file", resolvedMarker)
+			}
+			continue
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("inspect %s: %w", resolvedMarker, err)
+		}
+		encoded, err := encodeConfigJSONBytes(resolvedMarker, map[string]any{
+			"trustedAt":     now,
+			"workspacePath": folder,
+		})
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(resolvedMarker), 0o755); err != nil {
+			return fmt.Errorf("create folder for %s: %w", resolvedMarker, err)
+		}
+		file, err := os.OpenFile(resolvedMarker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("create %s: %w", resolvedMarker, err)
+		}
+		_, writeErr := file.Write(encoded)
+		if writeErr == nil {
+			writeErr = file.Sync()
+		}
+		if closeErr := errors.Join(writeErr, file.Close()); closeErr != nil {
+			return fmt.Errorf("write %s: %w", resolvedMarker, closeErr)
+		}
+	}
+	return nil
 }

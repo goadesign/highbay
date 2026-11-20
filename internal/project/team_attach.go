@@ -168,6 +168,18 @@ func (s *Server) findSessionGuidePane(
 				if !paneMatchesPIDs(target, p.AncestorPids) {
 					continue
 				}
+				observed, conflict := observedGuideClient(target)
+				if conflict {
+					continue
+				}
+				if p.Client != nil && *p.Client != "" {
+					want := normalizeGuideClient(*p.Client)
+					if want == "" || (observed != "" && observed != want) {
+						continue
+					}
+				} else if observed == "" {
+					continue
+				}
 				matches = append(matches, candidatePane{space: space, tab: tab, terminal: pane.Terminal})
 				if len(matches) > 1 {
 					return guidePane{}
@@ -262,7 +274,10 @@ func (s *Server) validateGuideTab(
 	if owner := target.Labels["chorus.handle"]; owner != "" && owner != handle && target.Labels["chorus.project"] != "" {
 		return guidePane{}
 	}
-	observed := observedGuideClient(target)
+	observed, conflict := observedGuideClient(target)
+	if conflict {
+		return guidePane{}
+	}
 	key := observed
 	if client != nil && *client != "" {
 		want := normalizeGuideClient(*client)
@@ -337,8 +352,17 @@ func guideTabConflict(t TeamTerminal, root, swarm string) bool {
 
 // observedGuideClient derives the canonical client family reported by terminal's
 // own label and foreground argv without trusting a caller-supplied override.
-func observedGuideClient(terminal TeamTerminal) string {
-	labelClient := normalizeGuideClient(terminal.Labels["chorus.agent"])
+// It reports conflict when an explicit chorus.agent label is unrecognized or
+// disagrees with the active foreground client program.
+func observedGuideClient(terminal TeamTerminal) (string, bool) {
+	rawLabel := strings.TrimSpace(terminal.Labels["chorus.agent"])
+	labelClient := ""
+	if rawLabel != "" {
+		labelClient = normalizeGuideClient(rawLabel)
+		if labelClient == "" {
+			return "", true
+		}
+	}
 	var fgClient string
 	if terminal.Foreground != nil {
 		for _, arg := range terminal.Foreground.Argv {
@@ -351,12 +375,12 @@ func observedGuideClient(terminal TeamTerminal) string {
 		}
 	}
 	if labelClient != "" && fgClient != "" && labelClient != fgClient {
-		return ""
+		return "", true
 	}
 	if fgClient != "" {
-		return fgClient
+		return fgClient, false
 	}
-	return labelClient
+	return labelClient, false
 }
 
 // normalizeGuideClient maps known CLI and MCP clientInfo names to canonical client keys.

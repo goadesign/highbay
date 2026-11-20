@@ -873,3 +873,106 @@ func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *
 	assert.Equal(t, 1, host.creates)
 	assert.Contains(t, host.calls, "launch")
 }
+
+func TestAttachGuideRefusesConflictingStaleAgentLabel(t *testing.T) {
+	direct := "t-pane"
+	codexClient := "codex"
+	claudeClient := "claude"
+
+	t.Run("positive direct session with consistent label and foreground adopts pane", func(t *testing.T) {
+		state := testState(t)
+		deps := fixtureTeamDependencies(state)
+		host := deps.Host.(*teamFixture)
+		host.spaces = []TeamSpace{{
+			ID: "space-ok", Tabs: []TeamTab{{ID: "tab-ok", Terminals: []TeamPane{{Terminal: direct, Pane: "p-ok"}}}},
+		}}
+		host.terminals = []TeamTerminal{{
+			Address: direct, PID: 51000, State: "live",
+			Labels:     map[string]string{"chorus.agent": "codex"},
+			Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+		}}
+		s, err := NewServer(state, func() {}, deps)
+		require.NoError(t, err)
+
+		res, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+			HcTerminalID: &direct,
+			Client:       &codexClient,
+			AncestorPids: []int{52099, 52010, 51000},
+		})
+		require.NoError(t, err)
+		assert.True(t, res.AdoptedHerdr)
+		assert.Equal(t, "attached", res.HerdrMode)
+		assert.Contains(t, host.calls, "label")
+	})
+
+	for _, tc := range []struct {
+		name       string
+		terminalID *string
+		client     *string
+		labelAgent string
+		fgArgv     []string
+	}{
+		{
+			name:       "direct HcTerminalID matching shell PID with stale codex label and claude foreground (codex caller)",
+			terminalID: &direct,
+			client:     &codexClient,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "direct HcTerminalID matching shell PID with stale codex label and claude foreground (claude caller)",
+			terminalID: &direct,
+			client:     &claudeClient,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "direct HcTerminalID matching shell PID with stale codex label and claude foreground (omitted client)",
+			terminalID: &direct,
+			client:     nil,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "fallback scan matching shell PID with stale codex label and claude foreground",
+			terminalID: nil,
+			client:     &codexClient,
+			labelAgent: "codex",
+			fgArgv:     []string{"claude"},
+		},
+		{
+			name:       "unrecognized explicit chorus.agent label conflicts even when foreground matches caller",
+			terminalID: &direct,
+			client:     &codexClient,
+			labelAgent: "custom-foreign-agent",
+			fgArgv:     []string{"codex"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			host.spaces = []TeamSpace{{
+				ID: "space-conflict", Tabs: []TeamTab{{ID: "tab-conflict", Terminals: []TeamPane{{Terminal: direct, Pane: "p-conflict"}}}},
+			}}
+			host.terminals = []TeamTerminal{{
+				Address: direct, PID: 51000, State: "live",
+				Labels:     map[string]string{"chorus.agent": tc.labelAgent},
+				Foreground: &TeamForeground{PID: 60010, Argv: tc.fgArgv, Cwd: state.Record.Directory},
+			}}
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			res, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: tc.terminalID,
+				Client:       tc.client,
+				AncestorPids: []int{52099, 51000},
+			})
+			require.NoError(t, err)
+			assert.False(t, res.AdoptedHerdr)
+			assert.NotContains(t, host.calls, "label")
+			assert.Empty(t, state.Record.Space)
+			assert.Empty(t, state.Record.Tab)
+		})
+	}
+}
