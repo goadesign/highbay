@@ -53,7 +53,11 @@ const confirms = () => page.sent("POST", "/changes/confirm");
 await until(() => editor().dataset.changeId === "chg-ui-test", "the change did not open");
 expect(page.state() === "cp1-change-card" && editor().dataset.requestRevision === input.r1, "unexpected CP1 dataset: " + JSON.stringify(editor().dataset));
 const cp1Text = page.text("#surla-checkpoint-view");
-expect(cp1Text.includes(input.r1) && cp1Text.includes("Does the $50 limit include tax?") && cp1Text.includes("Scenario:") && cp1Text.includes("Input:") && cp1Text.includes("Expected result:"), "CP1 view missing revision, ambiguity question, or visible field labels: " + cp1Text);
+expect(cp1Text.includes(input.r1) && cp1Text.includes("Does the $50 limit include tax?"), "CP1 view missing the revision or question");
+for (const [field, label] of [["scenario", "Scenario"], ["input_summary", "Input"], ["expected_outcome", "Expected result"]]) {
+  expect(page.$('textarea[data-field="' + field + '"]').labels[0]?.firstElementChild?.textContent === label,
+         "example field missing its visible label: " + label);
+}
 
 // A confirmation sends exactly one request with the exact text and holds the form busy.
 pill("subtotal_only").click();
@@ -142,17 +146,26 @@ await until(() => editor().dataset.requestRevision === r3card.request_revision, 
 const recovered = page.text("#surla-checkpoint-view");
 expect(page.$("#surla-preserved-draft") && recovered.includes("Preserved Unsaved Draft Edits") && recovered.includes("total_with_tax") && recovered.includes("Edited outcome preserved across stale error"), "recovery did not keep the preserved draft: " + recovered);
 
-// Recovering again keeps the lines already preserved.
+// Local validation focuses the unanswered question. A second genuine stale
+// request still offers recovery and keeps the lines already preserved.
+const beforeLocalValidation = confirms().length;
 page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-load-latest-card"), "an unanswered question did not offer recovery");
+expect(page.text("#surla-confirm-error").includes("Choose an answer") &&
+       page.doc.activeElement === choice("subtotal_only") &&
+       !page.$("#surla-load-latest-card") && confirms().length === beforeLocalValidation,
+       "an unanswered question did not focus the local input");
+const recoveredAgain = await revise(r3card, "Route refunds to manager approval and save the decision trail.", "Recorded approval");
+choice("total_with_tax").click();
+page.$("#surla-confirm-submit").click();
+await until(() => page.$("#surla-load-latest-card"), "a second stale request did not offer recovery");
 page.$("#surla-load-latest-card").click();
-await until(() => !page.$("#surla-load-latest-card") || !page.$("#surla-load-latest-card").disabled, "the second recovery did not finish");
+await until(() => editor().dataset.requestRevision === recoveredAgain.request_revision, "the second recovery did not finish");
 expect(page.text("#surla-cp1-editor").includes("Edited outcome preserved across stale error"), "repeated recovery lost the preserved draft");
 
 // An incoming revision waits beside unsaved edits; switching keeps every unsaved line.
 page.type(outcome(), "Dirty edit on confirmed card before incoming switch");
 page.setHidden(false);
-const r4card = await revise(r3card, "Route refunds >= $50 to manager approval, with an audit and a notice.", "Audited approval with notice");
+const r4card = await revise(recoveredAgain, "Route refunds >= $50 to manager approval, with an audit and a notice.", "Audited approval with notice");
 await until(() => page.$("#surla-replace-incoming-card"), "an incoming revision did not wait beside unsaved edits");
 expect(page.$("#surla-replace-incoming-card").textContent.includes("Keep Unsaved Edits"), "expected the switch button to say it keeps unsaved edits");
 page.$("#surla-replace-incoming-card").click();

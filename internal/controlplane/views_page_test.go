@@ -190,7 +190,7 @@ const card = await propose("chg-live", "Route refunds to a manager.", "Auto-appr
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-live", "the change did not open");
 const next = () => page.text("#surla-frame-next dd");
-expect(next().includes("then confirm the change"), "Agree did not guide confirmation");
+expect(page.$("#surla-cp1-next-question"), "Agree did not guide the user to the unanswered question");
 page.$("#surla-nav-build").click();
 expect(page.$("#surla-nav-build").getAttribute("aria-current") === "step" && page.$("#surla-confirm-submit") && !page.$("#surla-build-section"), "unconfirmed Build did not expose the existing confirmation form");
 expect(next().includes("then confirm the change"), "unconfirmed Build pointed to controls it did not have");
@@ -257,7 +257,7 @@ await until(() => page.$("#surla-load-latest-card") && next().includes("Choose L
 expect(!page.$("#surla-frame-next button"), "the frame duplicated the visible recovery control");
 page.$("#surla-load-latest-card").click();
 await until(() => page.$("#surla-cp1-editor").dataset.requestRevision === latest.request_revision, "the recovery did not load the latest card");
-expect(!page.$("#surla-load-latest-card") && next().includes("then confirm the change"), "successful recovery did not restore confirmation guidance");
+expect(!page.$("#surla-load-latest-card") && page.$("#surla-cp1-next-question"), "successful recovery did not restore confirmation guidance");
 expect(page.sent("GET", path).filter((read) => read.status === 503).length === 2, "the recovery did not retry both failed reads");
 page.close();
 `)

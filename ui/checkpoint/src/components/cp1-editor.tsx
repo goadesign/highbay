@@ -586,20 +586,16 @@ export function CP1EditorView({
           <div id="surla-confirm-feedback">
             {formError ? (
               <Alert id="surla-confirm-error" variant="destructive" role="alert" tabIndex={-1}>
-                <strong>Change Card request failed: </strong>
+                {onLoadLatestCard !== null ? <strong>Change Card request failed: </strong> : null}
                 <p>{formError}</p>
-                Your edited answers and examples remain in this form. Click{" "}
-                <strong>Load Latest Card</strong> to inspect the current saved Change Card alongside
-                your unsaved edits.
-                {onLoadLatestCard !== null ? <div className="surla-field-row">
-                  <Button
-                    id="surla-load-latest-card"
-                    disabled={rpcInFlight}
-                    onClick={onLoadLatestCard}
-                  >
-                    Load Latest Card
-                  </Button>
-                </div> : null}
+                {onLoadLatestCard !== null ? <>
+                  <p>Your edited answers and examples remain in this form. Choose <strong>Load Latest Card</strong> to inspect the current saved Change Card alongside your unsaved edits.</p>
+                  <div className="surla-field-row">
+                    <Button id="surla-load-latest-card" disabled={rpcInFlight} onClick={onLoadLatestCard}>
+                      Load Latest Card
+                    </Button>
+                  </div>
+                </> : null}
               </Alert>
             ) : null}
           </div>

@@ -2784,7 +2784,7 @@ export function bootstrapViewsPage() {
           }
         } else if (ed.card.status === "needs_confirmation") {
           attention = "This change needs confirmation.";
-          step = "Open Agree to review and confirm the change.";
+          step = "Review the questions and examples below, then confirm the change.";
         } else if (editorStage === "build") {
           step = "Review the Build controls below for this change.";
         } else if (ed.preservedDraft !== null) {
