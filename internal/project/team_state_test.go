@@ -56,9 +56,31 @@ func TestRegisteredCredentialFailuresNameTheirRepair(t *testing.T) {
 	}
 }
 
-// TestStateRepairForFailuresWithoutAFile covers a project_state failure that
-// names no state file, such as an unreadable build assignment: it is retried
-// as it is, without a permission change.
-func TestStateRepairForFailuresWithoutAFile(t *testing.T) {
-	assert.Equal(t, "this project's saved build state could not be read; try again", stateRepair(errors.New("assignment reader failed")))
+// TestStateRepairMatchesTheFailure checks each failure kind's repair: a failed
+// write names its folder even when the system refused it, a refused read names
+// the folders that hold the path rather than changing a file whose mode is
+// already correct, and a failure that names no state file, such as an
+// unreadable build assignment, is retried as it is.
+func TestStateRepairMatchesTheFailure(t *testing.T) {
+	record := filepath.Join("/state", "project.json")
+	for _, tc := range []struct {
+		name     string
+		err      error
+		want     string
+		withheld string
+	}{
+		{"refused write", &teamStateFailure{path: record, write: true, err: os.ErrPermission}, "Surla could not write /state/project.json; make sure this account can write the folder /state", "chmod"},
+		{"refused read", &teamStateFailure{path: record, err: os.ErrPermission}, "Surla could not open /state/project.json; make sure this account can open the folders that hold it, starting at /state", "chmod"},
+		{"not private file", &teamStateFailure{path: record, err: errNotPrivateFile}, "chmod 600 /state/project.json", ""},
+		{"not private folder", &teamStateFailure{path: "/state/agents", dir: true, err: errNotPrivateFolder}, "make it a folder of this account that only this account can use (chmod 700 /state/agents", ""},
+		{"no state file", errors.New("assignment reader failed"), "this project's saved build state could not be read; try again", "chmod"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repair := stateRepair(tc.err)
+			assert.Contains(t, repair, tc.want)
+			if tc.withheld != "" {
+				assert.NotContains(t, repair, tc.withheld)
+			}
+		})
+	}
 }

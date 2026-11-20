@@ -118,7 +118,7 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
 		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."},
 		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
-		{name: "project state", cause: "project_state", repair: "Team → Start workers on the views page names the file and its repair"},
+		{name: "project state", cause: "project_state", repair: "Make sure this account can read and write its record (project.json) and agents folder"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},
 		{name: "no typed cause", repair: "The project team could not be prepared. Use Team → Start workers on the views page"},
 	} {

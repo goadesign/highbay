@@ -554,8 +554,9 @@ func buildTeamStep(cause string) string {
 		return "Herdr's launcher roster folder could not be written. Make data/chorus-launcher/rosters " +
 			"in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
 	case "project_state":
-		return "This project's private state could not be read or written. Team → Start workers on the views page " +
-			"names the file and its repair; fix it, " + retry
+		return "This project's private state could not be read or written. Make sure this account can read and write " +
+			"its record (project.json) and agents folder in this project's folder under Surla's operator storage " +
+			"(surla/operator in your user configuration folder); once the views page can read the build again, " + retry
 	case "role_folder":
 		return "A team role's working folder could not be read. Make sure this account can open " +
 			"the project folder and its build working folders, " + retry
