@@ -552,8 +552,6 @@ func TestStdioLineageInspectorAttachPayload(t *testing.T) {
 				}
 				return entry.ppid, entry.args, nil
 			},
-			userParents: func(context.Context) (map[int]int, error) { return nil, nil },
-			unixSockets: func(context.Context) (string, error) { return "", nil },
 		}
 
 		payload := inspector.attachPayload(t.Context(), "t-herdr", "claude")
@@ -562,10 +560,9 @@ func TestStdioLineageInspectorAttachPayload(t *testing.T) {
 		require.NotNil(t, payload.Client)
 		assert.Equal(t, "claude", *payload.Client)
 		assert.Equal(t, []int{900, 800, 700}, payload.AncestorPids)
-		assert.Nil(t, payload.DaemonClientPid)
 	})
 
-	t.Run("shared codex app-server drops daemon HcTerminalID and resolves sole external peer", func(t *testing.T) {
+	t.Run("shared codex app-server omits HcTerminalID and AncestorPids to stay external", func(t *testing.T) {
 		tree := map[int]struct {
 			ppid int
 			args string
@@ -574,40 +571,6 @@ func TestStdioLineageInspectorAttachPayload(t *testing.T) {
 			73230: {2239, "/Users/dev/.codex/bin/codex app-server --listen unix:// --managed-daemon"},
 			2239:  {1, "/Users/dev/.codex/bin/codex app-server daemon pid-update-loop"},
 		}
-		parents := map[int]int{
-			2239:  1,
-			73230: 2239,
-			73786: 73230, // daemon child codex-code-mode-host
-			73900: 73230, // surla stdio
-			41055: 41000, // interactive codex CLI in Herdr pane
-		}
-		// macOS asymmetric format: accepted daemon PCB in d0x..., client n->0x...
-		lsofSingle := strings.Join([]string{
-			"p73230",
-			"ccodex",
-			"f11",
-			"d0xa45d7d11a7d9a8d",
-			"n/private/tmp/codex-daemon-501/daemon.sock",
-			"f12",
-			"d0x194d924c09fb1c33",
-			"n->0xeebc9f74378679e3",
-			"p73786",
-			"ccodex-code-mode-host",
-			"f6",
-			"d0xeebc9f74378679e3",
-			"n->0x194d924c09fb1c33",
-			"p41055",
-			"ccodex",
-			"f19",
-			"d0xe0db2625fc709545",
-			"n->0xa45d7d11a7d9a8d",
-			"p691",
-			"cHerdr",
-			"f6",
-			"d0x6c6283e4cb393541",
-			"n->0x96e1ee1273246ea5",
-		}, "\n")
-
 		inspector := stdioLineageInspector{
 			selfPID:  func() int { return 73900 },
 			selfPPID: func() int { return 73230 },
@@ -618,34 +581,12 @@ func TestStdioLineageInspectorAttachPayload(t *testing.T) {
 				}
 				return entry.ppid, entry.args, nil
 			},
-			userParents: func(context.Context) (map[int]int, error) { return parents, nil },
-			unixSockets: func(context.Context) (string, error) { return lsofSingle, nil },
 		}
 
 		payload := inspector.attachPayload(t.Context(), "t-stale-daemon-launch", "codex")
 		assert.Nil(t, payload.HcTerminalID, "daemon's launch HC_TERMINAL_ID must be dropped")
 		assert.Nil(t, payload.AncestorPids, "daemon's launch ancestors must be dropped")
-		require.NotNil(t, payload.DaemonClientPid)
-		assert.Equal(t, 41055, *payload.DaemonClientPid)
-
-		// Adding a second external client (e.g., Codex Desktop App) makes daemon correlation ambiguous.
-		parents[55000] = 1
-		lsofMultiple := lsofSingle + "\n" + strings.Join([]string{
-			"p73230",
-			"ccodex",
-			"f81",
-			"d0xdf2ede7b3aa43787",
-			"n/private/tmp/codex-daemon-501/daemon.sock",
-			"p55000",
-			"cCodex",
-			"f38",
-			"d0xda556b1d15ca1c4a",
-			"n->0xdf2ede7b3aa43787",
-		}, "\n")
-		inspector.unixSockets = func(context.Context) (string, error) { return lsofMultiple, nil }
-		ambiguous := inspector.attachPayload(t.Context(), "t-stale-daemon-launch", "codex")
-		assert.Nil(t, ambiguous.HcTerminalID)
-		assert.Nil(t, ambiguous.AncestorPids)
-		assert.Nil(t, ambiguous.DaemonClientPid)
+		require.NotNil(t, payload.Client)
+		assert.Equal(t, "codex", *payload.Client)
 	})
 }

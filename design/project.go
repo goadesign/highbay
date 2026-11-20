@@ -94,7 +94,6 @@ var _ = Service("project", func() {
 			Attribute("hc_terminal_id", String, "Invoking local Herdr terminal identity.", func() { MinLength(1) })
 			Attribute("client", String, "Invoking coding-agent client.", func() { Enum("claude", "codex", "antigravity", "cursor", "gemini", "opencode") })
 			Attribute("ancestor_pids", ArrayOf(Int, func() { Minimum(1) }), "Invoking process and ancestor OS process IDs.", func() { MaxLength(64) })
-			Attribute("daemon_client_pid", Int, "Unique local client OS process ID in this project directory when stdio was spawned by a background daemon.", func() { Minimum(1) })
 		})
 		Result(func() {
 			Attribute("team", String, "Stable project team name.")

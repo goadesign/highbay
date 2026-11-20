@@ -762,7 +762,7 @@ func projectAttachGuideUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project attach-guide --body '{\n      \"ancestor_pids\": [\n         6680357311335224070,\n         8202761794251479320,\n         533187414794575372\n      ],\n      \"client\": \"gemini\",\n      \"daemon_client_pid\": 8734940604984878032,\n      \"hc_terminal_id\": \"x\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project attach-guide --body '{\n      \"ancestor_pids\": [\n         6680357311335224070,\n         8202761794251479320,\n         533187414794575372\n      ],\n      \"client\": \"gemini\",\n      \"hc_terminal_id\": \"x\"\n   }'")
 }
 
 func projectStatusUsage() {

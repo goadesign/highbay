@@ -15,7 +15,6 @@ import (
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	goa "goa.design/goa/v3/pkg"
 )
 
 func TestAttachGuideAdoptsExistingPaneAndKeepsItsCredential(t *testing.T) {
@@ -344,17 +343,15 @@ func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
 
 func TestAttachGuideLiveClientFallback(t *testing.T) {
 	stale := "t45"
-	daemonPeer := 52010
 	cases := []struct {
-		name            string
-		terminalID      *string
-		client          string
-		ancestorPids    []int
-		daemonClientPid *int
-		setup           func(t *testing.T, state *State, host *teamFixture)
-		wantAdopted     bool
-		wantTerminal    string
-		wantAgent       string
+		name         string
+		terminalID   *string
+		client       string
+		ancestorPids []int
+		setup        func(t *testing.T, state *State, host *teamFixture)
+		wantAdopted  bool
+		wantTerminal string
+		wantAgent    string
 	}{
 		{
 			name:         "missing HcTerminalID adopts unique Codex pane matching AncestorPids",
@@ -367,24 +364,6 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 				host.terminals = []TeamTerminal{{
 					Address: "t52", PID: 51000, State: "live",
 					Foreground: &TeamForeground{PID: 52010, Argv: []string{"/opt/homebrew/bin/codex"}, Cwd: state.Record.Directory},
-				}}
-			},
-			wantAdopted:  true,
-			wantTerminal: "t52",
-			wantAgent:    "codex",
-		},
-		{
-			name:            "Codex daemon adopts unique working pane matching DaemonClientPid",
-			client:          "codex",
-			daemonClientPid: &daemonPeer,
-			setup: func(_ *testing.T, state *State, host *teamFixture) {
-				host.spaces = []TeamSpace{{
-					ID: "space-daemon", Tabs: []TeamTab{{ID: "tab-daemon", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
-				}}
-				host.terminals = []TeamTerminal{{
-					Address: "t52", PID: 51000, State: "live",
-					Status:     &TeamStatus{State: "working"},
-					Foreground: &TeamForeground{PID: daemonPeer, Argv: []string{"/opt/homebrew/bin/codex"}, Cwd: state.Record.Directory},
 				}}
 			},
 			wantAdopted:  true,
@@ -426,31 +405,16 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 			wantAdopted: false,
 		},
 		{
-			name:   "external session without lineage evidence never adopts by client and directory alone",
-			client: "claude",
+			name:   "shared daemon or external session without lineage evidence never adopts active Herdr pane",
+			client: "codex",
 			setup: func(_ *testing.T, state *State, host *teamFixture) {
 				host.spaces = []TeamSpace{{
-					ID: "space-herdr", Tabs: []TeamTab{{ID: "tab-herdr", Terminals: []TeamPane{{Terminal: "t60", Pane: "p60"}}}},
-				}}
-				host.terminals = []TeamTerminal{{
-					Address: "t60", PID: 60000, State: "live",
-					Foreground: &TeamForeground{PID: 60100, Argv: []string{"claude"}, Cwd: state.Record.Directory},
-				}}
-			},
-			wantAdopted: false,
-		},
-		{
-			name:            "Codex daemon refuses idle Herdr pane even when DaemonClientPid matches",
-			client:          "codex",
-			daemonClientPid: &daemonPeer,
-			setup: func(_ *testing.T, state *State, host *teamFixture) {
-				host.spaces = []TeamSpace{{
-					ID: "space-idle", Tabs: []TeamTab{{ID: "tab-idle", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
+					ID: "space-herdr", Tabs: []TeamTab{{ID: "tab-herdr", Terminals: []TeamPane{{Terminal: "t52", Pane: "p52"}}}},
 				}}
 				host.terminals = []TeamTerminal{{
 					Address: "t52", PID: 51000, State: "live",
-					Status:     &TeamStatus{State: "idle"},
-					Foreground: &TeamForeground{PID: daemonPeer, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+					Status:     &TeamStatus{State: "working"},
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
 				}}
 			},
 			wantAdopted: false,
@@ -638,10 +602,9 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 
 			client := tc.client
 			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
-				HcTerminalID:    tc.terminalID,
-				Client:          &client,
-				AncestorPids:    tc.ancestorPids,
-				DaemonClientPid: tc.daemonClientPid,
+				HcTerminalID: tc.terminalID,
+				Client:       &client,
+				AncestorPids: tc.ancestorPids,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantAdopted, result.AdoptedHerdr)
@@ -678,17 +641,15 @@ func TestAttachGuideLineageAdoptionReusedByBuildWorkers(t *testing.T) {
 	}}
 	host.terminals = []TeamTerminal{{
 		Address: "t-codex", PID: 41000, State: "live",
-		Status:     &TeamStatus{State: "working"},
 		Foreground: &TeamForeground{PID: 41055, Argv: []string{"codex"}, Cwd: state.Record.Directory},
 	}}
 	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
 
 	client := "codex"
-	peerPID := 41055
 	attached, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
-		Client:          &client,
-		DaemonClientPid: &peerPID,
+		Client:       &client,
+		AncestorPids: []int{41099, 41055, 41000},
 	})
 	require.NoError(t, err)
 	require.True(t, attached.AdoptedHerdr)
@@ -717,6 +678,69 @@ func TestAttachGuideLineageAdoptionReusedByBuildWorkers(t *testing.T) {
 	require.NotNil(t, roster.Roles[1].Place)
 	assert.Equal(t, attached.Handle, roster.Roles[1].Place.Beside)
 	assert.Equal(t, "right", roster.Roles[1].Place.Direction)
+}
+
+type mutatingReadTerminalHost struct {
+	*teamFixture
+	reads  int
+	onRead func(readCount int)
+}
+
+func (h *mutatingReadTerminalHost) ReadTerminal(ctx context.Context, address string) (TeamTerminal, error) {
+	h.reads++
+	if h.onRead != nil {
+		h.onRead(h.reads)
+	}
+	return h.teamFixture.ReadTerminal(ctx, address)
+}
+
+func TestAttachGuideRefusesPaneChangedBetweenScanAndFinalValidation(t *testing.T) {
+	for _, mutation := range []string{"lineage_pid", "cwd"} {
+		t.Run(mutation, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			baseHost := deps.Host.(*teamFixture)
+			baseHost.spaces = []TeamSpace{{
+				ID:   "space-race",
+				Tabs: []TeamTab{{ID: "tab-race", Terminals: []TeamPane{{Terminal: "t-race", Pane: "p-race"}}}},
+			}}
+			baseHost.terminals = []TeamTerminal{{
+				Address: "t-race", PID: 41000, State: "live",
+				Foreground: &TeamForeground{PID: 41055, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+			}}
+			otherDir := t.TempDir()
+			wrapper := &mutatingReadTerminalHost{
+				teamFixture: baseHost,
+				onRead: func(readCount int) {
+					if readCount == 2 {
+						switch mutation {
+						case "lineage_pid":
+							baseHost.terminals[0].PID = 88000
+							baseHost.terminals[0].Foreground.PID = 88055
+						case "cwd":
+							baseHost.terminals[0].Foreground.Cwd = otherDir
+						}
+					}
+				},
+			}
+			deps.Host = wrapper
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
+
+			client := "codex"
+			res, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				Client:       &client,
+				AncestorPids: []int{41099, 41055, 41000},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, 2, wrapper.reads, "scan read + final validation read")
+			assert.False(t, res.AdoptedHerdr)
+			assert.Equal(t, "available", res.HerdrMode)
+			assert.NotContains(t, baseHost.calls, "label")
+			assert.Empty(t, state.Record.Space)
+			assert.Empty(t, state.Record.Tab)
+		})
+	}
 }
 
 func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *testing.T) {
@@ -748,14 +772,17 @@ func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *
 	require.Error(t, err)
 	assert.Empty(t, prepared)
 
-	// Explicit WorkerPolicyError refuses with 422 before creating a space, saving choices, or writing a roster.
-	trustErr = &WorkerPolicyError{Message: "Codex marks project as untrusted in config.toml; set trust_level = \"trusted\"."}
+	// Explicit TeamPolicyRefusal returns before creating a space, saving choices, or writing a roster.
+	trustErr = &controlplane.TeamPolicyRefusal{
+		Kind:   controlplane.PolicyCodexProjectUntrusted,
+		Client: "codex",
+		Detail: "untrusted",
+	}
 	_, err = s.StartAgents(t.Context(), nil)
 	require.Error(t, err)
-	var serviceErr *goa.ServiceError
-	require.ErrorAs(t, err, &serviceErr)
-	assert.Equal(t, "unprocessable", serviceErr.Name)
-	assert.Contains(t, err.Error(), `set trust_level = "trusted"`)
+	var policyRefusal *controlplane.TeamPolicyRefusal
+	require.ErrorAs(t, err, &policyRefusal)
+	assert.Contains(t, policyRefusal.Error(), `trust_level = "trusted"`)
 	assert.Zero(t, host.creates, "policy refusal must not create a Herdr space")
 	assert.NotContains(t, host.calls, "launch")
 	assert.NoDirExists(t, deps.RosterDirectory)
@@ -768,8 +795,8 @@ func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *
 	require.NoError(t, err)
 	require.Len(t, prepared, 1)
 	assert.Equal(t, []WorkerTrustTarget{
-		{ProjectDir: state.Record.Directory, Folder: builderDir, Client: "codex", Yolo: false, RequireChorus: true},
-		{ProjectDir: state.Record.Directory, Folder: writerDir, Client: "claude", Yolo: false, RequireChorus: true},
+		{Role: "builder", ProjectDir: state.Record.Directory, Folder: builderDir, Client: "codex", Yolo: false, RequireChorus: true},
+		{Role: "test_writer", ProjectDir: state.Record.Directory, Folder: writerDir, Client: "claude", Yolo: false, RequireChorus: true},
 	}, prepared[0])
 	assert.Equal(t, 1, host.creates)
 	assert.Contains(t, host.calls, "launch")

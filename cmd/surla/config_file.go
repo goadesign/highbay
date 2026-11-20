@@ -1,9 +1,11 @@
-// This file provides destination validation, advisory locking, and JSON
+// This file provides destination validation, context-bounded locking, and JSON
 // helpers shared by `surla setup -global` and worker folder-trust updates.
 package main
 
 import (
 	"bytes"
+	"cmp"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,22 +17,31 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/testwriter"
 )
 
-// maxConfigUpdateAttempts bounds pre-rename rechecks when an external process
-// modifies a configuration file while Surla is merging an update.
-const maxConfigUpdateAttempts = 5
+// configPathLock is a 1-buffered channel token serializing in-process updates
+// to one resolved file path while honoring context cancellation.
+type configPathLock chan struct{}
+
+const (
+	// maxConfigUpdateAttempts bounds pre-rename rechecks when an external process
+	// modifies a configuration file while Surla is merging an update.
+	maxConfigUpdateAttempts = 5
+	// configFlockPollInterval spaces non-blocking flock retries while waiting on ctx.
+	configFlockPollInterval = 10 * time.Millisecond
+)
 
 var (
-	// configMutexes serializes in-process configuration updates per resolved path.
-	configMutexes = struct {
+	// configLocks maps each resolved path to its in-process channel lock.
+	configLocks = struct {
 		mu    sync.Mutex
-		locks map[string]*sync.Mutex
+		locks map[string]configPathLock
 	}{
-		locks: make(map[string]*sync.Mutex),
+		locks: make(map[string]configPathLock),
 	}
 
 	// testBeforeConfigReplace is an optional test hook invoked after reading and
@@ -103,28 +114,34 @@ func validateConfigDestination(path string, protectedRoots []string) (string, er
 
 // updateLockedConfigFile serializes concurrent Surla writers (both goroutines in
 // this process and other `surla serve` or `surla setup` processes sharing lockDir)
-// using an in-process per-path mutex and `syscall.Flock` on
+// using a context-bounded in-process lock and non-blocking `syscall.Flock` on
 // `<lockDir>/<sha256(resolvedTarget)>.lock`. Before `os.Rename`, it re-reads the
 // target and retries up to maxConfigUpdateAttempts times if the bytes changed
 // since `os.ReadFile`; this narrows races with non-cooperating external saves
 // without claiming kernel-atomic compare-and-swap across `ReadFile` and `Rename`.
 func updateLockedConfigFile(
+	ctx context.Context,
 	lockDir, path string,
 	protectedRoots []string,
 	perm os.FileMode,
 	transform func(before []byte, existed bool) ([]byte, bool, error),
 ) (wrote bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	resolvedTarget, err := validateConfigDestination(path, protectedRoots)
 	if err != nil {
 		return false, err
 	}
 
-	mu := inProcessConfigMutex(resolvedTarget)
-	mu.Lock()
-	defer mu.Unlock()
+	releaseLocal, err := acquireInProcessConfigLock(ctx, resolvedTarget)
+	if err != nil {
+		return false, err
+	}
+	defer releaseLocal()
 
 	if lockDir != "" {
-		unlock, lockErr := acquireCrossProcessConfigLock(lockDir, resolvedTarget, protectedRoots)
+		unlock, lockErr := acquireCrossProcessConfigLock(ctx, lockDir, resolvedTarget, protectedRoots)
 		if lockErr != nil {
 			return false, lockErr
 		}
@@ -134,6 +151,9 @@ func updateLockedConfigFile(
 	}
 
 	for attempt := range maxConfigUpdateAttempts {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
 		resolvedTarget, err = validateConfigDestination(path, protectedRoots)
 		if err != nil {
 			return false, err
@@ -175,22 +195,37 @@ func updateLockedConfigFile(
 	return false, fmt.Errorf("concurrent external updates prevented saving %s", resolvedTarget)
 }
 
-// inProcessConfigMutex returns the process-wide mutex for resolvedTarget.
-func inProcessConfigMutex(resolvedTarget string) *sync.Mutex {
-	configMutexes.mu.Lock()
-	defer configMutexes.mu.Unlock()
-	mu, ok := configMutexes.locks[resolvedTarget]
-	if !ok {
-		mu = &sync.Mutex{}
-		configMutexes.locks[resolvedTarget] = mu
+// acquireInProcessConfigLock acquires the in-process token for resolvedTarget or returns ctx.Err().
+func acquireInProcessConfigLock(ctx context.Context, resolvedTarget string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return mu
+	ch := inProcessConfigLock(resolvedTarget)
+	select {
+	case <-ch:
+		return func() { ch <- struct{}{} }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// inProcessConfigLock returns the 1-buffered channel lock for resolvedTarget.
+func inProcessConfigLock(resolvedTarget string) configPathLock {
+	configLocks.mu.Lock()
+	defer configLocks.mu.Unlock()
+	ch, ok := configLocks.locks[resolvedTarget]
+	if !ok {
+		ch = make(configPathLock, 1)
+		ch <- struct{}{}
+		configLocks.locks[resolvedTarget] = ch
+	}
+	return ch
 }
 
 // acquireCrossProcessConfigLock acquires an exclusive advisory flock for
-// resolvedTarget inside lockDir without creating files in client dot-folders.
+// resolvedTarget inside lockDir using non-blocking LOCK_NB polls bounded by ctx.
 func acquireCrossProcessConfigLock(
-	lockDir, resolvedTarget string, protectedRoots []string,
+	ctx context.Context, lockDir, resolvedTarget string, protectedRoots []string,
 ) (func() error, error) {
 	resolvedLockDir, err := validateConfigDestination(lockDir, protectedRoots)
 	if err != nil {
@@ -205,15 +240,30 @@ func acquireCrossProcessConfigLock(
 	if err != nil {
 		return nil, fmt.Errorf("open config lock %s: %w", lockPath, err)
 	}
+	ticker := time.NewTicker(configFlockPollInterval)
+	defer ticker.Stop()
 	for {
-		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
-		if !errors.Is(err, syscall.EINTR) {
+		if err := ctx.Err(); err != nil {
+			closeErr := file.Close()
+			return nil, errors.Join(err, closeErr)
+		}
+		err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
 			break
 		}
-	}
-	if err != nil {
-		closeErr := file.Close()
-		return nil, errors.Join(fmt.Errorf("lock %s: %w", lockPath, err), closeErr)
+		if errors.Is(err, syscall.EINTR) {
+			continue
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+			closeErr := file.Close()
+			return nil, errors.Join(fmt.Errorf("lock %s: %w", lockPath, err), closeErr)
+		}
+		select {
+		case <-ctx.Done():
+			closeErr := file.Close()
+			return nil, errors.Join(ctx.Err(), closeErr)
+		case <-ticker.C:
+		}
 	}
 	return func() error {
 		unlockErr := syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
@@ -319,4 +369,37 @@ func isPathOrAncestor(ancestor, target string) bool {
 func isStrictAncestorPath(ancestor, target string) bool {
 	rel, err := filepath.Rel(filepath.Clean(ancestor), filepath.Clean(target))
 	return err == nil && rel != "." && filepath.IsLocal(rel)
+}
+
+// geminiConfigDir resolves Gemini CLI's configuration directory beneath
+// GEMINI_CLI_HOME when set, or beneath home otherwise.
+func geminiConfigDir(home, geminiCLIHome string) string {
+	return filepath.Join(cmp.Or(geminiCLIHome, home), ".gemini")
+}
+
+// geminiTrustedFoldersPath resolves Gemini CLI's trusted-folders file, honoring
+// GEMINI_CLI_TRUSTED_FOLDERS_PATH before falling back to GEMINI_CLI_HOME/.gemini.
+func geminiTrustedFoldersPath(home string, getenv func(string) string) string {
+	if custom := getenv("GEMINI_CLI_TRUSTED_FOLDERS_PATH"); custom != "" {
+		return custom
+	}
+	return filepath.Join(geminiConfigDir(home, getenv("GEMINI_CLI_HOME")), "trustedFolders.json")
+}
+
+// cursorWorkspaceSlug converts an absolute path into Cursor's per-workspace
+// folder name by stripping leading slashes and replacing '/', '\', and '.' with '-'.
+func cursorWorkspaceSlug(folder string) string {
+	trimmed := strings.TrimLeft(filepath.Clean(folder), `/\`)
+	return strings.NewReplacer("/", "-", `\`, "-", ".", "-").Replace(trimmed)
+}
+
+// envLookup returns the last entry matching name=value in env, or "".
+func envLookup(env []string, name string) string {
+	prefix := name + "="
+	for i := len(env) - 1; i >= 0; i-- {
+		if value, ok := strings.CutPrefix(env[i], prefix); ok {
+			return value
+		}
+	}
+	return ""
 }

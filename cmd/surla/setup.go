@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -406,7 +407,7 @@ func mergePermissionsAllowJSONWithLock(
 	lockDir string, target permissionsJSONTarget,
 ) (changed, present bool, err error) {
 	path := target.path
-	changed, err = updateLockedConfigFile(lockDir, path, nil, 0o644, func(raw []byte, existed bool) ([]byte, bool, error) {
+	changed, err = updateLockedConfigFile(context.Background(), lockDir, path, nil, 0o644, func(raw []byte, existed bool) ([]byte, bool, error) {
 		if (!existed || len(bytes.TrimSpace(raw)) == 0) && !target.createWhenMissing {
 			present = false
 			return nil, false, nil
@@ -466,11 +467,10 @@ func mergePermissionsAllowJSONWithLock(
 	return changed, present, nil
 }
 
-// mergeMCPJSONConfig sets target.serversKey["surla"] to target.entry in a JSON
-// configuration file, keeping every other key and server and preserving an
-// explicit `"trust": false` setting on surla. Numbers keep their exact text. A
-// missing or empty file starts from an empty object. It writes nothing and
-// reports false when the entry is already equal.
+// mergeMCPJSONConfig updates target.serversKey["surla"] to Surla's stdio
+// transport in a JSON configuration file while preserving every other key,
+// server, number representation, and user-configured surla entry fields such as
+// includeTools, excludeTools, env, timeout, and explicit trust.
 func mergeMCPJSONConfig(target mcpJSONTarget) (bool, error) {
 	return mergeMCPJSONConfigWithLock("", target)
 }
@@ -478,7 +478,7 @@ func mergeMCPJSONConfig(target mcpJSONTarget) (bool, error) {
 // mergeMCPJSONConfigWithLock runs mergeMCPJSONConfig under lockDir.
 func mergeMCPJSONConfigWithLock(lockDir string, target mcpJSONTarget) (bool, error) {
 	path := target.path
-	return updateLockedConfigFile(lockDir, path, nil, 0o644, func(raw []byte, _ bool) ([]byte, bool, error) {
+	return updateLockedConfigFile(context.Background(), lockDir, path, nil, 0o644, func(raw []byte, _ bool) ([]byte, bool, error) {
 		root, err := decodeConfigJSONBytes(path, raw)
 		if err != nil {
 			return nil, false, err
@@ -490,13 +490,33 @@ func mergeMCPJSONConfigWithLock(lockDir string, target mcpJSONTarget) (bool, err
 				return nil, false, fmt.Errorf("%s: %s must be a JSON object", path, target.serversKey)
 			}
 		}
-		desired := maps.Clone(target.entry)
-		if desired["trust"] == true {
-			if existingServer, ok := servers[surlaServerName].(map[string]any); ok {
-				if trust, hasTrust := existingServer["trust"].(bool); hasTrust && !trust {
-					desired["trust"] = false
+		var desired map[string]any
+		if existingRaw, hasExisting := servers[surlaServerName]; hasExisting {
+			existingServer, ok := existingRaw.(map[string]any)
+			if !ok || existingServer == nil {
+				return nil, false, fmt.Errorf("%s: %s.%s must be a JSON object", path, target.serversKey, surlaServerName)
+			}
+			desired = maps.Clone(existingServer)
+			delete(desired, "url")
+			delete(desired, "httpUrl")
+			delete(desired, "headers")
+			if transportType, hasType := target.entry["type"]; hasType {
+				desired["type"] = transportType
+			} else {
+				delete(desired, "type")
+			}
+			desired["command"] = target.entry["command"]
+			desired["args"] = target.entry["args"]
+			for key, val := range target.entry {
+				if key == "command" || key == "args" || key == "type" {
+					continue
+				}
+				if _, alreadySet := desired[key]; !alreadySet {
+					desired[key] = val
 				}
 			}
+		} else {
+			desired = maps.Clone(target.entry)
 		}
 		if sameJSON(servers[surlaServerName], desired) {
 			return nil, false, nil
@@ -552,7 +572,7 @@ func mergeCodexConfigWithLock(lockDir, path, executable string) (bool, error) {
 	)
 	byHand := fmt.Sprintf("set [mcp_servers.surla] command = %s and args = %s by hand", commandValue, argsValue)
 
-	return updateLockedConfigFile(lockDir, path, nil, 0o600, func(content []byte, _ bool) ([]byte, bool, error) {
+	return updateLockedConfigFile(context.Background(), lockDir, path, nil, 0o600, func(content []byte, _ bool) ([]byte, bool, error) {
 		// Decoding checks what the position-aware parser does not: duplicate keys,
 		// redefined tables and type conflicts, which Codex itself refuses.
 		var decoded map[string]any
@@ -1002,7 +1022,7 @@ func setupHerdrShortcut(herdrHome string, out io.Writer) error {
 func setupHerdrShortcutWithLock(lockDir, herdrHome string, out io.Writer) error {
 	path := filepath.Join(herdrHome, "keys.json")
 	var message string
-	wrote, err := updateLockedConfigFile(lockDir, path, nil, 0o644, func(raw []byte, existed bool) ([]byte, bool, error) {
+	wrote, err := updateLockedConfigFile(context.Background(), lockDir, path, nil, 0o644, func(raw []byte, existed bool) ([]byte, bool, error) {
 		if !existed {
 			message = "Herdr's keyboard file is missing; open Herdr once and run surla setup -global again to add the shortcut."
 			return nil, false, nil

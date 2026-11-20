@@ -102,20 +102,16 @@ type (
 		Argv []string `json:"argv"`
 		Cwd  string   `json:"cwd"`
 	}
-	// WorkerTrustTarget pairs a project and role working folder with the client
-	// choice so user-scoped folder trust is ready and explicit restrictions are
-	// respected before launch.
+	// WorkerTrustTarget pairs a project and role working folder with the role and
+	// client choice so user-scoped folder trust is ready and explicit restrictions
+	// on that role's required MCP operations are respected before launch.
 	WorkerTrustTarget struct {
+		Role          string
 		ProjectDir    string
 		Folder        string
 		Client        string
 		Yolo          bool
 		RequireChorus bool
-	}
-	// WorkerPolicyError reports that an explicit user setting in a coding
-	// client's configuration prevents launching a worker.
-	WorkerPolicyError struct {
-		Message string
 	}
 	// teamOperation serializes accepted work without tying its lifetime to the HTTP caller.
 	teamOperation struct {
@@ -166,11 +162,6 @@ const teamStartTimeout = 45 * time.Second
 
 // errAssignmentsUnavailable keeps assignment read failures free of private evidence.
 var errAssignmentsUnavailable = errors.New("team assignments could not be read")
-
-// Error returns the actionable client-policy refusal message.
-func (e *WorkerPolicyError) Error() string {
-	return e.Message
-}
 
 // BindAssignments installs the control plane's read-only assignment reader
 // before the server listens so StartAgents and StopWorkers know which worker

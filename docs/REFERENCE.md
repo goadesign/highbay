@@ -154,10 +154,11 @@ a browser credential.
 Setup does not populate provider settings in the MCP registration; for Codex,
 setup adds `HC_TERMINAL_ID` to `mcp_servers.surla.env_vars` so direct CLI
 spawns can forward the Herdr terminal identifier. `surla stdio` uses the
-environment and OS process lineage observed at bind time (dropping inherited
-daemon terminal IDs when spawned by `codex app-server` and requiring a sole
-Unix-socket client peer) to attempt live Herdr adoption. Bare `surla` remains
-the operator path for handing over settings from a known shell environment.
+environment and direct OS process lineage observed at bind time (omitting
+inherited daemon terminal IDs and lineage when spawned by `codex app-server`,
+which leaves shared-daemon sessions external) to attempt live Herdr adoption.
+Bare `surla` remains the operator path for handing over settings from a known
+shell environment.
 
 The physical working folder determines the role. A folder inside
 `.surla-build` or `.surla-tests`, including nested modules, connects only as
@@ -2266,12 +2267,11 @@ without launching an agent or creating a space.
 
 `POST /project/attach-guide` lets a local management client register an
 existing coding session as the guide. Send `hc_terminal_id`, `client` and
-`ancestor_pids` (or `daemon_client_pid` when `surla stdio` was spawned by a
-shared `codex app-server` daemon with a single connected client peer) when
-attaching in Herdr. Surla adopts the pane only if it is a running local model
-pane inside the project folder with matching client and lineage facts and
-compatible project and team labels.
-Outside Herdr, omit the terminal ID. The result includes `team`, the guide's
+`ancestor_pids` when attaching a direct session in Herdr. Surla adopts the pane
+only if it is a running local model pane inside the project folder with
+matching client and OS lineage facts and compatible project and team labels.
+Outside Herdr (or when spawned by a shared daemon without direct lineage), omit
+the terminal ID and ancestor PIDs. The result includes `team`, the guide's
 `handle`, `adopted_herdr` and `herdr_mode`. The integration gives the coding
 agent its role credential from `agents/<handle>` in the private project
 state folder. The project serves MCP at `/mcp` and authenticates the agent

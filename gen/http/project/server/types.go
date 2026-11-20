@@ -23,9 +23,6 @@ type AttachGuideRequestBody struct {
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
 	// Invoking process and ancestor OS process IDs.
 	AncestorPids []int `form:"ancestor_pids,omitempty" json:"ancestor_pids,omitempty" xml:"ancestor_pids,omitempty"`
-	// Unique local client OS process ID in this project directory when stdio was
-	// spawned by a background daemon.
-	DaemonClientPid *int `form:"daemon_client_pid,omitempty" json:"daemon_client_pid,omitempty" xml:"daemon_client_pid,omitempty"`
 }
 
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
@@ -730,9 +727,8 @@ func NewExchangeBrowserLinkUnprocessableResponseBody(res *goa.ServiceError) *Exc
 // NewAttachGuidePayload builds a project service attach_guide endpoint payload.
 func NewAttachGuidePayload(body *AttachGuideRequestBody) *project.AttachGuidePayload {
 	v := &project.AttachGuidePayload{
-		HcTerminalID:    body.HcTerminalID,
-		Client:          body.Client,
-		DaemonClientPid: body.DaemonClientPid,
+		HcTerminalID: body.HcTerminalID,
+		Client:       body.Client,
 	}
 	if body.AncestorPids != nil {
 		v.AncestorPids = make([]int, len(body.AncestorPids))
@@ -773,11 +769,6 @@ func ValidateAttachGuideRequestBody(body *AttachGuideRequestBody) (err error) {
 	for _, e := range body.AncestorPids {
 		if e < 1 {
 			err = goa.MergeErrors(err, goa.InvalidRangeError("body.ancestor_pids[*]", e, 1, true))
-		}
-	}
-	if body.DaemonClientPid != nil {
-		if *body.DaemonClientPid < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daemon_client_pid", *body.DaemonClientPid, 1, true))
 		}
 	}
 	return

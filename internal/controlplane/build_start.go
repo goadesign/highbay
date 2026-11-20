@@ -518,6 +518,14 @@ func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
 			Step:  gensurla.BuildStartStep(duplicateTeamSpacesStep()),
 		})
 	}
+	var policy *TeamPolicyRefusal
+	if errors.As(err, &policy) {
+		return gensurla.NewTeamUnavailable(&gensurla.BuildTeamUnavailable{
+			Step: gensurla.BuildStartStep(policy.Step(
+				"then use Team → Start workers on the views page to start the team agents for this saved build.",
+			)),
+		})
+	}
 	var unavailable *goa.ServiceError
 	if errors.As(err, &unavailable) && unavailable.Name == "window_busy" {
 		return gensurla.NewTeamWindowBusy(&gensurla.BuildTeamWindowBusy{

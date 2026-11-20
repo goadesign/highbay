@@ -1,6 +1,6 @@
-// This file checks explicit client permission policies and pre-populates
-// missing user-scoped folder trust outside git working copies before project
-// roles launch.
+// This file checks explicit client permission policies against each role's
+// required MCP operations and pre-populates missing user-scoped folder trust
+// outside git working copies before project roles launch.
 package main
 
 import (
@@ -15,11 +15,15 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 
+	genmcp "github.com/goadesign/surla/gen/mcp_surla"
+	gensurla "github.com/goadesign/surla/gen/surla"
+	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testwriter"
 )
@@ -36,25 +40,60 @@ type (
 		uneditable bool
 	}
 
-	// clientTrustPlan groups the folders and policy requirements for one coding client.
+	// clientTrustPlan groups the folders and required MCP operations for one coding client.
 	clientTrustPlan struct {
 		// folders lists unique absolute folders needing folder trust when Yolo is false.
 		folders []string
 		// checkPolicy is true when at least one role for this client runs with Yolo false.
 		checkPolicy bool
-		// requireChorus is true when at least one non-Yolo role uses Chorus.
-		requireChorus bool
+		// requiredServers lists MCP servers ("surla", and "chorus" when needed) in deterministic order.
+		requiredServers []string
+		// requiredTools maps each server name to the exact MCP tool names the non-Yolo roles need.
+		requiredTools map[string][]string
 	}
+)
+
+// workerTrustLockTimeout bounds waiting on a contended client configuration
+// lock so a stalled writer cannot hold the team start mutex for its full budget.
+const workerTrustLockTimeout = 5 * time.Second
+
+var (
+	// chorusMCPToolNames lists the Chorus MCP tools workers use in Herdr mode.
+	chorusMCPToolNames = []string{"join", "read", "send", "who", "leave"}
+
+	// allSurlaMCPToolNames caches the generated Surla MCP tool catalog once.
+	allSurlaMCPToolNames = sync.OnceValue(func() []string {
+		res, err := genmcp.NewMCPAdapter(&gensurla.Endpoints{}, nil).ToolsList(
+			context.Background(), &genmcp.ToolsListPayload{},
+		)
+		if err != nil || res == nil {
+			return nil
+		}
+		names := make([]string, 0, len(res.Tools))
+		for _, tool := range res.Tools {
+			if tool != nil && tool.Name != "" {
+				names = append(names, tool.Name)
+			}
+		}
+		return names
+	})
 )
 
 // prepareWorkerTrust checks read-only client permission policies and writes
 // only missing user-scoped folder-trust entries resolved from env (falling back
-// to os.UserHomeDir when HOME is absent in env). It never writes settings.json,
-// cli-config.json, MCP server entries, or any path inside project or worktree folders.
-func prepareWorkerTrust(env []string, targets []project.WorkerTrustTarget) error {
+// to os.UserHomeDir when HOME is absent in env). It honors ctx (bounded to
+// workerTrustLockTimeout) and never writes settings.json, cli-config.json, MCP
+// server entries, or any path inside project or worktree folders.
+func prepareWorkerTrust(ctx context.Context, env []string, targets []project.WorkerTrustTarget) error {
 	if len(targets) == 0 {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	lockCtx, cancel := context.WithTimeout(ctx, workerTrustLockTimeout)
+	defer cancel()
+
 	home := envLookup(env, "HOME")
 	if home == "" {
 		var err error
@@ -71,6 +110,9 @@ func prepareWorkerTrust(env []string, targets []project.WorkerTrustTarget) error
 
 	// Validate destinations and check explicit client restrictions before any write.
 	for _, client := range clientOrder {
+		if err := lockCtx.Err(); err != nil {
+			return err
+		}
 		plan := plans[client]
 		if err := validateClientConfigPaths(client, home, getenv, protectedRoots, plan.folders); err != nil {
 			return err
@@ -93,21 +135,21 @@ func prepareWorkerTrust(env []string, targets []project.WorkerTrustTarget) error
 		case "codex":
 			codexDir := cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
 			errs = errors.Join(errs, mergeCodexFolderTrust(
-				lockDir, filepath.Join(codexDir, "config.toml"), protectedRoots, plan.folders,
+				lockCtx, lockDir, filepath.Join(codexDir, "config.toml"), protectedRoots, plan.folders,
 			))
 		case "claude":
 			claudeConfig := filepath.Join(home, ".claude.json")
 			if dir := getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 				claudeConfig = filepath.Join(dir, ".claude.json")
 			}
-			errs = errors.Join(errs, mergeClaudeProjectTrust(lockDir, claudeConfig, protectedRoots, plan.folders))
+			errs = errors.Join(errs, mergeClaudeProjectTrust(lockCtx, lockDir, claudeConfig, protectedRoots, plan.folders))
 		case "gemini":
 			trustedPath := geminiTrustedFoldersPath(home, getenv)
-			errs = errors.Join(errs, mergeGeminiTrustedFolders(lockDir, trustedPath, protectedRoots, plan.folders))
+			errs = errors.Join(errs, mergeGeminiTrustedFolders(lockCtx, lockDir, trustedPath, protectedRoots, plan.folders))
 		case "cursor":
-			errs = errors.Join(errs, mergeCursorTrustedWorkspaces(home, protectedRoots, plan.folders))
+			errs = errors.Join(errs, mergeCursorTrustedWorkspaces(lockCtx, home, protectedRoots, plan.folders))
 		}
-		var policyErr *project.WorkerPolicyError
+		var policyErr *controlplane.TeamPolicyRefusal
 		if errors.As(errs, &policyErr) {
 			return policyErr
 		}
@@ -117,24 +159,9 @@ func prepareWorkerTrust(env []string, targets []project.WorkerTrustTarget) error
 
 // bindPrepareWorkerTrust adapts prepareWorkerTrust to project.TeamDependencies.
 func bindPrepareWorkerTrust(env []string) func(context.Context, []project.WorkerTrustTarget) error {
-	return func(_ context.Context, targets []project.WorkerTrustTarget) error {
-		return prepareWorkerTrust(env, targets)
+	return func(ctx context.Context, targets []project.WorkerTrustTarget) error {
+		return prepareWorkerTrust(ctx, env, targets)
 	}
-}
-
-// geminiConfigDir resolves Gemini CLI's configuration directory beneath
-// GEMINI_CLI_HOME when set, or beneath home otherwise.
-func geminiConfigDir(home, geminiCLIHome string) string {
-	return filepath.Join(cmp.Or(geminiCLIHome, home), ".gemini")
-}
-
-// geminiTrustedFoldersPath resolves Gemini CLI's trusted-folders file, honoring
-// GEMINI_CLI_TRUSTED_FOLDERS_PATH before falling back to GEMINI_CLI_HOME/.gemini.
-func geminiTrustedFoldersPath(home string, getenv func(string) string) string {
-	if custom := getenv("GEMINI_CLI_TRUSTED_FOLDERS_PATH"); custom != "" {
-		return custom
-	}
-	return filepath.Join(geminiConfigDir(home, getenv("GEMINI_CLI_HOME")), "trustedFolders.json")
 }
 
 // collectProtectedRoots lists project and worker working-copy roots where client
@@ -162,12 +189,28 @@ func collectProtectedRoots(targets []project.WorkerTrustTarget) []string {
 	return roots
 }
 
-// buildClientTrustPlans aggregates non-Yolo folders and policy checks per client.
+// buildClientTrustPlans aggregates non-Yolo folders and role-specific MCP tools per client.
 func buildClientTrustPlans(
 	targets []project.WorkerTrustTarget,
 ) (map[string]clientTrustPlan, []string) {
 	plans := make(map[string]clientTrustPlan)
 	var order []string
+	addTools := func(plan *clientTrustPlan, server string, tools []string) {
+		if !slices.Contains(plan.requiredServers, server) {
+			plan.requiredServers = append(plan.requiredServers, server)
+		}
+		if plan.requiredTools == nil {
+			plan.requiredTools = make(map[string][]string)
+		}
+		existing := plan.requiredTools[server]
+		for _, tool := range tools {
+			if !slices.Contains(existing, tool) {
+				existing = append(existing, tool)
+			}
+		}
+		plan.requiredTools[server] = existing
+	}
+
 	for _, target := range targets {
 		if target.Client == "" {
 			continue
@@ -178,8 +221,10 @@ func buildClientTrustPlans(
 		}
 		if !target.Yolo {
 			plan.checkPolicy = true
+			role := resolveTargetRole(target)
+			addTools(&plan, surlaServerName, requiredSurlaTools(role))
 			if target.RequireChorus {
-				plan.requireChorus = true
+				addTools(&plan, "chorus", chorusMCPToolNames)
 			}
 			for _, candidate := range []string{target.ProjectDir, target.Folder} {
 				if !filepath.IsAbs(candidate) {
@@ -194,6 +239,38 @@ func buildClientTrustPlans(
 		plans[target.Client] = plan
 	}
 	return plans, order
+}
+
+// resolveTargetRole returns target.Role, falling back to its worktree folder name when omitted.
+func resolveTargetRole(target project.WorkerTrustTarget) string {
+	if target.Role != "" {
+		return target.Role
+	}
+	if filepath.Base(filepath.Clean(target.Folder)) == testwriter.TestsRole.Folder {
+		return "test_writer"
+	}
+	return "builder"
+}
+
+// requiredSurlaTools returns the Surla MCP tools allowed for role.
+func requiredSurlaTools(role string) []string {
+	var kind controlplane.CallerKind
+	switch role {
+	case "guide":
+		kind = controlplane.CallerGuide
+	case "test_writer":
+		kind = controlplane.CallerTestWriter
+	default:
+		kind = controlplane.CallerBuilder
+	}
+	all := allSurlaMCPToolNames()
+	allowed := make([]string, 0, len(all))
+	for _, name := range all {
+		if controlplane.OperationAllowed(kind, name) {
+			allowed = append(allowed, name)
+		}
+	}
+	return allowed
 }
 
 // validateClientConfigPaths verifies that every configuration file for client
@@ -236,34 +313,28 @@ func validateClientConfigPaths(
 }
 
 // checkClientWorkerPolicy performs read-only checks on explicit user settings
-// that block non-Yolo workers from calling required Surla or Chorus MCP tools
-// or trusting the project folder. Remedies name only the exact file and scoped
-// setting to update, never suggesting permission-bypass flags.
+// that block non-Yolo workers from calling their role's required Surla or Chorus
+// MCP tools or trusting the project folder.
 func checkClientWorkerPolicy(
 	client, home string,
 	getenv func(string) string,
 	plan clientTrustPlan,
 ) error {
-	requiredServers := []string{surlaServerName}
-	if plan.requireChorus {
-		requiredServers = append(requiredServers, "chorus")
-	}
-
 	switch client {
 	case "codex":
 		codexDir := cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
-		return checkCodexWorkerPolicy(filepath.Join(codexDir, "config.toml"), requiredServers, plan.folders)
+		return checkCodexWorkerPolicy(filepath.Join(codexDir, "config.toml"), plan.requiredServers, plan.folders)
 	case "claude":
 		claudeDir := cmp.Or(getenv("CLAUDE_CONFIG_DIR"), filepath.Join(home, ".claude"))
-		return checkPermissionsFilePolicy("claude", "Claude Code", filepath.Join(claudeDir, "settings.json"), requiredServers)
+		return checkPermissionsFilePolicy("claude", filepath.Join(claudeDir, "settings.json"), plan)
 	case "gemini":
 		geminiDir := geminiConfigDir(home, getenv("GEMINI_CLI_HOME"))
-		if err := checkGeminiSettingsPolicy(filepath.Join(geminiDir, "settings.json"), requiredServers); err != nil {
+		if err := checkGeminiSettingsPolicy(filepath.Join(geminiDir, "settings.json"), plan); err != nil {
 			return err
 		}
 		return checkGeminiTrustedFoldersPolicy(geminiTrustedFoldersPath(home, getenv), plan.folders)
 	case "cursor":
-		return checkPermissionsFilePolicy("cursor", "Cursor", filepath.Join(home, ".cursor", "cli-config.json"), requiredServers)
+		return checkPermissionsFilePolicy("cursor", filepath.Join(home, ".cursor", "cli-config.json"), plan)
 	default:
 		return nil
 	}
@@ -289,41 +360,39 @@ func checkCodexWorkerPolicy(path string, requiredServers, folders []string) erro
 				continue
 			}
 			if enabled, hasEnabled := entry["enabled"].(bool); hasEnabled && !enabled {
-				return &project.WorkerPolicyError{
-					Message: fmt.Sprintf(
-						"Codex disables MCP server %q in %s ([mcp_servers.%s] enabled = false); set enabled = true on [mcp_servers.%s] in %s and start build workers again.",
-						name, path, name, name, path,
-					),
+				return &controlplane.TeamPolicyRefusal{
+					Kind:   controlplane.PolicyCodexServerDisabled,
+					Client: "codex",
+					Server: name,
 				}
 			}
 			if mode, hasMode := entry["default_tools_approval_mode"]; hasMode && mode != "approve" {
-				return &project.WorkerPolicyError{
-					Message: fmt.Sprintf(
-						"Codex requires interactive approval for MCP server %q in %s ([mcp_servers.%s] default_tools_approval_mode = %q); set default_tools_approval_mode = \"approve\" on [mcp_servers.%s] in %s and start build workers again.",
-						name, path, name, fmt.Sprint(mode), name, path,
-					),
+				return &controlplane.TeamPolicyRefusal{
+					Kind:   controlplane.PolicyCodexServerApproval,
+					Client: "codex",
+					Server: name,
+					Detail: fmt.Sprint(mode),
 				}
 			}
 		}
 	}
 	if projects, ok := decoded["projects"].(map[string]any); ok {
-		return checkCodexProjectsMapPolicy(path, projects, folders)
+		return checkCodexProjectsMapPolicy(projects, folders)
 	}
 	return nil
 }
 
 // checkCodexProjectsMapPolicy verifies that neither folders nor an unoverridden
 // ancestor project in projects sets trust_level to a value other than "trusted".
-func checkCodexProjectsMapPolicy(path string, projects map[string]any, folders []string) error {
+func checkCodexProjectsMapPolicy(projects map[string]any, folders []string) error {
 	for _, folder := range folders {
 		if entry, ok := projects[folder].(map[string]any); ok {
 			if level, hasLevel := entry["trust_level"]; hasLevel {
 				if level != "trusted" {
-					return &project.WorkerPolicyError{
-						Message: fmt.Sprintf(
-							"Codex marks %s as %q in %s ([projects.%s]); set trust_level = \"trusted\" for that folder in %s and start build workers again.",
-							folder, fmt.Sprint(level), path, strconv.Quote(folder), path,
-						),
+					return &controlplane.TeamPolicyRefusal{
+						Kind:   controlplane.PolicyCodexProjectUntrusted,
+						Client: "codex",
+						Detail: fmt.Sprint(level),
 					}
 				}
 				continue
@@ -338,11 +407,10 @@ func checkCodexProjectsMapPolicy(path string, projects map[string]any, folders [
 				continue
 			}
 			if level, hasLevel := entry["trust_level"]; hasLevel && level != "trusted" {
-				return &project.WorkerPolicyError{
-					Message: fmt.Sprintf(
-						"Codex marks %s as %q in %s ([projects.%s]); set trust_level = \"trusted\" for that folder in %s and start build workers again.",
-						key, fmt.Sprint(level), path, strconv.Quote(key), path,
-					),
+				return &controlplane.TeamPolicyRefusal{
+					Kind:   controlplane.PolicyCodexProjectUntrusted,
+					Client: "codex",
+					Detail: fmt.Sprint(level),
 				}
 			}
 		}
@@ -351,8 +419,8 @@ func checkCodexProjectsMapPolicy(path string, projects map[string]any, folders [
 }
 
 // checkPermissionsFilePolicy checks permissions.deny and permissions.ask in
-// Claude settings.json or Cursor cli-config.json without writing the file.
-func checkPermissionsFilePolicy(client, displayName, path string, requiredServers []string) error {
+// Claude settings.json or Cursor cli-config.json against plan's required tools.
+func checkPermissionsFilePolicy(client, path string, plan clientTrustPlan) error {
 	root, err := readConfigJSONObject(path)
 	if err != nil {
 		return err
@@ -360,6 +428,10 @@ func checkPermissionsFilePolicy(client, displayName, path string, requiredServer
 	perms, ok := root["permissions"].(map[string]any)
 	if !ok || perms == nil {
 		return nil
+	}
+	kind := controlplane.PolicyClaudePermission
+	if client == "cursor" {
+		kind = controlplane.PolicyCursorPermission
 	}
 	for _, listName := range []string{"deny", "ask"} {
 		items, ok := perms[listName].([]any)
@@ -371,13 +443,16 @@ func checkPermissionsFilePolicy(client, displayName, path string, requiredServer
 			if !ok {
 				continue
 			}
-			for _, server := range requiredServers {
-				if permissionRuleBlocksServer(client, rule, server) {
-					return &project.WorkerPolicyError{
-						Message: fmt.Sprintf(
-							"%s blocks %s MCP tools via permissions.%s (%q) in %s; remove %q from permissions.%s in %s and start build workers again.",
-							displayName, server, listName, rule, path, rule, listName, path,
-						),
+			for _, server := range plan.requiredServers {
+				for _, tool := range plan.requiredTools[server] {
+					if permissionRuleBlocksTool(client, rule, server, tool) {
+						return &controlplane.TeamPolicyRefusal{
+							Kind:   kind,
+							Client: client,
+							Server: server,
+							List:   listName,
+							Detail: strings.TrimSpace(rule),
+						}
 					}
 				}
 			}
@@ -386,32 +461,36 @@ func checkPermissionsFilePolicy(client, displayName, path string, requiredServer
 	return nil
 }
 
-// permissionRuleBlocksServer reports whether a permission deny/ask rule blocks
-// tools of MCP server for client ("claude" or "cursor").
-func permissionRuleBlocksServer(client, rule, server string) bool {
+// permissionRuleBlocksTool reports whether rule blocks calling tool on MCP
+// server under client ("claude" or "cursor") using each client's wildcard syntax.
+func permissionRuleBlocksTool(client, rule, server, tool string) bool {
 	trimmed := strings.TrimSpace(rule)
+	if trimmed == "" {
+		return false
+	}
 	if trimmed == "*" {
 		return true
 	}
 	switch client {
 	case "claude":
-		return trimmed == "mcp__*" ||
-			trimmed == "mcp__"+server ||
-			trimmed == "mcp__"+server+"__*" ||
-			strings.HasPrefix(trimmed, "mcp__"+server+"__")
+		return trimmed == "mcp__"+server || globMatch(trimmed, "mcp__"+server+"__"+tool)
 	case "cursor":
-		return trimmed == "Mcp(*)" ||
-			trimmed == "Mcp(*:*)" ||
-			trimmed == "Mcp("+server+")" ||
-			trimmed == "Mcp("+server+":*)" ||
-			strings.HasPrefix(trimmed, "Mcp("+server+":")
+		if !strings.HasPrefix(trimmed, "Mcp(") || !strings.HasSuffix(trimmed, ")") {
+			return false
+		}
+		inner := trimmed[4 : len(trimmed)-1]
+		if srvPat, toolPat, hasColon := strings.Cut(inner, ":"); hasColon {
+			return globMatch(strings.TrimSpace(srvPat), server) && globMatch(strings.TrimSpace(toolPat), tool)
+		}
+		return globMatch(strings.TrimSpace(inner), server)
 	default:
 		return false
 	}
 }
 
 // permissionListsBlockCandidateRule reports whether permissions.deny or
-// permissions.ask blocks adding candidateRule to permissions.allow during setup.
+// permissions.ask restricts any tool of candidateRule's server so `surla setup`
+// never widens permissions over an explicit user restriction.
 func permissionListsBlockCandidateRule(perms map[string]any, candidateRule string) bool {
 	client, server := "", ""
 	switch {
@@ -422,6 +501,12 @@ func permissionListsBlockCandidateRule(perms map[string]any, candidateRule strin
 		client = "cursor"
 		server = strings.TrimSuffix(strings.TrimPrefix(candidateRule, "Mcp("), ":*)")
 	}
+	var tools []string
+	if server == surlaServerName {
+		tools = append(slices.Clone(allSurlaMCPToolNames()), "__any_tool__")
+	} else if server != "" {
+		tools = append(slices.Clone(chorusMCPToolNames), "__any_tool__")
+	}
 	for _, listName := range []string{"deny", "ask"} {
 		items, ok := perms[listName].([]any)
 		if !ok {
@@ -432,20 +517,66 @@ func permissionListsBlockCandidateRule(perms map[string]any, candidateRule strin
 			if !ok {
 				continue
 			}
-			if strings.TrimSpace(rule) == candidateRule {
+			trimmed := strings.TrimSpace(rule)
+			if trimmed == candidateRule {
 				return true
 			}
-			if client != "" && server != "" && permissionRuleBlocksServer(client, rule, server) {
+			if client == "claude" && server != "" &&
+				(strings.HasPrefix(trimmed, "mcp__"+server+"__") || trimmed == "mcp__"+server) {
 				return true
+			}
+			if client == "cursor" && strings.HasPrefix(trimmed, "Mcp(") && strings.HasSuffix(trimmed, ")") {
+				inner := trimmed[4 : len(trimmed)-1]
+				srvPat, _, _ := strings.Cut(inner, ":")
+				if globMatch(strings.TrimSpace(srvPat), server) {
+					return true
+				}
+			}
+			for _, tool := range tools {
+				if permissionRuleBlocksTool(client, trimmed, server, tool) {
+					return true
+				}
 			}
 		}
 	}
 	return false
 }
 
-// checkGeminiSettingsPolicy checks whether Gemini settings.json explicitly marks
-// a required MCP server as untrusted (`"trust": false`).
-func checkGeminiSettingsPolicy(path string, requiredServers []string) error {
+// globMatch reports whether pattern (where '*' matches zero or more bytes) matches value.
+func globMatch(pattern, value string) bool {
+	px, vx := 0, 0
+	nextPx, nextVx := 0, 0
+	for px < len(pattern) || vx < len(value) {
+		if px < len(pattern) {
+			switch pattern[px] {
+			case '*':
+				nextPx = px
+				nextVx = vx + 1
+				px++
+				continue
+			default:
+				if vx < len(value) && pattern[px] == value[vx] {
+					px++
+					vx++
+					continue
+				}
+			}
+		}
+		if nextVx > 0 && nextVx <= len(value) {
+			px = nextPx + 1
+			vx = nextVx
+			nextVx++
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// checkGeminiSettingsPolicy checks whether Gemini settings.json marks a required
+// MCP server as untrusted (`"trust": false`) or filters out a required role tool
+// via `excludeTools` or `includeTools`.
+func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 	root, err := readConfigJSONObject(path)
 	if err != nil {
 		return err
@@ -454,21 +585,68 @@ func checkGeminiSettingsPolicy(path string, requiredServers []string) error {
 	if !ok || servers == nil {
 		return nil
 	}
-	for _, name := range requiredServers {
+	for _, name := range plan.requiredServers {
 		entry, ok := servers[name].(map[string]any)
 		if !ok || entry == nil {
 			continue
 		}
 		if trust, hasTrust := entry["trust"].(bool); hasTrust && !trust {
-			return &project.WorkerPolicyError{
-				Message: fmt.Sprintf(
-					"Gemini CLI marks MCP server %q as untrusted in %s (mcpServers.%s.trust is false); set mcpServers.%s.trust to true in %s and start build workers again.",
-					name, path, name, name, path,
-				),
+			return &controlplane.TeamPolicyRefusal{
+				Kind:   controlplane.PolicyGeminiServerUntrusted,
+				Client: "gemini",
+				Server: name,
+			}
+		}
+		if excluded, ok := entry["excludeTools"].([]any); ok {
+			for _, tool := range plan.requiredTools[name] {
+				if geminiToolListMatches(excluded, name, tool) {
+					return &controlplane.TeamPolicyRefusal{
+						Kind:   controlplane.PolicyGeminiToolFiltered,
+						Client: "gemini",
+						Server: name,
+						List:   "excludeTools",
+						Detail: tool,
+					}
+				}
+			}
+		}
+		if rawInclude, hasInclude := entry["includeTools"]; hasInclude {
+			if included, ok := rawInclude.([]any); ok {
+				for _, tool := range plan.requiredTools[name] {
+					if !geminiToolListMatches(included, name, tool) {
+						return &controlplane.TeamPolicyRefusal{
+							Kind:   controlplane.PolicyGeminiToolFiltered,
+							Client: "gemini",
+							Server: name,
+							List:   "includeTools",
+							Detail: tool,
+						}
+					}
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// geminiToolListMatches reports whether any string pattern in patterns matches tool on server.
+func geminiToolListMatches(patterns []any, server, tool string) bool {
+	for _, item := range patterns {
+		pat, ok := item.(string)
+		if !ok {
+			continue
+		}
+		trimmed := strings.TrimSpace(pat)
+		if trimmed == "" {
+			continue
+		}
+		if globMatch(trimmed, tool) ||
+			globMatch(trimmed, "mcp_"+server+"_"+tool) ||
+			globMatch(trimmed, "mcp__"+server+"__"+tool) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkGeminiTrustedFoldersPolicy checks whether Gemini trustedFolders.json
@@ -478,11 +656,11 @@ func checkGeminiTrustedFoldersPolicy(path string, folders []string) error {
 	if err != nil {
 		return err
 	}
-	return checkGeminiTrustedMapPolicy(path, root, folders)
+	return checkGeminiTrustedMapPolicy(root, folders)
 }
 
 // checkGeminiTrustedMapPolicy checks decoded trustedFolders.json entries against folders.
-func checkGeminiTrustedMapPolicy(path string, root map[string]any, folders []string) error {
+func checkGeminiTrustedMapPolicy(root map[string]any, folders []string) error {
 	for _, folder := range folders {
 		for key, raw := range root {
 			state, ok := raw.(string)
@@ -490,11 +668,9 @@ func checkGeminiTrustedMapPolicy(path string, root map[string]any, folders []str
 				continue
 			}
 			if isPathOrAncestor(key, folder) {
-				return &project.WorkerPolicyError{
-					Message: fmt.Sprintf(
-						"Gemini CLI marks %s as DO_NOT_TRUST in %s; set %q to \"TRUST_FOLDER\" in %s and start build workers again.",
-						key, path, key, path,
-					),
+				return &controlplane.TeamPolicyRefusal{
+					Kind:   controlplane.PolicyGeminiFolderUntrusted,
+					Client: "gemini",
 				}
 			}
 		}
@@ -505,8 +681,10 @@ func checkGeminiTrustedMapPolicy(path string, root map[string]any, folders []str
 // mergeCodexFolderTrust adds missing [projects.<folder>] trust_level = "trusted"
 // entries in path while leaving existing trust_level values, comments, and all
 // [mcp_servers.*] tables untouched.
-func mergeCodexFolderTrust(lockDir, path string, protectedRoots, folders []string) error {
-	_, err := updateLockedConfigFile(lockDir, path, protectedRoots, 0o600, func(content []byte, _ bool) ([]byte, bool, error) {
+func mergeCodexFolderTrust(
+	ctx context.Context, lockDir, path string, protectedRoots, folders []string,
+) error {
+	_, err := updateLockedConfigFile(ctx, lockDir, path, protectedRoots, 0o600, func(content []byte, _ bool) ([]byte, bool, error) {
 		var decoded map[string]any
 		if err := toml.Unmarshal(content, &decoded); err != nil {
 			return nil, false, fmt.Errorf("%s is not valid TOML: %w", path, err)
@@ -518,7 +696,7 @@ func mergeCodexFolderTrust(lockDir, path string, protectedRoots, folders []strin
 				return nil, false, fmt.Errorf("%s: projects is not a table", path)
 			}
 		}
-		if err := checkCodexProjectsMapPolicy(path, projects, folders); err != nil {
+		if err := checkCodexProjectsMapPolicy(projects, folders); err != nil {
 			return nil, false, err
 		}
 
@@ -647,8 +825,10 @@ func locateCodexProjectEntries(doc []byte) (map[string]codexProjectLocation, boo
 
 // mergeClaudeProjectTrust ensures projects[folder].hasTrustDialogAccepted is
 // true in Claude Code's .claude.json, preserving exact numbers and other keys.
-func mergeClaudeProjectTrust(lockDir, path string, protectedRoots, folders []string) error {
-	_, err := updateLockedConfigFile(lockDir, path, protectedRoots, 0o600, func(raw []byte, _ bool) ([]byte, bool, error) {
+func mergeClaudeProjectTrust(
+	ctx context.Context, lockDir, path string, protectedRoots, folders []string,
+) error {
+	_, err := updateLockedConfigFile(ctx, lockDir, path, protectedRoots, 0o600, func(raw []byte, _ bool) ([]byte, bool, error) {
 		root, err := decodeConfigJSONBytes(path, raw)
 		if err != nil {
 			return nil, false, err
@@ -694,13 +874,15 @@ func mergeClaudeProjectTrust(lockDir, path string, protectedRoots, folders []str
 // mergeGeminiTrustedFolders ensures path maps each folder to "TRUST_FOLDER"
 // when not already covered by "TRUST_FOLDER" or an ancestor "TRUST_PARENT",
 // refusing to overwrite any "DO_NOT_TRUST" entry.
-func mergeGeminiTrustedFolders(lockDir, path string, protectedRoots, folders []string) error {
-	_, err := updateLockedConfigFile(lockDir, path, protectedRoots, 0o600, func(raw []byte, _ bool) ([]byte, bool, error) {
+func mergeGeminiTrustedFolders(
+	ctx context.Context, lockDir, path string, protectedRoots, folders []string,
+) error {
+	_, err := updateLockedConfigFile(ctx, lockDir, path, protectedRoots, 0o600, func(raw []byte, _ bool) ([]byte, bool, error) {
 		root, err := decodeConfigJSONBytes(path, raw)
 		if err != nil {
 			return nil, false, err
 		}
-		if err := checkGeminiTrustedMapPolicy(path, root, folders); err != nil {
+		if err := checkGeminiTrustedMapPolicy(root, folders); err != nil {
 			return nil, false, err
 		}
 		changed := false
@@ -743,9 +925,12 @@ func geminiFolderAlreadyTrusted(root map[string]any, folder string) bool {
 
 // mergeCursorTrustedWorkspaces creates ~/.cursor/projects/<slug>/.workspace-trusted
 // with O_CREAT|O_EXCL for each folder when absent, leaving existing markers untouched.
-func mergeCursorTrustedWorkspaces(home string, protectedRoots, folders []string) error {
+func mergeCursorTrustedWorkspaces(ctx context.Context, home string, protectedRoots, folders []string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, folder := range folders {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		slug := cursorWorkspaceSlug(folder)
 		if slug == "" {
 			continue
@@ -786,22 +971,4 @@ func mergeCursorTrustedWorkspaces(home string, protectedRoots, folders []string)
 		}
 	}
 	return nil
-}
-
-// cursorWorkspaceSlug converts an absolute path into Cursor's per-workspace
-// folder name by stripping leading slashes and replacing '/', '\', and '.' with '-'.
-func cursorWorkspaceSlug(folder string) string {
-	trimmed := strings.TrimLeft(filepath.Clean(folder), `/\`)
-	return strings.NewReplacer("/", "-", `\`, "-", ".", "-").Replace(trimmed)
-}
-
-// envLookup returns the last entry matching name=value in env, or "".
-func envLookup(env []string, name string) string {
-	prefix := name + "="
-	for i := len(env) - 1; i >= 0; i-- {
-		if value, ok := strings.CutPrefix(env[i], prefix); ok {
-			return value
-		}
-	}
-	return ""
 }

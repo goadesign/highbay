@@ -27,13 +27,12 @@ func BuildAttachGuidePayload(projectAttachGuideBody *string) (*project.AttachGui
 		}
 		err = json.Unmarshal([]byte(*projectAttachGuideBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ancestor_pids\": [\n         6680357311335224070,\n         8202761794251479320,\n         533187414794575372\n      ],\n      \"client\": \"gemini\",\n      \"daemon_client_pid\": 8734940604984878032,\n      \"hc_terminal_id\": \"x\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ancestor_pids\": [\n         6680357311335224070,\n         8202761794251479320,\n         533187414794575372\n      ],\n      \"client\": \"gemini\",\n      \"hc_terminal_id\": \"x\"\n   }'")
 		}
 	}
 	v := &project.AttachGuidePayload{
-		HcTerminalID:    body.HcTerminalID,
-		Client:          body.Client,
-		DaemonClientPid: body.DaemonClientPid,
+		HcTerminalID: body.HcTerminalID,
+		Client:       body.Client,
 	}
 	if body.AncestorPids != nil {
 		v.AncestorPids = make([]int, len(body.AncestorPids))

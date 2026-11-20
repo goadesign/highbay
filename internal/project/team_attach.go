@@ -68,7 +68,7 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 		if p.HcTerminalID != nil && *p.HcTerminalID != "" {
 			pane = s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client, p.AncestorPids)
 		}
-		if pane.terminal == "" {
+		if pane.terminal == "" && len(p.AncestorPids) > 0 {
 			pane = s.findSessionGuidePane(ctx, record, handle, p)
 		}
 		if pane.terminal != "" {
@@ -91,8 +91,7 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 		s.openCompanion(ctx)
 	} else if (p.HcTerminalID != nil && *p.HcTerminalID != "" ||
 		p.Client != nil && *p.Client != "" ||
-		len(p.AncestorPids) > 0 ||
-		p.DaemonClientPid != nil) && mode != herdrUnavailable {
+		len(p.AncestorPids) > 0) && mode != herdrUnavailable {
 		// This caller has no adopted tab even if another guide already does.
 		mode = herdrAvailable
 	}
@@ -116,7 +115,7 @@ func (s *Server) findGuidePane(
 		for _, tab := range space.Tabs {
 			for _, pane := range tab.Terminals {
 				if pane.Terminal == address && pane.Pane != "" && safeSpaceID(tab.ID) {
-					return s.validateGuideTab(ctx, record, space, tab, handle, address, client, ancestorPids)
+					return s.validateGuideTab(ctx, record, space, tab, handle, address, client, ancestorPids, false)
 				}
 			}
 		}
@@ -125,15 +124,12 @@ func (s *Server) findGuidePane(
 }
 
 // findSessionGuidePane adopts a unique local model pane inside record.Directory
-// only when OS process lineage (p.AncestorPids or a verified 1-to-1 Codex daemon
-// socket peer in an active turn) ties the requesting session to that pane.
+// only when OS process lineage (p.AncestorPids) ties the requesting session to
+// that pane, re-validating every predicate immediately before labeling.
 func (s *Server) findSessionGuidePane(
 	ctx context.Context, record Record, handle string, p *genproject.AttachGuidePayload,
 ) guidePane {
-	wantDaemon := len(p.AncestorPids) == 0 &&
-		p.DaemonClientPid != nil && *p.DaemonClientPid > 0 &&
-		p.Client != nil && normalizeGuideClient(*p.Client) == "codex"
-	if len(p.AncestorPids) == 0 && !wantDaemon {
+	if len(p.AncestorPids) == 0 {
 		return guidePane{}
 	}
 	host := s.team.dependencies.Host
@@ -169,16 +165,8 @@ func (s *Server) findSessionGuidePane(
 				if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
 					continue
 				}
-				if len(p.AncestorPids) > 0 {
-					if !paneMatchesPIDs(target, p.AncestorPids) {
-						continue
-					}
-				} else {
-					if target.Foreground.PID != *p.DaemonClientPid ||
-						observedGuideClient(target) != "codex" ||
-						target.Status == nil || target.Status.State != "working" {
-						continue
-					}
+				if !paneMatchesPIDs(target, p.AncestorPids) {
+					continue
 				}
 				matches = append(matches, candidatePane{space: space, tab: tab, terminal: pane.Terminal})
 				if len(matches) > 1 {
@@ -191,7 +179,7 @@ func (s *Server) findSessionGuidePane(
 		return guidePane{}
 	}
 	unique := matches[0]
-	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, p.Client, p.AncestorPids)
+	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, p.Client, p.AncestorPids, true)
 }
 
 // paneMatchesPIDs reports whether target's shell PID or foreground PID is in pids.
@@ -241,7 +229,8 @@ func guidePaneInProject(projectDir, cwd string) bool {
 // validateGuideTab preserves any existing project/swarm and avoids replacing
 // another live guide or splitting a single team across several tabs. When
 // ancestorPids is non-empty, the pane must match that OS lineage (failing
-// closed when terminal PIDs are absent).
+// closed when terminal PIDs are absent). When requireCwd is true, the final
+// terminal read must also report a foreground directory inside record.Directory.
 func (s *Server) validateGuideTab(
 	ctx context.Context,
 	record Record,
@@ -250,13 +239,18 @@ func (s *Server) validateGuideTab(
 	handle, address string,
 	client *string,
 	ancestorPids []int,
+	requireCwd bool,
 ) guidePane {
 	host := s.team.dependencies.Host
 	target, err := host.ReadTerminal(ctx, address)
 	if err != nil || target.Address != address || !roleRunning(target, s.team.dependencies.Shell) {
 		return guidePane{}
 	}
-	if target.Foreground != nil && target.Foreground.Cwd != "" &&
+	if requireCwd {
+		if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
+			return guidePane{}
+		}
+	} else if target.Foreground != nil && target.Foreground.Cwd != "" &&
 		!guidePaneInProject(record.Directory, target.Foreground.Cwd) {
 		return guidePane{}
 	}

@@ -81,9 +81,6 @@ type AttachGuidePayload struct {
 	Client *string
 	// Invoking process and ancestor OS process IDs.
 	AncestorPids []int
-	// Unique local client OS process ID in this project directory when stdio was
-	// spawned by a background daemon.
-	DaemonClientPid *int
 }
 
 // AttachGuideResult is the result type of the project service attach_guide

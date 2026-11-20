@@ -309,19 +309,19 @@ func TestSetupCodexConfigMerge(t *testing.T) {
 		},
 		{
 			name:    "splices HC_TERMINAL_ID into structured env_vars array without overwriting tables",
-			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"env\" }]\n",
-			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"env\" }, \"HC_TERMINAL_ID\"]\n",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"local\" }]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"local\" }, \"HC_TERMINAL_ID\"]\n",
 			changed: true,
 		},
 		{
 			name:    "splices HC_TERMINAL_ID into multiline structured env_vars with comments",
-			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"env\" } # keep comment\n]\n",
-			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"env\" }, # keep comment\n  \"HC_TERMINAL_ID\"\n]\n",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"remote\" } # keep comment\n]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"remote\" }, # keep comment\n  \"HC_TERMINAL_ID\"\n]\n",
 			changed: true,
 		},
 		{
 			name:    "recognizes structured HC_TERMINAL_ID entry without rewriting",
-			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [{ name = \"HC_TERMINAL_ID\", source = \"env\" }]\n",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [{ name = \"HC_TERMINAL_ID\", source = \"local\" }]\n",
 			changed: false,
 		},
 		{
@@ -548,19 +548,32 @@ func TestSetupPermissionsAllowJSON(t *testing.T) {
 		}
 	})
 
-	t.Run("gemini settings preserves explicit trust false", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), ".gemini", "settings.json")
-		writeTestFile(t, path, `{"mcpServers":{"surla":{"command":"/old/surla","args":["stdio"],"trust":false},"other":{"command":"npx"}}}`)
-		changed, err := mergeMCPJSONConfig(mcpJSONTarget{
-			path:       path,
-			serversKey: "mcpServers",
-			entry:      map[string]any{"command": testExecutable, "args": []any{"stdio"}, "trust": true},
-		})
-		require.NoError(t, err)
-		assert.True(t, changed)
+	t.Run("gemini settings preserves explicit trust false and tool filter arrays across repeat setup", func(t *testing.T) {
+		home := t.TempDir()
+		path := filepath.Join(home, ".gemini", "settings.json")
+		writeTestFile(t, path, `{"mcpServers":{"surla":{"command":"/old/surla","args":["stdio"],"trust":false,"includeTools":["list_changes","get_change"],"excludeTools":["open_views"],"timeout":15000},"other":{"command":"npx"}}}`)
+
+		var out bytes.Buffer
+		require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
+		assert.Contains(t, out.String(), "Registered the surla MCP server in "+path)
+
 		servers := readTestJSON(t, path)["mcpServers"].(map[string]any)
-		assert.Equal(t, map[string]any{"command": testExecutable, "args": []any{"stdio"}, "trust": false}, servers["surla"])
+		assert.Equal(t, map[string]any{
+			"command":      testExecutable,
+			"args":         []any{"stdio"},
+			"trust":        false,
+			"includeTools": []any{"list_changes", "get_change"},
+			"excludeTools": []any{"open_views"},
+			"timeout":      float64(15000),
+		}, servers["surla"])
 		assert.Equal(t, map[string]any{"command": "npx"}, servers["other"])
+
+		// Repeat setupGlobal run preserves everything untouched and reports already registered.
+		before := snapshotTree(t, home)
+		out.Reset()
+		require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
+		assert.Equal(t, before, snapshotTree(t, home))
+		assert.Contains(t, out.String(), "The surla MCP server is already registered in "+path)
 	})
 
 	t.Run("cursor cli-config updates existing files including deny-only configs and respects deny rules", func(t *testing.T) {

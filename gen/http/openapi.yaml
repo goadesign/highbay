@@ -8510,12 +8510,6 @@ definitions:
                     - cursor
                     - gemini
                     - opencode
-            daemon_client_pid:
-                type: integer
-                description: Unique local client OS process ID in this project directory when stdio was spawned by a background daemon.
-                example: 8734940604984878032
-                format: int64
-                minimum: 1
             hc_terminal_id:
                 type: string
                 description: Invoking local Herdr terminal identity.
@@ -8527,7 +8521,6 @@ definitions:
                 - 8202761794251479320
                 - 533187414794575372
             client: gemini
-            daemon_client_pid: 8734940604984878032
             hc_terminal_id: x
     ProjectAttachGuideResponseBody:
         title: ProjectAttachGuideResponseBody

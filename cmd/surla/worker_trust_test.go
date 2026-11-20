@@ -1,21 +1,31 @@
-// This file tests read-only client policy checks, user-scoped folder trust
-// pre-population, concurrent Surla writers, and worktree destination refusal.
+// This file tests read-only client policy checks, role-specific operation
+// matching, context-bounded locking, concurrent Surla writers, and worktree
+// destination refusal.
 package main
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 )
 
@@ -47,13 +57,13 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 		"GEMINI_CLI_HOME=" + geminiHome,
 	}
 	targets := []project.WorkerTrustTarget{
-		{ProjectDir: repo, Folder: buildDir, Client: "codex", RequireChorus: true},
-		{ProjectDir: repo, Folder: testsDir, Client: "claude", RequireChorus: true},
-		{ProjectDir: repo, Folder: buildDir, Client: "gemini", RequireChorus: true},
-		{ProjectDir: repo, Folder: testsDir, Client: "cursor", RequireChorus: true},
+		{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "codex", RequireChorus: true},
+		{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: "claude", RequireChorus: true},
+		{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "gemini", RequireChorus: true},
+		{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: "cursor", RequireChorus: true},
 	}
 
-	require.NoError(t, prepareWorkerTrust(env, targets))
+	require.NoError(t, prepareWorkerTrust(t.Context(), env, targets))
 
 	// Git working copies must contain zero untracked or modified files.
 	for _, dir := range []string{repo, buildDir, testsDir} {
@@ -95,8 +105,8 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 	// Custom GEMINI_CLI_TRUSTED_FOLDERS_PATH is honored when set.
 	customTrustedPath := filepath.Join(home, "custom-trusted-folders.json")
 	customEnv := append(append([]string(nil), env...), "GEMINI_CLI_TRUSTED_FOLDERS_PATH="+customTrustedPath)
-	require.NoError(t, prepareWorkerTrust(customEnv, []project.WorkerTrustTarget{
-		{ProjectDir: repo, Folder: buildDir, Client: "gemini"},
+	require.NoError(t, prepareWorkerTrust(t.Context(), customEnv, []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "gemini"},
 	}))
 	customTrusted := readTestJSON(t, customTrustedPath)
 	assert.Equal(t, "TRUST_FOLDER", customTrusted[repo])
@@ -115,7 +125,7 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 
 	// Second run is strictly idempotent and writes nothing.
 	before := snapshotTree(t, home)
-	require.NoError(t, prepareWorkerTrust(env, targets))
+	require.NoError(t, prepareWorkerTrust(t.Context(), env, targets))
 	assert.Equal(t, before, snapshotTree(t, home))
 }
 
@@ -127,7 +137,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 		client        string
 		requireChorus bool
 		setup         func(t *testing.T, home string) (env []string, verifyPath, initialContent string)
-		wantErrSubstr string
+		wantStepPart  string
 	}{
 		{
 			name:   "codex explicitly untrusted project",
@@ -138,7 +148,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home}, path, content
 			},
-			wantErrSubstr: `set trust_level = "trusted"`,
+			wantStepPart: `Set trust_level = "trusted" for it in your Codex config.toml`,
 		},
 		{
 			name:   "codex surla prompt approval mode",
@@ -149,7 +159,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home}, path, content
 			},
-			wantErrSubstr: `set default_tools_approval_mode = "approve" on [mcp_servers.surla]`,
+			wantStepPart: `Set default_tools_approval_mode = "approve" on [mcp_servers.surla] in your Codex config.toml`,
 		},
 		{
 			name:          "codex chorus writes approval mode when Chorus is required",
@@ -161,7 +171,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home}, path, content
 			},
-			wantErrSubstr: `set default_tools_approval_mode = "approve" on [mcp_servers.chorus]`,
+			wantStepPart: `Set default_tools_approval_mode = "approve" on [mcp_servers.chorus] in your Codex config.toml`,
 		},
 		{
 			name:   "gemini surla trust false",
@@ -173,7 +183,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home, "GEMINI_CLI_HOME=" + geminiHome}, path, content
 			},
-			wantErrSubstr: "set mcpServers.surla.trust to true",
+			wantStepPart: "Set mcpServers.surla.trust to true in your Gemini settings.json",
 		},
 		{
 			name:   "gemini DO_NOT_TRUST parent folder",
@@ -184,7 +194,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home}, path, content
 			},
-			wantErrSubstr: "DO_NOT_TRUST",
+			wantStepPart: "DO_NOT_TRUST in trustedFolders.json",
 		},
 		{
 			name:   "claude permissions deny on surla",
@@ -195,7 +205,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home}, path, content
 			},
-			wantErrSubstr: `remove "mcp__surla__*" from permissions.deny`,
+			wantStepPart: "permissions.deny (\"mcp__surla__*\") in settings.json",
 		},
 		{
 			name:          "cursor permissions deny on chorus when Chorus is required",
@@ -207,7 +217,7 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				writeTestFile(t, path, content)
 				return []string{"HOME=" + home}, path, content
 			},
-			wantErrSubstr: `remove "Mcp(chorus:*)" from permissions.deny`,
+			wantStepPart: "permissions.deny (\"Mcp(chorus:*)\") in cli-config.json",
 		},
 	}
 
@@ -216,7 +226,8 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 			home := t.TempDir()
 			env, verifyPath, initialContent := tc.setup(t, home)
 
-			err := prepareWorkerTrust(env, []project.WorkerTrustTarget{{
+			err := prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{{
+				Role:          "builder",
 				ProjectDir:    repo,
 				Folder:        buildDir,
 				Client:        tc.client,
@@ -224,11 +235,11 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 				RequireChorus: tc.requireChorus,
 			}})
 			require.Error(t, err)
-			var policyErr *project.WorkerPolicyError
+			var policyErr *controlplane.TeamPolicyRefusal
 			require.ErrorAs(t, err, &policyErr)
-			assert.Contains(t, policyErr.Error(), tc.wantErrSubstr)
-			assert.Contains(t, policyErr.Error(), verifyPath)
-			lowerMsg := strings.ToLower(policyErr.Error())
+			step := policyErr.Step("then choose Start workers again.")
+			assert.Contains(t, step, tc.wantStepPart)
+			lowerMsg := strings.ToLower(step)
 			assert.NotContains(t, lowerMsg, "yolo")
 			assert.NotContains(t, lowerMsg, "dangerously-skip-permissions")
 
@@ -237,7 +248,8 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 			assert.Equal(t, initialContent, string(raw), "explicit policy must remain untouched")
 
 			// With Yolo: true, startup is permitted and still leaves the explicit policy file untouched.
-			require.NoError(t, prepareWorkerTrust(env, []project.WorkerTrustTarget{{
+			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{{
+				Role:          "builder",
 				ProjectDir:    repo,
 				Folder:        buildDir,
 				Client:        tc.client,
@@ -255,7 +267,8 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 		home := t.TempDir()
 		codexPath := filepath.Join(home, ".codex", "config.toml")
 		writeTestFile(t, codexPath, "[mcp_servers.chorus]\ndefault_tools_approval_mode = \"prompt\"\n")
-		require.NoError(t, prepareWorkerTrust([]string{"HOME=" + home}, []project.WorkerTrustTarget{{
+		require.NoError(t, prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{{
+			Role:          "builder",
 			ProjectDir:    repo,
 			Folder:        buildDir,
 			Client:        "codex",
@@ -263,6 +276,111 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 			RequireChorus: false,
 		}}))
 	})
+}
+
+func TestPrepareWorkerTrustRoleSpecificOperationsAndWildcardRules(t *testing.T) {
+	repo, buildDir, testsDir := initTrustGitRepoWithWorktrees(t)
+
+	t.Run("denying open_views allows builder and test_writer while refusing guide", func(t *testing.T) {
+		home := t.TempDir()
+		writeTestFile(t, filepath.Join(home, ".claude", "settings.json"),
+			`{"permissions":{"deny":["mcp__surla__open_views"]}}`)
+		writeTestFile(t, filepath.Join(home, ".cursor", "cli-config.json"),
+			`{"permissions":{"deny":["Mcp(surla:open_views)"]}}`)
+		writeTestFile(t, filepath.Join(home, ".gemini", "settings.json"),
+			`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"excludeTools":["open_views"]}}}`)
+
+		env := []string{"HOME=" + home}
+		for _, client := range []string{"claude", "cursor", "gemini"} {
+			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+				{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: client},
+				{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: client},
+			}), "open_views restriction must not block worker roles on %s", client)
+
+			err := prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+				{Role: "guide", ProjectDir: repo, Folder: repo, Client: client},
+			})
+			var policyErr *controlplane.TeamPolicyRefusal
+			require.ErrorAs(t, err, &policyErr, "open_views restriction must refuse guide on %s", client)
+		}
+	})
+
+	t.Run("server wildcard rules catch required role tools without blocking other roles", func(t *testing.T) {
+		home := t.TempDir()
+		writeTestFile(t, filepath.Join(home, ".cursor", "cli-config.json"),
+			`{"permissions":{"deny":["Mcp(*:get_builder_assignment)"]}}`)
+		writeTestFile(t, filepath.Join(home, ".claude", "settings.json"),
+			`{"permissions":{"ask":["mcp__*__get_builder_assignment"]}}`)
+		includedTools := slices.DeleteFunc(slices.Clone(allSurlaMCPToolNames()), func(name string) bool {
+			return name == "get_builder_assignment"
+		})
+		includedJSON, err := json.Marshal(includedTools)
+		require.NoError(t, err)
+		writeTestFile(t, filepath.Join(home, ".gemini", "settings.json"),
+			fmt.Sprintf(`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"includeTools":%s}}}`, includedJSON))
+
+		env := []string{"HOME=" + home}
+		for _, client := range []string{"cursor", "claude", "gemini"} {
+			err := prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+				{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: client},
+			})
+			var policyErr *controlplane.TeamPolicyRefusal
+			require.ErrorAs(t, err, &policyErr, "expected builder refusal on %s", client)
+			assert.Contains(t, policyErr.Error(), "get_builder_assignment")
+
+			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+				{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: client},
+			}), "builder-only restriction must allow test_writer on %s", client)
+		}
+	})
+}
+
+func TestPrepareWorkerTrustHonorsContextOnContendedLocks(t *testing.T) {
+	home := t.TempDir()
+	env := []string{"HOME=" + home}
+	projectDir := filepath.Join(t.TempDir(), "service")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	claudePath := filepath.Join(home, ".claude.json")
+	resolvedClaude, err := validateConfigDestination(claudePath, nil)
+	require.NoError(t, err)
+
+	// 1. Contended in-process lock cancels promptly on ctx deadline.
+	releaseLocal, err := acquireInProcessConfigLock(t.Context(), resolvedClaude)
+	require.NoError(t, err)
+	shortCtx, cancel := context.WithTimeout(t.Context(), 35*time.Millisecond)
+	start := time.Now()
+	err = prepareWorkerTrust(shortCtx, env, []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: projectDir, Folder: projectDir, Client: "claude"},
+	})
+	cancel()
+	releaseLocal()
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), time.Second)
+
+	// 2. Contended cross-process flock cancels promptly on ctx deadline.
+	lockDir := configLockDir(home, func(name string) string { return envLookup(env, name) }, runtime.GOOS)
+	resolvedLockDir, err := validateConfigDestination(lockDir, nil)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(resolvedLockDir, 0o700))
+	sum := sha256.Sum256([]byte(resolvedClaude))
+	lockPath := filepath.Join(resolvedLockDir, hex.EncodeToString(sum[:])+".lock")
+	heldFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, syscall.Flock(int(heldFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB))
+	t.Cleanup(func() {
+		assert.NoError(t, syscall.Flock(int(heldFile.Fd()), syscall.LOCK_UN))
+		assert.NoError(t, heldFile.Close())
+	})
+
+	flockCtx, flockCancel := context.WithTimeout(t.Context(), 45*time.Millisecond)
+	defer flockCancel()
+	start = time.Now()
+	err = prepareWorkerTrust(flockCtx, env, []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: projectDir, Folder: projectDir, Client: "claude"},
+	})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(t, time.Since(start), time.Second)
 }
 
 func TestPrepareWorkerTrustConcurrentWritersAndExternalSaveRetry(t *testing.T) {
@@ -282,10 +400,10 @@ func TestPrepareWorkerTrustConcurrentWritersAndExternalSaveRetry(t *testing.T) {
 		if idx%2 == 0 {
 			go func(dir string) {
 				defer wg.Done()
-				errs <- prepareWorkerTrust(env, []project.WorkerTrustTarget{
-					{ProjectDir: dir, Folder: dir, Client: "codex"},
-					{ProjectDir: dir, Folder: dir, Client: "claude"},
-					{ProjectDir: dir, Folder: dir, Client: "gemini"},
+				errs <- prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+					{Role: "builder", ProjectDir: dir, Folder: dir, Client: "codex"},
+					{Role: "builder", ProjectDir: dir, Folder: dir, Client: "claude"},
+					{Role: "builder", ProjectDir: dir, Folder: dir, Client: "gemini"},
 				})
 			}(folder)
 		} else {
@@ -346,8 +464,8 @@ func TestPrepareWorkerTrustConcurrentWritersAndExternalSaveRetry(t *testing.T) {
 			require.NoError(t, os.WriteFile(resolvedTarget, encoded, 0o600))
 		}
 	}
-	require.NoError(t, prepareWorkerTrust(env, []project.WorkerTrustTarget{
-		{ProjectDir: extraFolder, Folder: extraFolder, Client: "claude"},
+	require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: extraFolder, Folder: extraFolder, Client: "claude"},
 	}))
 	assert.True(t, injected)
 	updatedClaude := readTestJSON(t, filepath.Join(home, ".claude.json"))
@@ -361,10 +479,10 @@ func TestWorkerTrustSubprocessHelper(t *testing.T) {
 	}
 	home := os.Getenv("SURLA_WORKER_TRUST_HOME")
 	folder := os.Getenv("SURLA_WORKER_TRUST_FOLDER")
-	require.NoError(t, prepareWorkerTrust([]string{"HOME=" + home}, []project.WorkerTrustTarget{
-		{ProjectDir: folder, Folder: folder, Client: "codex"},
-		{ProjectDir: folder, Folder: folder, Client: "claude"},
-		{ProjectDir: folder, Folder: folder, Client: "gemini"},
+	require.NoError(t, prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "codex"},
+		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "claude"},
+		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "gemini"},
 	}))
 }
 
@@ -384,11 +502,11 @@ func TestPrepareWorkerTrustRefusesWorktreeDestinationsAndSymlinks(t *testing.T) 
 				{"gemini", []string{"HOME=" + safeHome, "GEMINI_CLI_TRUSTED_FOLDERS_PATH=" + filepath.Join(worktree, "trusted.json")}},
 				{"cursor", []string{"HOME=" + worktree}},
 			} {
-				err := prepareWorkerTrust(tc.env, []project.WorkerTrustTarget{
-					{ProjectDir: repo, Folder: worktree, Client: tc.client},
+				err := prepareWorkerTrust(t.Context(), tc.env, []project.WorkerTrustTarget{
+					{Role: "builder", ProjectDir: repo, Folder: worktree, Client: tc.client},
 				})
 				require.Error(t, err, "expected refusal for %s with %v", tc.client, tc.env)
-				var policyErr *project.WorkerPolicyError
+				var policyErr *controlplane.TeamPolicyRefusal
 				assert.False(t, errors.As(err, &policyErr), "destination refusal is not a user policy error")
 			}
 
@@ -402,8 +520,8 @@ func TestPrepareWorkerTrustRefusesWorktreeDestinationsAndSymlinks(t *testing.T) 
 			require.NoError(t, os.Symlink(filepath.Join(worktree, "linked-cursor-projects"), filepath.Join(symlinkHome, ".cursor", "projects")))
 
 			for _, client := range []string{"codex", "claude", "gemini", "cursor"} {
-				err := prepareWorkerTrust([]string{"HOME=" + symlinkHome}, []project.WorkerTrustTarget{
-					{ProjectDir: repo, Folder: worktree, Client: client},
+				err := prepareWorkerTrust(t.Context(), []string{"HOME=" + symlinkHome}, []project.WorkerTrustTarget{
+					{Role: "builder", ProjectDir: repo, Folder: worktree, Client: client},
 				})
 				require.Error(t, err, "expected symlink refusal for %s", client)
 			}
@@ -427,9 +545,9 @@ func TestPrepareWorkerTrustRefusesMalformedUserConfigWithoutOverwriting(t *testi
 	writeTestFile(t, claudePath, badJSON)
 
 	folder := t.TempDir()
-	err := prepareWorkerTrust([]string{"HOME=" + home}, []project.WorkerTrustTarget{
-		{ProjectDir: folder, Folder: folder, Client: "codex"},
-		{ProjectDir: folder, Folder: folder, Client: "claude"},
+	err := prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "codex"},
+		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "claude"},
 	})
 	require.Error(t, err)
 
