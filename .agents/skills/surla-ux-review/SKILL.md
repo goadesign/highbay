@@ -34,8 +34,10 @@ Use the person's own task and participant profile when they give them.
 Otherwise use the defaults:
 
 - **Task:** build an agentic platform that lets end users buy and sell houses.
-- **Participant profile:** a software developer who is comfortable with Go
-  and the command line and uses coding agents daily, but has never used
+- **Participant profile:** an impatient, product-minded software developer who
+  uses coding agents daily, skims just enough of a README to get moving,
+  dislikes boilerplate setup questions or upfront checklists before seeing a
+  proposal, is comfortable with Go and the command line, and has never used
   Surla, Goa, or Goa-AI.
 
 ## 1. Set up the run

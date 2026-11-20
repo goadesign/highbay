@@ -78,15 +78,14 @@ var DeclineRevisionPayload = Type("DeclineRevisionPayload", func() {
 
 // InitProjectPayload is the input to the init_project tool.
 var InitProjectPayload = Type("InitProjectPayload", func() {
-	Description("Go module path and optional directory for initializing a new Surla starter project in the bound workspace.")
-	Attribute("module_path", String, "Go module path of the new service (for example example.com/shop).", func() {
+	Description("Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.")
+	Attribute("module_path", String, "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.", func() {
 		MinLength(3)
 		Example("example.com/shop")
 	})
-	Attribute("dir", String, "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.", func() {
-		Example("shop")
+	Attribute("dir", String, "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.", func() {
+		Example(".")
 	})
-	Required("module_path")
 })
 
 // InitProjectResult is the output of the init_project tool.
@@ -1065,7 +1064,7 @@ var _ = Service("surla", func() {
 		Error("conflict", ErrorResult, "The workspace or target directory is already initialized.")
 		Error("unprocessable", ErrorResult, "The module path or child directory name is invalid.")
 		Error("not_implemented", ErrorResult, "This control plane has no exact Surla module version configured for starter generation.")
-		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Returns the created commit ID in commit for start_live_target and verify_change.")
+		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). Returns the created commit ID in commit for start_live_target and verify_change.")
 		HTTP(func() {
 			POST("/workspace/init")
 			Response(StatusOK)

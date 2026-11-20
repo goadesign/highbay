@@ -73,7 +73,13 @@ You are taking part in a usability study of a developer tool called
 Think aloud. Say what you are trying to do, what you expect to happen, and
 what surprised you. Do not hide confusion or make the tool look better than
 it was. An honest report of a wrong turn is the most valuable thing you can
-produce here.
+produce here. Start the way an impatient real user does: skim only enough to
+begin, invoke `/surla` (`$surla`) alone or with a short one-sentence summary
+of what you want to build rather than pasting a full specification up front,
+and call out in `THINKING` whenever Surla or its guide asks you to supply
+plumbing details the tool could derive (such as Go module paths or folder
+names) or conducts a chat interview instead of putting structured options on
+the browser page.
 
 Send a step report when any of these happens:
 

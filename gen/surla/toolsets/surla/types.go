@@ -581,11 +581,14 @@ type (
 	}
 	// InitProjectPayload defines the JSON payload for the surla.init_project tool.
 	InitProjectPayload = struct {
-		// Go module path of the new service (for example example.com/shop).
-		ModulePath string
-		// Use a direct child name, or . to initialize the bound workspace itself while
-		// preserving allowed agent configuration. When omitted or empty, defaults to
-		// the service name derived from module_path.
+		// Optional Go module path of the new service (for example example.com/shop).
+		// Omit unless the user gave one: Surla derives example.com/<service> from the
+		// target folder name.
+		ModulePath *string
+		// Use . to initialize the bound workspace itself while preserving allowed
+		// agent configuration, or pass a direct child name. When omitted or empty,
+		// defaults to . when module_path is omitted, or to the service name derived
+		// from module_path when module_path is given.
 		Dir *string
 	}
 	// InitProjectResult defines the JSON result for the surla.init_project tool.

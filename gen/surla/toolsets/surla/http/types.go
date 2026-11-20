@@ -674,11 +674,14 @@ type (
 	// decode + validation (missing-field detection) before transforming into
 	// the public tool type.
 	InitProjectPayloadTransport struct {
-		// Go module path of the new service (for example example.com/shop).
-		ModulePath *string `json:"module_path"`
-		// Use a direct child name, or . to initialize the bound workspace itself while
-		// preserving allowed agent configuration. When omitted or empty, defaults to
-		// the service name derived from module_path.
+		// Optional Go module path of the new service (for example example.com/shop).
+		// Omit unless the user gave one: Surla derives example.com/<service> from the
+		// target folder name.
+		ModulePath *string `json:"module_path,omitempty"`
+		// Use . to initialize the bound workspace itself while preserving allowed
+		// agent configuration, or pass a direct child name. When omitted or empty,
+		// defaults to . when module_path is omitted, or to the service name derived
+		// from module_path when module_path is given.
 		Dir *string `json:"dir,omitempty"`
 	}
 	// InitProjectResultTransport is the internal JSON transport type for InitProjectResult.

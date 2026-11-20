@@ -184,11 +184,14 @@ type HandOverModelSettingsRequestBody struct {
 // InitProjectRequestBody is the type of the "surla" service "init_project"
 // endpoint HTTP request body.
 type InitProjectRequestBody struct {
-	// Go module path of the new service (for example example.com/shop).
+	// Optional Go module path of the new service (for example example.com/shop).
+	// Omit unless the user gave one: Surla derives example.com/<service> from the
+	// target folder name.
 	ModulePath *string `form:"module_path,omitempty" json:"module_path,omitempty" xml:"module_path,omitempty"`
-	// Use a direct child name, or . to initialize the bound workspace itself while
-	// preserving allowed agent configuration. When omitted or empty, defaults to
-	// the service name derived from module_path.
+	// Use . to initialize the bound workspace itself while preserving allowed
+	// agent configuration, or pass a direct child name. When omitted or empty,
+	// defaults to . when module_path is omitted, or to the service name derived
+	// from module_path when module_path is given.
 	Dir *string `form:"dir,omitempty" json:"dir,omitempty" xml:"dir,omitempty"`
 }
 
@@ -13993,7 +13996,7 @@ func NewHandOverModelSettingsPayload(body *HandOverModelSettingsRequestBody) *su
 // NewInitProjectPayload builds a surla service init_project endpoint payload.
 func NewInitProjectPayload(body *InitProjectRequestBody) *surla.InitProjectPayload {
 	v := &surla.InitProjectPayload{
-		ModulePath: *body.ModulePath,
+		ModulePath: body.ModulePath,
 		Dir:        body.Dir,
 	}
 
@@ -14439,9 +14442,6 @@ func ValidateHandOverModelSettingsRequestBody(body *HandOverModelSettingsRequest
 // ValidateInitProjectRequestBody runs the validations defined on
 // InitProjectRequestBody
 func ValidateInitProjectRequestBody(body *InitProjectRequestBody) (err error) {
-	if body.ModulePath == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("module_path", "body"))
-	}
 	if body.ModulePath != nil {
 		if utf8.RuneCountInString(*body.ModulePath) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.module_path", *body.ModulePath, utf8.RuneCountInString(*body.ModulePath), 3, true))

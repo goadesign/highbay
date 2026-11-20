@@ -131,7 +131,12 @@ one gets the step where it happened, what the participant did or said
 - **Bug:** Surla behaves differently from its docs, or crashes.
 - **Usability issue:** Surla works as documented, but the participant
   misread it, hesitated, or took a wrong action because the interface,
-  output, or docs were unclear.
+  output, or docs were unclear—or Surla or its guide imposed unnecessary
+  user toil or upfront questioning (for example, asking the user for
+  derivable plumbing such as a Go module path or folder name, or conducting
+  a multi-question chat interview before proposing options on the Change
+  Card), even if documented and even if the participant complied without
+  hesitating.
 - **Documentation gap:** the participant needed something the README does
   not say or only links to.
 - **Missing capability:** the participant needed a step to initialize,

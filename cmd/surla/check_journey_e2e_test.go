@@ -158,7 +158,8 @@ func TestCheckProjectRepairsDependenciesOnOneServer(t *testing.T) {
 		ConfirmIntentEndpoint: userTransport.ConfirmIntent(), StartBuildEndpoint: userTransport.StartBuild(),
 	}
 
-	args, err := gensurla.EncodeInitProjectPayload(&gensurla.InitProjectPayload{ModulePath: "example.com/shop"})
+	shopModule := "example.com/shop"
+	args, err := gensurla.EncodeInitProjectPayload(&gensurla.InitProjectPayload{ModulePath: &shopModule})
 	require.NoError(t, err)
 	initialized, err := gensurla.DecodeInitProjectResult(journeyCall(t, client, "init_project", args, journeyCallTimeout))
 	require.NoError(t, err)

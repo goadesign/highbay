@@ -1238,7 +1238,7 @@ func surlaInitProjectUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla init-project --body '{\n      \"dir\": \"shop\",\n      \"module_path\": \"example.com/shop\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla init-project --body '{\n      \"dir\": \".\",\n      \"module_path\": \"example.com/shop\"\n   }'")
 }
 
 func surlaGenerateCodeUsage() {

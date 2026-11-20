@@ -117,9 +117,13 @@ session if it has not discovered the integration yet.
 Open your project folder in the agent and invoke `/surla` (`$surla` in
 Codex). Its first Surla tool call starts or attaches to the server for that
 physical folder and attaches the current session as the guide. Discovery
-alone starts no server. If the folder is empty, the guide can call
+alone starts no server. If you invoke `/surla` without a request yet, the
+guide opens the page and asks what you would like to build. Once you state a
+goal in an empty folder, the guide can call
 [`init_project`](REFERENCE.md#init_project) with `dir: "."` to create the
-starter and its first Git commit in place.
+starter and its first Git commit in place, deriving a default Go module path
+from the folder name unless you gave one, and puts open product questions on
+the Change Card rather than asking a checklist in chat.
 
 In Herdr, when the client forwards its terminal identity, Surla can adopt the
 guide's existing local pane and space if their project and team labels are
@@ -190,10 +194,12 @@ manager approves it."
      guide adds your flows to `design/story.go` in `.surla-draft`.
    - In a folder with no service, the guide first creates the starter
      project with [`init_project`](REFERENCE.md#init_project). It can pass
-     `dir: "."` to put the service, Story, test module in `eval/` and first
+     `dir: "."` (and omit `module_path`, so Surla derives one from the folder
+     name) to put the service, Story, test module in `eval/` and first
      commit into the existing folder while preserving supported agent
-     configuration. Omitting `dir` creates a child folder named for the
-     service and makes it the server's active workspace.
+     configuration. Omitting `dir` when `module_path` is given creates a child
+     folder named for the service and makes it the server's active workspace;
+     omitting both initializes `.` in place.
    - In a project made another way, the design can import the Story language
      only when the draft's `go.mod` requires its module. When it does not,
      the failed evaluation names the step: “`In the folder that holds that

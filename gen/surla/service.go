@@ -1397,11 +1397,14 @@ type HandOverModelSettingsPayload struct {
 // InitProjectPayload is the payload type of the surla service init_project
 // method.
 type InitProjectPayload struct {
-	// Go module path of the new service (for example example.com/shop).
-	ModulePath string
-	// Use a direct child name, or . to initialize the bound workspace itself while
-	// preserving allowed agent configuration. When omitted or empty, defaults to
-	// the service name derived from module_path.
+	// Optional Go module path of the new service (for example example.com/shop).
+	// Omit unless the user gave one: Surla derives example.com/<service> from the
+	// target folder name.
+	ModulePath *string
+	// Use . to initialize the bound workspace itself while preserving allowed
+	// agent configuration, or pass a direct child name. When omitted or empty,
+	// defaults to . when module_path is omitted, or to the service name derived
+	// from module_path when module_path is given.
 	Dir *string
 }
 
@@ -5092,11 +5095,14 @@ func validatejsonHandOverModelSettingsPayloadTransport(value *jsonHandOverModelS
 
 // jsonInitProjectPayloadTransport stores JSON fields until they have been validated.
 type jsonInitProjectPayloadTransport struct {
-	// Go module path of the new service (for example example.com/shop).
-	ModulePath *string `json:"module_path"`
-	// Use a direct child name, or . to initialize the bound workspace itself while
-	// preserving allowed agent configuration. When omitted or empty, defaults to
-	// the service name derived from module_path.
+	// Optional Go module path of the new service (for example example.com/shop).
+	// Omit unless the user gave one: Surla derives example.com/<service> from the
+	// target folder name.
+	ModulePath *string `json:"module_path,omitempty"`
+	// Use . to initialize the bound workspace itself while preserving allowed
+	// agent configuration, or pass a direct child name. When omitted or empty,
+	// defaults to . when module_path is omitted, or to the service name derived
+	// from module_path when module_path is given.
 	Dir *string `json:"dir,omitempty"`
 }
 
@@ -5104,9 +5110,6 @@ type jsonInitProjectPayloadTransport struct {
 func validatejsonInitProjectPayloadTransport(value *jsonInitProjectPayloadTransport) (err error) {
 	if value == nil {
 		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.ModulePath == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("module_path", "body"))
 	}
 	if value.ModulePath != nil {
 		if utf8.RuneCountInString(*value.ModulePath) < 3 {
@@ -9695,8 +9698,10 @@ func validateHandOverModelSettingsPayloadOriginal(value *HandOverModelSettingsPa
 
 // validateInitProjectPayloadOriginal checks the original typed value before JSON conversion.
 func validateInitProjectPayloadOriginal(value *InitProjectPayload) (err error) {
-	if utf8.RuneCountInString(value.ModulePath) < 3 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.module_path", value.ModulePath, utf8.RuneCountInString(value.ModulePath), 3, true))
+	if value.ModulePath != nil {
+		if utf8.RuneCountInString(*value.ModulePath) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("value.module_path", *value.ModulePath, utf8.RuneCountInString(*value.ModulePath), 3, true))
+		}
 	}
 	return err
 }
@@ -19217,7 +19222,7 @@ func EncodeInitProjectPayload(in *InitProjectPayload) ([]byte, error) {
 	var body *jsonInitProjectPayloadTransport
 	{
 		body = &jsonInitProjectPayloadTransport{
-			ModulePath: &in.ModulePath,
+			ModulePath: in.ModulePath,
 			Dir:        in.Dir,
 		}
 	}
@@ -19249,7 +19254,7 @@ func ValidateInitProjectPayloadValue(in *InitProjectPayload) error {
 	var body *jsonInitProjectPayloadTransport
 	{
 		body = &jsonInitProjectPayloadTransport{
-			ModulePath: &in.ModulePath,
+			ModulePath: in.ModulePath,
 			Dir:        in.Dir,
 		}
 	}
@@ -19285,7 +19290,7 @@ func DecodeInitProjectPayload(data []byte) (out *InitProjectPayload, err error) 
 	}
 	{
 		out = &InitProjectPayload{
-			ModulePath: *body.ModulePath,
+			ModulePath: body.ModulePath,
 			Dir:        body.Dir,
 		}
 	}
@@ -38162,14 +38167,14 @@ func validateInitProjectPayloadJSONValue(path string, value any, description str
 		case "dir":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.",
+				typed[key], "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.",
 			); err != nil {
 				return err
 			}
 		case "module_path":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Go module path of the new service (for example example.com/shop).",
+				typed[key], "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.",
 			); err != nil {
 				return err
 			}
@@ -45439,8 +45444,10 @@ func checkInitProjectPayloadInitProjectPayloadValue(in *InitProjectPayload, fiel
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
-		if !utf8.ValidString(string(in.ModulePath)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "module_path", false))
+		if in.ModulePath != nil {
+			if !utf8.ValidString(string(*in.ModulePath)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "module_path", false))
+			}
 		}
 		if in.Dir != nil {
 			if !utf8.ValidString(string(*in.Dir)) {

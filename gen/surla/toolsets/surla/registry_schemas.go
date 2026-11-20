@@ -19544,29 +19544,29 @@ func (registryDeclarations) field1121() *genregistry.ToolFieldMetadata {
 
 // schema1122 constructs one generated schema declaration.
 func (declarations registryDeclarations) schema1122() *genregistry.ToolSchema {
-	registryText1 := "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Returns the created commit ID in commit for start_live_target and verify_change."
+	registryText1 := "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). Returns the created commit ID in commit for start_live_target and verify_change."
 	return &genregistry.ToolSchema{
 		Name:                   "surla.init_project",
 		Description:            &registryText1,
-		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Go module path and optional directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.\",\"example\":\"shop\",\"type\":\"string\"},\"module_path\":{\"description\":\"Go module path of the new service (for example example.com/shop).\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"required\":[\"module_path\"],\"type\":\"object\"}"),
-		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Go module path and optional directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.\",\"example\":\"shop\",\"type\":\"string\"},\"module_path\":{\"description\":\"Go module path of the new service (for example example.com/shop).\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"required\":[\"module_path\"],\"type\":\"object\"}"),
+		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.\",\"example\":\".\",\"type\":\"string\"},\"module_path\":{\"description\":\"Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/\\u003cservice\\u003e from the target folder name.\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.\",\"example\":\".\",\"type\":\"string\"},\"module_path\":{\"description\":\"Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/\\u003cservice\\u003e from the target folder name.\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"type\":\"object\"}"),
 		ResultSchema:           []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Newly initialized Surla starter project directory, derived service identity, and initial Git commit.\",\"properties\":{\"commit\":{\"description\":\"Full commit ID of the initial starter commit created in the initialized repository (40 or 64 lowercase hex characters); start_live_target and verify_change take this commit ID.\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"dir\":{\"description\":\"Physical directory path of the newly created starter project (now the server's active workspace).\",\"type\":\"string\"},\"module_path\":{\"description\":\"Initialized Go module path.\",\"type\":\"string\"},\"service_name\":{\"description\":\"Derived service name.\",\"type\":\"string\"}},\"required\":[\"dir\",\"module_path\",\"service_name\",\"commit\"],\"type\":\"object\"}"),
 		ConsumerContract: &genregistry.ConsumerContract{
 			Kind:  "service",
 			Title: "Init Project",
 			Search: &genregistry.ToolSearchDocument{
-				Length: 45,
-				Terms:  map[string]int{"a": 1, "active": 1, "and": 2, "bound": 1, "change": 1, "commit": 3, "create": 1, "created": 1, "directory": 1, "for": 1, "git": 1, "id": 1, "in": 1, "init": 2, "initial": 1, "initialize": 1, "inside": 1, "its": 1, "live": 1, "new": 1, "project": 4, "returns": 1, "s": 1, "server": 1, "start": 1, "starter": 1, "surla": 2, "switch": 1, "target": 1, "that": 1, "the": 3, "to": 1, "verify": 1, "workspace": 2},
+				Length: 77,
+				Terms:  map[string]int{"a": 2, "active": 1, "an": 1, "and": 3, "bound": 1, "change": 1, "commit": 3, "create": 1, "created": 1, "derived": 1, "dir": 1, "directory": 1, "empty": 1, "folder": 2, "for": 1, "from": 1, "gave": 1, "git": 1, "id": 1, "in": 2, "init": 2, "initial": 1, "initialize": 2, "inside": 1, "its": 1, "live": 1, "module": 3, "name": 1, "new": 1, "omit": 1, "one": 1, "only": 1, "pass": 2, "path": 3, "place": 1, "project": 5, "returns": 1, "s": 1, "server": 1, "start": 1, "starter": 1, "surla": 2, "switch": 1, "target": 1, "that": 1, "the": 5, "to": 2, "user": 1, "verify": 1, "when": 1, "with": 1, "workspace": 2},
 			},
 			RequiresUI: false,
 			TextOnly: &genregistry.TextOnlyToolContract{
-				ExecutionSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Go module path and optional directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.\",\"example\":\"shop\",\"type\":\"string\"},\"module_path\":{\"description\":\"Go module path of the new service (for example example.com/shop).\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"required\":[\"module_path\"],\"type\":\"object\"}"),
-				Description:     "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Returns the created commit ID in commit for start_live_target and verify_change.",
+				ExecutionSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.\",\"example\":\".\",\"type\":\"string\"},\"module_path\":{\"description\":\"Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/\\u003cservice\\u003e from the target folder name.\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"type\":\"object\"}"),
+				Description:     "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). Returns the created commit ID in commit for start_live_target and verify_change.",
 				Search: &genregistry.ToolSearchDocument{
-					Length: 45,
-					Terms:  map[string]int{"a": 1, "active": 1, "and": 2, "bound": 1, "change": 1, "commit": 3, "create": 1, "created": 1, "directory": 1, "for": 1, "git": 1, "id": 1, "in": 1, "init": 2, "initial": 1, "initialize": 1, "inside": 1, "its": 1, "live": 1, "new": 1, "project": 4, "returns": 1, "s": 1, "server": 1, "start": 1, "starter": 1, "surla": 2, "switch": 1, "target": 1, "that": 1, "the": 3, "to": 1, "verify": 1, "workspace": 2},
+					Length: 77,
+					Terms:  map[string]int{"a": 2, "active": 1, "an": 1, "and": 3, "bound": 1, "change": 1, "commit": 3, "create": 1, "created": 1, "derived": 1, "dir": 1, "directory": 1, "empty": 1, "folder": 2, "for": 1, "from": 1, "gave": 1, "git": 1, "id": 1, "in": 2, "init": 2, "initial": 1, "initialize": 2, "inside": 1, "its": 1, "live": 1, "module": 3, "name": 1, "new": 1, "omit": 1, "one": 1, "only": 1, "pass": 2, "path": 3, "place": 1, "project": 5, "returns": 1, "s": 1, "server": 1, "start": 1, "starter": 1, "surla": 2, "switch": 1, "target": 1, "that": 1, "the": 5, "to": 2, "user": 1, "verify": 1, "when": 1, "with": 1, "workspace": 2},
 				},
-				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Go module path and optional directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.\",\"example\":\"shop\",\"type\":\"string\"},\"module_path\":{\"description\":\"Go module path of the new service (for example example.com/shop).\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"required\":[\"module_path\"],\"type\":\"object\"}"),
+				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.\",\"example\":\".\",\"type\":\"string\"},\"module_path\":{\"description\":\"Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/\\u003cservice\\u003e from the target folder name.\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"type\":\"object\"}"),
 				Payload:       declarations.metadata1133(),
 			},
 			Payload: declarations.metadata1123(),
@@ -19580,7 +19580,7 @@ func (declarations registryDeclarations) metadata1123() *genregistry.ToolTypeMet
 	registryText1 := "InitProjectPayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
-		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Go module path and optional directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.\",\"example\":\"shop\",\"type\":\"string\"},\"module_path\":{\"description\":\"Go module path of the new service (for example example.com/shop).\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"required\":[\"module_path\"],\"type\":\"object\"}"),
+		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.\",\"example\":\".\",\"type\":\"string\"},\"module_path\":{\"description\":\"Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/\\u003cservice\\u003e from the target folder name.\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
 			declarations.field1124(),
 			declarations.field1125(),
@@ -19592,7 +19592,7 @@ func (declarations registryDeclarations) metadata1123() *genregistry.ToolTypeMet
 // field1124 constructs one generated field declaration.
 func (registryDeclarations) field1124() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "Go module path and optional directory for initializing a new Surla starter project in the bound workspace."
+	registryText2 := "Optional Go module path and directory for initializing a new Surla starter project in the bound workspace."
 	return &genregistry.ToolFieldMetadata{
 		JSONType:    &registryText1,
 		Description: &registryText2,
@@ -19602,7 +19602,7 @@ func (registryDeclarations) field1124() *genregistry.ToolFieldMetadata {
 // field1125 constructs one generated field declaration.
 func (registryDeclarations) field1125() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "Go module path of the new service (for example example.com/shop)."
+	registryText2 := "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("module_path")},
@@ -19615,7 +19615,7 @@ func (registryDeclarations) field1125() *genregistry.ToolFieldMetadata {
 // field1126 constructs one generated field declaration.
 func (registryDeclarations) field1126() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path."
+	registryText2 := "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("dir")},
@@ -19708,7 +19708,7 @@ func (declarations registryDeclarations) metadata1133() *genregistry.ToolTypeMet
 	registryText1 := "InitProjectPayload"
 	return &genregistry.ToolTypeMetadata{
 		Name:                     &registryText1,
-		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Go module path and optional directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path.\",\"example\":\"shop\",\"type\":\"string\"},\"module_path\":{\"description\":\"Go module path of the new service (for example example.com/shop).\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"required\":[\"module_path\"],\"type\":\"object\"}"),
+		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.\",\"properties\":{\"dir\":{\"description\":\"Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.\",\"example\":\".\",\"type\":\"string\"},\"module_path\":{\"description\":\"Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/\\u003cservice\\u003e from the target folder name.\",\"example\":\"example.com/shop\",\"minLength\":3,\"type\":\"string\"}},\"type\":\"object\"}"),
 		Fields: []*genregistry.ToolFieldMetadata{
 			declarations.field1134(),
 			declarations.field1135(),
@@ -19720,7 +19720,7 @@ func (declarations registryDeclarations) metadata1133() *genregistry.ToolTypeMet
 // field1134 constructs one generated field declaration.
 func (registryDeclarations) field1134() *genregistry.ToolFieldMetadata {
 	registryText1 := "object"
-	registryText2 := "Go module path and optional directory for initializing a new Surla starter project in the bound workspace."
+	registryText2 := "Optional Go module path and directory for initializing a new Surla starter project in the bound workspace."
 	return &genregistry.ToolFieldMetadata{
 		JSONType:    &registryText1,
 		Description: &registryText2,
@@ -19730,7 +19730,7 @@ func (registryDeclarations) field1134() *genregistry.ToolFieldMetadata {
 // field1135 constructs one generated field declaration.
 func (registryDeclarations) field1135() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "Go module path of the new service (for example example.com/shop)."
+	registryText2 := "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("module_path")},
@@ -19743,7 +19743,7 @@ func (registryDeclarations) field1135() *genregistry.ToolFieldMetadata {
 // field1136 constructs one generated field declaration.
 func (registryDeclarations) field1136() *genregistry.ToolFieldMetadata {
 	registryText1 := "string"
-	registryText2 := "Use a direct child name, or . to initialize the bound workspace itself while preserving allowed agent configuration. When omitted or empty, defaults to the service name derived from module_path."
+	registryText2 := "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given."
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("dir")},

@@ -905,9 +905,6 @@ func ValidateGetVerificationResultTransport(body *GetVerificationResultTransport
 
 // ValidateInitProjectPayloadTransport runs the validations defined on InitProjectPayloadTransport.
 func ValidateInitProjectPayloadTransport(body *InitProjectPayloadTransport) (err error) {
-	if body.ModulePath == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("module_path", "body"))
-	}
 	if body.ModulePath != nil {
 		if utf8.RuneCountInString(*body.ModulePath) < 3 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.module_path", *body.ModulePath, utf8.RuneCountInString(*body.ModulePath), 3, true))
