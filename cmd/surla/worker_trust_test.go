@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,9 +24,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	genmcp "github.com/goadesign/surla/gen/mcp_surla"
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 )
+
+func testCatalogSurlaTools(t *testing.T) []string {
+	t.Helper()
+	res, err := genmcp.NewMCPAdapter(&gensurla.Endpoints{}, nil).ToolsList(
+		t.Context(), &genmcp.ToolsListPayload{},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	names := make([]string, 0, len(res.Tools))
+	for _, tool := range res.Tools {
+		if tool != nil && tool.Name != "" {
+			names = append(names, tool.Name)
+		}
+	}
+	return names
+}
 
 func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 	home := t.TempDir()
@@ -280,22 +297,41 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 
 func TestPrepareWorkerTrustRoleSpecificOperationsAndWildcardRules(t *testing.T) {
 	repo, buildDir, testsDir := initTrustGitRepoWithWorktrees(t)
+	catalog := testCatalogSurlaTools(t)
 
-	t.Run("denying open_views allows builder and test_writer while refusing guide", func(t *testing.T) {
+	t.Run("required role tools exist in generated MCP catalog and match role authority", func(t *testing.T) {
+		for _, tc := range []struct {
+			role string
+			kind controlplane.CallerKind
+		}{
+			{"guide", controlplane.CallerGuide},
+			{"builder", controlplane.CallerBuilder},
+			{"test_writer", controlplane.CallerTestWriter},
+		} {
+			tools := requiredSurlaTools(tc.role)
+			require.NotEmpty(t, tools)
+			for _, tool := range tools {
+				assert.Contains(t, catalog, tool)
+				assert.True(t, controlplane.OperationAllowed(tc.kind, tool), "%s must be allowed to call %s", tc.role, tool)
+			}
+		}
+	})
+
+	t.Run("denying open_views or optional start_live_target allows workers while open_views refuses guide", func(t *testing.T) {
 		home := t.TempDir()
 		writeTestFile(t, filepath.Join(home, ".claude", "settings.json"),
-			`{"permissions":{"deny":["mcp__surla__open_views"]}}`)
+			`{"permissions":{"deny":["mcp__surla__open_views","mcp__surla__start_live_target"]}}`)
 		writeTestFile(t, filepath.Join(home, ".cursor", "cli-config.json"),
-			`{"permissions":{"deny":["Mcp(surla:open_views)"]}}`)
+			`{"permissions":{"deny":["Mcp(surla:open_views)","Mcp(surla:start_live_target)"]}}`)
 		writeTestFile(t, filepath.Join(home, ".gemini", "settings.json"),
-			`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"excludeTools":["open_views"]}}}`)
+			`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"excludeTools":["open_views","start_live_target"]}}}`)
 
 		env := []string{"HOME=" + home}
 		for _, client := range []string{"claude", "cursor", "gemini"} {
 			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
 				{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: client},
 				{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: client},
-			}), "open_views restriction must not block worker roles on %s", client)
+			}), "open_views and start_live_target restrictions must not block ordinary worker roles on %s", client)
 
 			err := prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
 				{Role: "guide", ProjectDir: repo, Folder: repo, Client: client},
@@ -311,7 +347,7 @@ func TestPrepareWorkerTrustRoleSpecificOperationsAndWildcardRules(t *testing.T) 
 			`{"permissions":{"deny":["Mcp(*:get_builder_assignment)"]}}`)
 		writeTestFile(t, filepath.Join(home, ".claude", "settings.json"),
 			`{"permissions":{"ask":["mcp__*__get_builder_assignment"]}}`)
-		includedTools := slices.DeleteFunc(slices.Clone(allSurlaMCPToolNames()), func(name string) bool {
+		includedTools := slices.DeleteFunc(slices.Clone(catalog), func(name string) bool {
 			return name == "get_builder_assignment"
 		})
 		includedJSON, err := json.Marshal(includedTools)
@@ -332,6 +368,83 @@ func TestPrepareWorkerTrustRoleSpecificOperationsAndWildcardRules(t *testing.T) 
 				{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: client},
 			}), "builder-only restriction must allow test_writer on %s", client)
 		}
+	})
+
+	t.Run("gemini filter checks match Gemini CLI literal excludeTools and parenthesized includeTools", func(t *testing.T) {
+		// 1. excludeTools in Gemini CLI is exact literal matching, so "get_*" does not block get_builder_assignment.
+		globHome := t.TempDir()
+		writeTestFile(t, filepath.Join(globHome, ".gemini", "settings.json"),
+			`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"excludeTools":["get_*","mcp__surla__get_builder_assignment"]}}}`)
+		require.NoError(t, prepareWorkerTrust(t.Context(), []string{"HOME=" + globHome}, []project.WorkerTrustTarget{
+			{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "gemini"},
+		}))
+
+		// 2. Literal excludeTools entry blocks builder and preserves the exact entry in Detail.
+		exactExcludeHome := t.TempDir()
+		writeTestFile(t, filepath.Join(exactExcludeHome, ".gemini", "settings.json"),
+			`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"excludeTools":["get_builder_assignment"]}}}`)
+		err := prepareWorkerTrust(t.Context(), []string{"HOME=" + exactExcludeHome}, []project.WorkerTrustTarget{
+			{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "gemini"},
+		})
+		var policyErr *controlplane.TeamPolicyRefusal
+		require.ErrorAs(t, err, &policyErr)
+		assert.Equal(t, "get_builder_assignment", policyErr.Detail)
+
+		// 3. includeTools supports both exact names and parenthesized entries `tool(...)`.
+		parenIncludeHome := t.TempDir()
+		writeTestFile(t, filepath.Join(parenIncludeHome, ".gemini", "settings.json"),
+			`{"mcpServers":{"surla":{"command":"/bin/surla","args":["stdio"],"trust":true,"includeTools":["list_builder_assignments","get_builder_assignment(foo)","generate_code","check_project","verify_change"]}}}`)
+		require.NoError(t, prepareWorkerTrust(t.Context(), []string{"HOME=" + parenIncludeHome}, []project.WorkerTrustTarget{
+			{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "gemini"},
+		}))
+	})
+}
+
+func TestPrepareWorkerTrustCompletesIndependentPreflightChecks(t *testing.T) {
+	repo, buildDir, testsDir := initTrustGitRepoWithWorktrees(t)
+
+	t.Run("explicit refusal on second client wins over malformed settings on first client", func(t *testing.T) {
+		home := t.TempDir()
+		badClaude := "{malformed-json"
+		claudeSettings := filepath.Join(home, ".claude", "settings.json")
+		writeTestFile(t, claudeSettings, badClaude)
+		codexConfig := filepath.Join(home, ".codex", "config.toml")
+		initialCodex := "[mcp_servers.surla]\nenabled = false\n"
+		writeTestFile(t, codexConfig, initialCodex)
+
+		err := prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{
+			{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: "claude"},
+			{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "codex"},
+		})
+		var policyErr *controlplane.TeamPolicyRefusal
+		require.ErrorAs(t, err, &policyErr)
+		assert.Equal(t, controlplane.PolicyCodexServerDisabled, policyErr.Kind)
+		assert.Equal(t, "codex", policyErr.Client)
+		assert.Equal(t, "surla", policyErr.Server)
+
+		gotClaude, readErr := os.ReadFile(claudeSettings)
+		require.NoError(t, readErr)
+		assert.Equal(t, badClaude, string(gotClaude))
+		gotCodex, readErr := os.ReadFile(codexConfig)
+		require.NoError(t, readErr)
+		assert.Equal(t, initialCodex, string(gotCodex))
+	})
+
+	t.Run("malformed client settings alone produces actionable PolicyConfigUnusable refusal", func(t *testing.T) {
+		home := t.TempDir()
+		writeTestFile(t, filepath.Join(home, ".claude", "settings.json"), "{malformed-json")
+
+		err := prepareWorkerTrust(t.Context(), []string{"HOME=" + home}, []project.WorkerTrustTarget{
+			{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "claude"},
+		})
+		var policyErr *controlplane.TeamPolicyRefusal
+		require.ErrorAs(t, err, &policyErr)
+		assert.Equal(t, controlplane.PolicyConfigUnusable, policyErr.Kind)
+		assert.Equal(t, "claude", policyErr.Client)
+		assert.Equal(t, "settings.json", policyErr.Detail)
+		step := policyErr.Step("then choose Start workers again.")
+		assert.Contains(t, step, "Claude Code configuration file settings.json could not be read or safely used.")
+		assert.NotContains(t, step, home)
 	})
 }
 
@@ -505,9 +618,10 @@ func TestPrepareWorkerTrustRefusesWorktreeDestinationsAndSymlinks(t *testing.T) 
 				err := prepareWorkerTrust(t.Context(), tc.env, []project.WorkerTrustTarget{
 					{Role: "builder", ProjectDir: repo, Folder: worktree, Client: tc.client},
 				})
-				require.Error(t, err, "expected refusal for %s with %v", tc.client, tc.env)
 				var policyErr *controlplane.TeamPolicyRefusal
-				assert.False(t, errors.As(err, &policyErr), "destination refusal is not a user policy error")
+				require.ErrorAs(t, err, &policyErr, "expected actionable destination refusal for %s with %v", tc.client, tc.env)
+				assert.Equal(t, controlplane.PolicyConfigUnusable, policyErr.Kind)
+				assert.NotContains(t, policyErr.Step("then retry."), worktree, "refusal step must omit raw filesystem paths")
 			}
 
 			// Symlinks inside a safe home resolving into the worktree must also be refused before writing.
@@ -523,7 +637,9 @@ func TestPrepareWorkerTrustRefusesWorktreeDestinationsAndSymlinks(t *testing.T) 
 				err := prepareWorkerTrust(t.Context(), []string{"HOME=" + symlinkHome}, []project.WorkerTrustTarget{
 					{Role: "builder", ProjectDir: repo, Folder: worktree, Client: client},
 				})
-				require.Error(t, err, "expected symlink refusal for %s", client)
+				var policyErr *controlplane.TeamPolicyRefusal
+				require.ErrorAs(t, err, &policyErr, "expected symlink refusal for %s", client)
+				assert.Equal(t, controlplane.PolicyConfigUnusable, policyErr.Kind)
 			}
 
 			for _, dir := range []string{repo, buildDir, testsDir} {
@@ -549,7 +665,9 @@ func TestPrepareWorkerTrustRefusesMalformedUserConfigWithoutOverwriting(t *testi
 		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "codex"},
 		{Role: "builder", ProjectDir: folder, Folder: folder, Client: "claude"},
 	})
-	require.Error(t, err)
+	var policyErr *controlplane.TeamPolicyRefusal
+	require.ErrorAs(t, err, &policyErr)
+	assert.Equal(t, controlplane.PolicyConfigUnusable, policyErr.Kind)
 
 	gotToml, err := os.ReadFile(codexPath)
 	require.NoError(t, err)

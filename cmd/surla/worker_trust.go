@@ -15,14 +15,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 
-	genmcp "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/internal/testwriter"
@@ -51,39 +48,30 @@ type (
 		// requiredTools maps each server name to the exact MCP tool names the non-Yolo roles need.
 		requiredTools map[string][]string
 	}
+
+	// preflightAccumulator collects independent client preflight outcomes so an
+	// explicit user policy refusal always takes precedence over a generic config
+	// parse or destination failure on an earlier client.
+	preflightAccumulator struct {
+		// explicit holds the first explicit policy refusal across all checked clients.
+		explicit *controlplane.TeamPolicyRefusal
+		// unusable holds the first malformed, unreadable, or worktree-aliased config failure.
+		unusable *controlplane.TeamPolicyRefusal
+	}
 )
 
 // workerTrustLockTimeout bounds waiting on a contended client configuration
 // lock so a stalled writer cannot hold the team start mutex for its full budget.
 const workerTrustLockTimeout = 5 * time.Second
 
-var (
-	// chorusMCPToolNames lists the Chorus MCP tools workers use in Herdr mode.
-	chorusMCPToolNames = []string{"join", "read", "send", "who", "leave"}
+// chorusMCPToolNames lists the Chorus MCP tools required for Herdr coordination.
+var chorusMCPToolNames = []string{"join", "read", "send", "who"}
 
-	// allSurlaMCPToolNames caches the generated Surla MCP tool catalog once.
-	allSurlaMCPToolNames = sync.OnceValue(func() []string {
-		res, err := genmcp.NewMCPAdapter(&gensurla.Endpoints{}, nil).ToolsList(
-			context.Background(), &genmcp.ToolsListPayload{},
-		)
-		if err != nil || res == nil {
-			return nil
-		}
-		names := make([]string, 0, len(res.Tools))
-		for _, tool := range res.Tools {
-			if tool != nil && tool.Name != "" {
-				names = append(names, tool.Name)
-			}
-		}
-		return names
-	})
-)
-
-// prepareWorkerTrust checks read-only client permission policies and writes
-// only missing user-scoped folder-trust entries resolved from env (falling back
-// to os.UserHomeDir when HOME is absent in env). It honors ctx (bounded to
-// workerTrustLockTimeout) and never writes settings.json, cli-config.json, MCP
-// server entries, or any path inside project or worktree folders.
+// prepareWorkerTrust checks read-only client permission policies across all
+// selected clients and writes only missing user-scoped folder-trust entries
+// resolved from env (falling back to os.UserHomeDir when HOME is absent). It
+// honors ctx (bounded to workerTrustLockTimeout) and never writes settings.json,
+// cli-config.json, MCP server entries, or paths inside project or worktree folders.
 func prepareWorkerTrust(ctx context.Context, env []string, targets []project.WorkerTrustTarget) error {
 	if len(targets) == 0 {
 		return nil
@@ -108,53 +96,99 @@ func prepareWorkerTrust(ctx context.Context, env []string, targets []project.Wor
 	protectedRoots := collectProtectedRoots(targets)
 	plans, clientOrder := buildClientTrustPlans(targets)
 
-	// Validate destinations and check explicit client restrictions before any write.
+	// Complete every independent client policy and destination check before any write.
+	var acc preflightAccumulator
 	for _, client := range clientOrder {
 		if err := lockCtx.Err(); err != nil {
 			return err
 		}
 		plan := plans[client]
-		if err := validateClientConfigPaths(client, home, getenv, protectedRoots, plan.folders); err != nil {
-			return err
-		}
-		if !plan.checkPolicy {
+		if !plan.checkPolicy && len(plan.folders) == 0 {
 			continue
 		}
-		if err := checkClientWorkerPolicy(client, home, getenv, plan); err != nil {
-			return err
-		}
+		preflightClientWorkerTrust(client, home, getenv, protectedRoots, plan, &acc)
+	}
+	if acc.explicit != nil {
+		return acc.explicit
+	}
+	if acc.unusable != nil {
+		return acc.unusable
 	}
 
-	var errs error
 	for _, client := range clientOrder {
 		plan := plans[client]
 		if len(plan.folders) == 0 {
 			continue
 		}
+		var (
+			writeErr   error
+			configBase string
+		)
 		switch client {
 		case "codex":
 			codexDir := cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
-			errs = errors.Join(errs, mergeCodexFolderTrust(
+			configBase = "config.toml"
+			writeErr = mergeCodexFolderTrust(
 				lockCtx, lockDir, filepath.Join(codexDir, "config.toml"), protectedRoots, plan.folders,
-			))
+			)
 		case "claude":
 			claudeConfig := filepath.Join(home, ".claude.json")
 			if dir := getenv("CLAUDE_CONFIG_DIR"); dir != "" {
 				claudeConfig = filepath.Join(dir, ".claude.json")
 			}
-			errs = errors.Join(errs, mergeClaudeProjectTrust(lockCtx, lockDir, claudeConfig, protectedRoots, plan.folders))
+			configBase = ".claude.json"
+			writeErr = mergeClaudeProjectTrust(lockCtx, lockDir, claudeConfig, protectedRoots, plan.folders)
 		case "gemini":
 			trustedPath := geminiTrustedFoldersPath(home, getenv)
-			errs = errors.Join(errs, mergeGeminiTrustedFolders(lockCtx, lockDir, trustedPath, protectedRoots, plan.folders))
+			configBase = filepath.Base(trustedPath)
+			writeErr = mergeGeminiTrustedFolders(lockCtx, lockDir, trustedPath, protectedRoots, plan.folders)
 		case "cursor":
-			errs = errors.Join(errs, mergeCursorTrustedWorkspaces(lockCtx, home, protectedRoots, plan.folders))
+			configBase = ".workspace-trusted"
+			writeErr = mergeCursorTrustedWorkspaces(lockCtx, home, protectedRoots, plan.folders)
 		}
-		var policyErr *controlplane.TeamPolicyRefusal
-		if errors.As(errs, &policyErr) {
-			return policyErr
+		if writeErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			var policyErr *controlplane.TeamPolicyRefusal
+			if errors.As(writeErr, &policyErr) {
+				return policyErr
+			}
+			return &controlplane.TeamPolicyRefusal{
+				Kind:   controlplane.PolicyConfigUnusable,
+				Client: client,
+				Detail: configBase,
+			}
 		}
 	}
-	return errs
+	return nil
+}
+
+// record classifies err into explicit policy refusal vs unusable config failure.
+func (a *preflightAccumulator) record(client, configFile string, err error) {
+	if err == nil {
+		return
+	}
+	var policyErr *controlplane.TeamPolicyRefusal
+	if errors.As(err, &policyErr) {
+		if policyErr.Kind == controlplane.PolicyConfigUnusable {
+			if a.unusable == nil {
+				a.unusable = policyErr
+			}
+			return
+		}
+		if a.explicit == nil {
+			a.explicit = policyErr
+		}
+		return
+	}
+	if a.unusable == nil {
+		a.unusable = &controlplane.TeamPolicyRefusal{
+			Kind:   controlplane.PolicyConfigUnusable,
+			Client: client,
+			Detail: configFile,
+		}
+	}
 }
 
 // bindPrepareWorkerTrust adapts prepareWorkerTrust to project.TeamDependencies.
@@ -252,39 +286,67 @@ func resolveTargetRole(target project.WorkerTrustTarget) string {
 	return "builder"
 }
 
-// requiredSurlaTools returns the Surla MCP tools allowed for role.
+// requiredSurlaTools returns the minimal Surla MCP operations that role
+// necessarily invokes to execute its assigned startup and workflow. Optional
+// operations such as start_live_target do not block ordinary worker admission.
 func requiredSurlaTools(role string) []string {
-	var kind controlplane.CallerKind
 	switch role {
 	case "guide":
-		kind = controlplane.CallerGuide
+		return []string{
+			"open_views",
+			"list_changes",
+			"get_change",
+			"update_draft",
+			"refresh_story",
+			"get_story_refresh",
+			"propose_change",
+			"revise_change",
+		}
 	case "test_writer":
-		kind = controlplane.CallerTestWriter
+		return []string{
+			"list_test_writer_assignments",
+			"get_test_writer_assignment",
+			"report_tests_finished",
+		}
 	default:
-		kind = controlplane.CallerBuilder
-	}
-	all := allSurlaMCPToolNames()
-	allowed := make([]string, 0, len(all))
-	for _, name := range all {
-		if controlplane.OperationAllowed(kind, name) {
-			allowed = append(allowed, name)
+		return []string{
+			"list_builder_assignments",
+			"get_builder_assignment",
+			"generate_code",
+			"check_project",
+			"verify_change",
 		}
 	}
-	return allowed
 }
 
-// validateClientConfigPaths verifies that every configuration file for client
-// resolves outside project and worker working trees before any read or write.
-func validateClientConfigPaths(
+// preflightClientWorkerTrust validates destinations and checks read-only client
+// policies and folder-trust target syntax for client without modifying any file.
+func preflightClientWorkerTrust(
 	client, home string,
 	getenv func(string) string,
-	protectedRoots, folders []string,
-) error {
-	var paths []string
+	protectedRoots []string,
+	plan clientTrustPlan,
+	acc *preflightAccumulator,
+) {
+	checkPath := func(path, label string, fn func(string) error) {
+		if _, err := validateConfigDestination(path, protectedRoots); err != nil {
+			acc.record(client, label, err)
+			return
+		}
+		if fn != nil {
+			acc.record(client, label, fn(path))
+		}
+	}
+
 	switch client {
 	case "codex":
-		codexDir := cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
-		paths = append(paths, filepath.Join(codexDir, "config.toml"))
+		codexPath := filepath.Join(cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex")), "config.toml")
+		checkPath(codexPath, "config.toml", func(p string) error {
+			if !plan.checkPolicy {
+				return nil
+			}
+			return checkCodexWorkerPolicy(p, plan.requiredServers, plan.folders)
+		})
 	case "claude":
 		claudeDir := filepath.Join(home, ".claude")
 		claudeConfig := filepath.Join(home, ".claude.json")
@@ -292,52 +354,62 @@ func validateClientConfigPaths(
 			claudeDir = dir
 			claudeConfig = filepath.Join(dir, ".claude.json")
 		}
-		paths = append(paths, claudeConfig, filepath.Join(claudeDir, "settings.json"))
+		checkPath(filepath.Join(claudeDir, "settings.json"), "settings.json", func(p string) error {
+			if !plan.checkPolicy {
+				return nil
+			}
+			return checkPermissionsFilePolicy("claude", p, plan)
+		})
+		checkPath(claudeConfig, ".claude.json", func(p string) error {
+			if len(plan.folders) == 0 {
+				return nil
+			}
+			return checkClaudeProjectTrustReadable(p)
+		})
 	case "gemini":
 		geminiDir := geminiConfigDir(home, getenv("GEMINI_CLI_HOME"))
-		paths = append(paths, filepath.Join(geminiDir, "settings.json"), geminiTrustedFoldersPath(home, getenv))
+		checkPath(filepath.Join(geminiDir, "settings.json"), "settings.json", func(p string) error {
+			if !plan.checkPolicy {
+				return nil
+			}
+			return checkGeminiSettingsPolicy(p, plan)
+		})
+		trustedPath := geminiTrustedFoldersPath(home, getenv)
+		checkPath(trustedPath, filepath.Base(trustedPath), func(p string) error {
+			if !plan.checkPolicy {
+				return nil
+			}
+			return checkGeminiTrustedFoldersPolicy(p, plan.folders)
+		})
 	case "cursor":
-		paths = append(paths, filepath.Join(home, ".cursor", "cli-config.json"))
-		for _, folder := range folders {
+		checkPath(filepath.Join(home, ".cursor", "cli-config.json"), "cli-config.json", func(p string) error {
+			if !plan.checkPolicy {
+				return nil
+			}
+			return checkPermissionsFilePolicy("cursor", p, plan)
+		})
+		for _, folder := range plan.folders {
 			if slug := cursorWorkspaceSlug(folder); slug != "" {
-				paths = append(paths, filepath.Join(home, ".cursor", "projects", slug, ".workspace-trusted"))
+				marker := filepath.Join(home, ".cursor", "projects", slug, ".workspace-trusted")
+				checkPath(marker, ".workspace-trusted", nil)
 			}
 		}
 	}
-	for _, path := range paths {
-		if _, err := validateConfigDestination(path, protectedRoots); err != nil {
-			return err
+}
+
+// checkClaudeProjectTrustReadable verifies that Claude's .claude.json is absent
+// or decodes cleanly with an object `projects` map before any client write runs.
+func checkClaudeProjectTrustReadable(path string) error {
+	root, err := readConfigJSONObject(path)
+	if err != nil {
+		return err
+	}
+	if existing, present := root["projects"]; present {
+		if projects, ok := existing.(map[string]any); !ok || projects == nil {
+			return fmt.Errorf("%s: projects must be a JSON object", path)
 		}
 	}
 	return nil
-}
-
-// checkClientWorkerPolicy performs read-only checks on explicit user settings
-// that block non-Yolo workers from calling their role's required Surla or Chorus
-// MCP tools or trusting the project folder.
-func checkClientWorkerPolicy(
-	client, home string,
-	getenv func(string) string,
-	plan clientTrustPlan,
-) error {
-	switch client {
-	case "codex":
-		codexDir := cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex"))
-		return checkCodexWorkerPolicy(filepath.Join(codexDir, "config.toml"), plan.requiredServers, plan.folders)
-	case "claude":
-		claudeDir := cmp.Or(getenv("CLAUDE_CONFIG_DIR"), filepath.Join(home, ".claude"))
-		return checkPermissionsFilePolicy("claude", filepath.Join(claudeDir, "settings.json"), plan)
-	case "gemini":
-		geminiDir := geminiConfigDir(home, getenv("GEMINI_CLI_HOME"))
-		if err := checkGeminiSettingsPolicy(filepath.Join(geminiDir, "settings.json"), plan); err != nil {
-			return err
-		}
-		return checkGeminiTrustedFoldersPolicy(geminiTrustedFoldersPath(home, getenv), plan.folders)
-	case "cursor":
-		return checkPermissionsFilePolicy("cursor", filepath.Join(home, ".cursor", "cli-config.json"), plan)
-	default:
-		return nil
-	}
 }
 
 // checkCodexWorkerPolicy inspects Codex config.toml without modifying it.
@@ -376,8 +448,35 @@ func checkCodexWorkerPolicy(path string, requiredServers, folders []string) erro
 			}
 		}
 	}
-	if projects, ok := decoded["projects"].(map[string]any); ok {
-		return checkCodexProjectsMapPolicy(projects, folders)
+	projects := map[string]any{}
+	if existing, present := decoded["projects"]; present {
+		var ok bool
+		if projects, ok = existing.(map[string]any); !ok {
+			return fmt.Errorf("%s: projects is not a table", path)
+		}
+		if err := checkCodexProjectsMapPolicy(projects, folders); err != nil {
+			return err
+		}
+	}
+	if len(folders) > 0 {
+		projLocs, projectsInline, err := locateCodexProjectEntries(content)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		for _, folder := range folders {
+			if existing, present := projects[folder]; present {
+				entry, ok := existing.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%s: projects.%q is not a table", path, folder)
+				}
+				if _, hasLevel := entry["trust_level"]; hasLevel {
+					continue
+				}
+			}
+			if projectsInline || projLocs[folder].uneditable {
+				return fmt.Errorf("%s: projects or projects.%q cannot be edited in place", path, folder)
+			}
+		}
 	}
 	return nil
 }
@@ -461,118 +560,6 @@ func checkPermissionsFilePolicy(client, path string, plan clientTrustPlan) error
 	return nil
 }
 
-// permissionRuleBlocksTool reports whether rule blocks calling tool on MCP
-// server under client ("claude" or "cursor") using each client's wildcard syntax.
-func permissionRuleBlocksTool(client, rule, server, tool string) bool {
-	trimmed := strings.TrimSpace(rule)
-	if trimmed == "" {
-		return false
-	}
-	if trimmed == "*" {
-		return true
-	}
-	switch client {
-	case "claude":
-		return trimmed == "mcp__"+server || globMatch(trimmed, "mcp__"+server+"__"+tool)
-	case "cursor":
-		if !strings.HasPrefix(trimmed, "Mcp(") || !strings.HasSuffix(trimmed, ")") {
-			return false
-		}
-		inner := trimmed[4 : len(trimmed)-1]
-		if srvPat, toolPat, hasColon := strings.Cut(inner, ":"); hasColon {
-			return globMatch(strings.TrimSpace(srvPat), server) && globMatch(strings.TrimSpace(toolPat), tool)
-		}
-		return globMatch(strings.TrimSpace(inner), server)
-	default:
-		return false
-	}
-}
-
-// permissionListsBlockCandidateRule reports whether permissions.deny or
-// permissions.ask restricts any tool of candidateRule's server so `surla setup`
-// never widens permissions over an explicit user restriction.
-func permissionListsBlockCandidateRule(perms map[string]any, candidateRule string) bool {
-	client, server := "", ""
-	switch {
-	case strings.HasPrefix(candidateRule, "mcp__") && strings.HasSuffix(candidateRule, "__*"):
-		client = "claude"
-		server = strings.TrimSuffix(strings.TrimPrefix(candidateRule, "mcp__"), "__*")
-	case strings.HasPrefix(candidateRule, "Mcp(") && strings.HasSuffix(candidateRule, ":*)"):
-		client = "cursor"
-		server = strings.TrimSuffix(strings.TrimPrefix(candidateRule, "Mcp("), ":*)")
-	}
-	var tools []string
-	if server == surlaServerName {
-		tools = append(slices.Clone(allSurlaMCPToolNames()), "__any_tool__")
-	} else if server != "" {
-		tools = append(slices.Clone(chorusMCPToolNames), "__any_tool__")
-	}
-	for _, listName := range []string{"deny", "ask"} {
-		items, ok := perms[listName].([]any)
-		if !ok {
-			continue
-		}
-		for _, item := range items {
-			rule, ok := item.(string)
-			if !ok {
-				continue
-			}
-			trimmed := strings.TrimSpace(rule)
-			if trimmed == candidateRule {
-				return true
-			}
-			if client == "claude" && server != "" &&
-				(strings.HasPrefix(trimmed, "mcp__"+server+"__") || trimmed == "mcp__"+server) {
-				return true
-			}
-			if client == "cursor" && strings.HasPrefix(trimmed, "Mcp(") && strings.HasSuffix(trimmed, ")") {
-				inner := trimmed[4 : len(trimmed)-1]
-				srvPat, _, _ := strings.Cut(inner, ":")
-				if globMatch(strings.TrimSpace(srvPat), server) {
-					return true
-				}
-			}
-			for _, tool := range tools {
-				if permissionRuleBlocksTool(client, trimmed, server, tool) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// globMatch reports whether pattern (where '*' matches zero or more bytes) matches value.
-func globMatch(pattern, value string) bool {
-	px, vx := 0, 0
-	nextPx, nextVx := 0, 0
-	for px < len(pattern) || vx < len(value) {
-		if px < len(pattern) {
-			switch pattern[px] {
-			case '*':
-				nextPx = px
-				nextVx = vx + 1
-				px++
-				continue
-			default:
-				if vx < len(value) && pattern[px] == value[vx] {
-					px++
-					vx++
-					continue
-				}
-			}
-		}
-		if nextVx > 0 && nextVx <= len(value) {
-			px = nextPx + 1
-			vx = nextVx
-			nextVx++
-			continue
-		}
-		return false
-	}
-	return true
-}
-
 // checkGeminiSettingsPolicy checks whether Gemini settings.json marks a required
 // MCP server as untrusted (`"trust": false`) or filters out a required role tool
 // via `excludeTools` or `includeTools`.
@@ -599,13 +586,13 @@ func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 		}
 		if excluded, ok := entry["excludeTools"].([]any); ok {
 			for _, tool := range plan.requiredTools[name] {
-				if geminiToolListMatches(excluded, name, tool) {
+				if matched, blocked := geminiExcludeMatches(excluded, tool); blocked {
 					return &controlplane.TeamPolicyRefusal{
 						Kind:   controlplane.PolicyGeminiToolFiltered,
 						Client: "gemini",
 						Server: name,
 						List:   "excludeTools",
-						Detail: tool,
+						Detail: matched,
 					}
 				}
 			}
@@ -613,7 +600,7 @@ func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 		if rawInclude, hasInclude := entry["includeTools"]; hasInclude {
 			if included, ok := rawInclude.([]any); ok {
 				for _, tool := range plan.requiredTools[name] {
-					if !geminiToolListMatches(included, name, tool) {
+					if !geminiIncludeMatches(included, tool) {
 						return &controlplane.TeamPolicyRefusal{
 							Kind:   controlplane.PolicyGeminiToolFiltered,
 							Client: "gemini",
@@ -627,26 +614,6 @@ func checkGeminiSettingsPolicy(path string, plan clientTrustPlan) error {
 		}
 	}
 	return nil
-}
-
-// geminiToolListMatches reports whether any string pattern in patterns matches tool on server.
-func geminiToolListMatches(patterns []any, server, tool string) bool {
-	for _, item := range patterns {
-		pat, ok := item.(string)
-		if !ok {
-			continue
-		}
-		trimmed := strings.TrimSpace(pat)
-		if trimmed == "" {
-			continue
-		}
-		if globMatch(trimmed, tool) ||
-			globMatch(trimmed, "mcp_"+server+"_"+tool) ||
-			globMatch(trimmed, "mcp__"+server+"__"+tool) {
-			return true
-		}
-	}
-	return false
 }
 
 // checkGeminiTrustedFoldersPolicy checks whether Gemini trustedFolders.json

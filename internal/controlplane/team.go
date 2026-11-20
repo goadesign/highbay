@@ -141,6 +141,8 @@ const (
 	PolicyGeminiToolFiltered PolicyRefusalKind = "gemini_tool_filtered"
 	// PolicyGeminiFolderUntrusted reports `DO_NOT_TRUST` in Gemini `trustedFolders.json`.
 	PolicyGeminiFolderUntrusted PolicyRefusalKind = "gemini_folder_untrusted"
+	// PolicyConfigUnusable reports a malformed, unreadable, or worktree-aliased client configuration file.
+	PolicyConfigUnusable PolicyRefusalKind = "config_unusable"
 )
 
 // HasWork reports whether the named worker role ("builder" or "test_writer")
@@ -241,10 +243,42 @@ func (e *TeamPolicyRefusal) Step(retry string) string {
 			"Gemini CLI marks this project folder (or an ancestor folder) as DO_NOT_TRUST in trustedFolders.json. Set it to \"TRUST_FOLDER\" in your Gemini trustedFolders.json, %s",
 			retry,
 		)
+	case PolicyConfigUnusable:
+		clientName := policyClientDisplayName(e.Client)
+		switch {
+		case clientName != "" && detail != "":
+			step = fmt.Sprintf(
+				"%s configuration file %s could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, %s",
+				clientName, detail, retry,
+			)
+		case clientName != "":
+			step = fmt.Sprintf(
+				"%s configuration could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, %s",
+				clientName, retry,
+			)
+		default:
+			step = "A coding-agent configuration file could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, " + retry
+		}
 	default:
 		step = "A coding-agent permission setting prevented starting the workers; update that client setting, " + retry
 	}
 	return boundedPolicyText(step, 512)
+}
+
+// policyClientDisplayName maps a client key to its user-facing product name.
+func policyClientDisplayName(client string) string {
+	switch client {
+	case "claude":
+		return "Claude Code"
+	case "codex":
+		return "Codex"
+	case "gemini":
+		return "Gemini CLI"
+	case "cursor":
+		return "Cursor"
+	default:
+		return ""
+	}
 }
 
 // boundedPolicyText clamps s to at most maxRunes Unicode code points.

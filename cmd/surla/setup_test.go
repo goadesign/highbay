@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goadesign/surla/internal/project"
 	"github.com/goadesign/surla/skills"
 )
 
@@ -608,5 +609,65 @@ func TestSetupPermissionsAllowJSON(t *testing.T) {
 		perms := readTestJSON(t, path)["permissions"].(map[string]any)
 		assert.Equal(t, []any{"Mcp(surla:*)"}, perms["allow"])
 		assert.Equal(t, []any{"Shell(rm)", "Mcp(chorus:*)"}, perms["deny"])
+	})
+
+	t.Run("tool-specific denials preserve deny scope while setupGlobal approves remaining worker tools", func(t *testing.T) {
+		home := t.TempDir()
+		claudeSettings := filepath.Join(home, ".claude", "settings.json")
+		cursorConfig := filepath.Join(home, ".cursor", "cli-config.json")
+		writeTestFile(t, claudeSettings,
+			`{"permissions":{"deny":["mcp__surla__open_views","mcp__surla__start_live_target"]}}`)
+		writeTestFile(t, cursorConfig,
+			`{"version":1,"permissions":{"deny":["Mcp(surla:open_views)","Mcp(surla:start_live_target)"]}}`)
+
+		var out bytes.Buffer
+		require.NoError(t, setupGlobal(testSetupEnvironment(home), &out))
+
+		claudePerms := readTestJSON(t, claudeSettings)["permissions"].(map[string]any)
+		assert.Equal(t, []any{"mcp__surla__*", "mcp__chorus__*"}, claudePerms["allow"])
+		assert.Equal(t, []any{"mcp__surla__open_views", "mcp__surla__start_live_target"}, claudePerms["deny"])
+
+		cursorPerms := readTestJSON(t, cursorConfig)["permissions"].(map[string]any)
+		assert.Equal(t, []any{"Mcp(surla:*)", "Mcp(chorus:*)"}, cursorPerms["allow"])
+		assert.Equal(t, []any{"Mcp(surla:open_views)", "Mcp(surla:start_live_target)"}, cursorPerms["deny"])
+
+		// Effective client precedence (deny > allow): denied tools stay blocked while required worker tools are approved.
+		effectiveAllowed := func(client string, perms map[string]any, server, tool string) bool {
+			for _, item := range perms["deny"].([]any) {
+				if permissionRuleBlocksTool(client, item.(string), server, tool) {
+					return false
+				}
+			}
+			for _, item := range perms["allow"].([]any) {
+				if permissionRuleBlocksTool(client, item.(string), server, tool) {
+					return true
+				}
+			}
+			return false
+		}
+		for _, tc := range []struct {
+			client string
+			perms  map[string]any
+		}{
+			{"claude", claudePerms},
+			{"cursor", cursorPerms},
+		} {
+			assert.False(t, effectiveAllowed(tc.client, tc.perms, "surla", "open_views"))
+			assert.False(t, effectiveAllowed(tc.client, tc.perms, "surla", "start_live_target"))
+			for _, role := range []string{"builder", "test_writer"} {
+				for _, tool := range requiredSurlaTools(role) {
+					assert.True(t, effectiveAllowed(tc.client, tc.perms, "surla", tool), "%s must approve %s for %s", tc.client, tool, role)
+				}
+			}
+		}
+
+		repo, buildDir, testsDir := initTrustGitRepoWithWorktrees(t)
+		env := []string{"HOME=" + home}
+		for _, client := range []string{"claude", "cursor"} {
+			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{
+				{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: client, RequireChorus: true},
+				{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: client, RequireChorus: true},
+			}))
+		}
 	})
 }

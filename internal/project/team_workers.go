@@ -560,10 +560,9 @@ func activeTeamState(state string) bool {
 
 // prepareWorkerTrust checks explicit client restrictions and pre-populates
 // missing user-scoped folder trust for the project root and each role folder
-// about to launch. An explicit policy restriction returns a typed
-// *controlplane.TeamPolicyRefusal before spaces, rosters or worker processes
-// are created; a malformed custom user configuration file records a span event
-// without blocking startup.
+// about to launch. Any explicit policy restriction or unusable client
+// configuration returns a typed refusal before spaces, rosters or worker
+// processes are created.
 func (s *Server) prepareWorkerTrust(
 	ctx context.Context,
 	record Record,
@@ -601,7 +600,11 @@ func (s *Server) prepareWorkerTrust(
 		if errors.As(err, &policyErr) {
 			return policyErr
 		}
-		trace.SpanFromContext(ctx).AddEvent("team.worker_trust_skipped")
+		if ctx.Err() != nil || s.team.closed {
+			return userTeamError(teamUnavailable(ctx, "worker_trust", "stopping"))
+		}
+		trace.SpanFromContext(ctx).AddEvent("team.worker_trust_failed")
+		return &controlplane.TeamPolicyRefusal{Kind: controlplane.PolicyConfigUnusable}
 	}
 	return nil
 }

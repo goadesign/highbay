@@ -65,7 +65,7 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 	var adopted bool
 	if s.team.dependencies.HerdrAvailable {
 		var pane guidePane
-		if p.HcTerminalID != nil && *p.HcTerminalID != "" {
+		if p.HcTerminalID != nil && *p.HcTerminalID != "" && len(p.AncestorPids) > 0 {
 			pane = s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client, p.AncestorPids)
 		}
 		if pane.terminal == "" && len(p.AncestorPids) > 0 {
@@ -115,7 +115,7 @@ func (s *Server) findGuidePane(
 		for _, tab := range space.Tabs {
 			for _, pane := range tab.Terminals {
 				if pane.Terminal == address && pane.Pane != "" && safeSpaceID(tab.ID) {
-					return s.validateGuideTab(ctx, record, space, tab, handle, address, client, ancestorPids, false)
+					return s.validateGuideTab(ctx, record, space, tab, handle, address, client, ancestorPids)
 				}
 			}
 		}
@@ -179,7 +179,7 @@ func (s *Server) findSessionGuidePane(
 		return guidePane{}
 	}
 	unique := matches[0]
-	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, p.Client, p.AncestorPids, true)
+	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, p.Client, p.AncestorPids)
 }
 
 // paneMatchesPIDs reports whether target's shell PID or foreground PID is in pids.
@@ -227,10 +227,9 @@ func guidePaneInProject(projectDir, cwd string) bool {
 }
 
 // validateGuideTab preserves any existing project/swarm and avoids replacing
-// another live guide or splitting a single team across several tabs. When
-// ancestorPids is non-empty, the pane must match that OS lineage (failing
-// closed when terminal PIDs are absent). When requireCwd is true, the final
-// terminal read must also report a foreground directory inside record.Directory.
+// another live guide or splitting a single team across several tabs. Both
+// direct and fallback paths must prove OS process lineage (ancestorPids) and
+// a foreground working directory inside record.Directory on the final read.
 func (s *Server) validateGuideTab(
 	ctx context.Context,
 	record Record,
@@ -239,22 +238,16 @@ func (s *Server) validateGuideTab(
 	handle, address string,
 	client *string,
 	ancestorPids []int,
-	requireCwd bool,
 ) guidePane {
 	host := s.team.dependencies.Host
 	target, err := host.ReadTerminal(ctx, address)
 	if err != nil || target.Address != address || !roleRunning(target, s.team.dependencies.Shell) {
 		return guidePane{}
 	}
-	if requireCwd {
-		if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
-			return guidePane{}
-		}
-	} else if target.Foreground != nil && target.Foreground.Cwd != "" &&
-		!guidePaneInProject(record.Directory, target.Foreground.Cwd) {
+	if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
 		return guidePane{}
 	}
-	if len(ancestorPids) > 0 && !paneMatchesPIDs(target, ancestorPids) {
+	if len(ancestorPids) == 0 || !paneMatchesPIDs(target, ancestorPids) {
 		return guidePane{}
 	}
 	if v := target.Labels["herdr.space"]; v != "" && v != space.ID {

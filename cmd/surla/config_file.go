@@ -403,3 +403,157 @@ func envLookup(env []string, name string) string {
 	}
 	return ""
 }
+
+// permissionRuleBlocksTool reports whether rule blocks calling tool on MCP
+// server under client ("claude" or "cursor") using each client's wildcard syntax.
+func permissionRuleBlocksTool(client, rule, server, tool string) bool {
+	trimmed := strings.TrimSpace(rule)
+	if trimmed == "" {
+		return false
+	}
+	if trimmed == "*" {
+		return true
+	}
+	switch client {
+	case "claude":
+		return trimmed == "mcp__"+server || globMatch(trimmed, "mcp__"+server+"__"+tool)
+	case "cursor":
+		if !strings.HasPrefix(trimmed, "Mcp(") || !strings.HasSuffix(trimmed, ")") {
+			return false
+		}
+		inner := trimmed[4 : len(trimmed)-1]
+		if srvPat, toolPat, hasColon := strings.Cut(inner, ":"); hasColon {
+			return globMatch(strings.TrimSpace(srvPat), server) && globMatch(strings.TrimSpace(toolPat), tool)
+		}
+		return globMatch(strings.TrimSpace(inner), server)
+	default:
+		return false
+	}
+}
+
+// permissionListsBlockCandidateRule reports whether permissions.deny or
+// permissions.ask blocks the entire server covered by candidateRule (`mcp__<s>__*`
+// or `Mcp(<s>:*)`). Tool-specific denials such as `Mcp(surla:open_views)` keep
+// their precedence over `permissions.allow` in Claude Code and Cursor CLI, so
+// setup still adds `candidateRule` to approve remaining worker operations.
+func permissionListsBlockCandidateRule(perms map[string]any, candidateRule string) bool {
+	client, server := "", ""
+	switch {
+	case strings.HasPrefix(candidateRule, "mcp__") && strings.HasSuffix(candidateRule, "__*"):
+		client = "claude"
+		server = strings.TrimSuffix(strings.TrimPrefix(candidateRule, "mcp__"), "__*")
+	case strings.HasPrefix(candidateRule, "Mcp(") && strings.HasSuffix(candidateRule, ":*)"):
+		client = "cursor"
+		server = strings.TrimSuffix(strings.TrimPrefix(candidateRule, "Mcp("), ":*)")
+	}
+	for _, listName := range []string{"deny", "ask"} {
+		items, ok := perms[listName].([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range items {
+			rule, ok := item.(string)
+			if !ok {
+				continue
+			}
+			trimmed := strings.TrimSpace(rule)
+			if trimmed == candidateRule || permissionRuleBlocksWholeServer(client, trimmed, server) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// permissionRuleBlocksWholeServer reports whether rule denies or asks on every
+// tool of server rather than a specific tool pattern.
+func permissionRuleBlocksWholeServer(client, rule, server string) bool {
+	if rule == "*" || server == "" {
+		return rule == "*"
+	}
+	switch client {
+	case "claude":
+		if rule == "mcp__"+server || isAllWildcard(strings.TrimPrefix(rule, "mcp__")) {
+			return strings.HasPrefix(rule, "mcp__")
+		}
+		rest, ok := strings.CutPrefix(rule, "mcp__")
+		if !ok {
+			return false
+		}
+		idx := strings.LastIndex(rest, "__")
+		if idx < 0 {
+			return false
+		}
+		return globMatch(rest[:idx], server) && isAllWildcard(rest[idx+2:])
+	case "cursor":
+		if !strings.HasPrefix(rule, "Mcp(") || !strings.HasSuffix(rule, ")") {
+			return false
+		}
+		inner := rule[4 : len(rule)-1]
+		if srvPat, toolPat, hasColon := strings.Cut(inner, ":"); hasColon {
+			return globMatch(strings.TrimSpace(srvPat), server) && isAllWildcard(strings.TrimSpace(toolPat))
+		}
+		return globMatch(strings.TrimSpace(inner), server)
+	default:
+		return false
+	}
+}
+
+// isAllWildcard reports whether s is non-empty and consists solely of '*' wildcards.
+func isAllWildcard(s string) bool {
+	return s != "" && strings.Trim(s, "*") == ""
+}
+
+// globMatch reports whether pattern (where '*' matches zero or more bytes) matches value.
+func globMatch(pattern, value string) bool {
+	px, vx := 0, 0
+	nextPx, nextVx := 0, 0
+	for px < len(pattern) || vx < len(value) {
+		if px < len(pattern) {
+			switch pattern[px] {
+			case '*':
+				nextPx = px
+				nextVx = vx + 1
+				px++
+				continue
+			default:
+				if vx < len(value) && pattern[px] == value[vx] {
+					px++
+					vx++
+					continue
+				}
+			}
+		}
+		if nextVx > 0 && nextVx <= len(value) {
+			px = nextPx + 1
+			vx = nextVx
+			nextVx++
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// geminiExcludeMatches matches Gemini CLI's literal excludeTools membership check,
+// returning the exact matching entry without glob or server-prefix expansion.
+func geminiExcludeMatches(excluded []any, tool string) (string, bool) {
+	for _, item := range excluded {
+		if entry, ok := item.(string); ok && entry == tool {
+			return entry, true
+		}
+	}
+	return "", false
+}
+
+// geminiIncludeMatches matches Gemini CLI's includeTools check, which accepts
+// an exact tool name or a parenthesized specialization `tool(...)`.
+func geminiIncludeMatches(included []any, tool string) bool {
+	prefix := tool + "("
+	for _, item := range included {
+		if entry, ok := item.(string); ok && (entry == tool || strings.HasPrefix(entry, prefix)) {
+			return true
+		}
+	}
+	return false
+}

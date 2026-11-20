@@ -165,6 +165,15 @@ func TestBuildAndTeamStartSurfaceBoundedPolicyRefusal(t *testing.T) {
 			},
 			wantSubstr: "excludeTools in your Gemini settings.json",
 		},
+		{
+			name: "unusable client configuration file",
+			refusal: &TeamPolicyRefusal{
+				Kind:   PolicyConfigUnusable,
+				Client: "claude",
+				Detail: "settings.json",
+			},
+			wantSubstr: "Claude Code configuration file settings.json could not be read or safely used.",
+		},
 	}
 
 	for _, tc := range refusals {

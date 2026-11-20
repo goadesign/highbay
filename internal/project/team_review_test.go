@@ -39,7 +39,10 @@ func TestAttachGuideAdoptsExistingPaneAndKeepsItsCredential(t *testing.T) {
 
 	host.overlays, host.calls = nil, nil
 	address := "t-guide"
-	again, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{HcTerminalID: &address})
+	again, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+		HcTerminalID: &address,
+		AncestorPids: []int{4202, 4201, 4200},
+	})
 	require.NoError(t, err)
 	assert.Equal(t, result, again)
 	assert.NotContains(t, host.calls, "companion", "an overlay closed between attaches stays closed")
@@ -63,12 +66,15 @@ func TestAttachGuideRefusesConflictedPanes(t *testing.T) {
 			host.spaces = []TeamSpace{{
 				ID: "space", Tabs: []TeamTab{{ID: "tab", Terminals: []TeamPane{{Terminal: "target", Pane: "pane"}}}},
 			}}
-			host.terminals = []TeamTerminal{{Address: "target", State: "live", Foreground: &TeamForeground{Argv: []string{"codex"}}}}
+			host.terminals = []TeamTerminal{{
+				Address: "target", PID: 4200, State: "live",
+				Foreground: &TeamForeground{PID: 4201, Cwd: state.Record.Directory, Argv: []string{"codex"}},
+			}}
 			switch scenario {
 			case "not live":
 				host.terminals[0].State = "finished"
 			case "idle shell":
-				host.terminals[0].Foreground = &TeamForeground{Argv: []string{"zsh"}}
+				host.terminals[0].Foreground = &TeamForeground{PID: 4201, Cwd: state.Record.Directory, Argv: []string{"zsh"}}
 			case "no model pane":
 				host.spaces[0].Tabs[0].Terminals[0].Pane = ""
 			case "remote":
@@ -88,7 +94,10 @@ func TestAttachGuideRefusesConflictedPanes(t *testing.T) {
 			s, err := NewServer(state, func() {}, deps)
 			require.NoError(t, err)
 			address := "target"
-			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{HcTerminalID: &address})
+			result, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: &address,
+				AncestorPids: []int{4202, 4201, 4200},
+			})
 			require.NoError(t, err)
 			assert.False(t, result.AdoptedHerdr)
 			assert.Equal(t, "available", result.HerdrMode)
@@ -469,6 +478,37 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 			wantAdopted: false,
 		},
 		{
+			name:       "live direct HcTerminalID without AncestorPids is refused",
+			terminalID: &stale,
+			client:     "codex",
+			setup: func(_ *testing.T, state *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-direct", Tabs: []TeamTab{{ID: "tab-direct", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 45000, State: "live",
+					Foreground: &TeamForeground{PID: 45010, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
+			name:         "live direct HcTerminalID with empty Cwd is refused",
+			terminalID:   &stale,
+			client:       "codex",
+			ancestorPids: []int{45099, 45010, 45000},
+			setup: func(_ *testing.T, _ *State, host *teamFixture) {
+				host.spaces = []TeamSpace{{
+					ID: "space-nocwd", Tabs: []TeamTab{{ID: "tab-nocwd", Terminals: []TeamPane{{Terminal: "t45", Pane: "p45"}}}},
+				}}
+				host.terminals = []TeamTerminal{{
+					Address: "t45", PID: 45000, State: "live",
+					Foreground: &TeamForeground{PID: 45010, Argv: []string{"codex"}, Cwd: ""},
+				}}
+			},
+			wantAdopted: false,
+		},
+		{
 			name:         "stale live HcTerminalID falls back to actual session pane proven by AncestorPids",
 			terminalID:   &stale,
 			client:       "codex",
@@ -632,52 +672,74 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 }
 
 func TestAttachGuideLineageAdoptionReusedByBuildWorkers(t *testing.T) {
-	state := testState(t)
-	deps := fixtureTeamDependencies(state)
-	host := deps.Host.(*teamFixture)
-	host.spaces = []TeamSpace{{
-		ID:   "space-adopted",
-		Tabs: []TeamTab{{ID: "tab-adopted", Terminals: []TeamPane{{Terminal: "t-codex", Pane: "p-codex"}}}},
-	}}
-	host.terminals = []TeamTerminal{{
-		Address: "t-codex", PID: 41000, State: "live",
-		Foreground: &TeamForeground{PID: 41055, Argv: []string{"codex"}, Cwd: state.Record.Directory},
-	}}
-	s, err := NewServer(state, func() {}, deps)
-	require.NoError(t, err)
+	directID := "t-codex"
+	for _, mode := range []struct {
+		name       string
+		terminalID *string
+	}{
+		{name: "fallback_scan", terminalID: nil},
+		{name: "direct_terminal_id", terminalID: &directID},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			state := testState(t)
+			deps := fixtureTeamDependencies(state)
+			host := deps.Host.(*teamFixture)
+			host.spaces = []TeamSpace{{
+				ID:   "space-adopted",
+				Tabs: []TeamTab{{ID: "tab-adopted", Terminals: []TeamPane{{Terminal: "t-codex", Pane: "p-codex"}}}},
+			}}
+			host.terminals = []TeamTerminal{{
+				Address: "t-codex", PID: 41000, State: "live",
+				Foreground: &TeamForeground{PID: 41055, Argv: []string{"codex"}, Cwd: state.Record.Directory},
+			}}
+			s, err := NewServer(state, func() {}, deps)
+			require.NoError(t, err)
 
-	client := "codex"
-	attached, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
-		Client:       &client,
-		AncestorPids: []int{41099, 41055, 41000},
-	})
-	require.NoError(t, err)
-	require.True(t, attached.AdoptedHerdr)
-	assert.Equal(t, "attached", attached.HerdrMode)
+			client := "codex"
+			// Without AncestorPids, even a live direct HcTerminalID must stay unattached.
+			unproven, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: mode.terminalID,
+				Client:       &client,
+			})
+			require.NoError(t, err)
+			require.False(t, unproven.AdoptedHerdr)
+			assert.Equal(t, "available", unproven.HerdrMode)
+			assert.Empty(t, state.Record.Space)
 
-	fixtureAssignments(s, true)
-	builderDir := filepath.Join(state.Record.Directory, ".surla-build")
-	writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
-	require.NoError(t, os.MkdirAll(builderDir, 0o755))
-	require.NoError(t, os.MkdirAll(writerDir, 0o755))
-	require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
-		BuilderFolder: builderDir, TestWriterFolder: writerDir,
-	}))
+			attached, err := s.AttachGuide(teamContext(state), &genproject.AttachGuidePayload{
+				HcTerminalID: mode.terminalID,
+				Client:       &client,
+				AncestorPids: []int{41099, 41055, 41000},
+			})
+			require.NoError(t, err)
+			require.True(t, attached.AdoptedHerdr)
+			assert.Equal(t, "attached", attached.HerdrMode)
 
-	started, err := s.StartAgents(t.Context(), nil)
-	require.NoError(t, err)
-	assert.Zero(t, host.creates, "Build must reuse the adopted guide space without creating a second space")
-	assert.Equal(t, "space-adopted", started.Space)
-	assert.Equal(t, "attached", started.HerdrMode)
-	rawRoster, err := os.ReadFile(filepath.Join(deps.RosterDirectory, "space-adopted.json"))
-	require.NoError(t, err)
-	var roster launcherRoster
-	require.NoError(t, json.Unmarshal(rawRoster, &roster))
-	require.Len(t, roster.Roles, 3)
-	assert.Equal(t, "guide", roster.Roles[0].Role)
-	require.NotNil(t, roster.Roles[1].Place)
-	assert.Equal(t, attached.Handle, roster.Roles[1].Place.Beside)
-	assert.Equal(t, "right", roster.Roles[1].Place.Direction)
+			fixtureAssignments(s, true)
+			builderDir := filepath.Join(state.Record.Directory, ".surla-build")
+			writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+			require.NoError(t, os.MkdirAll(builderDir, 0o755))
+			require.NoError(t, os.MkdirAll(writerDir, 0o755))
+			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
+				BuilderFolder: builderDir, TestWriterFolder: writerDir,
+			}))
+
+			started, err := s.StartAgents(t.Context(), nil)
+			require.NoError(t, err)
+			assert.Zero(t, host.creates, "Build must reuse the adopted guide space without creating a second space")
+			assert.Equal(t, "space-adopted", started.Space)
+			assert.Equal(t, "attached", started.HerdrMode)
+			rawRoster, err := os.ReadFile(filepath.Join(deps.RosterDirectory, "space-adopted.json"))
+			require.NoError(t, err)
+			var roster launcherRoster
+			require.NoError(t, json.Unmarshal(rawRoster, &roster))
+			require.Len(t, roster.Roles, 3)
+			assert.Equal(t, "guide", roster.Roles[0].Role)
+			require.NotNil(t, roster.Roles[1].Place)
+			assert.Equal(t, attached.Handle, roster.Roles[1].Place.Beside)
+			assert.Equal(t, "right", roster.Roles[1].Place.Direction)
+		})
+	}
 }
 
 type mutatingReadTerminalHost struct {
@@ -788,9 +850,19 @@ func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *
 	assert.NoDirExists(t, deps.RosterDirectory)
 	assert.Empty(t, state.Record.SavedChoices)
 
-	// Non-policy parse errors on custom configs record a span event without blocking startup.
+	// Unresolved preflight config errors are also surfaced as actionable refusals before launch.
 	prepared = nil
 	trustErr = assert.AnError
+	_, err = s.StartAgents(t.Context(), nil)
+	require.Error(t, err)
+	require.ErrorAs(t, err, &policyRefusal)
+	assert.Equal(t, controlplane.PolicyConfigUnusable, policyRefusal.Kind)
+	assert.Zero(t, host.creates, "unusable config refusal must not create a Herdr space")
+	assert.NotContains(t, host.calls, "launch")
+
+	// Clean preflight launches workers with exact role-scoped targets.
+	prepared = nil
+	trustErr = nil
 	_, err = s.StartAgents(t.Context(), nil)
 	require.NoError(t, err)
 	require.Len(t, prepared, 1)
