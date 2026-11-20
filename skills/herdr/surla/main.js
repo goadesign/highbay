@@ -40,7 +40,7 @@ const ROLE_STATES = {
   working: "working",
   waiting: "waiting",
   error: "error",
-  unknown: "unknown",
+  unknown: "status unknown",
 };
 
 // projectFolder returns the folder whose Surla project the window shows for
@@ -127,14 +127,10 @@ export function stageLine(status) {
 }
 
 // roleLine says what one role is doing, including why it needs the user.
-// When the coding agent is attached outside Herdr, Herdr observes no pane for
-// it, so an unknown pane state still means the coding agent is attached.
-export function roleLine(role, herdrMode) {
+// An unobserved or disconnected role is reported truthfully as status unknown.
+export function roleLine(role) {
   const title = ROLE_TITLES[role.role] ?? role.role;
-  if (role.role === "guide" && herdrMode && herdrMode !== "attached" && role.state === "unknown") {
-    return `${title}: attached`;
-  }
-  const state = ROLE_STATES[role.state] ?? "unknown";
+  const state = ROLE_STATES[role.state] ?? "status unknown";
   const why = role.state === "needs_you" && role.attention && role.attention !== "none" ? ` (${role.attention})` : "";
   return `${title}: ${state}${why}`;
 }
@@ -279,7 +275,7 @@ export default class SurlaCompanion extends View {
           h_flex()
             .items_center()
             .gap(8)
-            .child(div().flex_1().min_w(0).truncate().child(roleLine(role, s.herdrMode)))
+            .child(div().flex_1().min_w(0).truncate().child(roleLine(role)))
             .when(Boolean(terminal), el => el.child(this.button(`surla-show-${role.role}`, "Show", t, () => run("pane.focus", { terminal })))),
         );
       }

@@ -41,7 +41,6 @@ import (
 
 	genmcpserver "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/server"
 	genmcp "github.com/goadesign/surla/gen/mcp_surla"
-	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/controlplane"
@@ -278,13 +277,7 @@ func bindStdioGuide(
 	if err := handOverModelSettings(ctx, state, modelsettings.Select(os.Environ()), diagnostics); err != nil {
 		return nil, err
 	}
-	payload := &genproject.AttachGuidePayload{}
-	if terminal != "" {
-		payload.HcTerminalID = &terminal
-	}
-	if client != "" {
-		payload.Client = &client
-	}
+	payload := buildAttachGuidePayload(ctx, terminal, client)
 	attached, err := management.AttachGuide(ctx, payload)
 	if err != nil {
 		return nil, fmt.Errorf("attach this agent as the project's guide: %w", err)

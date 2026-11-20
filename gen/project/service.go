@@ -34,10 +34,10 @@ type Service interface {
 	// no team, credential, space, roster or agent and opens no window. This
 	// management operation is never an MCP tool.
 	EnsureTeam(context.Context) (res *ProjectTeam, err error)
-	// Attach the invoking coding agent as this project's guide. A supplied live
-	// Herdr terminal is adopted only after its model pane, local project and
-	// labels are validated. Omit terminal identity outside Herdr. Never opens a
-	// launcher.
+	// Attach the invoking coding agent as this project's guide. A live Herdr
+	// terminal is adopted only when session lineage, model pane, local project
+	// directory, client family and labels match. Omit terminal identity outside
+	// Herdr. Never opens a launcher.
 	AttachGuide(context.Context, *AttachGuidePayload) (res *AttachGuideResult, err error)
 	// Read existing project, saved change stage and observed role state. Creates
 	// nothing and starts no agent. Merge status uses the build owner's read-only
@@ -79,6 +79,11 @@ type AttachGuidePayload struct {
 	HcTerminalID *string
 	// Invoking coding-agent client.
 	Client *string
+	// Invoking process and ancestor OS process IDs.
+	AncestorPids []int
+	// Unique local client OS process ID in this project directory when stdio was
+	// spawned by a background daemon.
+	DaemonClientPid *int
 }
 
 // AttachGuideResult is the result type of the project service attach_guide

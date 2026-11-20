@@ -44,6 +44,7 @@ type (
 	// teamTerminalFacts is the external Herdr projection, excluding all free text.
 	teamTerminalFacts struct {
 		Address    string                  `json:"address"`
+		PID        int                     `json:"pid"`
 		State      string                  `json:"state"`
 		Labels     teamLabels              `json:"labels"`
 		Foreground *project.TeamForeground `json:"foreground"`
@@ -160,11 +161,12 @@ func (facts teamTerminalFacts) terminal() project.TeamTerminal {
 	var foreground *project.TeamForeground
 	if facts.Foreground != nil {
 		foreground = &project.TeamForeground{
+			PID:  facts.Foreground.PID,
 			Argv: slices.Clone(facts.Foreground.Argv[:min(len(facts.Foreground.Argv), 3)]),
 			Cwd:  facts.Foreground.Cwd,
 		}
 	}
-	return project.TeamTerminal{Address: facts.Address, State: facts.State, Labels: facts.Labels.values(), Foreground: foreground, Reported: facts.Reported, Status: facts.Status, CreatedMS: facts.CreatedMS, Reason: facts.Reason}
+	return project.TeamTerminal{Address: facts.Address, PID: facts.PID, State: facts.State, Labels: facts.Labels.values(), Foreground: foreground, Reported: facts.Reported, Status: facts.Status, CreatedMS: facts.CreatedMS, Reason: facts.Reason}
 }
 
 // values materializes only the ownership and tab facts consumed by the project owner.

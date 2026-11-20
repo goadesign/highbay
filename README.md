@@ -55,13 +55,13 @@ Here is how that change reaches your branch:
 1. **Start in your agent.** Invoke `/surla` (or `$surla`) in the project
    folder and describe what you want. The first Surla tool call attaches
    this session as the guide and starts the server when needed. In Herdr,
-   when the client forwards its terminal identity or matches a unique live
+   when the client's terminal identity or process lineage matches its live
    pane in the project folder, Surla can adopt your existing pane and space if
    they can belong to this project.
 2. **Open the page.** Your coding agent calls `open_views` to open the project's
-   browser window and bring it to the front. If you close or reload it, ask
-   your coding agent to open it again, or click **Open Surla Window** in the
-   Herdr Surla panel (`Cmd+Alt+Shift+S` on macOS).
+   browser page in your default browser. If you close or reload it, ask your
+   coding agent to open it again, or click **Open Surla Window** in the Herdr
+   companion (`Cmd+Alt+Shift+S` on macOS).
 3. **Describe.** Your coding agent writes the Story, a description of your
    system's flows in Go, and proposes a Change Card: the saved request,
    questions, examples and behavior to preserve. It appears on the page by

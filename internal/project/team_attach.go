@@ -66,10 +66,10 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 	if s.team.dependencies.HerdrAvailable {
 		var pane guidePane
 		if p.HcTerminalID != nil && *p.HcTerminalID != "" {
-			pane = s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client)
+			pane = s.findGuidePane(ctx, record, handle, *p.HcTerminalID, p.Client, p.AncestorPids)
 		}
-		if pane.terminal == "" && p.Client != nil && *p.Client != "" {
-			pane = s.findClientGuidePane(ctx, record, handle, *p.Client)
+		if pane.terminal == "" {
+			pane = s.findSessionGuidePane(ctx, record, handle, p)
 		}
 		if pane.terminal != "" {
 			err := s.team.dependencies.Host.LabelGuide(ctx, pane.terminal, record.Directory, pane.swarm, pane.client, handle, pane.space, pane.tab)
@@ -89,7 +89,10 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 			s.setTeamConnection(connection)
 		}
 		s.openCompanion(ctx)
-	} else if (p.HcTerminalID != nil && *p.HcTerminalID != "" || p.Client != nil && *p.Client != "") && mode != herdrUnavailable {
+	} else if (p.HcTerminalID != nil && *p.HcTerminalID != "" ||
+		p.Client != nil && *p.Client != "" ||
+		len(p.AncestorPids) > 0 ||
+		p.DaemonClientPid != nil) && mode != herdrUnavailable {
 		// This caller has no adopted tab even if another guide already does.
 		mode = herdrAvailable
 	}
@@ -98,7 +101,9 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 }
 
 // findGuidePane applies the live pane, local tab and conflict checks before any labeling.
-func (s *Server) findGuidePane(ctx context.Context, record Record, handle, address string, client *string) guidePane {
+func (s *Server) findGuidePane(
+	ctx context.Context, record Record, handle, address string, client *string, ancestorPids []int,
+) guidePane {
 	host := s.team.dependencies.Host
 	spaces, err := host.Spaces(ctx)
 	if err != nil {
@@ -111,7 +116,7 @@ func (s *Server) findGuidePane(ctx context.Context, record Record, handle, addre
 		for _, tab := range space.Tabs {
 			for _, pane := range tab.Terminals {
 				if pane.Terminal == address && pane.Pane != "" && safeSpaceID(tab.ID) {
-					return s.validateGuideTab(ctx, record, space, tab, handle, address, client)
+					return s.validateGuideTab(ctx, record, space, tab, handle, address, client, ancestorPids)
 				}
 			}
 		}
@@ -119,12 +124,16 @@ func (s *Server) findGuidePane(ctx context.Context, record Record, handle, addre
 	return guidePane{}
 }
 
-// findClientGuidePane adopts a unique local model pane whose live foreground
-// or agent label matches client inside record.Directory when HC_TERMINAL_ID is
-// stripped by the MCP client or belongs to a stale background daemon terminal.
-func (s *Server) findClientGuidePane(ctx context.Context, record Record, handle, client string) guidePane {
-	wantClient := normalizeGuideClient(client)
-	if wantClient == "" {
+// findSessionGuidePane adopts a unique local model pane inside record.Directory
+// only when OS process lineage (p.AncestorPids or a verified 1-to-1 Codex daemon
+// socket peer in an active turn) ties the requesting session to that pane.
+func (s *Server) findSessionGuidePane(
+	ctx context.Context, record Record, handle string, p *genproject.AttachGuidePayload,
+) guidePane {
+	wantDaemon := len(p.AncestorPids) == 0 &&
+		p.DaemonClientPid != nil && *p.DaemonClientPid > 0 &&
+		p.Client != nil && normalizeGuideClient(*p.Client) == "codex"
+	if len(p.AncestorPids) == 0 && !wantDaemon {
 		return guidePane{}
 	}
 	host := s.team.dependencies.Host
@@ -157,11 +166,19 @@ func (s *Server) findClientGuidePane(ctx context.Context, record Record, handle,
 				if role := target.Labels["chorus.role"]; role != "" && role != "guide" {
 					continue
 				}
-				if guideClient(target, nil) != wantClient {
-					continue
-				}
 				if target.Foreground == nil || !guidePaneInProject(record.Directory, target.Foreground.Cwd) {
 					continue
+				}
+				if len(p.AncestorPids) > 0 {
+					if !paneMatchesPIDs(target, p.AncestorPids) {
+						continue
+					}
+				} else {
+					if target.Foreground.PID != *p.DaemonClientPid ||
+						observedGuideClient(target) != "codex" ||
+						target.Status == nil || target.Status.State != "working" {
+						continue
+					}
 				}
 				matches = append(matches, candidatePane{space: space, tab: tab, terminal: pane.Terminal})
 				if len(matches) > 1 {
@@ -174,7 +191,15 @@ func (s *Server) findClientGuidePane(ctx context.Context, record Record, handle,
 		return guidePane{}
 	}
 	unique := matches[0]
-	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, &wantClient)
+	return s.validateGuideTab(ctx, record, unique.space, unique.tab, handle, unique.terminal, p.Client, p.AncestorPids)
+}
+
+// paneMatchesPIDs reports whether target's shell PID or foreground PID is in pids.
+func paneMatchesPIDs(target TeamTerminal, pids []int) bool {
+	if target.PID > 0 && slices.Contains(pids, target.PID) {
+		return true
+	}
+	return target.Foreground != nil && target.Foreground.PID > 0 && slices.Contains(pids, target.Foreground.PID)
 }
 
 // guidePaneInProject reports whether cwd is at or inside projectDir and lies
@@ -214,13 +239,28 @@ func guidePaneInProject(projectDir, cwd string) bool {
 }
 
 // validateGuideTab preserves any existing project/swarm and avoids replacing
-// another live guide or splitting a single team across several tabs.
+// another live guide or splitting a single team across several tabs. When
+// ancestorPids is non-empty, the pane must match that OS lineage (failing
+// closed when terminal PIDs are absent).
 func (s *Server) validateGuideTab(
-	ctx context.Context, record Record, space TeamSpace, tab TeamTab, handle, address string, client *string,
+	ctx context.Context,
+	record Record,
+	space TeamSpace,
+	tab TeamTab,
+	handle, address string,
+	client *string,
+	ancestorPids []int,
 ) guidePane {
 	host := s.team.dependencies.Host
 	target, err := host.ReadTerminal(ctx, address)
 	if err != nil || target.Address != address || !roleRunning(target, s.team.dependencies.Shell) {
+		return guidePane{}
+	}
+	if target.Foreground != nil && target.Foreground.Cwd != "" &&
+		!guidePaneInProject(record.Directory, target.Foreground.Cwd) {
+		return guidePane{}
+	}
+	if len(ancestorPids) > 0 && !paneMatchesPIDs(target, ancestorPids) {
 		return guidePane{}
 	}
 	if v := target.Labels["herdr.space"]; v != "" && v != space.ID {
@@ -235,7 +275,15 @@ func (s *Server) validateGuideTab(
 	if owner := target.Labels["chorus.handle"]; owner != "" && owner != handle && target.Labels["chorus.project"] != "" {
 		return guidePane{}
 	}
-	key := guideClient(target, client)
+	observed := observedGuideClient(target)
+	key := observed
+	if client != nil && *client != "" {
+		want := normalizeGuideClient(*client)
+		if want == "" || (observed != "" && observed != want) {
+			return guidePane{}
+		}
+		key = want
+	}
 	if key == "" {
 		return guidePane{}
 	}
@@ -300,27 +348,28 @@ func guideTabConflict(t TeamTerminal, root, swarm string) bool {
 		t.Labels["chorus.swarm"] != "" && t.Labels["chorus.swarm"] != swarm
 }
 
-// guideClient normalizes the known local client aliases without guessing an
-// unrecognized pane's agent program.
-func guideClient(terminal TeamTerminal, client *string) string {
-	var candidates []string
-	if client != nil {
-		candidates = append(candidates, *client)
-	}
-	candidates = append(candidates, terminal.Labels["chorus.agent"])
+// observedGuideClient derives the canonical client family reported by terminal's
+// own label and foreground argv without trusting a caller-supplied override.
+func observedGuideClient(terminal TeamTerminal) string {
+	labelClient := normalizeGuideClient(terminal.Labels["chorus.agent"])
+	var fgClient string
 	if terminal.Foreground != nil {
 		for _, arg := range terminal.Foreground.Argv {
 			if arg != "" && !strings.HasPrefix(arg, "-") {
-				candidates = append(candidates, filepath.Base(arg))
+				if key := normalizeGuideClient(filepath.Base(arg)); key != "" {
+					fgClient = key
+					break
+				}
 			}
 		}
 	}
-	for _, candidate := range candidates {
-		if key := normalizeGuideClient(candidate); key != "" {
-			return key
-		}
+	if labelClient != "" && fgClient != "" && labelClient != fgClient {
+		return ""
 	}
-	return ""
+	if fgClient != "" {
+		return fgClient
+	}
+	return labelClient
 }
 
 // normalizeGuideClient maps known CLI and MCP clientInfo names to canonical client keys.

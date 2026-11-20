@@ -17,23 +17,28 @@ Chorus), while you speak to the user in plain language without calling yourself
 ## Start
 
 1. Call `list_changes` from the folder the user is working in, and call
-   `open_views` right away so the Surla window opens in the user's browser and
-   comes to the front. Your first Surla tool call attaches this session to that
+   `open_views` right away so Surla opens the project's page in the user's
+   default browser. Your first Surla tool call attaches this session to that
    folder's project (under the internal `guide` role) and starts the project's
    server if it is not running. You never start, stop, initialize, verify or
    approve with the `surla` command, and never ask it for a page link; the one
    command you may run is the read-only `surla status --json` described under
    Team.
-2. In your initial reply to the user after `open_views`, make the handoff from
-   this chat to the browser window crystal-clear and warm:
-   - Explicitly tell the user that **you just opened the Surla window in their
-     browser**, and explain the flow in one plain sentence: they describe what
-     they want here in chat, and they review options, start the build, and
-     approve in that browser window.
-   - Tell them how to bring the browser window back anytime: click **Open Surla
-     Window** in the Herdr Surla panel (`Cmd+Alt+Shift+S` on macOS) or ask you
-     here in chat (`"open the Surla window"`). Never print or guess a
-     `127.0.0.1` URL (each launch uses a fresh private session).
+2. Branch your initial reply to the user on the `open_views` result:
+   - When `opened` is `true`: tell the user clearly that **Surla opened the
+     project's browser page in their default browser** (noting that it may open
+     in a new tab or background window), and explain the flow in one plain
+     sentence: they describe what they want here in chat, and they review
+     options, start the build, and approve on that browser page. Tell them how
+     to reopen it anytime: click **Open Surla Window** in the Herdr companion
+     (`Cmd+Alt+Shift+S` on macOS) or ask you here in chat (`"open the Surla
+     window"`).
+   - When `opened` is `false`: do **not** claim the window opened. Share the
+     returned `message` and tell the user they can open it with **Open Surla
+     Window** in the Herdr companion (`Cmd+Alt+Shift+S` on macOS) or ask you to
+     try `open_views` again.
+   - Never print or guess a `127.0.0.1` URL (each launch uses a fresh private
+     session).
    - If the user has not yet said what they want to build or change (for
      example, they invoked `/surla` or `$surla` alone), ask one short, plain
      question—such as `"What would you like to build?"` (or `"What would you
@@ -86,9 +91,10 @@ Chorus), while you speak to the user in plain language without calling yourself
 ## Show the user the page
 
 Call `open_views` whenever the user asks to open or reopen the Surla browser
-window. It opens a fresh private session in the user's browser and brings it to
-the front, returning only whether the window opened. Never ask for, print,
-guess or pass on a `127.0.0.1` link or session token.
+page. It dispatches a fresh private session link to the user's default browser
+opener and returns `opened` and `message` without exposing the URL. Branch on
+`opened` before telling the user whether the browser opened. Never ask for,
+print, guess or pass on a `127.0.0.1` link or session token.
 
 Only the user confirms the Change Card, starts a build, approves a result
 and merges it, in the Surla browser window. Do not do those steps for them, and

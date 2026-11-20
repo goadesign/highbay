@@ -29,12 +29,12 @@ func TestHeadlessArgs(t *testing.T) {
 	}{
 		{"claude yolo", "claude", &model, &effort, true, []string{"--model", model, "--effort", effort, "--dangerously-skip-permissions", "--print"}},
 		{"claude non-yolo", "claude", &model, &effort, false, []string{"--model", model, "--effort", effort, "--allowedTools", "mcp__surla__*", "--print"}},
-		{"codex non-yolo", "codex", &model, &effort, false, []string{"exec", "--sandbox", "workspace-write", "--model", model, "-c", `model_reasoning_effort="high"`, "-c", `mcp_servers.surla.default_tools_approval_mode="approve"`}},
-		{"codex yolo", "codex", nil, nil, true, []string{"exec", "-c", `mcp_servers.surla.default_tools_approval_mode="approve"`, "--dangerously-bypass-approvals-and-sandbox"}},
+		{"codex non-yolo", "codex", &model, &effort, false, []string{"exec", "--sandbox", "workspace-write", "--model", model, "-c", `model_reasoning_effort="high"`}},
+		{"codex yolo", "codex", nil, nil, true, []string{"exec", "--dangerously-bypass-approvals-and-sandbox"}},
 		{"antigravity yolo", "antigravity", &model, &effort, true, []string{"--model", model, "--effort", effort, "--dangerously-skip-permissions", "--print"}},
 		{"antigravity non-yolo", "antigravity", &model, nil, false, []string{"--model", model, "--print"}},
 		{"cursor yolo", "cursor", nil, nil, true, []string{"--print", "--yolo"}},
-		{"cursor non-yolo", "cursor", nil, nil, false, []string{"--trust", "--approve-mcps", "--print"}},
+		{"cursor non-yolo", "cursor", nil, nil, false, []string{"--trust", "--print"}},
 		{"gemini yolo", "gemini", nil, nil, true, []string{"--approval-mode=yolo", "--prompt"}},
 		{"opencode", "opencode", &model, nil, false, []string{"run", "--model", model}},
 	} {

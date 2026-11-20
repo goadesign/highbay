@@ -21,6 +21,11 @@ type AttachGuideRequestBody struct {
 	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
 	// Invoking coding-agent client.
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Invoking process and ancestor OS process IDs.
+	AncestorPids []int `form:"ancestor_pids,omitempty" json:"ancestor_pids,omitempty" xml:"ancestor_pids,omitempty"`
+	// Unique local client OS process ID in this project directory when stdio was
+	// spawned by a background daemon.
+	DaemonClientPid *int `form:"daemon_client_pid,omitempty" json:"daemon_client_pid,omitempty" xml:"daemon_client_pid,omitempty"`
 }
 
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
@@ -422,8 +427,15 @@ type TeamRoleStateResponseBody struct {
 // the "attach_guide" endpoint of the "project" service.
 func NewAttachGuideRequestBody(p *project.AttachGuidePayload) *AttachGuideRequestBody {
 	body := &AttachGuideRequestBody{
-		HcTerminalID: p.HcTerminalID,
-		Client:       p.Client,
+		HcTerminalID:    p.HcTerminalID,
+		Client:          p.Client,
+		DaemonClientPid: p.DaemonClientPid,
+	}
+	if p.AncestorPids != nil {
+		body.AncestorPids = make([]int, len(p.AncestorPids))
+		for i, val := range p.AncestorPids {
+			body.AncestorPids[i] = val
+		}
 	}
 	return body
 }

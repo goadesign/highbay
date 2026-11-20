@@ -192,11 +192,11 @@ test('stageLine and roleLine describe the project for people', () => {
   assert.equal(mod.stageLine({ stage: 'describe', changeTitle: '' }), 'Describe');
   assert.equal(mod.stageLine({ stage: 'later', changeTitle: '' }), 'Unknown stage');
   assert.equal(mod.roleLine(running.roles[0]), 'Coding agent: working');
-  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }), 'Coding agent: unknown');
-  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'attached'), 'Coding agent: unknown');
-  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'available'), 'Coding agent: attached');
-  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'unavailable'), 'Coding agent: attached');
-  assert.equal(mod.roleLine({ role: 'builder', state: 'unknown', attention: 'none' }, 'available'), 'Builder: unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'attached'), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'available'), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'guide', state: 'unknown', attention: 'none' }, 'unavailable'), 'Coding agent: status unknown');
+  assert.equal(mod.roleLine({ role: 'builder', state: 'unknown', attention: 'none' }, 'available'), 'Builder: status unknown');
   assert.equal(mod.roleLine(running.roles[1]), 'Builder: needs you (permission)');
   assert.equal(mod.roleLine(running.roles[2]), 'Test writer: not started');
 });
@@ -281,7 +281,7 @@ test('Open Surla Window shows Opening, then Opened in browser, and clears on nex
   view.init(undefined, cx);
   state.deferred.shift().resolve({ code: 0, stdout: JSON.stringify({ ...running, herdr_mode: 'available', roles: [{ role: 'guide', handle: 'guide-1', state: 'unknown', attention: 'none', watcher: 'unknown', assignment: 'no_work' }] }), stderr: '' });
   await tick();
-  assert.ok(texts(view.render(cx)).includes('Coding agent: attached'));
+  assert.ok(texts(view.render(cx)).includes('Coding agent: status unknown'));
   assert.ok(texts(view.render(cx)).includes('Open Surla Window'));
 
   walk(view.render(cx)).find(node => node.id === 'surla-open').handlers.click({}, cx);

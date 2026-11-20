@@ -315,13 +315,12 @@ func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, er
 		if choice.Thinking != nil {
 			args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(*choice.Thinking))
 		}
-		args = append(args, "-c", `mcp_servers.surla.default_tools_approval_mode="approve"`)
 		if choice.Yolo {
 			args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 		}
 	case "cursor":
 		if !choice.Yolo {
-			args = append(args, "--trust", "--approve-mcps")
+			args = append(args, "--trust")
 		}
 		args = append(args, "--print")
 		if choice.Yolo {

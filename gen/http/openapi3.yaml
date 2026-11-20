@@ -14569,7 +14569,7 @@ paths:
             tags:
                 - project
             summary: attach_guide project
-            description: Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.
+            description: Attach the invoking coding agent as this project's guide. A live Herdr terminal is adopted only when session lineage, model pane, local project directory, client family and labels match. Omit terminal identity outside Herdr. Never opens a launcher.
             operationId: project#attach_guide
             requestBody:
                 description: Request body for attach_guide.
@@ -14579,7 +14579,12 @@ paths:
                         schema:
                             $ref: '#/components/schemas/AttachGuideRequestBody'
                         example:
+                            ancestor_pids:
+                                - 6680357311335224070
+                                - 8202761794251479320
+                                - 533187414794575372
                             client: gemini
+                            daemon_client_pid: 8734940604984878032
                             hc_terminal_id: x
             responses:
                 "200":
@@ -18723,6 +18728,19 @@ components:
         AttachGuideRequestBody:
             type: object
             properties:
+                ancestor_pids:
+                    type: array
+                    items:
+                        type: integer
+                        example: 6680357311335224070
+                        format: int64
+                        minimum: 1
+                    description: Invoking process and ancestor OS process IDs.
+                    example:
+                        - 6680357311335224070
+                        - 8202761794251479320
+                        - 533187414794575372
+                    maxItems: 64
                 client:
                     type: string
                     description: Invoking coding-agent client.
@@ -18734,6 +18752,12 @@ components:
                         - cursor
                         - gemini
                         - opencode
+                daemon_client_pid:
+                    type: integer
+                    description: Unique local client OS process ID in this project directory when stdio was spawned by a background daemon.
+                    example: 8734940604984878032
+                    format: int64
+                    minimum: 1
                 hc_terminal_id:
                     type: string
                     description: Invoking local Herdr terminal identity.
@@ -18741,7 +18765,12 @@ components:
                     minLength: 1
             description: Request body for attach_guide.
             example:
+                ancestor_pids:
+                    - 6680357311335224070
+                    - 8202761794251479320
+                    - 533187414794575372
                 client: gemini
+                daemon_client_pid: 8734940604984878032
                 hc_terminal_id: x
         AttachGuideResponseBody:
             type: object

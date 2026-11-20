@@ -126,7 +126,7 @@ starter and its first Git commit in place, deriving a default Go module path
 from the folder name unless you gave one, and puts open product questions on
 the Change Card rather than asking a checklist in chat.
 
-In Herdr, when the client forwards its terminal identity or matches a unique
+In Herdr, when the client's terminal identity or process lineage matches its
 live pane in the project folder, Surla can adopt your coding agent's existing
 local pane and space if their project and team labels are compatible. You keep
 the conversation already open. Without Herdr, the server runs in the background; the same MCP tools
@@ -134,11 +134,11 @@ and browser decisions remain available. Bare `surla` remains an operator
 entrypoint that opens the page without starting agents or a team launcher.
 
 Your coding agent calls [`open_views`](REFERENCE.md#open_views) to open a fresh
-window in your browser and bring it to the front. Ask it to open the window
-again after a reload or close. The Herdr companion (`Cmd+Alt+Shift+S` on macOS)
-also offers **Open Surla Window**, alongside the current stage, role attention
-and pane focus buttons. Setup installs the companion as a floating window; it
-does not change Herdr's workspace layout.
+session in your default browser. Ask it to open the page again after a reload
+or close. The Herdr companion (`Cmd+Alt+Shift+S` on macOS) also offers **Open
+Surla Window**, alongside the current stage, role attention and pane focus
+buttons. Setup installs the companion as a floating window; it does not change
+Herdr's workspace layout.
 
 For terminal operation and browser automation, `surla --print-link` prints
 the one-use URL and expiry as JSON, and `surla status --json` reads the

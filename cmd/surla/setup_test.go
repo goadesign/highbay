@@ -141,10 +141,15 @@ func TestSetupDetectsClientsByEnvironmentAndPath(t *testing.T) {
 	home := t.TempDir()
 	claudeDir := filepath.Join(t.TempDir(), "claude")
 	codexDir := filepath.Join(t.TempDir(), "codex")
+	geminiHome := filepath.Join(t.TempDir(), "gemini-home")
 	env := testSetupEnvironment(home)
 	env.goos = "linux"
 	env.getenv = func(name string) string {
-		return map[string]string{"CLAUDE_CONFIG_DIR": claudeDir, "CODEX_HOME": codexDir}[name]
+		return map[string]string{
+			"CLAUDE_CONFIG_DIR": claudeDir,
+			"CODEX_HOME":        codexDir,
+			"GEMINI_CLI_HOME":   geminiHome,
+		}[name]
 	}
 	env.onPath = func(name string) bool { return name == "claude" || name == "codex" || name == "gemini" }
 
@@ -153,7 +158,10 @@ func TestSetupDetectsClientsByEnvironmentAndPath(t *testing.T) {
 	for _, target := range jsonTargets {
 		paths = append(paths, target.path)
 	}
-	assert.Equal(t, []string{filepath.Join(claudeDir, ".claude.json"), filepath.Join(home, ".gemini", "settings.json")}, paths)
+	assert.Equal(t, []string{
+		filepath.Join(claudeDir, ".claude.json"),
+		filepath.Join(geminiHome, ".gemini", "settings.json"),
+	}, paths)
 	assert.Equal(t, []string{filepath.Join(codexDir, "config.toml")}, tomlTargets)
 	require.Len(t, permTargets, 1)
 	assert.Equal(t, filepath.Join(claudeDir, "settings.json"), permTargets[0].path)
@@ -161,7 +169,7 @@ func TestSetupDetectsClientsByEnvironmentAndPath(t *testing.T) {
 		filepath.Join(home, ".agents", "skills", "surla", "SKILL.md"),
 		filepath.Join(claudeDir, "skills", "surla", "SKILL.md"),
 		filepath.Join(codexDir, "skills", "surla", "SKILL.md"),
-		filepath.Join(home, ".gemini", "skills", "surla", "SKILL.md"),
+		filepath.Join(geminiHome, ".gemini", "skills", "surla", "SKILL.md"),
 	}, skillTargets)
 
 	// Antigravity's ~/.gemini/config alone does not make Gemini CLI a target.
@@ -294,10 +302,27 @@ func TestSetupCodexConfigMerge(t *testing.T) {
 			changed: true,
 		},
 		{
-			name:    "replaces values in place and keeps other keys",
+			name:    "replaces command and args while preserving explicit approval mode and other keys",
 			content: "[mcp_servers.surla]\ncommand = 'old/surla' # pinned\nargs = [\"serve\", \"-x\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [\"CUSTOM_VAR\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
-			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\" # pinned\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [\"CUSTOM_VAR\", \"HC_TERMINAL_ID\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\" # pinned\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [\"CUSTOM_VAR\", \"HC_TERMINAL_ID\"]\nstartup_timeout_sec = 30\n\n[mcp_servers.surla.env]\nA = \"1\"\n",
 			changed: true,
+		},
+		{
+			name:    "splices HC_TERMINAL_ID into structured env_vars array without overwriting tables",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"env\" }]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\nenv_vars = [{ name = \"FOO\", source = \"env\" }, \"HC_TERMINAL_ID\"]\n",
+			changed: true,
+		},
+		{
+			name:    "splices HC_TERMINAL_ID into multiline structured env_vars with comments",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"env\" } # keep comment\n]\n",
+			want:    "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"writes\"\nenv_vars = [\n  { name = \"FOO\", source = \"env\" }, # keep comment\n  \"HC_TERMINAL_ID\"\n]\n",
+			changed: true,
+		},
+		{
+			name:    "recognizes structured HC_TERMINAL_ID entry without rewriting",
+			content: "[mcp_servers.surla]\ncommand = \"/opt/surla/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"prompt\"\nenv_vars = [{ name = \"HC_TERMINAL_ID\", source = \"env\" }]\n",
+			changed: false,
 		},
 		{
 			name:    "keeps user env_vars untouched when HC_TERMINAL_ID already present",
@@ -523,7 +548,22 @@ func TestSetupPermissionsAllowJSON(t *testing.T) {
 		}
 	})
 
-	t.Run("cursor cli-config updates only existing permissions.allow", func(t *testing.T) {
+	t.Run("gemini settings preserves explicit trust false", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), ".gemini", "settings.json")
+		writeTestFile(t, path, `{"mcpServers":{"surla":{"command":"/old/surla","args":["stdio"],"trust":false},"other":{"command":"npx"}}}`)
+		changed, err := mergeMCPJSONConfig(mcpJSONTarget{
+			path:       path,
+			serversKey: "mcpServers",
+			entry:      map[string]any{"command": testExecutable, "args": []any{"stdio"}, "trust": true},
+		})
+		require.NoError(t, err)
+		assert.True(t, changed)
+		servers := readTestJSON(t, path)["mcpServers"].(map[string]any)
+		assert.Equal(t, map[string]any{"command": testExecutable, "args": []any{"stdio"}, "trust": false}, servers["surla"])
+		assert.Equal(t, map[string]any{"command": "npx"}, servers["other"])
+	})
+
+	t.Run("cursor cli-config updates existing files including deny-only configs and respects deny rules", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "cli-config.json")
 		target := permissionsJSONTarget{
@@ -541,15 +581,19 @@ func TestSetupPermissionsAllowJSON(t *testing.T) {
 		writeTestFile(t, path, `{"version":1}`)
 		changed, present, err = mergePermissionsAllowJSON(target)
 		require.NoError(t, err)
-		assert.False(t, changed)
-		assert.False(t, present)
+		assert.True(t, changed)
+		assert.True(t, present)
+		parsed := readTestJSON(t, path)
+		assert.Equal(t, float64(1), parsed["version"])
+		assert.Equal(t, []any{"Mcp(surla:*)", "Mcp(chorus:*)"}, parsed["permissions"].(map[string]any)["allow"])
 
-		writeTestFile(t, path, `{"version":1,"permissions":{"allow":["Shell(ls)"],"deny":[]}}`)
+		writeTestFile(t, path, `{"version":1,"permissions":{"deny":["Shell(rm)","Mcp(chorus:*)"]}}`)
 		changed, present, err = mergePermissionsAllowJSON(target)
 		require.NoError(t, err)
 		assert.True(t, changed)
 		assert.True(t, present)
 		perms := readTestJSON(t, path)["permissions"].(map[string]any)
-		assert.Equal(t, []any{"Shell(ls)", "Mcp(surla:*)", "Mcp(chorus:*)"}, perms["allow"])
+		assert.Equal(t, []any{"Mcp(surla:*)"}, perms["allow"])
+		assert.Equal(t, []any{"Shell(rm)", "Mcp(chorus:*)"}, perms["deny"])
 	})
 }

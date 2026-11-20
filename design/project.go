@@ -89,10 +89,12 @@ var _ = Service("project", func() {
 		})
 	})
 	Method("attach_guide", func() {
-		Description("Attach the invoking coding agent as this project's guide. A supplied live Herdr terminal is adopted only after its model pane, local project and labels are validated. Omit terminal identity outside Herdr. Never opens a launcher.")
+		Description("Attach the invoking coding agent as this project's guide. A live Herdr terminal is adopted only when session lineage, model pane, local project directory, client family and labels match. Omit terminal identity outside Herdr. Never opens a launcher.")
 		Payload(func() {
 			Attribute("hc_terminal_id", String, "Invoking local Herdr terminal identity.", func() { MinLength(1) })
 			Attribute("client", String, "Invoking coding-agent client.", func() { Enum("claude", "codex", "antigravity", "cursor", "gemini", "opencode") })
+			Attribute("ancestor_pids", ArrayOf(Int, func() { Minimum(1) }), "Invoking process and ancestor OS process IDs.", func() { MaxLength(64) })
+			Attribute("daemon_client_pid", Int, "Unique local client OS process ID in this project directory when stdio was spawned by a background daemon.", func() { Minimum(1) })
 		})
 		Result(func() {
 			Attribute("team", String, "Stable project team name.")

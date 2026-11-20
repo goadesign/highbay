@@ -21,6 +21,11 @@ type AttachGuideRequestBody struct {
 	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
 	// Invoking coding-agent client.
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Invoking process and ancestor OS process IDs.
+	AncestorPids []int `form:"ancestor_pids,omitempty" json:"ancestor_pids,omitempty" xml:"ancestor_pids,omitempty"`
+	// Unique local client OS process ID in this project directory when stdio was
+	// spawned by a background daemon.
+	DaemonClientPid *int `form:"daemon_client_pid,omitempty" json:"daemon_client_pid,omitempty" xml:"daemon_client_pid,omitempty"`
 }
 
 // ExchangeBrowserLinkRequestBody is the type of the "project" service
@@ -725,8 +730,15 @@ func NewExchangeBrowserLinkUnprocessableResponseBody(res *goa.ServiceError) *Exc
 // NewAttachGuidePayload builds a project service attach_guide endpoint payload.
 func NewAttachGuidePayload(body *AttachGuideRequestBody) *project.AttachGuidePayload {
 	v := &project.AttachGuidePayload{
-		HcTerminalID: body.HcTerminalID,
-		Client:       body.Client,
+		HcTerminalID:    body.HcTerminalID,
+		Client:          body.Client,
+		DaemonClientPid: body.DaemonClientPid,
+	}
+	if body.AncestorPids != nil {
+		v.AncestorPids = make([]int, len(body.AncestorPids))
+		for i, val := range body.AncestorPids {
+			v.AncestorPids[i] = val
+		}
 	}
 
 	return v
@@ -753,6 +765,19 @@ func ValidateAttachGuideRequestBody(body *AttachGuideRequestBody) (err error) {
 	if body.Client != nil {
 		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if len(body.AncestorPids) > 64 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.ancestor_pids", body.AncestorPids, len(body.AncestorPids), 64, false))
+	}
+	for _, e := range body.AncestorPids {
+		if e < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.ancestor_pids[*]", e, 1, true))
+		}
+	}
+	if body.DaemonClientPid != nil {
+		if *body.DaemonClientPid < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.daemon_client_pid", *body.DaemonClientPid, 1, true))
 		}
 	}
 	return
