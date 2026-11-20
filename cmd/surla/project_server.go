@@ -656,25 +656,13 @@ func projectClient(state *project.State) *genproject.Client {
 	teamClient := teamHTTPClient()
 	return genproject.NewClient(
 		managementEndpoint(state, client, (*genprojectclient.Client).Identity),
-		teamManagementEndpoint(state, teamClient),
+		managementEndpoint(state, client, (*genprojectclient.Client).EnsureTeam),
 		managementEndpoint(state, teamClient, (*genprojectclient.Client).AttachGuide),
 		managementEndpoint(state, client, (*genprojectclient.Client).Status),
 		managementEndpoint(state, client, (*genprojectclient.Client).Stop),
 		managementEndpoint(state, client, (*genprojectclient.Client).BrowserLink),
 		managementEndpoint(state, client, (*genprojectclient.Client).ExchangeBrowserLink),
 	)
-}
-
-// teamManagementEndpoint gives only the team request's deadline its own concrete recovery step.
-func teamManagementEndpoint(state *project.State, client *http.Client) goa.Endpoint {
-	next := managementEndpoint(state, client, (*genprojectclient.Client).EnsureTeam)
-	return func(ctx context.Context, payload any) (any, error) {
-		result, err := next(ctx, payload)
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("project team request did not finish because Herdr did not answer in time; open the Herdr app, then click Start agents on the views page: %w", context.DeadlineExceeded)
-		}
-		return result, err
-	}
 }
 
 // managementEndpoint preserves generated transport behavior without printing peer-authored
@@ -730,10 +718,6 @@ func managementCall(
 			}
 			return nil, goahttp.ErrInvalidResponse(responseErr.Service, responseErr.Method, doer.lastStatus, "")
 		}
-		var spaceConflict *genproject.TeamSpaceConflict
-		if errors.As(err, &spaceConflict) {
-			return nil, fmt.Errorf("%d Herdr spaces match this project; close duplicate spaces and run surla again (HTTP %d)", spaceConflict.Count, doer.lastStatus)
-		}
 		var unavailable *genproject.TeamUnavailable
 		if errors.As(err, &unavailable) {
 			return nil, fmt.Errorf("%s (HTTP %d)", teamUnavailableStep(state, unavailable.Cause), doer.lastStatus)
@@ -741,8 +725,6 @@ func managementCall(
 		var serviceErr *goa.ServiceError
 		if errors.As(err, &serviceErr) {
 			switch serviceErr.Name {
-			case "window_busy":
-				return nil, fmt.Errorf("a dialog is open in Herdr; close it, then run surla again (HTTP %d)", doer.lastStatus)
 			case "forbidden":
 				return nil, fmt.Errorf("project management operation is not permitted (HTTP %d); run surla again", doer.lastStatus)
 			case "unprocessable":
@@ -753,16 +735,17 @@ func managementCall(
 	}
 }
 
-// teamUnavailableStep is the CLI's fixed text for one declared team failure cause. It names
-// what could not be used and the step that repairs it; the retry is the views page's
-// Start agents, which reaches the same team operation, because the page opens regardless.
+// teamUnavailableStep is the fixed text for one team failure cause of attach_guide,
+// the only management operation that returns one. surla stdio calls it when a
+// guide's first Surla tool call attaches the agent, so the text names what could
+// not be used, its repair, and the retry: calling the Surla tool again.
 func teamUnavailableStep(state *project.State, cause string) string {
-	const retry = "then click Start agents on the views page"
+	const retry = "then call the Surla tool again"
 	switch cause {
 	case "stopping":
-		return "the project server is stopping; run surla again"
+		return "the project server is stopping; call the Surla tool again to start it"
 	case "chorus":
-		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then start the agents again (Start agents on the page, or run surla)."
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), " + retry
 	case "herdr":
 		return "Herdr did not complete a team command; open the Herdr app, " + retry
 	case "saved_space":
@@ -774,7 +757,7 @@ func teamUnavailableStep(state *project.State, cause string) string {
 	case "role_folder":
 		return fmt.Sprintf("a team role's working folder could not be read; make sure this account can open the project folder %s and its build working folders, %s", state.Record.Directory, retry)
 	}
-	return "project team could not be prepared; run surla again"
+	return "project team could not be prepared; call the Surla tool again"
 }
 
 // projectHTTPClient keeps management requests off proxies and refuses redirects,

@@ -149,7 +149,7 @@ func TestUnexpectedManagementResponseDoesNotEchoCredential(t *testing.T) {
 // TestManagementErrorsUseOnlyCLIText covers declared errors, malformed bodies and
 // malformed HTTP itself. The peer deliberately copies the sent credential into each reply.
 func TestManagementErrorsUseOnlyCLIText(t *testing.T) {
-	for _, scenario := range []string{"forbidden", "window_busy", "unprocessable", "unknown name", "invalid JSON", "malformed status", "malformed header"} {
+	for _, scenario := range []string{"forbidden", "unprocessable", "unknown name", "invalid JSON", "malformed status", "malformed header"} {
 		t.Run(scenario, func(t *testing.T) {
 			isolateServeWorkspace(t)
 			state, err := fixtureProjectState("")
@@ -157,9 +157,6 @@ func TestManagementErrorsUseOnlyCLIText(t *testing.T) {
 			key := strings.Repeat("c", 64)
 			marker := "peer-must-never-print"
 			status := http.StatusForbidden
-			if scenario == "window_busy" {
-				status = http.StatusConflict
-			}
 			if scenario == "unprocessable" {
 				status = http.StatusUnprocessableEntity
 			}
@@ -199,11 +196,7 @@ func TestManagementErrorsUseOnlyCLIText(t *testing.T) {
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: key}))
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
-			if scenario == "window_busy" {
-				_, err = projectClient(state).EnsureTeam(ctx)
-			} else {
-				_, err = projectClient(state).Identity(ctx)
-			}
+			_, err = projectClient(state).Identity(ctx)
 			require.Error(t, err)
 			assert.False(t, strings.Contains(err.Error(), key), "the CLI must never echo the sent credential")
 			assert.False(t, strings.Contains(err.Error(), marker), "the CLI must never print peer-authored text")

@@ -73,7 +73,7 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 	}{
 		{name: "ready", kind: gensurla.TeamKindReady},
 		{name: "window busy", err: gensurla.MakeWindowBusy(errors.New(private)), kind: gensurla.TeamKindWindowBusy},
-		{name: "ambiguous", err: fmt.Errorf("%s: %w", private, &genproject.TeamSpaceConflict{Name: "ambiguous_space", Count: 3}), kind: gensurla.TeamKindAmbiguousSpace},
+		{name: "ambiguous", err: fmt.Errorf("%s: %w", private, &TeamSpaceConflict{Count: 3}), kind: gensurla.TeamKindAmbiguousSpace},
 		{name: "unavailable", err: gensurla.MakeTeamUnavailable(errors.New(private)), kind: gensurla.TeamKindUnavailable},
 		{name: "unexpected failure", err: errors.New(private), kind: gensurla.TeamKindUnavailable},
 	}
@@ -109,17 +109,18 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 // the project owner returns, a team_unavailable error whose cause is the typed
 // failure, and checks that each cause gets its own repair before the step to
 // start the team agents for the saved build, not one Herdr check for all. An
-// error without a typed cause names surla, which prints the cause's step.
+// error without a typed cause asks for that retry alone. No step tells the
+// user to type surla, which neither prints a team step nor starts agents.
 func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 	for _, tc := range []struct{ name, cause, repair string }{
-		{name: "stopping", cause: "stopping", repair: "Run surla in the project folder to start it again"},
+		{name: "stopping", cause: "stopping", repair: "Ask your coding agent to call a Surla tool, or choose Start Surla in the Herdr companion, to start it again"},
 		{name: "herdr", cause: "herdr", repair: "Open the Herdr app"},
 		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
 		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."},
 		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
-		{name: "project state", cause: "project_state", repair: "Run surla in the project folder to see which folder to repair"},
+		{name: "project state", cause: "project_state", repair: "Make this project's folder under Surla's operator storage private to this account"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},
-		{name: "no typed cause", repair: "Run surla in the project folder to see the step"},
+		{name: "no typed cause", repair: "The project team could not be prepared. Try again"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := error(gensurla.MakeTeamUnavailable(errors.New("private external reply")))
@@ -136,6 +137,7 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 				assert.True(t, strings.HasSuffix(step, "the team agents for this saved build."), step)
 			}
 			assert.NotContains(t, step, "Check that Herdr is available")
+			assert.NotContains(t, strings.ToLower(step), "run surla")
 			assert.NotContains(t, step, "private external reply")
 			assert.True(t, boundedText(step, maxCheckStep), "the step fits the contract")
 		})

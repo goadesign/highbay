@@ -282,7 +282,7 @@ func (s *Server) workerSpace(ctx context.Context, record Record) (TeamSpace, err
 		}
 	}
 	if matches > 1 {
-		return TeamSpace{}, &genproject.TeamSpaceConflict{Name: "ambiguous_space", Count: matches}
+		return TeamSpace{}, &controlplane.TeamSpaceConflict{Count: matches}
 	}
 	if matches == 1 {
 		return matched, nil

@@ -167,29 +167,23 @@ func TestCommandErrorsNeverIncludeArguments(t *testing.T) {
 	assert.Equal(t, "no-such-program command failed", err.Error())
 }
 
-func TestTeamTimeoutHasRecoveryStep(t *testing.T) {
-	for _, operation := range []string{"team", "identity"} {
-		t.Run(operation, func(t *testing.T) {
-			isolateServeWorkspace(t)
-			state, err := fixtureProjectState(t.TempDir())
-			require.NoError(t, err)
-			release := make(chan struct{})
-			api := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
-			defer api.Close()
-			defer close(release)
-			state.Record.Port = api.Listener.Addr().(*net.TCPAddr).Port
-			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("a", 64)}))
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
-			defer cancel()
-			if operation == "team" {
-				_, err = projectClient(state).EnsureTeam(ctx)
-				require.ErrorContains(t, err, "open the Herdr app, then click Start agents on the views page")
-			} else {
-				_, err = projectClient(state).Identity(ctx)
-				require.ErrorContains(t, err, "project server request did not finish")
-				assert.NotContains(t, err.Error(), "check Herdr")
-			}
-			assert.ErrorIs(t, err, context.DeadlineExceeded)
-		})
-	}
+// TestManagementTimeoutHasRecoveryStep checks that a management request that
+// does not finish names its own recovery and no Herdr step: no management
+// read waits on Herdr.
+func TestManagementTimeoutHasRecoveryStep(t *testing.T) {
+	isolateServeWorkspace(t)
+	state, err := fixtureProjectState(t.TempDir())
+	require.NoError(t, err)
+	release := make(chan struct{})
+	api := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	defer api.Close()
+	defer close(release)
+	state.Record.Port = api.Listener.Addr().(*net.TCPAddr).Port
+	require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("a", 64)}))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	_, err = projectClient(state).Identity(ctx)
+	require.ErrorContains(t, err, "project server request did not finish")
+	assert.NotContains(t, err.Error(), "check Herdr")
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }

@@ -183,7 +183,7 @@ func TestServeProposesWithoutAModelAndConfigureModelSwitchesTheLiveTargetModel(t
 	require.NoError(t, json.Unmarshal(body, &missingKeyBody))
 	assert.Equal(t, http.StatusUnprocessableEntity, status)
 	assert.False(t, missingKeyBody.Fault)
-	assert.Equal(t, "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway.", missingKeyBody.Message)
+	assert.Equal(t, "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway.", missingKeyBody.Message)
 
 	// 3. A gateway address is accepted.
 	status, body = post("/cp1/model", `{"gateway_addr":"127.0.0.1:9090"}`)

@@ -373,7 +373,7 @@ func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 		kind gensurla.TeamKind
 	}{
 		{"busy", gensurla.MakeWindowBusy(errors.New("fixture busy")), gensurla.TeamKindWindowBusy},
-		{"ambiguous", fmt.Errorf("fixture: %w", &genproject.TeamSpaceConflict{Name: "ambiguous_space", Count: 2}), gensurla.TeamKindAmbiguousSpace},
+		{"ambiguous", fmt.Errorf("fixture: %w", &TeamSpaceConflict{Count: 2}), gensurla.TeamKindAmbiguousSpace},
 		{"unavailable", gensurla.MakeTeamUnavailable(errors.New("fixture unavailable")), gensurla.TeamKindUnavailable},
 		{"unavailable herdr", gensurla.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: "herdr"}), gensurla.TeamKindUnavailable},
 	} {

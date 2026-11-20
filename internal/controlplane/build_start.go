@@ -511,7 +511,7 @@ func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
 	if err == nil {
 		return gensurla.NewTeamReady(team)
 	}
-	var spaces *genproject.TeamSpaceConflict
+	var spaces *TeamSpaceConflict
 	if errors.As(err, &spaces) {
 		return gensurla.NewTeamAmbiguousSpace(&gensurla.BuildTeamAmbiguousSpace{
 			Count: spaces.Count,
@@ -534,19 +534,18 @@ func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
 	})
 }
 
-// buildTeamStep is a saved build's step for one team failure cause, as the
-// surla command and the views page each give one: what could not be used,
-// its repair, and then Start agents, which starts the team for the saved
-// build without building again. An unknown cause, including none, names
-// surla, which prints the step for the cause. Each step fits BuildStartStep.
+// buildTeamStep is a saved build's step for one team failure cause: what
+// could not be used, its repair, and then Start agents, which starts the team
+// for the saved build without building again. An unknown cause, including
+// none, asks for that retry alone. Each step fits BuildStartStep.
 func buildTeamStep(cause string) string {
 	const retry = "then start the team agents for this saved build."
 	switch cause {
 	case "stopping":
-		return "The project server is stopping. Run surla in the project folder to start it again; " +
-			"that also starts the team agents for this saved build."
+		return "The project server is stopping. Ask your coding agent to call a Surla tool, or choose Start Surla " +
+			"in the Herdr companion, to start it again, " + retry
 	case "chorus":
-		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then use Start agents on the page or run surla to start the team agents for this saved build."
+		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), " + retry
 	case "herdr":
 		return "Herdr did not complete a team command. Open the Herdr app, " + retry
 	case "saved_space":
@@ -555,13 +554,13 @@ func buildTeamStep(cause string) string {
 		return "Herdr's launcher roster folder could not be written. Make data/chorus-launcher/rosters " +
 			"in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
 	case "project_state":
-		return "This project's private state could not be read or written. " +
-			"Run surla in the project folder to see which folder to repair, " + retry
+		return "This project's private state could not be read or written. Make this project's folder under " +
+			"Surla's operator storage private to this account (chmod 700 for folders, 600 for files), " + retry
 	case "role_folder":
 		return "A team role's working folder could not be read. Make sure this account can open " +
 			"the project folder and its build working folders, " + retry
 	}
-	return "The project team could not be prepared. Run surla in the project folder to see the step, " + retry
+	return "The project team could not be prepared. Try again: start the team agents for this saved build."
 }
 
 // checkBuildReplacement refuses another change while the open build remains,

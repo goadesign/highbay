@@ -14915,28 +14915,6 @@ paths:
                                 name: forbidden
                                 temporary: false
                                 timeout: false
-                "409":
-                    description: |-
-                        ambiguous_space: Several local spaces match the team name and folder; close the duplicates before starting agents again.
-
-                        window_busy: Another Herdr dialog is open; close it and run surla again.
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TeamSpaceConflict'
-                            example:
-                                count: 5186046670494698814
-                                name: Distinctio aperiam facere quia sed.
-                        application/vnd.goa.error:
-                            schema:
-                                $ref: '#/components/schemas/Error'
-                            example:
-                                fault: false
-                                id: 123abc
-                                message: parameter 'p' must be an integer
-                                name: window_busy
-                                temporary: false
-                                timeout: false
                 "422":
                     description: 'unprocessable: The requested credential exchange does not exist or is invalid.'
                     content:
@@ -14950,15 +14928,6 @@ paths:
                                 name: unprocessable
                                 temporary: false
                                 timeout: false
-                "503":
-                    description: 'team_unavailable: A bounded Herdr operation, roster write or project state access failed; its cause selects the recovery step.'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/TeamUnavailable'
-                            example:
-                                cause: project_state
-                                name: Aut velit ea sunt placeat possimus.
     /sandbox/draft:
         post:
             tags:
@@ -29276,32 +29245,13 @@ components:
                 - herdr_mode
                 - saved_choices
                 - dismissed_notices
-        TeamSpaceConflict:
-            type: object
-            properties:
-                count:
-                    type: integer
-                    description: Number of local spaces matching the team's name and physical folder.
-                    example: 5186046670494698814
-                    format: int64
-                    minimum: 2
-                name:
-                    type: string
-                    description: Error name.
-                    example: Distinctio aperiam facere quia sed.
-            example:
-                count: 5186046670494698814
-                name: Distinctio aperiam facere quia sed.
-            required:
-                - name
-                - count
         TeamUnavailable:
             type: object
             properties:
                 cause:
                     type: string
                     description: 'What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project''s saved Herdr space has an ID this version of Surla no longer accepts and is still open), roster_folder (Herdr''s launcher roster folder could not be written), project_state (the project''s private record or an agent credential could not be read or written), or role_folder (a role''s working folder could not be read).'
-                    example: project_state
+                    example: roster_folder
                     enum:
                         - stopping
                         - chorus
@@ -29313,10 +29263,10 @@ components:
                 name:
                     type: string
                     description: Error name.
-                    example: Aut velit ea sunt placeat possimus.
+                    example: Natus quasi et corporis dignissimos.
             example:
-                cause: project_state
-                name: Aut velit ea sunt placeat possimus.
+                cause: roster_folder
+                name: Natus quasi et corporis dignissimos.
             required:
                 - name
                 - cause

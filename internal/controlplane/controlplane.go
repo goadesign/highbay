@@ -688,7 +688,7 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), gensurla.MakeForbidden(errors.New("open the project views with surla; session or credential is no longer valid")))); encodeErr != nil {
+			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), gensurla.MakeForbidden(errors.New("session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Page in the Herdr companion")))); encodeErr != nil {
 				otel.Handle(encodeErr)
 			}
 			return

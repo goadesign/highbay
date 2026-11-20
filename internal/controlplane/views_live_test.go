@@ -433,7 +433,7 @@ await until(() => page.$("#surla-model-name"), "the Live target view did not ope
 expect(page.$("#surla-model-name").value === "gpt-5.4-mini" && page.$("#surla-model-provider").value === "openai", "leaving the view lost the typed text: " + page.$("#surla-model-name").value + " / " + page.$("#surla-model-provider").value);
 page.$("#surla-model-apply").click();
 await until(() => page.$("#surla-model-outcome"), "the refusal was not shown");
-expect(page.text("#surla-model-outcome").includes("provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway."), "the refusal is not shown verbatim: " + page.text("#surla-model-outcome"));
+expect(page.text("#surla-model-outcome").includes("provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway."), "the refusal is not shown verbatim: " + page.text("#surla-model-outcome"));
 expect(page.$("#surla-model-outcome").getAttribute("role") === "alert", "the refusal is not an alert");
 expect(page.text("#surla-model-current").includes("anthropic / claude-sonnet-4-6"), "a refused change replaced the shown choice");
 expect(page.beforeUnload() && page.$("#surla-open-pending-link").disabled, "a refused model Apply cleared its unsaved guard");

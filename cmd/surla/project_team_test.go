@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	genproject "github.com/goadesign/surla/gen/project"
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/project"
 	"github.com/stretchr/testify/assert"
@@ -178,12 +179,19 @@ func TestTeamCommandProtocol(t *testing.T) {
 	assert.Equal(t, 50*time.Second, teamHTTPClient().Timeout)
 }
 
-// TestEnsureTeamDeclaredErrorsAreFixed drives the generated CLI decoder with hostile messages.
-func TestEnsureTeamDeclaredErrorsAreFixed(t *testing.T) {
+// TestAttachGuideTeamFailureIsFixed drives the generated CLI decoder with the
+// team failures attach_guide declares, as surla stdio meets them when a guide
+// attaches: each cause gets its fixed step and the retry is calling the Surla
+// tool again, never typing surla.
+func TestAttachGuideTeamFailureIsFixed(t *testing.T) {
 	for _, tc := range []struct {
 		name, body, want string
 		status           int
-	}{{"ambiguous", `{"name":"ambiguous_space","count":3}`, "3 Herdr spaces match", 409}, {"busy", `{"name":"window_busy","id":"fixture","message":"private peer output","temporary":false,"timeout":false,"fault":false}`, "a dialog is open in Herdr", 409}, {"unavailable", `{"name":"team_unavailable","cause":"herdr"}`, "Herdr did not complete a team command", 503}} {
+	}{
+		{"herdr", `{"name":"team_unavailable","cause":"herdr"}`, "Herdr did not complete a team command; open the Herdr app, then call the Surla tool again", 503},
+		{"stopping", `{"name":"team_unavailable","cause":"stopping"}`, "the project server is stopping; call the Surla tool again to start it", 503},
+		{"chorus", `{"name":"team_unavailable","cause":"chorus"}`, "Run chorus up (or chorus status to see the error), then call the Surla tool again", 503},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateServeWorkspace(t)
 			state, err := fixtureProjectState(t.TempDir())
@@ -198,8 +206,9 @@ func TestEnsureTeamDeclaredErrorsAreFixed(t *testing.T) {
 			defer api.Close()
 			state.Record.Port = api.Listener.Addr().(*net.TCPAddr).Port
 			require.NoError(t, state.SaveRunning(project.Running{ManagementCredential: strings.Repeat("a", 64)}))
-			_, err = projectClient(state).EnsureTeam(t.Context())
+			_, err = projectClient(state).AttachGuide(t.Context(), &genproject.AttachGuidePayload{})
 			require.ErrorContains(t, err, tc.want)
+			assert.NotContains(t, err.Error(), "run surla")
 			assert.NotContains(t, err.Error(), "private peer output")
 			assert.Contains(t, err.Error(), fmt.Sprintf("HTTP %d", tc.status))
 		})

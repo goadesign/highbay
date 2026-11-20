@@ -272,7 +272,7 @@ func operatorRootError(dir string, err error) error {
 	if validErr := validateOperatorPrivateDir(dir); validErr == nil || errors.Is(validErr, os.ErrNotExist) {
 		return fmt.Errorf("prepare operator storage root %s: %w", dir, err)
 	}
-	return fmt.Errorf("prepare operator storage root %s: %w; make it a folder of this account that only this account can open (chmod 700 %s, and chown -R it to this account if another account owns it), then run surla again", dir, err, dir)
+	return fmt.Errorf("prepare operator storage root %s: %w; make it a folder of this account that only this account can open (chmod 700 %s, and chown -R it to this account if another account owns it), then try again", dir, err, dir)
 }
 
 // withinAnyDir checks physical containment in the supplied existing roots.

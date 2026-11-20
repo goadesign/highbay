@@ -31,8 +31,8 @@ import (
 // refusalAnthropic and refusalOpenAI are configure_model's refusals of a
 // provider whose request settings the server does not hold.
 const (
-	refusalAnthropic = "provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway."
-	refusalOpenAI    = "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in a shell and run surla there; the project server keeps running. Or choose a model gateway."
+	refusalAnthropic = "provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway."
+	refusalOpenAI    = "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway."
 )
 
 // TestConfigureModelValidationTelemetryAndLiveEnv verifies ConfigureModel's

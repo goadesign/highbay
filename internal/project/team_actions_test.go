@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	genproject "github.com/goadesign/surla/gen/project"
+	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
@@ -109,7 +111,7 @@ func TestShowPaneHerdrFailureNamesRetry(t *testing.T) {
 }
 
 func TestUserTeamErrorBoundary(t *testing.T) {
-	conflict := &genproject.TeamSpaceConflict{Name: "ambiguous_space", Count: 2}
+	conflict := &controlplane.TeamSpaceConflict{Count: 2}
 	wrapped := fmt.Errorf("private peer output: %w", conflict)
 	assert.Same(t, conflict, userTeamError(conflict))
 	assert.Same(t, wrapped, userTeamError(wrapped))
@@ -117,7 +119,7 @@ func TestUserTeamErrorBoundary(t *testing.T) {
 		name string
 		err  error
 	}{
-		{"window_busy", genproject.MakeWindowBusy(errors.New("private peer output"))},
+		{"window_busy", &goa.ServiceError{Name: "window_busy", Message: "private peer output"}},
 		{"team_unavailable", &genproject.TeamUnavailable{Name: "team_unavailable", Cause: "herdr"}},
 		{"team_unavailable", fmt.Errorf("private peer output: %w", &genproject.TeamUnavailable{Name: "team_unavailable", Cause: "herdr"})},
 		{"team_unavailable", errors.New("private peer output")},
@@ -132,6 +134,30 @@ func TestUserTeamErrorBoundary(t *testing.T) {
 			if errors.As(tc.err, &typed) {
 				assert.Same(t, typed, errors.Unwrap(failure), "only the typed failure is kept")
 			}
+		})
+	}
+}
+
+// TestUserTeamStepNamesARealRetry gives every team failure cause, and an
+// unknown one, a step whose retry the user can take from the page, a coding
+// agent or the Herdr companion. None tells the user to type surla: since
+// agents attach through surla stdio, surla neither prints a team step nor
+// starts agents.
+func TestUserTeamStepNamesARealRetry(t *testing.T) {
+	for _, tc := range []struct{ cause, want string }{
+		{"stopping", "ask your coding agent to call a Surla tool, or choose Start Surla in the Herdr companion, to start it again, then try again"},
+		{"chorus", "Run chorus up (or chorus status to see the error), then try again."},
+		{"herdr", "open the Herdr app, then try again"},
+		{"saved_space", "Close this project's obsolete Herdr space, then start the agents again."},
+		{"roster_folder", "then start the agents again"},
+		{"project_state", "make this project's folder under Surla's operator storage (surla/operator in your user configuration folder) and everything in it private to this account"},
+		{"role_folder", "then start the agents again"},
+		{"", "project team could not be prepared; try again"},
+	} {
+		t.Run(tc.cause, func(t *testing.T) {
+			step := userTeamStep(tc.cause)
+			assert.Contains(t, step, tc.want)
+			assert.NotContains(t, strings.ToLower(step), "run surla")
 		})
 	}
 }

@@ -83,15 +83,9 @@ var _ = Service("project", func() {
 	Method("ensure_team", func() {
 		Description("Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.")
 		Result(ProjectTeam)
-		Error("ambiguous_space", TeamSpaceConflict, "Several local spaces match the team name and folder; close the duplicates before starting agents again.")
-		Error("window_busy", ErrorResult, "Another Herdr dialog is open; close it and run surla again.")
-		Error("team_unavailable", TeamUnavailable, "A bounded Herdr operation, roster write or project state access failed; its cause selects the recovery step.")
 		HTTP(func() {
 			POST("/team")
 			Response(StatusOK)
-			Response("ambiguous_space", StatusConflict)
-			Response("window_busy", StatusConflict)
-			Response("team_unavailable", StatusServiceUnavailable)
 		})
 	})
 	Method("attach_guide", func() {

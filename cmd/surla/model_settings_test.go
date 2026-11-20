@@ -90,7 +90,7 @@ func TestModelSettingsLineNamesWhatIsHeld(t *testing.T) {
 			sel:    modelsettings.Selection{Send: map[string]map[string]string{}, NotSent: []modelsettings.Unsent{{Name: "ANTHROPIC_BASE_URL", MissingKey: "ANTHROPIC_API_KEY"}}},
 			result: &gensurla.ModelSettingsResult{Held: map[string][]string{}, Connection: noChoice()},
 			want: "No model settings are held by the project server; not sent: ANTHROPIC_BASE_URL (ANTHROPIC_API_KEY is not set). " +
-				"Live targets have no model: export a provider key in a shell and run surla there, or choose a model gateway on the views page.",
+				"Live targets have no model: export a provider key in the shell your coding agent starts from and restart the agent, or in a shell where you run surla, or choose a model gateway on the views page.",
 		},
 		{
 			name:   "nothing held, nothing unsent, a gateway",

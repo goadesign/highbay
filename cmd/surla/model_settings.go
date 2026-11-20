@@ -123,5 +123,5 @@ func liveModelSentence(choice gensurla.Connection) string {
 	if gateway, ok := choice.AsGateway(); ok {
 		return "Live targets use the model gateway at " + printableTerminalText(gateway.GatewayAddr) + "; change it on the views page."
 	}
-	return "Live targets have no model: export a provider key in a shell and run surla there, or choose a model gateway on the views page."
+	return "Live targets have no model: export a provider key in the shell your coding agent starts from and restart the agent, or in a shell where you run surla, or choose a model gateway on the views page."
 }
