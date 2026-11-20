@@ -53,6 +53,9 @@ type (
 		DevTools string `json:"devtools"`
 		// Agreement selects the summary layout and keyboard-reading journey.
 		Agreement bool `json:"agreement,omitempty"`
+		// Onboarding starts with a connected empty project, then sends its
+		// first proposal using the fixture's project-scoped guide credential.
+		Onboarding *onboardingInput `json:"onboarding,omitempty"`
 		// Phone selects the focused Team and Build layout scenario.
 		Phone bool `json:"phone,omitempty"`
 		// Taking selects the focused passed-build layout and consent scenario.
@@ -90,6 +93,12 @@ type (
 		// ConfirmBody is a confirm_intent body that the user's session would
 		// have the server accept; pages on other origins send it.
 		ConfirmBody string `json:"confirm_body"`
+	}
+
+	// onboardingInput binds the first proposal to the isolated test project.
+	onboardingInput struct {
+		Guide    string          `json:"guide"`
+		Proposal json.RawMessage `json:"proposal"`
 	}
 
 	// browserFacts is everything browser_harness.cjs observed in the browser.
@@ -460,6 +469,12 @@ const (
 // a reload ending the session, and the browser's cleanup. The Story comes
 // from a real evaluation of a workspace design, which takes most of a minute.
 func TestViewsPageInARealBrowser(t *testing.T) {
+	t.Run("project session", checkViewsSessionInBrowser)
+	t.Run("first run and agreement at desktop and phone widths", checkOnboardingInBrowser)
+}
+
+// checkViewsSessionInBrowser drives link exchange, the loaded page, and session recovery.
+func checkViewsSessionInBrowser(t *testing.T) {
 	executable := findBrowser(t)
 	node, err := exec.LookPath("node")
 	if err != nil {
@@ -669,7 +684,7 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 	t.Run("g a reload ends the session", func(t *testing.T) {
 		assert.False(t, facts.Reload.SignedOutTimedOut, "the reloaded page did not say how to open it")
 		assert.Contains(t, facts.Reload.SignedOutText,
-			"Ask your coding agent to open Surla views, or choose Open Page in the Herdr companion.",
+			"Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.",
 			"the reloaded page's recovery routes")
 		assert.Equal(t, origin+"/views", facts.Reload.Href, "the reloaded page's address")
 		assert.Len(t, requestsTo(facts.Reload.PageRequests, http.MethodGet, "/views"), 1, "the reload did not load the page again")
@@ -725,6 +740,74 @@ func TestViewsPageInARealBrowser(t *testing.T) {
 		assert.Contains(t, facts.Browser.UserAgent, "HeadlessChrome", "the browser did not run headless")
 		browser.stopAndCheck(t)
 	})
+}
+
+// checkOnboardingInBrowser exercises the first proposed card through the
+// real browser and typed HTTP server without relying on an existing card.
+func checkOnboardingInBrowser(t *testing.T) {
+	executable := findBrowser(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		missingPageTool(t, "node is required to drive the browser through its DevTools protocol")
+	}
+	skipWithoutNodeWebSocket(t, node)
+	harness, err := filepath.Abs("../../ui/checkpoint/testing/browser_harness.cjs")
+	require.NoError(t, err)
+	capture := os.Getenv("SURLA_TEST_LINK_CAPTURE_DIR")
+	if capture == "" {
+		capture = t.TempDir()
+	}
+	require.NoError(t, os.MkdirAll(capture, 0o700))
+
+	vp := startViewsProject(t, controlplane.Options{})
+	program := strings.Join([]string{
+		`root = DecisionWorkspace("Refund decisions", [matrix, rationale])`,
+		`matrix = PolicySimulatorTable("Tax threshold comparison", 1, [refund])`,
+		`refund = PolicySimulatorRow("Order just below the limit", "$48 subtotal plus $4 tax", ["Approve automatically", "Send to a manager"], 1)`,
+		`rationale = AmbiguityChoiceCard(1, "Including tax can send otherwise identical refunds to different approval paths.")`,
+	}, "\n")
+	payload, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
+		ChangeID: "refund-rules",
+		Prompt:   "Require manager review for refunds above fifty dollars.",
+		Analysis: &gensurla.CP1Analysis{
+			Summary: "Route larger refunds to a manager and leave smaller refunds on the automatic path.",
+			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{
+				{
+					Question: "Does the manager-review threshold include tax?",
+					Options: []string{
+						"Use the order subtotal so changes to tax alone cannot move an otherwise identical refund into manager review.",
+						"Use the full amount the customer paid, including tax, to route refunds to the manager when they exceed the threshold.",
+					},
+				},
+				{
+					Question: "What happens when the amount is exactly fifty dollars?",
+					Options:  []string{"Approve the refund automatically.", "Send the refund to a manager for review."},
+				},
+			},
+			Examples: []*gensurla.CP1AnalysisExample{{
+				Scenario: "Refund a smaller order", InputSummary: "A customer requests a refund for a $48 order with $4 tax.",
+				ExpectedOutcome:  "The order follows the chosen threshold. The requester sees whether the refund was approved or needs review.",
+				VerificationKind: "deterministic",
+			}},
+			PreservedBehaviors: []string{},
+			UIComposition:      &program,
+		},
+	})
+	require.NoError(t, err)
+	guide := vp.agent(t, "guide")
+	link, err := vp.link()
+	require.NoError(t, err)
+	browser := startBrowser(t, executable, t.TempDir())
+	driveBrowser(t, node, harness, browserInput{
+		DevTools: browser.devtools, Origin: vp.state.Origin(), Link: link, ChangeIDs: []string{},
+		CaptureDirectory: capture, Onboarding: &onboardingInput{Guide: guide, Proposal: payload},
+	})
+	for _, view := range []string{"welcome", "agree"} {
+		for _, variant := range []string{"desktop-light", "desktop-dark", "phone-light", "phone-dark"} {
+			assert.FileExists(t, filepath.Join(capture, view+"-"+variant+".png"))
+		}
+	}
+	browser.stopAndCheck(t)
 }
 
 // Supervise holds the recorded observations until this test's control plane closes.
@@ -806,6 +889,7 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	// supervisor owner from three independent, recorded blocked terminal snapshots.
 	vp.state.Record.Team = strings.Repeat("t", 32)
 	vp.state.Record.Space = "phone-space"
+	vp.state.Record.Tab = "phone-tab"
 	guide := ""
 	for _, role := range []string{"guide", "builder", "test_writer"} {
 		handle := role + strings.Repeat("x", 32-len(role))

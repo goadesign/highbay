@@ -2427,9 +2427,9 @@ name, such as `Confirm change: shop`, from the facts the page last read;
 after a failed read of the changes or the team, a lost update connection or
 an ended session, it names the recovery instead, such as
 `Reconnecting: shop`. Before the exchange succeeds, the title is `Surla`.
-Reloading or closing the tab ends the session. Ask the guide to call
-[`open_views`](#open_views), or use **Open Surla Window** in the Herdr companion, to
-open a fresh session. Bare `surla` remains an operator fallback.
+Reloading or closing the tab ends the session. Ask your coding agent to
+[reopen Surla](#open_views) or choose **Open Surla Window** in the Herdr companion
+to open a fresh session. Bare `surla` remains an operator fallback.
 Opening a fresh link in the same tab reloads the page through the normal link
 exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form
 edits, or a pending edit request, the page removes the link from the address
@@ -2440,33 +2440,36 @@ The link still expires two minutes after it was printed, not after it was
 pasted. Obtain another link if it expires while you finish editing.
 A used or expired link is reported as such. When the server answers `401`, as
 it does after a restart, the page keeps everything typed visible and
-copyable and explains how to ask the guide to reopen the page. Leaving with unsaved edits asks the
+copyable and explains how to ask your coding agent to reopen the page. Leaving with unsaved edits asks the
 browser to confirm, including for unadopted proposal answers and Model-form edits.
 
-**Every view.** The frame previews at most two lines of the confirmed
-agreement's summary. **Read full summary** opens Agree, expands **Agreement
-details**, and focuses the complete saved summary without submitting or
-discarding unsaved edits. The action is absent before confirmation. On
-Describe with no change open for editing, the frame says **No confirmed
-agreement opened** and offers no **Read full summary**; a change kept open
-there because its edits are unsaved, failed or still saving keeps both.
+**Every view.** Open **Inspect** to reach Team, Story, Live target,
+Architecture, or Diagnostics. The label names the current inspection, and
+Escape closes the disclosure and returns focus to it. On an empty project with
+a connected coding agent and no outstanding issue, the frame leaves room for
+the welcome card. When a confirmed agreement is open, the frame previews at
+most two lines of its summary. **Read full summary** expands **Agreement
+details** in Agree and focuses the saved summary while retaining unsaved edits.
+That preview remains available if you open another view while editing the card.
 
-One line per role that needs the user (for example
-`Builder needs you: permission`), with a **Show builder pane** action. This
+Each role that needs your help has a notice, for example
+`Builder needs you: permission`, and a **Show builder pane** action when
+Herdr can show it. This
 polite live region follows the current role facts; a recovered role's line
 disappears without leaving a copied attention message in operation status.
 The page keeps one `wait_for_changes` read open and reads again only what
-changed. When the server does not answer, the status line says so, every
-edit is kept, and the page retries after 5 seconds, doubling up to 30.
+changed. The operation status announces progress to assistive technology.
+When the server does not answer, a visible notice explains that updates are
+unavailable, every edit is kept, and the page retries after 5 seconds, doubling up to 30.
 Hiding the tab pauses this. A failed read keeps the last facts with a
 last-read label. An incoming revision never replaces typed edits: the page
 holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Describe** | The project's changes ([`list_changes`](#list_changes)), opening directly on the only one. With none: `This project has no changes yet. Ask the guide to propose a change; it appears here by itself.` A change with a waiting proposed revision is marked **New revision proposed**. Each change shows its latest saved run, such as **Latest saved run: passed**, or **No saved runs**, and under a run what `inputs_current` says: `Matches the agreed revision and selected tests.` or `Earlier inputs or no current test selection. Ask the builder for a check of the agreed revision and selected tests.` |
-| **Team** | Each registered role's state, its Chorus watcher, and its assignment status (**No assignments** for the guide, and **Assignment unread**, **No unread assignment**, **No work now** or **Assignment status unknown** for a worker role), with a **Show … pane** action per role, such as **Show guide pane**, and **Start workers**, which requests missing workers and shows the outcome and time. Refresh reads the cached team facts. |
-| **Story** | The Story saved with the shown revision, one row of step cards per flow: a finished flow is marked **will be tested end to end**, others **draft: not tested** with the reasons. Below it, the current Story evaluation ([`get_story_refresh`](#get_story_refresh)): none, running, failed, or succeeded, and how it differs from the change's Story; a draft is not part of the change until the guide revises the change with it and the user confirms. |
+| **Describe / Changes** | The welcome card directs you to your coding agent. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
+| **Team** | Each registered role has a state, watcher, and any worker assignment. The project coding agent may be attached in its own session outside Herdr. **Show coding agent pane** appears for an attached Herdr pane; eligible workers have their own **Show … pane** actions. **Start workers** requests missing workers and reports the outcome and time. **Refresh team** reads the cached facts. |
+| **Story** | The Story saved with the shown revision, one row of step cards per flow. A finished flow is marked **will be tested end to end**. Other flows are marked **draft: not tested** with the reasons. Below it, see the current Story evaluation ([`get_story_refresh`](#get_story_refresh)) and how it differs from the change's Story. A draft joins the change when your coding agent proposes it and you confirm the new revision. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
 | **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Previous Saved Revision** keeps the earlier snapshot: questions not yet answered in that proposal are labeled as historical, and a note distinguishes an unconfirmed proposal from the current confirmed agreement. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
 | **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. |

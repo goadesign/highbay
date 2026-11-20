@@ -73,7 +73,7 @@ export interface GlobalTeamAttentionProps {
 
 // roleLabels keep registered handles in Details and human role names visible.
 const roleLabels: Record<Role, string> = {
-  guide: "Guide",
+  guide: "Coding agent (guide)",
   builder: "Builder",
   test_writer: "Test writer",
 };
@@ -116,10 +116,16 @@ const assignmentLabels: Record<TeamRoleState["assignment"], string> = {
   unknown: "Assignment status unknown",
 };
 
-// attentionReason adds pane guidance only when Herdr is available.
-function attentionReason(role: TeamRoleState, herdrAvailable: boolean): string {
+// roleHasPane distinguishes the guide's own attachment from a machine that
+// can run build workers in Herdr.
+export function roleHasPane(role: Role, mode: TeamSnapshot["herdr_mode"] | undefined): boolean {
+  return role === "guide" ? mode === "attached" : mode !== undefined && mode !== "unavailable";
+}
+
+// attentionReason adds pane guidance only for a role with a pane action.
+function attentionReason(role: TeamRoleState, hasPane: boolean): string {
   const reason = attentionLabels[role.attention];
-  return role.attention === "assignment" && herdrAvailable
+  return role.attention === "assignment" && hasPane
     ? reason + " Show its pane and tell it to read its assignments and to keep its Chorus watcher running."
     : reason;
 }
@@ -143,7 +149,6 @@ export function TeamStageView({
   onShowPane,
   onFocusedControlRemoved,
 }: TeamStageProps) {
-  const herdrAvailable = snapshot?.herdr_mode !== "unavailable";
   const needsStart = error === null && snapshot !== null &&
     snapshot.roles.some((role) => role.role !== "guide" && (role.state === "not_started" || role.state === "ended")) &&
     !snapshot.roles.some((role) => role.state === "needs_you");
@@ -193,8 +198,10 @@ export function TeamStageView({
             <p id="surla-team-empty">No agents are registered.</p>
           ) : (
             <ul id="surla-team-roles" className="surla-trace-list">
-              {snapshot.roles.map((role) => (
-                <li key={role.role} id={"surla-team-role-" + role.role} data-state={role.state}>
+              {snapshot.roles.map((role) => {
+                const hasPane = roleHasPane(role.role, snapshot.herdr_mode);
+                const externalGuideUnknown = role.role === "guide" && !hasPane && role.state === "unknown";
+                return <li key={role.role} id={"surla-team-role-" + role.role} data-state={role.state}>
                   <div className="surla-trace-heading">
                     <strong>{roleLabels[role.role]}</strong>
                     <Badge
@@ -203,14 +210,14 @@ export function TeamStageView({
                         role.state === "error" ? "destructive" : "default"
                       }
                     >
-                      {stateLabels[role.state]}
+                      {externalGuideUnknown ? "Attached in coding agent" : stateLabels[role.state]}
                       {role.state === "needs_you" && attentionLabels[role.attention] !== ""
-                        ? ": " + attentionReason(role, herdrAvailable) : ""}
+                        ? ": " + attentionReason(role, hasPane) : ""}
                     </Badge>
                   </div>
-                  <p>{watcherLabels[role.watcher]}</p>
+                  {externalGuideUnknown && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
                   <p>{role.role === "guide" ? "No assignments" : assignmentLabels[role.assignment]}</p>
-                  {herdrAvailable ? <div className="surla-field-row">
+                  {hasPane ? <div className="surla-field-row">
                     <PaneButton
                       role={role}
                       showing={showing}
@@ -224,8 +231,8 @@ export function TeamStageView({
                     <summary>{roleLabels[role.role]} details</summary>
                     <p>Registered handle: <code>{role.handle}</code></p>
                   </details>
-                </li>
-              ))}
+                </li>;
+              })}
             </ul>
           )}
         </div>
@@ -255,16 +262,16 @@ export function GlobalTeamAttention({
   onFocusedControlRemoved,
 }: GlobalTeamAttentionProps) {
   const roles = snapshot?.roles.filter((role) => role.state === "needs_you") ?? [];
-  const herdrAvailable = snapshot?.herdr_mode !== "unavailable";
   return (
     <div id="surla-team-attention" role="status" aria-live="polite">
-      {roles.map((role) => (
-        <div key={role.role} className="surla-field-row" id={"surla-team-attention-" + role.role}>
+      {roles.map((role) => {
+        const hasPane = roleHasPane(role.role, snapshot?.herdr_mode);
+        return <div key={role.role} className="surla-field-row" id={"surla-team-attention-" + role.role}>
           <span className="surla-live-wrap">
             {lastRead ? "Last read: " : ""}
-            {teamAttentionText(role, herdrAvailable)}
+            {teamAttentionText(role, hasPane)}
           </span>
-          {herdrAvailable ? <PaneButton
+          {hasPane ? <PaneButton
             role={role}
             showing={showing}
             disabled={disabled}
@@ -272,17 +279,18 @@ export function GlobalTeamAttention({
             onFocusedControlRemoved={onFocusedControlRemoved}
             global={true}
           /> : null}
-        </div>
-      ))}
+        </div>;
+      })}
     </div>
   );
 }
 
 // teamAttentionText supplies the same sentence to the live global notice and
 // the project title. Callers select needs_you roles first.
-export function teamAttentionText(role: TeamRoleState, herdrAvailable: boolean): string {
-  const reason = attentionReason(role, herdrAvailable);
-  return roleLabels[role.role] + " needs you" + (reason !== "" ? ": " + reason : "");
+export function teamAttentionText(role: TeamRoleState, hasPane: boolean): string {
+  const reason = attentionReason(role, hasPane);
+  const label = role.role === "guide" ? "Coding agent" : roleLabels[role.role];
+  return label + " needs you" + (reason !== "" ? ": " + reason : "");
 }
 
 // PaneButton keeps role-specific names and pending behavior consistent across
@@ -303,7 +311,7 @@ function PaneButton({
   global: boolean;
 }) {
   const pending = showing.includes(role.role);
-  const label = roleLabels[role.role].toLowerCase();
+  const label = role.role === "guide" ? "coding agent" : roleLabels[role.role].toLowerCase();
   // notifyRemoval keeps the current page callback without changing the DOM
   // ref's identity when the page renders again.
   const notifyRemoval = useRef(onFocusedControlRemoved);

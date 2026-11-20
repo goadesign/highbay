@@ -136,7 +136,11 @@ expect(cells.length === 4 && cells[0].getAttribute("data-label") === "Scenario" 
 workspace.querySelector('[data-openui-ambiguity-id="chg-openui-ambiguity-01"][data-openui-option="subtotal_only"]').click();
 const canonicalPill = editorRegion().querySelector('[data-ambiguity-id="chg-openui-ambiguity-01"][data-option="subtotal_only"]');
 const activeCells = workspace.querySelectorAll(".shadcn-cell-active");
-expect(canonicalPill && canonicalPill.getAttribute("aria-pressed") === "true" && activeCells.length === 3 && !page.$("#surla-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") && editorRegion().textContent.includes("[Selected draft answer: subtotal_only]") && !editorRegion().textContent.includes("[Confirmed answer: subtotal_only]"), "OpenUI option click did not synchronize canonical pill, draft label, or active column cells (activeCells=" + activeCells.length + ")");
+expect(canonicalPill && canonicalPill.getAttribute("aria-pressed") === "true" && activeCells.length === 3 &&
+       editorRegion().querySelectorAll('[data-ambiguity-id="chg-openui-ambiguity-01"]').length === 2 &&
+       !page.$("#surla-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") &&
+       !editorRegion().textContent.includes("[Selected draft answer:"), "OpenUI click did not update the single choice group and active column");
+expect(workspace.querySelectorAll("details").length === 0, "decision instruments exposed repeated technical disclosures");
 
 // 3. A local example edit qualifies the illustration.
 expect(!page.$("#surla-openui-local-edit-notice"), "unexpected local-edit notice before editing examples");
@@ -156,7 +160,7 @@ expect(decisions && decisions.textContent.includes("Confirmed Decisions:") && de
 // A confirmed card without questions keeps the plain Summary heading.
 await open("chg-zero-amb");
 page.$("#surla-confirm-submit").click();
-await until(() => editorRegion().textContent.includes("Agreed:"), "the zero-question card did not confirm");
+await until(() => page.$("#surla-agreement-details"), "the zero-question card did not confirm");
 expect(!page.$("#surla-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") && !editorRegion().textContent.includes("Initial Proposal Summary: "), "expected zero-ambiguity confirmed card to omit #surla-confirmed-decisions and keep Summary heading");
 
 // 4. Every invalid composition falls back to the canonical editor.

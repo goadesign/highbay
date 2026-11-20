@@ -107,7 +107,7 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
           </p>
           {changeStories.length === 0 ? (
             <p id="surla-story-change-empty">
-              This change has no Story. The guide adds one by revising the change with a refreshed
+              This change has no Story. Your coding agent adds one by revising the change with a refreshed
               Story.
             </p>
           ) : (
@@ -122,8 +122,7 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
       >
         <h3 id="surla-story-draft-title">Current Story draft</h3>
         <p>
-          The guide's latest Story evaluation of the project's design files. You, the guide and
-          the builder all read this same evaluation; the server keeps it in memory only.
+          This draft reflects your coding agent's latest Story evaluation of the project’s design files.
         </p>
         <p id="surla-story-draft-announcement" className="surla-visually-hidden" role="status">
           {evaluation !== null ? STATE_ANNOUNCEMENTS[evaluation.state] : ""}
@@ -300,14 +299,13 @@ function DraftBody({ card, evaluation }: { card: ChangeCardResult | null; evalua
     case "none":
       return (
         <p id="surla-story-draft-none">
-          No Story evaluation has run since the Surla server started. Ask the guide to refresh the
-          Story; the result appears here by itself.
+          Ask your coding agent to refresh the Story. The result appears here automatically.
         </p>
       );
     case "running":
       return (
         <p id="surla-story-draft-running">
-          The guide's Story evaluation is running for snapshot{" "}
+          Your coding agent's Story evaluation is running for snapshot{" "}
           <code>{evaluation.snapshot_digest ?? "unknown"}</code>. The result appears here when it
           finishes.
         </p>
@@ -320,7 +318,7 @@ function DraftBody({ card, evaluation }: { card: ChangeCardResult | null; evalua
             <code>{evaluation.snapshot_digest ?? "unknown"}</code>. The server reported:
           </p>
           <pre id="surla-story-draft-diagnostic">{evaluation.diagnostic ?? evaluation.message}</pre>
-          <p>Ask the guide to fix the Story and refresh it.</p>
+          <p>Ask your coding agent to fix the Story and refresh it.</p>
         </div>
       );
     case "succeeded":
@@ -366,8 +364,7 @@ function SucceededDraft({ card, evaluation }: { card: ChangeCardResult | null; e
           </p>
           <StoryDifferenceList difference={difference} subject="the draft" />
           <p id="surla-story-rule">
-            The draft is not part of this change until the guide revises the change with it and you
-            confirm the new revision.
+            The draft becomes part of this change after your coding agent proposes it and you confirm the new revision.
           </p>
         </div>
       )}

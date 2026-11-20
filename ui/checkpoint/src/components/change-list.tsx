@@ -21,6 +21,13 @@ export interface ChangeListViewProps {
   openChangeId: string | null;
   // busy disables opening while a Change Card request is outstanding.
   busy: boolean;
+  // guideConnected and guideInHerdr describe the guide the project reports.
+  guideConnected: boolean;
+  guideInHerdr: boolean;
+  // disabled and showingGuide prevent a duplicate or expired pane request.
+  disabled: boolean;
+  showingGuide: boolean;
+  onShowGuidePane: () => void;
   // onOpen opens one change by its change_id.
   onOpen: (changeId: string) => void;
   // onRetry reads the list again after a failure.
@@ -45,9 +52,43 @@ export function ChangeListView({
   openError,
   openChangeId,
   busy,
+  guideConnected,
+  guideInHerdr,
+  disabled,
+  showingGuide,
+  onShowGuidePane,
   onOpen,
   onRetry,
 }: ChangeListViewProps) {
+  if (list !== null && list.changes.length === 0 && error === null && openError === null) {
+    return (
+      <Card id="surla-change-list" className="surla-card surla-welcome-card"
+        aria-labelledby="surla-change-list-title" aria-busy={loading ? "true" : undefined}>
+        <h2 id="surla-change-list-title">
+          {guideConnected ? "Describe what you want to build in your coding agent" : "Start in your coding agent with /surla"}
+        </h2>
+        <p id="surla-change-list-empty">
+          {guideConnected
+            ? "Your coding agent drafts the Change Card. It opens here when it’s ready."
+            : <>Open your coding agent in this folder and invoke <code>/surla</code> (<code>$surla</code> in Codex)
+                to connect it, then describe what you want to build. Your Change Card will appear here automatically.</>}
+        </p>
+        {guideConnected && guideInHerdr ? (
+          <div className="surla-field-row">
+            <Button id="surla-empty-show-guide" variant="primary" disabled={disabled || showingGuide}
+              aria-busy={showingGuide} onClick={onShowGuidePane}>
+              {showingGuide ? "Showing coding agent pane…" : "Show coding agent pane"}
+            </Button>
+          </div>
+        ) : null}
+        <ol className="surla-welcome-steps">
+          <li><strong>Confirm intent</strong> Answer open questions and lock concrete examples before code is written.</li>
+          <li><strong>Build &amp; verify</strong> Surla coordinates implementation and independent checks.</li>
+          <li><strong>Approve &amp; merge</strong> Review the verified evidence and merge the change into your branch.</li>
+        </ol>
+      </Card>
+    );
+  }
   return (
     <Card
       id="surla-change-list"
@@ -59,7 +100,7 @@ export function ChangeListView({
       {list?.changes.some((item) => item.latest_verification !== undefined) ? (
         <p id="surla-change-run-history" className="surla-muted">
           Run results describe their recorded candidate. The server compares each latest run
-          with the agreed revision and selected tests. Open a change, then Proof, to inspect it.
+          with the agreed revision and selected tests. Open a change, then Check, to inspect it.
         </p>
       ) : null}
       {error !== null ? (
@@ -80,12 +121,7 @@ export function ChangeListView({
       ) : null}
       {list === null ? (
         error === null ? <p role="status">Reading this project's changes...</p> : null
-      ) : list.changes.length === 0 ? (
-        <p id="surla-change-list-empty">
-          This project has no changes yet. Ask the guide to propose a change; it appears here
-          by itself.
-        </p>
-      ) : (
+      ) : list.changes.length > 0 ? (
         <ul className="surla-compact-list" aria-label="Project changes">
           {list.changes.map((item) => (
             <ChangeListRow
@@ -97,7 +133,7 @@ export function ChangeListView({
             />
           ))}
         </ul>
-      )}
+      ) : null}
     </Card>
   );
 }

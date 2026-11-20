@@ -7,7 +7,7 @@
 
 import React from "react";
 import { AmbiguityQuestion, ChangeCardResult, ExampleItem, ProposedRevisionItem } from "../types";
-import { Alert, Badge, Button, Card } from "./shadcn";
+import { Alert, Badge, Button, Card, ChoiceGroup } from "./shadcn";
 import { compareStories, StoryDifferenceList } from "./story";
 
 // ProposedRevisionViewProps supplies the agreed change, its waiting proposal,
@@ -52,6 +52,9 @@ export function ProposedRevisionView({
   const dropped = (card.ambiguities ?? []).filter((question) => !proposedQuestions.has(question.question));
   const unanswered = questions.filter((question) => !answers[question.id]);
   const story = compareStories(card.stories ?? [], proposal.stories ?? []);
+  const promptChanged = proposal.prompt !== card.prompt;
+  const summaryChanged = proposal.summary !== card.summary;
+  const removedBehaviors = card.preserved_behaviors.filter((behavior) => !proposal.preserved_behaviors.includes(behavior));
   return (
     <Card
       id="surla-proposal"
@@ -68,7 +71,7 @@ export function ProposedRevisionView({
         </div>
       </div>
       <p>
-        The guide proposed a new revision of this change. The agreed revision stays in force, and
+        Your coding agent proposed a new revision of this change. The agreed revision stays in force, and
         architecture shows its saved design, and verification and approval keep working on it, until you adopt or decline
         this one. Adopting confirms it with your answers and makes it the agreed revision; an
         approval of the agreed revision does not carry over.
@@ -81,12 +84,8 @@ export function ProposedRevisionView({
         </p>
       ) : null}
 
-      <h3>Request</h3>
-      {proposal.prompt === card.prompt ? (
-        <p id="surla-proposal-prompt" data-changed="false">
-          Unchanged: {proposal.prompt}
-        </p>
-      ) : (
+      {promptChanged ? <>
+        <h3>Request</h3>
         <div id="surla-proposal-prompt" data-changed="true">
           <p>
             <strong>Proposed: </strong>
@@ -97,14 +96,10 @@ export function ProposedRevisionView({
             {card.prompt}
           </p>
         </div>
-      )}
+      </> : null}
 
-      <h3>Summary</h3>
-      {proposal.summary === card.summary ? (
-        <p id="surla-proposal-summary" data-changed="false">
-          Unchanged: {proposal.summary}
-        </p>
-      ) : (
+      {summaryChanged ? <>
+        <h3>Summary</h3>
         <div id="surla-proposal-summary" data-changed="true">
           <p>
             <strong>Proposed: </strong>
@@ -115,7 +110,12 @@ export function ProposedRevisionView({
             {card.summary}
           </p>
         </div>
-      )}
+      </> : null}
+      {!promptChanged || !summaryChanged ? <details className="surla-details">
+        <summary>Unchanged {promptChanged ? "summary" : summaryChanged ? "request" : "request and summary"}</summary>
+        {!promptChanged ? <p id="surla-proposal-prompt" data-changed="false"><strong>Request </strong>{proposal.prompt}</p> : null}
+        {!summaryChanged ? <p id="surla-proposal-summary" data-changed="false"><strong>Summary </strong>{proposal.summary}</p> : null}
+      </details> : null}
 
       <h3>{"Questions to answer (" + questions.length + ")"}</h3>
       {questions.length === 0 ? <p>This revision asks no questions.</p> : null}
@@ -141,7 +141,6 @@ export function ProposedRevisionView({
       <ul id="surla-proposal-examples">
         {exampleChanges(card.examples, proposal.examples).map(({ example, prior, status }) => (
           <li key={status + example.id} data-example-id={example.id} data-status={status}>
-            <code>{example.id}</code>{" "}
             <Badge variant={status === "Kept" ? "default" : status === "Removed" ? "destructive" : "accent"}>
               {status}
             </Badge>{" "}
@@ -159,25 +158,23 @@ export function ProposedRevisionView({
             ) : (
               <ExampleText example={example} />
             )}
+            <code className="surla-muted">{example.id}</code>
           </li>
         ))}
       </ul>
 
-      <h3>{"Preserved behaviors (" + proposal.preserved_behaviors.length + ")"}</h3>
-      {proposal.preserved_behaviors.length === 0 ? <p>None declared.</p> : null}
-      <ul id="surla-proposal-preserved">
+      {proposal.preserved_behaviors.length > 0 || removedBehaviors.length > 0 ? <h3>Preserved behaviors</h3> : null}
+      {proposal.preserved_behaviors.length > 0 ? <ul id="surla-proposal-preserved">
         {proposal.preserved_behaviors.map((behavior, index) => (
           <li key={String(index)} data-new={card.preserved_behaviors.includes(behavior) ? "false" : "true"}>
             {behavior} {card.preserved_behaviors.includes(behavior) ? null : <Badge variant="accent">New</Badge>}
           </li>
         ))}
-      </ul>
-      {card.preserved_behaviors.some((behavior) => !proposal.preserved_behaviors.includes(behavior)) ? (
+      </ul> : null}
+      {removedBehaviors.length > 0 ? (
         <p id="surla-proposal-dropped-preserved">
           {"No longer preserved: " +
-            card.preserved_behaviors
-              .filter((behavior) => !proposal.preserved_behaviors.includes(behavior))
-              .join(" ")}
+            removedBehaviors.join(" ")}
         </p>
       ) : null}
 
@@ -263,20 +260,9 @@ function ProposalQuestion({
       <div>
         <strong>{question.question}</strong> {isNew ? <Badge variant="accent">New</Badge> : null}
       </div>
-      <div role="group" aria-label={question.question}>
-        {question.options.map((option) => (
-          <Button
-            key={option}
-            variant="pill"
-            disabled={busy}
-            data-option={option}
-            aria-pressed={selected === option ? "true" : "false"}
-            onClick={() => onAnswer(question.id, option)}
-          >
-            {option}
-          </Button>
-        ))}
-      </div>
+      <ChoiceGroup label={question.question} options={question.options} selected={selected} disabled={busy}
+        onSelect={(option) => onAnswer(question.id, option)}
+        optionAttributes={(option) => ({ "data-option": option })} />
     </li>
   );
 }

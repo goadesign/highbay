@@ -212,7 +212,8 @@ h1 { font-size: 1.18rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 
 h2 { font-size: 1.02rem; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 0.4rem 0; }
 h3 { font-size: 0.9rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.85rem 0 0.35rem 0; }
 h4 { font-size: 0.85rem; font-weight: 600; margin: 0.6rem 0 0.25rem 0; }
-p { margin: 0.25rem 0; max-inline-size: 75ch; }
+h1, h2, h3, h4 { text-wrap: balance; }
+p { margin: 0.25rem 0; max-inline-size: 75ch; text-wrap: pretty; }
 #surla-checkpoint-status {
   font-size: 0.82rem;
   color: var(--muted-foreground);
@@ -443,6 +444,7 @@ li { margin-bottom: 0.35rem; }
 .shadcn-badge-success { border-color: var(--success); background: var(--success-soft); }
 .shadcn-badge-warning { border-color: var(--warning); background: var(--warning-soft); }
 .shadcn-badge-destructive { border-color: var(--destructive); background: var(--destructive-soft); }
+.shadcn-badge-outline { border-color: var(--border); background: transparent; }
 
 .shadcn-btn, .surla-pill, .surla-btn {
   -webkit-appearance: none;
@@ -474,11 +476,58 @@ li { margin-bottom: 0.35rem; }
   opacity: 0.55;
   cursor: not-allowed;
 }
-.surla-pill[aria-pressed="true"], .surla-pill[aria-current="page"], .surla-btn-primary, .shadcn-btn-primary {
+.surla-pill[aria-pressed="true"], .surla-pill[aria-current="page"] {
   border-color: var(--accent);
   background-color: var(--accent-soft);
   color: var(--foreground);
   font-weight: 600;
+}
+.shadcn-btn-primary, .surla-btn-primary {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+.shadcn-btn-primary:hover:not(:disabled), .surla-btn-primary:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--primary) 88%, var(--primary-foreground));
+}
+.shadcn-btn-secondary { background: var(--muted); }
+.shadcn-btn-ghost { background: transparent; border-color: transparent; }
+.shadcn-choice-group { display: grid; gap: 0.4rem; }
+.shadcn-choice-option {
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.shadcn-choice-indicator {
+  flex: 0 0 0.9rem;
+  block-size: 0.9rem;
+  align-self: flex-start;
+  margin-block-start: 0.11rem;
+  border: 1px solid var(--muted-foreground);
+  border-radius: 50%;
+}
+.shadcn-choice-option[aria-pressed="true"] .shadcn-choice-indicator {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--card);
+}
+.shadcn-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+.shadcn-separator {
+  margin-block: 1.25rem;
+  border: 0;
+  border-block-start: 1px solid var(--border);
 }
 #surla-cp4-run-list {
   display: flex;
@@ -524,6 +573,41 @@ li { margin-bottom: 0.35rem; }
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 3px);
 }
+.surla-question-list, .surla-examples-list, .surla-decision-grid {
+  display: grid;
+  gap: 1rem;
+}
+.surla-question h4 { margin-block: 0 0.55rem; }
+.surla-example-card .shadcn-label { min-inline-size: 0; }
+.surla-example-card .shadcn-textarea { line-height: 1.4; }
+.surla-example-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-block-end: 0.65rem;
+}
+.surla-example-header h4 { margin: 0; }
+.surla-example-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-block-start: 0.6rem;
+}
+.surla-welcome-card {
+  max-inline-size: 42rem;
+  margin: clamp(1.5rem, 5vw, 3rem) auto 0;
+  padding: clamp(1rem, 3vw, 1.75rem);
+}
+.surla-welcome-card h2 { font-size: 1.45rem; line-height: 1.25; margin-block-end: 0.75rem; }
+.surla-welcome-steps {
+  padding-inline-start: 1.3rem;
+  margin-block: 1.15rem 0;
+  color: var(--muted-foreground);
+}
+.surla-welcome-steps li + li { margin-block-start: 0.55rem; }
+.surla-welcome-steps strong { display: block; color: var(--foreground); }
 
 .shadcn-alert {
   border: 1px solid var(--border);
@@ -589,16 +673,22 @@ li { margin-bottom: 0.35rem; }
   .shadcn-table, .shadcn-table thead, .shadcn-table tbody, .shadcn-table tr, .shadcn-table th, .shadcn-table td {
     display: block;
   }
-  .shadcn-table thead { display: none; }
+  .shadcn-table thead {
+    position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%);
+  }
   .shadcn-table tr { border-bottom: 1px solid var(--border); padding: 0.35rem 0; }
   .shadcn-table td[data-label]::before {
-    content: attr(data-label) ": ";
+    content: attr(data-label);
+    display: block;
     font-weight: 600;
     color: var(--muted-foreground);
   }
 }
 
-.shadcn-cell-active { background: var(--accent-soft); font-weight: 600; }
+.shadcn-table thead .shadcn-cell-active, .shadcn-cell-active {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
 .shadcn-timeline, .surla-timeline {
   display: flex;
   flex-direction: column;
@@ -639,7 +729,7 @@ summary { cursor: pointer; font-weight: 500; user-select: none; }
    scrolls inside the stage, so long flows never widen the page. */
 .surla-story-stage h5 { font-size: 0.84rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
 /* Read by assistive technology, not shown. */
-.surla-visually-hidden {
+.surla-visually-hidden, #surla-checkpoint-status:not([data-connection-warning]) {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
@@ -733,7 +823,7 @@ summary { cursor: pointer; font-weight: 500; user-select: none; }
 .surla-build-merge pre code { padding: 0; background: transparent; white-space: pre; overflow-wrap: normal; word-break: normal; }
 .surla-build-merge li p { font-size: 0.875rem; color: var(--muted-foreground); }
 
-/* Layout B: the fixed Surla surface owns orientation and the deciding action. */
+/* The fixed Surla surface owns orientation and the deciding action. */
 :root {
   --surla-space-1: 4px;
   --surla-space-2: 8px;
@@ -754,14 +844,14 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
   border: 0; border-block-end: 1px solid var(--border); border-radius: 0;
   background: var(--card);
 }
-.surla-fixed-frame { font-size: 13px; line-height: 18px; }
+.surla-fixed-frame { font-size: 0.8125rem; line-height: 1.4; }
 .surla-frame-where {
-  display: grid; grid-template-columns: minmax(110px, 1fr) auto auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
   gap: 8px 16px; align-items: center; padding: 8px 12px;
 }
 .surla-frame-project {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
-  min-inline-size: 0; margin: 0; font-size: 13px; line-height: 18px;
+  min-inline-size: 0; margin: 0; font-size: 0.8125rem; line-height: 1.4;
   letter-spacing: normal; overflow-wrap: anywhere;
 }
 .surla-frame-project > span:first-child { font-weight: 700; }
@@ -769,7 +859,7 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-frame-journey, .surla-frame-references { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .surla-fixed-frame .surla-btn {
   min-block-size: 30px; padding: 4px 10px; border-radius: 4px;
-  font-size: 13px; line-height: 18px; white-space: normal;
+  font-size: 0.8125rem; line-height: 1.4; white-space: normal;
 }
 .surla-frame-journey .surla-btn { border-color: transparent; background: transparent; }
 .surla-frame-journey [aria-current="step"] { color: var(--accent); border-block-end-color: var(--accent); border-radius: 0; }
@@ -778,8 +868,11 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
   display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(170px, auto);
   margin: 0; padding: 12px; gap: 16px; border-block-start: 1px solid var(--border);
 }
+.surla-frame-slots:not(:has(.surla-frame-agreed)) {
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+}
 .surla-frame-slots > div { min-inline-size: 0; }
-.surla-frame-slots dt { font-size: 12px; color: var(--muted-foreground); margin-block-end: 4px; }
+.surla-frame-slots dt { font-size: 0.75rem; color: var(--muted-foreground); margin-block-end: 4px; }
 .surla-frame-slots dd { margin: 0; overflow-wrap: anywhere; }
 .surla-frame-summary {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
@@ -788,59 +881,64 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
 .surla-frame-agreed .surla-btn { margin-block-start: 4px; }
 #surla-agreement-summary:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .surla-frame-next dd { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
-#surla-frame-next .surla-btn-primary {
-  background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary);
-}
-.surla-frame-action-binding { font-size: 12px; color: var(--muted-foreground); }
-.surla-frame-context { padding: 0 12px 8px; font-size: 12px; }
+.surla-frame-action-binding { font-size: 0.75rem; color: var(--muted-foreground); }
+.surla-frame-context { padding: 0 12px 8px; font-size: 0.75rem; }
 .surla-frame-context summary { color: var(--muted-foreground); cursor: pointer; }
-.surla-frame-context .surla-workspace-context { margin-block-start: 8px; font-size: 12px; }
-.surla-frame-project-menu { position: relative; justify-self: end; }
+.surla-frame-context .surla-workspace-context { margin-block-start: 8px; font-size: 0.75rem; }
+.surla-frame-project-menu { position: relative; grid-column: 3; justify-self: end; }
 .surla-frame-project-menu > summary {
-  padding: 10px 12px; min-block-size: 44px; cursor: pointer;
+  padding: 0.3rem 0.65rem; min-block-size: 1.875rem; cursor: pointer;
   border: 1px solid var(--border); border-radius: 4px;
 }
+.surla-frame-project-menu > summary:hover { background: var(--muted); }
+.surla-frame-project-menu > summary[data-active="true"] { color: var(--accent); border-color: var(--accent); }
 .surla-frame-project-menu .surla-frame-references {
   position: absolute; inset-inline-end: 0; inset-block-start: calc(100% + 4px);
-  z-index: 35; inline-size: min(260px, 85vw); padding: 8px;
+  display: grid; z-index: 35; inline-size: min(15rem, 85vw); padding: 0.5rem;
   background: var(--card); border: 1px solid var(--border); border-radius: 6px;
 }
-.surla-approval-stage { min-inline-size: 0; font-size: 14px; line-height: 1.5; padding: 8px 0 24px; }
-.surla-approval-stage h2 { font-size: 18px; line-height: 1.4; margin: 0 0 8px; }
-.surla-approval-stage h3 { font-size: 14px; margin: 24px 0 8px; }
-.surla-approval-stage h4 { font-size: 13px; margin: 16px 0 8px; }
+.surla-frame-references .surla-btn { justify-content: flex-start; margin: 0; }
+.surla-frame-references [aria-current="page"], .surla-frame-references [aria-expanded="true"] {
+  color: var(--accent);
+}
+.surla-approval-stage { min-inline-size: 0; font-size: 0.875rem; line-height: 1.5; padding: 8px 0 24px; }
+.surla-approval-stage h2 { font-size: 1.125rem; line-height: 1.4; margin: 0 0 8px; }
+.surla-approval-stage h3 { font-size: 0.875rem; margin: 24px 0 8px; }
+.surla-approval-stage h4 { font-size: 0.8125rem; margin: 16px 0 8px; }
 .surla-approval-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; }
 .surla-approval-heading p { color: var(--muted-foreground); margin: 0; }
 .surla-approval-binding { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 16px 0; padding-block: 12px; border-block: 1px solid var(--border); }
-.surla-approval-binding dt { color: var(--muted-foreground); font-size: 12px; }
+.surla-approval-binding dt { color: var(--muted-foreground); font-size: 0.75rem; }
 .surla-approval-binding dd { margin: 4px 0 0; }
 .surla-approval-evidence { display: grid; grid-template-columns: minmax(0, 2fr) minmax(250px, 1fr); gap: 24px; align-items: start; }
 .surla-approval-evidence > * { min-inline-size: 0; }
 .surla-approval-basis { padding-inline-start: 24px; border-inline-start: 1px solid var(--border); }
 .surla-approval-notice { padding: 12px 0; color: var(--muted-foreground); }
 .surla-approval-exclusions { margin-block: 24px; padding-block: 0 16px; border-block-end: 1px solid var(--border); }
-.surla-flow-evidence { inline-size: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
+.surla-flow-evidence { inline-size: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.8125rem; }
 .surla-flow-evidence th, .surla-flow-evidence td { text-align: start; vertical-align: top; padding: 12px 8px; border-block-end: 1px solid var(--border); overflow-wrap: anywhere; }
-.surla-flow-evidence thead th { font-size: 12px; color: var(--muted-foreground); font-weight: 500; }
+.surla-flow-evidence thead th { font-size: 0.75rem; color: var(--muted-foreground); font-weight: 500; }
 .surla-flow-evidence th:first-child { inline-size: 49%; padding-inline-start: 0; }
 .surla-flow-evidence th:last-child { inline-size: 21%; }
 .surla-flow-evidence tbody th { font-weight: 400; }
-.surla-flow-evidence tbody th p { font-size: 13px; color: var(--muted-foreground); margin-block-start: 4px; }
+.surla-flow-evidence tbody th p { font-size: 0.8125rem; color: var(--muted-foreground); margin-block-start: 4px; }
 .surla-approval-stage [data-outcome="passed"] { color: var(--success); }
 .surla-approval-stage [data-outcome="failed"] { color: var(--destructive); }
 .surla-approval-stage [data-outcome="not_run"], .surla-approval-stage [data-outcome="harness_error"] { color: var(--warning); }
 .surla-approval-test-list { list-style: none; padding: 0; }
 .surla-approval-test-list li { display: flex; justify-content: space-between; gap: 12px; padding-block: 8px; border-block-end: 1px solid var(--border); }
 .surla-approval-basis dl { margin: 12px 0; }
-.surla-approval-basis dt { margin-block-start: 12px; color: var(--muted-foreground); font-size: 12px; }
+.surla-approval-basis dt { margin-block-start: 12px; color: var(--muted-foreground); font-size: 0.75rem; }
 .surla-approval-basis dd { margin: 4px 0 0; }
 .surla-approval-basis pre { white-space: pre; overflow-wrap: normal; max-inline-size: 100%; }
 .surla-approval-stage .surla-details > summary { display: list-item; padding: 4px 0; }
+.surla-meta .surla-details > summary,
+#surla-cp1-form-card > .surla-details > summary { display: list-item; }
 .surla-approval-stage :focus-visible, .surla-fixed-frame :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.surla-build-test-review { min-inline-size: 0; font-size: 14px; line-height: 1.5; }
-.surla-build-test-review h4 { font-size: 18px; margin: 16px 0 8px; }
-.surla-build-test-review h5 { font-size: 14px; margin: 12px 0 8px; }
-.surla-build-test-binding { font-size: 12px; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.surla-build-test-review { min-inline-size: 0; font-size: 0.875rem; line-height: 1.5; }
+.surla-build-test-review h4 { font-size: 1.125rem; margin: 16px 0 8px; }
+.surla-build-test-review h5 { font-size: 0.875rem; margin: 12px 0 8px; }
+.surla-build-test-binding { font-size: 0.75rem; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .surla-build-test-evidence { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .surla-build-test-evidence > * { min-inline-size: 0; }
 .surla-build-test-evidence > section:only-child { grid-column: 1 / -1; }
@@ -870,14 +968,21 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
   .surla-approval-evidence > div > section:last-child { margin-block-end: 0; padding-block-end: 0; border-block-end: 0; }
 }
 @media (max-width: 720px) {
-  body { padding-inline: 12px; padding-block-end: calc(var(--surla-next-height, 110px) + 24px); }
+  body { padding-inline: 12px; }
+  body:has(.surla-frame-next button) { padding-block-end: calc(var(--surla-next-height, 110px) + 24px); }
   #surla-checkpoint-nav:not([hidden]) { position: relative; margin-inline: -12px; }
   html { scroll-padding-block-start: 12px; }
-  .surla-frame-where { gap: 4px 8px; padding: 4px 12px; }
-  .surla-fixed-frame .surla-btn, .surla-approval-stage .surla-btn { min-block-size: 44px; padding: 10px 12px; }
-  .surla-frame-journey { flex-wrap: wrap; gap: 0; }
-  .surla-frame-journey .surla-btn { flex: 1; padding-inline: 6px; }
-  .surla-frame-slots { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  html:has(.surla-frame-next button) { scroll-padding-block-end: calc(var(--surla-next-height, 110px) + 16px); }
+  .surla-frame-where { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 4px 12px; }
+  .surla-frame-project-menu { grid-column: 2; grid-row: 1; }
+  .surla-fixed-frame .surla-btn, .surla-approval-stage .surla-btn, .surla-pill, .shadcn-choice-option,
+  .surla-frame-project-menu > summary { min-block-size: 2.75rem; padding-block: 0.625rem; }
+  .surla-example-fields { grid-template-columns: minmax(0, 1fr); }
+  .surla-frame-journey { grid-column: 1 / -1; grid-row: 2; gap: 0.25rem; }
+  .surla-frame-journey .surla-btn { margin: 0; padding-inline: 0.45rem; }
+  .surla-frame-slots, .surla-frame-slots:not(:has(.surla-frame-agreed)) {
+    grid-template-columns: minmax(0, 1fr); gap: 8px;
+  }
   .surla-frame-next {
     position: fixed; inset-inline: 0; inset-block-end: 0; z-index: 40;
     display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px;
@@ -891,7 +996,6 @@ html { scroll-padding-block-start: calc(var(--surla-frame-height, 120px) + 16px)
     grid-template-columns: minmax(0, 1fr); gap: 4px;
   }
   .surla-frame-next:not(:has(button)) dd { justify-content: flex-start; }
-  body:has(.surla-frame-next:not(:has(button))) { padding-block-end: 24px; }
   .surla-frame-action-binding { white-space: nowrap; }
   .surla-approval-binding { gap: 12px; }
   .surla-flow-evidence, .surla-flow-evidence tbody { display: block; }

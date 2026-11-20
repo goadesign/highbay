@@ -80,7 +80,7 @@ const page = await openPage(origin, { link: input.link });
 const editor = () => page.$("#surla-cp1-editor");
 const outcome = () => page.$('textarea[data-example-id="check_01"][data-field="expected_outcome"]');
 const answer = () => page.$('#surla-proposal [data-question-id="chg-proposal-ambiguity-01"] [data-option="with_tax"]');
-await until(() => editor().dataset.changeId === "chg-proposal" && page.text("#surla-cp1-editor").includes("Agreed:"), "the agreed change did not open");
+await until(() => editor().dataset.changeId === "chg-proposal" && page.$("#surla-agreement-details"), "the agreed change did not open");
 const next = () => page.text("#surla-frame-next dd");
 page.$("#surla-nav-cp1").click();
 expect(next().includes("Review Agreement details"), "clean Agree did not point to the saved agreement");

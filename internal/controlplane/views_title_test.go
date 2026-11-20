@@ -18,7 +18,7 @@ await control(origin, "hold", { key: "GET /changes" });
 const page = await openPage(origin, { link: input.link });
 await until(() => title(page, "Opening project"), "session did not identify its folder while opening");
 await control(origin, "release", { key: "GET /changes" });
-await until(() => title(page, "Ask guide to propose a change"), "empty project did not name its next step");
+await until(() => title(page, "Describe your change"), "empty project did not name its next step");
 const proposed = await api(origin, "POST", "/changes/propose", {
   change_id: "chg-title", prompt: "Route refunds to a manager.",
   analysis: { summary: "Route refunds to a manager.", ambiguities: [], examples: [{ scenario: "Refund", input_summary: "$40", expected_outcome: "Approved", verification_kind: "deterministic" }], preserved_behaviors: [] },
@@ -65,7 +65,7 @@ func TestViewsPageTitleRecoversTeamAndSession(t *testing.T) {
 	runPageScript(t, ps, nil, `
 const title = (page, step) => page.doc.title === step + ": Refunds café";
 const page = await openPage(origin, { link: input.link });
-await until(() => title(page, "Guide needs you: permission"), "role order or project name is wrong: " + page.doc.title);
+await until(() => title(page, "Coding agent needs you: permission"), "role order or project name is wrong: " + page.doc.title);
 expect(!page.doc.title.includes("page-team"), "title used the sanitized team identity");
 page.$("#surla-nav-team").click();
 await until(() => page.$("#surla-team-refresh") && !page.$("#surla-team-refresh").disabled, "Team did not open");
@@ -73,9 +73,9 @@ await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "u
 page.$("#surla-team-refresh").click();
 await until(() => title(page, "Refresh Team"), "failed read presented retained attention as current");
 page.$("#surla-team-refresh").click();
-await until(() => title(page, "Guide needs you: permission"), "recovered read did not restore current attention");
+await until(() => title(page, "Coding agent needs you: permission"), "recovered read did not restore current attention");
 await control(origin, "act", { key: "working" });
-await until(() => title(page, "Ask guide to propose a change"), "working role kept stale needs-you attention");
+await until(() => title(page, "Describe your change"), "working role kept stale needs-you attention");
 await control(origin, "act", { key: "needs-you" });
 await until(() => title(page, "Builder needs you: question"), "second attention did not arrive");
 await control(origin, "reply", { key: "GET /team", status: 401, body: { name: "unauthorized", message: "Session ended." } });

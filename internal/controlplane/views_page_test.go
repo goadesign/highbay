@@ -79,7 +79,7 @@ page.close();
 }
 
 // TestViewsPageFindsOpensAndConfirmsChanges walks the user's journey: the
-// empty project explains how a change appears, a proposed change appears by
+// empty project explains how a change appears, the first proposal opens by
 // itself, the list orders changes by save time and opens one, and confirming
 // records the user's session as who confirmed.
 func TestViewsPageFindsOpensAndConfirmsChanges(t *testing.T) {
@@ -88,11 +88,14 @@ func TestViewsPageFindsOpensAndConfirmsChanges(t *testing.T) {
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-change-list-empty"), "empty project did not show its empty state");
-expect(page.text("#surla-change-list-empty").includes("Ask the guide to propose a change; it appears here by itself."), "empty state did not say how a change appears");
+expect(page.text("#surla-change-list-title") === "Start in your coding agent with /surla" &&
+       page.text("#surla-change-list-empty").includes("Your Change Card will appear here automatically."),
+       "empty state did not say where to start and how a change appears");
 expect(page.win.location.href === origin + "/views", "the link stayed in the address: " + page.win.location.href);
 
 await propose("chg-first", "Route refunds to a manager.", "Auto-approved");
-await until(() => page.$$("#surla-change-list li").length === 1, "a proposed change did not appear without a reload");
+await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-first", "the first proposal did not open without a reload");
+page.$("#surla-nav-changes").click();
 await propose("chg-second", "Hold refunds for review.", "Held");
 await until(() => page.$$("#surla-change-list li").length === 2, "a second change did not appear");
 const ids = page.$$("#surla-change-list li").map((li) => li.dataset.changeId);
@@ -103,13 +106,28 @@ checkControl(page, page.$("#surla-open-change-chg-first"), "list control");
 expect(page.$("#surla-open-change-chg-first").textContent.includes("Route refunds to a manager."), "the list control is not named by its change");
 page.$("#surla-open-change-chg-first").click();
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-first", "opening a listed change did not show its card");
-page.$('[data-ambiguity-id="chg-first-ambiguity-01"][data-option="subtotal_only"]').click();
+const answer = page.$('[data-ambiguity-id="chg-first-ambiguity-01"][data-option="subtotal_only"]');
+checkControl(page, page.$("#surla-cp1-next-question"), "jump to unanswered question");
+page.$("#surla-cp1-next-question").click();
+expect(page.doc.activeElement === answer, "Next did not focus the first unanswered option");
+answer.click();
+const example = page.$('textarea[data-field="expected_outcome"]');
+const originalOutcome = example.value;
+page.type(example, " ");
 checkControl(page, page.$("#surla-confirm-submit"), "confirm control");
-await control(origin, "hold", { key: "POST /changes/confirm" });
 page.$("#surla-confirm-submit").click();
-expect(page.$("#surla-confirm-submit").disabled && page.$("#surla-cp1-form-card").getAttribute("aria-busy") === "true", "confirming showed no busy state");
+expect(page.doc.activeElement === example && page.text("#surla-confirm-error").includes("expected result for example 1") &&
+       page.sent("POST", "/changes/confirm").length === 0, "invalid example did not focus its field and preserve the draft");
+page.type(example, originalOutcome);
+checkControl(page, page.$("#surla-cp1-next-confirm"), "reachable confirm control");
+await control(origin, "hold", { key: "POST /changes/confirm" });
+page.$("#surla-cp1-next-confirm").click();
+expect(page.$("#surla-cp1-next-confirm").disabled && page.$("#surla-confirm-submit").disabled &&
+       page.$("#surla-cp1-form-card").getAttribute("aria-busy") === "true", "confirming showed no busy state");
 await control(origin, "release", { key: "POST /changes/confirm" });
-await until(() => page.$("#surla-cp1-editor").textContent.includes("Agreed: Route refunds to a manager."), "confirming did not show the confirmed card");
+await until(() => page.$("#surla-agreement-details") &&
+                  page.text("#surla-agreement-summary").includes("Route refunds to a manager."),
+                  "confirming did not show the saved agreement");
 const confirmed = await readCard("chg-first");
 expect(confirmed.status === "confirmed" && confirmed.confirmed_by === input.owner, "the saved change does not record the user as who confirmed: " + confirmed.confirmed_by);
 expect(page.doc.activeElement === page.$("#surla-cp1-editor"), "confirming did not move focus to the result");
