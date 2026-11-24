@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -524,4 +526,150 @@ func TestInitProjectReportsItsPhaseOnTheChangeList(t *testing.T) {
 			assert.Nil(t, after.InitializingPhase)
 		})
 	}
+}
+
+// TestChangesWaitOpenBeforeInitSeesItsPhases keeps the page's waiting read
+// open from before init_project starts: the wait returns with a new version
+// while the initialization still runs, instead of waiting for the workspace
+// until it ends.
+func TestChangesWaitOpenBeforeInitSeesItsPhases(t *testing.T) {
+	t.Parallel()
+	user := WithPrincipal(context.Background(), Principal{ID: "alice", CallerID: "session", Kind: CallerUser})
+	opts := inPlaceInitOptions(t)
+	var cp *ControlPlane
+	woke := make(chan string, 1)
+	var once sync.Once
+	run := opts.InitRunner
+	opts.InitRunner = func(ctx context.Context, dir, logPath string, args ...string) error {
+		var err error
+		once.Do(func() {
+			select {
+			case version := <-woke:
+				if version == "" {
+					err = errors.New("the open wait failed")
+				}
+			case <-time.After(10 * time.Second):
+				err = errors.New("the wait opened before init_project did not return while it ran")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		return run(ctx, dir, logPath, args...)
+	}
+	cp = newControlPlane(t, opts)
+	cp.changesWait, cp.changesPoll = time.Minute, 5*time.Millisecond
+	before, err := cp.ListChanges(user)
+	require.NoError(t, err)
+	opened := make(chan struct{})
+	go func() {
+		close(opened)
+		got, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: before.Version})
+		if err != nil {
+			woke <- ""
+			return
+		}
+		woke <- got.Version
+	}()
+	<-opened
+	// Give the wait time to be inside its polling before the init starts.
+	time.Sleep(50 * time.Millisecond)
+	_, err = initInPlaceForTest(cp)
+	require.NoError(t, err)
+}
+
+// TestOnlyTheAdmittedInitPublishesAPhase starts a second init_project while
+// the first still prepares its starter: the list keeps showing the first
+// one's phase, the second publishes nothing until it is admitted, and the
+// phase is gone once both have ended.
+func TestOnlyTheAdmittedInitPublishesAPhase(t *testing.T) {
+	t.Parallel()
+	user := WithPrincipal(context.Background(), Principal{ID: "alice", CallerID: "session", Kind: CallerUser})
+	opts := inPlaceInitOptions(t)
+	var cp *ControlPlane
+	second := make(chan error, 1)
+	var once sync.Once
+	var during []string
+	run := opts.InitRunner
+	opts.InitRunner = func(ctx context.Context, dir, logPath string, args ...string) error {
+		var failure error
+		once.Do(func() {
+			go func() {
+				_, err := initInPlaceForTest(cp)
+				second <- err
+			}()
+			// The second call has time to reach admission and wait there.
+			for range 20 {
+				time.Sleep(5 * time.Millisecond)
+				list, err := cp.ListChanges(user)
+				if err != nil {
+					failure = err
+					return
+				}
+				if list.InitializingPhase == nil {
+					failure = errors.New("the running initialization's phase disappeared")
+					return
+				}
+				during = append(during, *list.InitializingPhase)
+			}
+		})
+		if failure != nil {
+			return failure
+		}
+		return run(ctx, dir, logPath, args...)
+	}
+	cp = newControlPlane(t, opts)
+	_, err := initInPlaceForTest(cp)
+	require.NoError(t, err)
+	for _, phase := range during {
+		assert.Equal(t, "Resolving the service's Go modules", phase, "the waiting call must not replace the running one's phase")
+	}
+	select {
+	case err := <-second:
+		require.Error(t, err, "the folder is initialized by then")
+	case <-time.After(10 * time.Second):
+		t.Fatal("the second init_project never ended")
+	}
+	after, err := cp.ListChanges(user)
+	require.NoError(t, err)
+	assert.Nil(t, after.InitializingPhase)
+}
+
+// TestInitWaitsForAListReadAlreadyAtTheWorkspace holds the gate a change
+// list read holds while it reads the workspace, as a read that found no
+// initialization running does: init_project then publishes no phase and
+// leaves the workspace free until that read ends, so the read is never
+// caught waiting for the workspace for the length of an initialization.
+func TestInitWaitsForAListReadAlreadyAtTheWorkspace(t *testing.T) {
+	t.Parallel()
+	cp := newControlPlane(t, inPlaceInitOptions(t))
+	cp.initGate.RLock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := initInPlaceForTest(cp)
+		done <- err
+	}()
+	// The initialization is admitted and waits at the gate.
+	require.Eventually(t, func() bool {
+		if cp.initTurn.TryLock() {
+			cp.initTurn.Unlock()
+			return false
+		}
+		return true
+	}, 5*time.Second, time.Millisecond)
+	for range 20 {
+		time.Sleep(2 * time.Millisecond)
+		assert.Nil(t, cp.initPhase.Load(), "no phase is published while a list read is at the workspace")
+		if assert.True(t, cp.workspaceMu.TryRLock(), "the workspace stays free for that read") {
+			cp.workspaceMu.RUnlock()
+		}
+	}
+	cp.initGate.RUnlock()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("init_project did not continue after the list read ended")
+	}
+	assert.Nil(t, cp.initPhase.Load())
 }

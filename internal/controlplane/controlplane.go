@@ -378,9 +378,21 @@ type (
 		// assignmentWait and assignmentPoll override defaultAssignmentWait
 		// and defaultAssignmentPoll in tests when positive.
 		assignmentWait, assignmentPoll time.Duration
-		// initPhase is the sentence naming what a running init_project is
-		// doing, for the change list; nil when none runs.
+		// initPhase is the sentence naming what the admitted init_project is
+		// doing, for the change list; nil when none is admitted.
 		initPhase atomic.Pointer[string]
+		// initTurn admits one init_project at a time. Its holder alone
+		// publishes and clears initPhase; a second call waits here and
+		// publishes nothing until the first has cleared its phase.
+		initTurn sync.Mutex
+		// initGate orders the change list's workspace reads against an
+		// initialization taking the workspace for minutes. A list read
+		// holds it shared while it decides whether an initialization runs
+		// and, when none does, while it reads the workspace. The admitted
+		// init_project takes it exclusively to publish its first phase, so
+		// it takes the workspace only after every such read has finished,
+		// and every later read sees the phase and stays off the workspace.
+		initGate sync.RWMutex
 		// newGenerator constructs a fresh scaffold.Generator for each
 		// InitProject call when non-nil.
 		newGenerator func() scaffold.Generator

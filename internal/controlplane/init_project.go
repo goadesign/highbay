@@ -139,12 +139,18 @@ func (c *ControlPlane) InitProject(
 		))
 	}
 
-	// The change list answers during the initialization only because it
-	// sees a phase before this call takes the workspace: the phase is set
-	// first, and the list forgets it when the initialization ends, however
-	// it ends.
+	// One initialization is admitted at a time. The change list answers
+	// during it only because it sees a phase before this call takes the
+	// workspace: the phase is published under initGate first, which waits
+	// out the list reads already looking at the workspace. The list
+	// forgets the phase when this initialization ends, however it ends,
+	// before the next one is admitted.
+	c.initTurn.Lock()
+	defer c.initTurn.Unlock()
 	checking := "Checking the folder"
+	c.initGate.Lock()
 	c.initPhase.Store(&checking)
+	c.initGate.Unlock()
 	defer c.initPhase.Store(nil)
 	c.workspaceMu.Lock()
 	defer c.workspaceMu.Unlock()

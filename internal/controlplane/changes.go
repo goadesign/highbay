@@ -115,6 +115,10 @@ func (c *ControlPlane) WaitForChanges(
 // resolved keeps the list working with approvals unavailable, as approve_merge
 // refuses them; span records the cause.
 func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner string) (*gensurla.ChangeList, error) {
+	// Held for the whole read: an initialization cannot take the workspace
+	// between this read's look at its phase and its reads of the workspace.
+	c.initGate.RLock()
+	defer c.initGate.RUnlock()
 	var latest map[string]verifyrun.Run
 	if runsDir := c.runsDir; runsDir != "" {
 		var err error
@@ -190,7 +194,8 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 	// starter, which takes minutes. The two reads below look at the
 	// workspace and would wait for it, so the list would stop answering
 	// just when the page shows the initialization's progress. No project
-	// exists to approve or to evaluate a Story for until it ends.
+	// exists to approve or to evaluate a Story for until it ends. initGate,
+	// held above, makes this look at the phase and those reads one step.
 	initializing := c.initPhase.Load()
 	approvalAvailable := false
 	var story storyEvaluationVersion
