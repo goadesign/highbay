@@ -418,7 +418,7 @@ export function CP1EditorView({
           )}
           <details className="surla-details">
             <summary>Details</summary>
-            <p>Previous saved revision: <code>{priorCard.request_revision}</code></p>
+            <p>Previous saved revision: <code>{priorCard.request_revision}</code> · Status: <code>{priorCard.status}</code></p>
           </details>
         </details>
       ) : null}

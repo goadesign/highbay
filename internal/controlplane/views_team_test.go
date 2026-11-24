@@ -236,7 +236,19 @@ func TestViewsPageTeamNamesUnreadAssignmentStep(t *testing.T) {
 	f := &teamServiceFixture{snapshot: snapshot}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)
-	runPageScript(t, ps, nil, `
+	for _, transition := range []struct{ chorus, watcher string }{
+		{"unavailable", "unknown"}, {"connected", "held"},
+	} {
+		ps.act("chorus-"+transition.chorus, func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			next := pageTeamSnapshot("needs_you")
+			next.ChorusStatus = &transition.chorus
+			next.Roles[1].Attention, next.Roles[1].Watcher = "assignment", transition.watcher
+			f.snapshot = next
+		})
+	}
+	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-team-attention-builder"), "builder attention is missing outside Team");
 expect(page.text("#surla-team-attention-builder").includes("Builder needs you: idle with an unread assignment. Show its pane and tell it to read its assignments and to keep its Chorus watcher running."), "the user's step is missing: " + page.text("#surla-team-attention-builder"));
@@ -244,6 +256,23 @@ const show = page.$("#surla-team-attention-show-pane-builder");
 expect(show !== null && show.textContent === "Show builder pane", "Show pane is missing");
 expect(show.classList.contains("surla-btn-primary"), "Show pane is not the primary action");
 expect(page.$("#surla-team-attention-test_writer") === null, "a role that does not need the user is listed");
+await control(origin, "act", { key: "chorus-unavailable" });
+await until(() => page.text("#surla-team-chorus-status").includes("Running workers can wait for assignments through Surla"), "the owner-reported Chorus outage did not reach the page");
+const builderAttention = () => page.$("#surla-team-attention-builder");
+expect(builderAttention().textContent.includes("wait for assignments through Surla") &&
+       !builderAttention().textContent.includes("Chorus watcher"), "outage recovery still claimed a watcher was needed or absent");
+const copyBuilderPrompt = () => Array.from(builderAttention().querySelectorAll("button")).find((b) => b.textContent === "Copy builder prompt");
+let copied;
+Object.defineProperty(page.win.navigator, "clipboard", { value: { writeText: async (text) => { copied = text; } } });
+checkControl(page, copyBuilderPrompt(), "Copy builder prompt");
+copyBuilderPrompt().click();
+await until(() => builderAttention().textContent.includes("Prompt copied."), "copying the nudge was not announced");
+expect(copied.includes("wait_for_builder_assignment") && copied.includes("since_version") && copied.includes("list_builder_assignments") &&
+       !copied.includes("Chorus watcher"), "the nudge did not give the assigned worker its Surla waiting path");
+await control(origin, "act", { key: "chorus-connected" });
+await until(() => !page.$("#surla-team-chorus-status") && !copyBuilderPrompt(), "recovered Chorus left an active outage warning or stale prompt");
+expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0,
+       "reading/copying Team suggestions started or focused a worker");
 page.close();
 `)
 }

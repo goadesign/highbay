@@ -2719,7 +2719,7 @@ export function bootstrapViewsPage() {
       }
       if (next !== null && teamError === null && teamNeedsYou !== undefined) {
         attention = teamRoles.filter((role) => role.state === "needs_you")
-          .map((role) => teamAttentionText(role, roleHasPane(role.role, herdrMode))).join(". ");
+          .map((role) => teamAttentionText(role, roleHasPane(role.role, herdrMode), teamSnapshot?.chorus_status)).join(". ");
       }
     } else if (activeResult?.kind === "cp4-verification") {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
@@ -2728,7 +2728,7 @@ export function bootstrapViewsPage() {
     if (next === null) {
       // Recovery takes precedence over guidance based on retained observations.
       const connectGuide = "Connect your coding agent to this project’s Surla MCP server.";
-      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, roleHasPane(teamNeedsYou.role, herdrMode))
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, roleHasPane(teamNeedsYou.role, herdrMode), teamSnapshot?.chorus_status)
         : teamLoading || teamSnapshot === null ? "Waiting for Team status."
         : teamStatusUnknown ? "Team status unknown."
         : "Nothing now.";
@@ -2964,7 +2964,7 @@ export function bootstrapViewsPage() {
         teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
       ).find((role) => role !== undefined);
       if (attention !== undefined) {
-        step = teamAttentionText(attention, roleHasPane(attention.role, teamSnapshot?.herdr_mode));
+        step = teamAttentionText(attention, roleHasPane(attention.role, teamSnapshot?.herdr_mode), teamSnapshot?.chorus_status);
       } else if (activeEditor !== null) {
         const ed = activeEditor;
         if (ed.incomingCard !== null || ed.card.proposed_revision !== undefined) {
