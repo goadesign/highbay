@@ -428,6 +428,13 @@ func TestStdioBindsToARealProjectServer(t *testing.T) {
 	require.Nil(t, reply.Error, string(reply.Result))
 	assert.Contains(t, string(reply.Result), "# Golden Path")
 
+	// A call that asks for progress is answered whether or not the server
+	// has any to report: the relay accepts a stream and plain JSON alike.
+	progress := strings.Replace(stdioCall(6, "list_changes"), `"_meta":{`, `"_meta":{"progressToken":"p-6",`, 1)
+	reply = runStdioFrames(t, guide, progress)["6"]
+	require.Nil(t, reply.Error, string(reply.Result))
+	assert.Contains(t, string(reply.Result), "changes")
+
 	// A rotated credential is refused once, then the guide binds again.
 	var guideHandle string
 	reloaded, err := project.Discover(filepath.Dir(state.Dir), workspace)
@@ -507,6 +514,75 @@ func TestStdioRequestHeadersNameTheFrameTarget(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStdioForwardsProgressAheadOfTheResponse relays a call whose client
+// asked for progress to a server that answers with an event stream: the
+// keep-alive comment is dropped, each notification reaches the client at once
+// and in order, and the response follows. A call without a progress token
+// asks for plain JSON, and a stream that ends without a response is an error.
+func TestStdioForwardsProgressAheadOfTheResponse(t *testing.T) {
+	var accepts []string
+	var mu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		accepts = append(accepts, r.Header.Get("Accept"))
+		mu.Unlock()
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+		if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			_, err = io.WriteString(w, `{"jsonrpc":"2.0","id":2,"result":{"plain":true}}`)
+			assert.NoError(t, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		events := []string{
+			":\n\n",
+			"event: message\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":\"p\",\"progress\":0,\"total\":8,\"message\":\"Resolving the service's Go modules\"}}\n\n",
+			"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\n" +
+				"data: \"params\":{\"progressToken\":\"p\",\"progress\":1,\"total\":8,\"message\":\"Generating the service's code\"}}\r\n\r\n",
+		}
+		if !bytes.Contains(body, []byte(`"lost"`)) {
+			events = append(events, "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"streamed\":true}}\n\n")
+		}
+		for _, event := range events {
+			_, err = io.WriteString(w, event)
+			assert.NoError(t, err)
+			w.(http.Flusher).Flush()
+		}
+	}))
+	defer server.Close()
+	session, err := newStdioSession(testProjectRuntimeAt(t.TempDir()), t.TempDir(), "", io.Discard)
+	require.NoError(t, err)
+	session.bind = func(context.Context, string) (*stdioRelay, error) {
+		return &stdioRelay{endpoint: server.URL + "/mcp", credential: "c", http: &http.Client{}}, nil
+	}
+	serve := func(frame string) []string {
+		var out bytes.Buffer
+		require.NoError(t, serveStdioLoop(context.Background(), strings.NewReader(frame+"\n"), &out, session.dispatch))
+		return strings.Split(strings.TrimSpace(out.String()), "\n")
+	}
+
+	lines := serve(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"init_project","arguments":{},"_meta":{"progressToken":"p"}}}`)
+	require.Len(t, lines, 3)
+	assert.JSONEq(t, `{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p","progress":0,"total":8,"message":"Resolving the service's Go modules"}}`, lines[0])
+	assert.JSONEq(t, `{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p","progress":1,"total":8,"message":"Generating the service's code"}}`, lines[1])
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":1,"result":{"streamed":true}}`, lines[2])
+
+	lines = serve(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_changes","arguments":{},"_meta":{"progressToken":null}}}`)
+	require.Len(t, lines, 1)
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":2,"result":{"plain":true}}`, lines[0])
+
+	lines = serve(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"lost","arguments":{},"_meta":{"progressToken":"p"}}}`)
+	require.Len(t, lines, 3, "the notifications arrived before the stream ended")
+	var failed stdioReply
+	require.NoError(t, json.Unmarshal([]byte(lines[2]), &failed))
+	require.NotNil(t, failed.Error)
+	assert.Contains(t, failed.Error.Message, "event stream ended without a response")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"application/json, text/event-stream", "application/json", "application/json, text/event-stream"}, accepts)
 }
 
 func TestStdioRetriesOnlyRequestsTheServerNeverRan(t *testing.T) {
