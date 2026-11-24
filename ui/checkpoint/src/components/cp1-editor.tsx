@@ -38,6 +38,8 @@ export interface CP1EditorProps {
   cp4Open: boolean;
   preservedDraft: PreservedDraft | null;
   formError: string | null;
+  // revisionAid explains and resolves a choice the draft does not implement.
+  revisionAid: React.ReactNode | null;
   onSetAnswer: (ambiguityId: string, option: string) => void;
   onSetExampleField: (
     exampleId: string,
@@ -147,6 +149,7 @@ export function CP1EditorView({
   cp4Open,
   preservedDraft,
   formError,
+  revisionAid,
   onSetAnswer,
   onSetExampleField,
   onSubmitConfirm,
@@ -465,7 +468,7 @@ export function CP1EditorView({
                 return <section className="surla-question" key={question.id}>
                   <h4>{question.question} {selected ? <Badge variant="outline">{edited ? "Edited" : "Selected"}</Badge> : null}</h4>
                   <ChoiceGroup label={"Question " + number + ". " + question.question}
-                    options={question.options} selected={selected} disabled={rpcInFlight}
+                    options={question.options} selected={selected} matchingOption={question.draft_option} disabled={rpcInFlight}
                     onSelect={(option) => onSetAnswer(question.id, option)}
                     optionAttributes={(option) => ({ "data-ambiguity-id": question.id, "data-option": option })} />
                 </section>;
@@ -476,9 +479,8 @@ export function CP1EditorView({
 
           <h3>Concrete examples</h3>
           {draftExamples.length > 0 ? <p className="surla-muted" id="surla-example-check-labels">
-            Check labels guide test writing. Use scenario coverage to see how an example is tested.
-            Verification reports results for the selected suite’s scenarios. Starter tests use a scripted model and need no API key.
-            Configure a model in Live target to try live prompt responses.
+            Check labels guide test writing. Verification reports suite scenario results. Use scenario coverage to find the tests for an example.
+            Starter tests use a scripted model and need no API key. Configure a model in Live target for live prompt trials.
           </p> : null}
           <div className="surla-examples-list">
             {draftExamples.map((ex, idx) => (
@@ -568,12 +570,14 @@ export function CP1EditorView({
           {card.status === "confirmed" && draftDirty && !proposalWaiting && buildRevisionNotice !== null ? (
             <p id="surla-confirm-build-consequence">{buildRevisionNotice}</p>
           ) : null}
+          {revisionAid}
           <CardFooter>
             <Button
               id="surla-confirm-submit"
               variant={card.status === "confirmed" && draftDirty ? "primary" : "secondary"}
-              disabled={rpcInFlight || proposalWaiting}
+              disabled={rpcInFlight || proposalWaiting || revisionAid !== null}
               aria-describedby={proposalWaiting ? "surla-confirm-blocked" :
+                revisionAid !== null ? "surla-confirm-revision-needed-label" :
                 card.status === "confirmed" && draftDirty && buildRevisionNotice !== null
                   ? "surla-confirm-build-consequence" : undefined}
               onClick={onSubmitConfirm}

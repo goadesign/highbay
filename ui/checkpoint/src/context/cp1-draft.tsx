@@ -4,7 +4,7 @@
 // read and mutate this single draft store by canonical item ID.
 
 import React, { createContext, useContext } from "react";
-import { ChangeCardResult, ExampleItem } from "../types";
+import { AmbiguityQuestion, ChangeCardResult, ExampleItem } from "../types";
 
 export interface PreservedDraft {
   fromRevision: string;
@@ -26,6 +26,19 @@ export const CP1DraftContext = createContext<CP1DraftContextValue | null>(null);
 // outside an active CP1 editor (such as during a standalone partial preview).
 export function useCP1Draft(): CP1DraftContextValue | null {
   return useContext(CP1DraftContext);
+}
+
+// answersNeedingRevision finds selected answers the saved draft cannot confirm.
+// An unanswered question or a draft that supports every option needs no revision.
+export function answersNeedingRevision(
+  questions: readonly AmbiguityQuestion[] | undefined,
+  answers: Record<string, string>,
+): { question: string; answer: string }[] {
+  return (questions ?? []).flatMap((item) => {
+    const answer = Object.prototype.hasOwnProperty.call(answers, item.id) ? answers[item.id] : "";
+    return item.draft_option !== undefined && answer !== "" && answer !== item.draft_option
+      ? [{ question: item.question, answer }] : [];
+  });
 }
 
 // areExamplesModified reports whether the current draft examples differ from

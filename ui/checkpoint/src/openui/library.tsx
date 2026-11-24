@@ -115,7 +115,7 @@ export const PolicySimulatorTable = defineComponent({
           {showsChoices ? <CardDescription>{amb.question}</CardDescription> : null}
         </CardHeader>
         <CardContent>
-          {showsChoices ? <ChoiceGroup label={amb.question} options={amb.options} selected={selectedOption}
+          {showsChoices ? <ChoiceGroup label={amb.question} options={amb.options} selected={selectedOption} matchingOption={amb.draft_option}
             disabled={controlsDisabled} onSelect={(option) => draft.setAnswer(amb.id, option)}
             optionAttributes={(option) => ({
               "data-ambiguity-id": amb.id, "data-option": option,
@@ -220,7 +220,7 @@ export const AmbiguityChoiceCard = defineComponent({
           {props.rationale ? <CardDescription>{props.rationale}</CardDescription> : null}
         </CardHeader>
         {showsChoices ? <CardContent>
-          <ChoiceGroup label={amb.question} options={amb.options} selected={selectedOption}
+          <ChoiceGroup label={amb.question} options={amb.options} selected={selectedOption} matchingOption={amb.draft_option}
             disabled={controlsDisabled} onSelect={(option) => draft.setAnswer(amb.id, option)}
             optionAttributes={(option) => ({
               "data-ambiguity-id": amb.id, "data-option": option,

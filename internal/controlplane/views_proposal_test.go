@@ -127,6 +127,12 @@ expect(page.$("#surla-proposal-design").dataset.changed === "true" && page.text(
 expect(page.$("#surla-confirm-submit").disabled && page.$("#surla-confirm-blocked"), "refining the agreed revision is still offered");
 expect(page.$("#surla-proposal-adopt").disabled && page.$("#surla-proposal-adopt-hint"), "Adopt is offered before every question is answered");
 checkControl(page, page.$("#surla-proposal-decline"), "Decline");
+question.querySelector('[data-option="without_tax"]').click();
+expect(page.$("#surla-proposal-adopt").disabled && page.$("#surla-proposal-revision-needed") &&
+       page.$("#surla-review-revision-request") && answer().textContent.includes("Matches current draft"),
+       "a proposal permitted adopting an answer that needs a revised draft");
+page.$("#surla-proposal-adopt").click();
+expect(page.sent("POST", "/changes/confirm").length === 0, "the proposal submitted an incompatible answer");
 
 answer().click();
 expect(!page.$("#surla-proposal-adopt").disabled, "answering every question did not enable Adopt");
@@ -249,11 +255,14 @@ func proposalPage(t *testing.T) (*pageServer, string) {
 			latest = change.ProposedRevision.RequestRevision
 		}
 		edited := "check_01"
+		tax := refundTaxQuestion()
+		draftOption := "with_tax"
+		tax.DraftOption = &draftOption
 		_, err = cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
 			ChangeID: "chg-proposal", RequestRevision: latest, Prompt: "Refunds up to $60 are instant.", RevisionNote: "Raise the instant refund limit to $60 and add exchanges.", StoryRefreshOpID: &storyOp,
 			Analysis: &gensurla.CP1RevisionAnalysis{
 				Summary:     "Refunds up to $60 are instant; exchanges ship a replacement.",
-				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{refundTaxQuestion()},
+				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{tax},
 				Examples: []*gensurla.CP1RevisionAnalysisExample{
 					{
 						PriorID: &edited, Scenario: "Refund at the raised limit", InputSummary: "Order total $60.00",

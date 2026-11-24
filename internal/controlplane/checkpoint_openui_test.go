@@ -74,7 +74,7 @@ func TestCheckpointUIOpenUIDecisionStudio(t *testing.T) {
 function analysis(program, questions) {
   return {
     summary: "Route refunds >= $50 to manager approval.",
-    ambiguities: questions ? [{ question: "Does the $50 limit include tax?", options: ["subtotal_only", "total_with_tax"] }] : [],
+    ambiguities: questions ? [{ question: "Does the $50 limit include tax?", options: ["subtotal_only", "total_with_tax"], draft_option: "subtotal_only" }] : [],
     examples: [
       { scenario: "Borderline $48 order", input_summary: "$48 subtotal + $4 tax", expected_outcome: "Auto-approved", verification_kind: "deterministic" },
       { scenario: "Large $75 order", input_summary: "$75 subtotal + $6 tax", expected_outcome: "Manager approval required", verification_kind: "deterministic" },
@@ -133,7 +133,26 @@ const cells = table.querySelectorAll("tbody tr:first-child td[data-label]");
 expect(cells.length === 4 && cells[0].getAttribute("data-label") === "Scenario" && cells[1].getAttribute("data-label") === "Input" && cells[2].getAttribute("data-label") === "subtotal_only" && cells[3].getAttribute("data-label") === "total_with_tax", "expected PolicySimulatorTable cells to carry data-label attributes for narrow responsive layouts");
 
 // 2. Choosing in the simulator updates the canonical draft.
-workspace.querySelector('[data-openui-ambiguity-id="chg-openui-ambiguity-01"][data-openui-option="subtotal_only"]').click();
+const draftMatch = workspace.querySelector('[data-openui-option="subtotal_only"]');
+const draftMismatch = workspace.querySelector('[data-openui-option="total_with_tax"]');
+expect(draftMatch.textContent.includes("Matches current draft") && !draftMismatch.textContent.includes("Matches current draft"),
+       "the OpenUI choice did not mark the exact answer that the saved draft implements");
+draftMismatch.click();
+const confirm = page.$("#surla-confirm-submit");
+expect(confirm.disabled && draftMismatch.getAttribute("aria-pressed") === "true" &&
+       page.text(".surla-frame-attention dd").includes("coding agent to revise"), "a requested revision was not retained and identified");
+confirm.click();
+expect(page.sent("POST", "/changes/confirm").length === 0, "Confirm submitted an answer the draft does not implement");
+page.$("#surla-review-revision-request").click();
+expect(page.doc.activeElement === page.$("#surla-confirm-revision-needed"), "Next did not focus the revision request");
+let copied;
+Object.defineProperty(page.win.navigator, "clipboard", { value: { writeText: async (text) => { copied = text; } } });
+page.$("#surla-confirm-revision-needed button").click();
+await until(() => page.text("#surla-confirm-revision-needed").includes("Prompt copied."), "the request copy did not announce success");
+expect(copied.includes("chg-openui") && copied.includes("Does the $50 limit include tax?\ntotal_with_tax") &&
+       !copied.includes("\nsubtotal_only"), "the revision request omitted or changed the selected option");
+draftMatch.click();
+expect(!confirm.disabled && !page.$("#surla-confirm-revision-needed"), "the supported answer did not restore confirmation");
 const canonicalPill = editorRegion().querySelector('[data-ambiguity-id="chg-openui-ambiguity-01"][data-option="subtotal_only"]');
 const activeCells = workspace.querySelectorAll(".shadcn-cell-active");
 expect(canonicalPill && canonicalPill.getAttribute("aria-pressed") === "true" && activeCells.length === 3 &&

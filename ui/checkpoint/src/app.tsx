@@ -15,6 +15,7 @@ import { flushSync } from "react-dom";
 import { createRoot, Root } from "react-dom/client";
 import { ArchitecturePreviewView, IncomingChangeCardView } from "./components/c4-graph";
 import { ChangeListView } from "./components/change-list";
+import { CopyPrompt } from "./components/copy-prompt";
 import { CP1EditorView } from "./components/cp1-editor";
 import { BuildMergeInstructions, BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
 import { AgentPickerView } from "./components/agent-picker";
@@ -32,7 +33,7 @@ import { GlobalTeamAttention, roleHasPane, TeamFactsError, TeamStageProps, TeamS
 import { LiveTargetStageView, ModelDraft, ServerAnswer, describeApplied } from "./components/live-target";
 import { Alert, Button, Card } from "./components/shadcn";
 import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
-import { isDraftDirty, PreservedDraft } from "./context/cp1-draft";
+import { answersNeedingRevision, isDraftDirty, PreservedDraft } from "./context/cp1-draft";
 import {
   ArchitecturePreviewResult,
   ApprovalItem,
@@ -2596,6 +2597,12 @@ export function bootstrapViewsPage() {
     const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
     const teamStatusUnknown = teamRoles.some((role) => role.state === "error" ||
       (role.state === "unknown" && (role.role !== "guide" || guideInHerdr)));
+    const proposal = activeEditor?.card.proposed_revision;
+    const revisionTarget = activeEditor === null ? null : proposal !== undefined
+      ? answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0
+        ? "#surla-proposal-revision-needed" : null
+      : answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0
+        ? "#surla-confirm-revision-needed" : null;
     const showSlots = !(onDescribe && !editorOpen && listError === null &&
       (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)) &&
       changeList !== null && changeList.changes.length === 0 && teamError === null &&
@@ -2649,13 +2656,20 @@ export function bootstrapViewsPage() {
         attention = "Merging the approved result.";
         next = <MergePrimaryAction id="surla-cp5-merge" controls={mergeControls(run)} />;
       }
-    } else if (cp1Active && activeEditor !== null && activeEditor.card.status === "confirmed" &&
-        activeEditor.card.proposed_revision !== undefined && activeEditor.incomingCard === null &&
+    } else if (cp1Active && activeEditor !== null &&
+        (revisionTarget !== null || proposal !== undefined && activeEditor.card.status === "confirmed") &&
+        activeEditor.incomingCard === null &&
         sessionState === "active" && editorRequest === null && !cardLoadErrors.has(activeEditor.card.change_id) &&
         !hasPending("merge_change", activeEditor.card.change_id)) {
-      attention = "Adopt or decline the proposed revision.";
-      next = <Button id="surla-review-proposal" variant="primary"
-        onClick={() => focusResult("#surla-proposal")}>Review proposed revision</Button>;
+      if (revisionTarget !== null) {
+        attention = "Ask your coding agent to revise the draft for your selected answers.";
+        next = <Button id="surla-review-revision-request" variant="primary"
+          onClick={() => focusResult(revisionTarget)}>Review revision request</Button>;
+      } else {
+        attention = "Adopt or decline the proposed revision.";
+        next = <Button id="surla-review-proposal" variant="primary"
+          onClick={() => focusResult("#surla-proposal")}>Review proposed revision</Button>;
+      }
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
@@ -3040,6 +3054,29 @@ export function bootstrapViewsPage() {
       "Its tests must be reported, checked and accepted again before verification.";
   }
 
+  // draftRevisionAid gives the guide the exact decisions to incorporate. It
+  // leaves the saved revision and the user's selections in place for review.
+  function draftRevisionAid(id: string, changeId: string, choices: ReturnType<typeof answersNeedingRevision>) {
+    if (choices.length === 0) return null;
+    const prompt = [
+      "Please revise change " + changeId + " so the draft implements these answers.",
+      ...choices.map(({ question, answer }) => question + "\n" + answer),
+      "Update the design, Story, examples, and preserved behaviors as needed. Propose the revised change for my review.",
+    ].join("\n\n");
+    const guidePane = teamFactsError() === null && roleHasPane("guide", teamSnapshot?.herdr_mode) &&
+      connectedGuide() !== undefined;
+    return <Alert id={id} tabIndex={-1} variant="warning" role="region" aria-labelledby={id + "-label"}>
+      <p id={id + "-label"}>
+        Your selected answers need a revision. Send this request to your coding agent, then review its revised draft here.
+      </p>
+      <div className="surla-field-row">
+        <CopyPrompt text={prompt} label="Copy request for coding agent" />
+        {guidePane ? <Button disabled={hasPending("show_team_pane", "guide")}
+          onClick={() => showTeamPane("guide")}>Show coding agent pane</Button> : null}
+      </div>
+    </Alert>;
+  }
+
   // syncEditorRegion renders saved values and drafts together when editorOpen
   // is true, with editing disabled while a Change Card request is outstanding.
   function syncEditorRegion() {
@@ -3067,6 +3104,8 @@ export function bootstrapViewsPage() {
             answers={ed.proposalAnswers}
             busy={editorRequest !== null}
             error={ed.proposalError}
+            revisionAid={draftRevisionAid("surla-proposal-revision-needed", ed.card.change_id,
+              answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers))}
             buildRevisionNotice={buildRevisionNotice}
             onAnswer={(questionId, option) => {
               if (!activeEditor || editorRequest !== null) {
@@ -3130,6 +3169,8 @@ export function bootstrapViewsPage() {
             />
           }
           proposalWaiting={proposal !== undefined}
+          revisionAid={proposal === undefined ? draftRevisionAid("surla-confirm-revision-needed", ed.card.change_id,
+            answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers)) : null}
           priorCard={ed.priorCard}
           draftAnswers={ed.draftAnswers}
           draftExamples={ed.draftExamples}
@@ -3976,6 +4017,10 @@ export function bootstrapViewsPage() {
     if (!activeEditor || editorRequest !== null) {
       return;
     }
+    if (answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0) {
+      focusResult("#surla-confirm-revision-needed");
+      return;
+    }
     const unanswered = unansweredQuestions(activeEditor)[0];
     if (unanswered !== undefined) {
       showFormError("Choose an answer for “" + unanswered.question + "” before confirming.", "input");
@@ -4037,6 +4082,10 @@ export function bootstrapViewsPage() {
     const card = activeEditor.card;
     const proposal = card.proposed_revision;
     if (proposal === undefined) {
+      return;
+    }
+    if (answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0) {
+      focusResult("#surla-proposal-revision-needed");
       return;
     }
     const answers: Record<string, string> = {};

@@ -23,6 +23,8 @@ export interface ProposedRevisionViewProps {
   busy: boolean;
   // error describes the last refused adopt or decline, or null.
   error: string | null;
+  // revisionAid explains and resolves a choice the proposal does not implement.
+  revisionAid: React.ReactNode | null;
   // buildRevisionNotice describes adoption's effect on the agreed build.
   buildRevisionNotice: string | null;
   // onAnswer records the user's choice for one proposal question.
@@ -43,6 +45,7 @@ export function ProposedRevisionView({
   answers,
   busy,
   error,
+  revisionAid,
   buildRevisionNotice,
   onAnswer,
   onAdopt,
@@ -220,13 +223,15 @@ export function ProposedRevisionView({
       {buildRevisionNotice !== null ? (
         <p id="surla-proposal-build-consequence">{buildRevisionNotice}</p>
       ) : null}
+      {revisionAid}
       <div className="surla-field-row">
         <Button
           id="surla-proposal-adopt"
           variant="primary"
-          disabled={busy || unanswered.length > 0}
+          disabled={busy || unanswered.length > 0 || revisionAid !== null}
           aria-describedby={[
             unanswered.length > 0 ? "surla-proposal-adopt-hint" : "",
+            revisionAid !== null ? "surla-proposal-revision-needed-label" : "",
             buildRevisionNotice !== null ? "surla-proposal-build-consequence" : "",
           ].filter(Boolean).join(" ") || undefined}
           onClick={onAdopt}
@@ -273,7 +278,7 @@ function ProposalQuestion({
       <div>
         <strong>{question.question}</strong> {isNew ? <Badge variant="accent">New</Badge> : null}
       </div>
-      <ChoiceGroup label={question.question} options={question.options} selected={selected} disabled={busy}
+      <ChoiceGroup label={question.question} options={question.options} selected={selected} matchingOption={question.draft_option} disabled={busy}
         onSelect={(option) => onAnswer(question.id, option)}
         optionAttributes={(option) => ({ "data-option": option })} />
     </li>

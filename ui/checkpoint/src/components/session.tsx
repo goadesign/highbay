@@ -1,8 +1,9 @@
 // Package components explains how to open the views page with a session and
 // what to do when the session ends.
 
-import React, { useState } from "react";
-import { Alert, Button, Card } from "./shadcn";
+import React from "react";
+import { CopyPrompt } from "./copy-prompt";
+import { Alert, Card } from "./shadcn";
 
 // The recovery prompt contains no project link or browser credential.
 const openViewsPrompt = "Open Surla views";
@@ -10,26 +11,11 @@ const openViewsPrompt = "Open Surla views";
 // SessionRecovery offers the same fresh-session routes on either side of a
 // session. The visible prompt remains selectable if clipboard access fails.
 function SessionRecovery() {
-  const [copyStatus, setCopyStatus] = useState("");
-
-  async function copyPrompt() {
-    try {
-      await navigator.clipboard.writeText(openViewsPrompt);
-      setCopyStatus("Prompt copied.");
-    } catch {
-      setCopyStatus("Could not copy. Select the prompt above and copy it.");
-    }
-  }
-
   return <>
     <p>
       Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.
     </p>
-    <p>
-      <code>{openViewsPrompt}</code>{" "}
-      <Button onClick={copyPrompt}>Copy prompt for coding agent</Button>{" "}
-      <span role="status">{copyStatus}</span>
-    </p>
+    <CopyPrompt text={openViewsPrompt} label="Copy prompt for coding agent" showText />
     <details>
       <summary>Open from a terminal without a coding agent</summary>
       <p>In the project folder, use <code>surla --print-link</code>. Open the one-use link privately within two minutes.</p>

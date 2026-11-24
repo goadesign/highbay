@@ -45,6 +45,9 @@ for (const [role, label] of [["builder", "Builder"], ["test_writer", "Test write
   const toggle = page.$("#surla-build-agents-" + role + "-yolo");
   expect(toggle.labels[0]?.textContent.trim().replace(/\s+/g, " ") === "Skip permission prompts (YOLO) for " + label,
          "permission toggle did not include its worker role in its native label");
+  const description = toggle.getAttribute("aria-describedby").split(" ").map((id) => page.doc.getElementById(id)?.textContent).join(" ");
+  expect(description.includes("sets missing folder trust") && description.includes("explicitly untrusted"),
+         "the toggle's help did not distinguish missing and explicitly untrusted folder settings");
 }
 const model = page.$("#surla-build-agents-builder-model");
 Object.getOwnPropertyDescriptor(page.win.HTMLInputElement.prototype, "value").set.call(model, "custom-model-id");

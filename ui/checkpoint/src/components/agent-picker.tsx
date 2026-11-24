@@ -157,11 +157,14 @@ function WorkerFields({
       {choice !== undefined && option?.yolo_supported ? <div>
         <label htmlFor={idPrefix + "-yolo"}>
           <input id={idPrefix + "-yolo"} type="checkbox" checked={choice.yolo} disabled={unavailable}
-            aria-describedby={option.yolo_effect !== undefined ? idPrefix + "-yolo-effect" : undefined}
+            aria-describedby={idPrefix + "-trust-note" + (option.yolo_effect !== undefined ? " " + idPrefix + "-yolo-effect" : "")}
             onChange={(event) => changeChoice({ ...choice, yolo: event.currentTarget.checked })} />{" "}
           Skip permission prompts (YOLO)<span className="surla-visually-hidden"> for {roleLabels[role]}</span>
         </label>
         {option.yolo_effect !== undefined ? <p id={idPrefix + "-yolo-effect"}>{option.yolo_effect}</p> : null}
+        <p id={idPrefix + "-trust-note"}>
+          Surla sets missing folder trust for supported coding agents. If a folder is explicitly untrusted, review that setting before starting.
+        </p>
         {headless && !choice.yolo ? <p>Enable this permission switch to run this worker in the background.</p> : null}
       </div> : null}
       {choice !== undefined && option !== undefined && !option.yolo_supported ? <p>
