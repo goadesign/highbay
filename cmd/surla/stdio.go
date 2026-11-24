@@ -680,9 +680,10 @@ func validateStdioHTTPResponse(status int, body []byte, target string) ([]byte, 
 }
 
 // newStdioMCPRequest builds the HTTP POST for one frame. A frame whose params
-// carry the 2026-07-28 protocol version in _meta gets that version and the
-// method and tool-name headers; any other request after initialize gets the
-// legacy protocol version, which the generated server serves statelessly.
+// carry the 2026-07-28 protocol version in _meta gets that version, the
+// method header and, for a method that names its target, the name header;
+// any other request after initialize gets the legacy protocol version, which
+// the generated server serves statelessly.
 func newStdioMCPRequest(ctx context.Context, target string, payload []byte, raw *jsonrpc.RawRequest) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
@@ -691,9 +692,15 @@ func newStdioMCPRequest(ctx context.Context, target string, payload []byte, raw 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if raw != nil && !raw.Invalid {
+		// Typed fields keep the lookup the same as the generated decoder's,
+		// so the header names the target the server dispatches.
 		var params struct {
-			// Name is a tools/call tool name.
+			// Name is a tools/call tool name or a prompts/get prompt name.
 			Name json.RawMessage `json:"name"`
+			// URI is a resources/read resource.
+			URI json.RawMessage `json:"uri"`
+			// TaskID is a task method's task.
+			TaskID json.RawMessage `json:"taskId"`
 			// Meta carries the modern protocol version.
 			Meta map[string]any `json:"_meta"`
 		}
@@ -701,8 +708,19 @@ func newStdioMCPRequest(ctx context.Context, target string, payload []byte, raw 
 			if version, ok := params.Meta["io.modelcontextprotocol/protocolVersion"].(string); ok && version != "" {
 				req.Header.Set("MCP-Protocol-Version", version)
 				req.Header.Set("Mcp-Method", raw.Method)
+				// The protocol mirrors one params field per method in the
+				// name header; the server refuses a missing or different one.
+				var field json.RawMessage
+				switch raw.Method {
+				case "tools/call", "prompts/get":
+					field = params.Name
+				case "resources/read":
+					field = params.URI
+				case "tasks/get", "tasks/update", "tasks/cancel":
+					field = params.TaskID
+				}
 				var name string
-				if raw.Method == "tools/call" && json.Unmarshal(params.Name, &name) == nil {
+				if len(field) > 0 && json.Unmarshal(field, &name) == nil {
 					req.Header.Set("Mcp-Name", encodeMCPHeaderValue(name))
 				}
 				return req, nil
