@@ -6177,6 +6177,11 @@ type ListChangesResultTransport struct {
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable *bool `json:"approval_available"`
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string `json:"initializing_phase,omitempty"`
 }
 
 // ValidateListChangesResultTransport checks decoded JSON before it becomes a service value.
@@ -17928,6 +17933,7 @@ func EncodeListChangesResult(in *surla.ChangeList) ([]byte, error) {
 		body = &ListChangesResultTransport{
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
+			InitializingPhase: in.InitializingPhase,
 		}
 		body.Changes = make([]*ListChangesResultChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {

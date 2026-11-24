@@ -4,6 +4,7 @@ package scaffold
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,4 +181,55 @@ printf go-temp > "$GOTMPDIR/go-file"
 	assert.FileExists(t, filepath.Join(physicalWork, "go-file"))
 	assertOnly(t, osTemp)
 	assertOnly(t, goTemp)
+}
+
+// TestInitReportsEachSlowPhaseBeforeItStarts follows OnPhase through a
+// starter's preparation: each module's dependency resolution, generation and
+// build is announced in order before its commands run, and an error OnPhase
+// returns stops the preparation with that error and publishes nothing.
+func TestInitReportsEachSlowPhaseBeforeItStarts(t *testing.T) {
+	want := []string{
+		"Resolving the service's Go modules", "Generating the service's code", "Building and testing the service",
+		"Resolving the test module's Go modules", "Generating the test module's code", "Building and testing the test module",
+	}
+	t.Run("in order", func(t *testing.T) {
+		workspace, work := t.TempDir(), t.TempDir()
+		var phases []string
+		commands := map[string]int{}
+		run := func(_ context.Context, dir string, _ string, args ...string) error {
+			require.NotEmpty(t, phases, "a command ran before any phase was reported")
+			commands[phases[len(phases)-1]]++
+			return fakeGo(dir, args)
+		}
+		target := filepath.Join(workspace, "shop")
+		_, err := Init(t.Context(), Options{
+			Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+			OnPhase: func(phase string) error { phases = append(phases, phase); return nil },
+		}, run, &fakeGenerator{pkgs: []string{"shop"}})
+		require.NoError(t, err)
+		assert.Equal(t, want, phases)
+		for _, phase := range []string{want[0], want[2], want[3], want[5]} {
+			assert.Positive(t, commands[phase], "commands run under %q", phase)
+		}
+	})
+	t.Run("an error stops the preparation", func(t *testing.T) {
+		workspace, work := t.TempDir(), t.TempDir()
+		stopped := errors.New("the caller went away")
+		var phases []string
+		run := func(_ context.Context, dir string, _ string, args ...string) error { return fakeGo(dir, args) }
+		target := filepath.Join(workspace, "shop")
+		_, err := Init(t.Context(), Options{
+			Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+			OnPhase: func(phase string) error {
+				phases = append(phases, phase)
+				if len(phases) == 3 {
+					return stopped
+				}
+				return nil
+			},
+		}, run, &fakeGenerator{pkgs: []string{"shop"}})
+		require.ErrorIs(t, err, stopped)
+		assert.Equal(t, want[:3], phases)
+		assert.NoDirExists(t, target)
+	})
 }

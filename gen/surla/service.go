@@ -1113,6 +1113,11 @@ type ChangeList struct {
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable bool
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string
 }
 
 // One saved Change Card of the project as list_changes reports it.
@@ -4551,6 +4556,11 @@ type jsonChangeListTransport struct {
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable *bool `json:"approval_available"`
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string `json:"initializing_phase,omitempty"`
 }
 
 // validatejsonChangeListTransport checks decoded JSON before it becomes a service value.
@@ -17390,6 +17400,7 @@ func EncodeChangeList(in *ChangeList) ([]byte, error) {
 		body = &jsonChangeListTransport{
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
+			InitializingPhase: in.InitializingPhase,
 		}
 		body.Changes = make([]*jsonChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {
@@ -17430,6 +17441,7 @@ func ValidateChangeListValue(in *ChangeList) error {
 		body = &jsonChangeListTransport{
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
+			InitializingPhase: in.InitializingPhase,
 		}
 		body.Changes = make([]*jsonChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {
@@ -17474,6 +17486,7 @@ func DecodeChangeList(data []byte) (out *ChangeList, err error) {
 		out = &ChangeList{
 			Version:           *body.Version,
 			ApprovalAvailable: *body.ApprovalAvailable,
+			InitializingPhase: body.InitializingPhase,
 		}
 		out.Changes = make([]*ChangeListItem, len(body.Changes))
 		for i, val := range body.Changes {
@@ -37232,6 +37245,13 @@ func validateChangeListJSONValue(path string, value any, description string) err
 			); err != nil {
 				return err
 			}
+		case "initializing_phase":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What init_project is doing now, as a short sentence for the user, such as \"Resolving the service's Go modules\"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.",
+			); err != nil {
+				return err
+			}
 		case "version":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -37243,6 +37263,7 @@ func validateChangeListJSONValue(path string, value any, description string) err
 			return unknownJSONFieldError(path, key, []string{
 				"approval_available",
 				"changes",
+				"initializing_phase",
 				"version",
 			})
 		}
@@ -45362,6 +45383,11 @@ func checkChangeListChangeListValue(in *ChangeList, field string, active map[any
 		}
 		if !utf8.ValidString(string(in.Version)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
+		}
+		if in.InitializingPhase != nil {
+			if !utf8.ValidString(string(*in.InitializingPhase)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "initializing_phase", false))
+			}
 		}
 	}
 	return nil

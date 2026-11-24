@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -463,4 +464,64 @@ func pendingInPlaceRecord(t *testing.T, cp *ControlPlane) workspaceFile {
 	require.NotEmpty(t, wf.Staging)
 	require.Greater(t, len(wf.Entries), 2)
 	return wf
+}
+
+// TestInitProjectReportsItsPhaseOnTheChangeList follows the change list while
+// init_project runs: each command the starter preparation runs happens under
+// a phase the list names, the list's version changes with the phase so an
+// open page learns of it, and the phase is gone when the initialization ends,
+// whether it succeeded or failed.
+func TestInitProjectReportsItsPhaseOnTheChangeList(t *testing.T) {
+	t.Parallel()
+	user := WithPrincipal(context.Background(), Principal{ID: "alice", CallerID: "session", Kind: CallerUser})
+	for _, outcome := range []string{"succeeds", "fails"} {
+		t.Run(outcome, func(t *testing.T) {
+			opts := inPlaceInitOptions(t)
+			var cp *ControlPlane
+			var phases, versions []string
+			run := opts.InitRunner
+			opts.InitRunner = func(ctx context.Context, dir, logPath string, args ...string) error {
+				list, err := cp.ListChanges(user)
+				if err != nil {
+					return err
+				}
+				if list.InitializingPhase == nil {
+					return errors.New("a preparation command ran without a phase on the change list")
+				}
+				if len(phases) == 0 || phases[len(phases)-1] != *list.InitializingPhase {
+					phases = append(phases, *list.InitializingPhase)
+					versions = append(versions, list.Version)
+				}
+				if outcome == "fails" && len(phases) == 2 {
+					return errors.New("the generator's toolchain is missing")
+				}
+				return run(ctx, dir, logPath, args...)
+			}
+			cp = newControlPlane(t, opts)
+			before, err := cp.ListChanges(user)
+			require.NoError(t, err)
+			assert.Nil(t, before.InitializingPhase)
+
+			_, err = initInPlaceForTest(cp)
+			if outcome == "fails" {
+				require.Error(t, err)
+				assert.Equal(t, []string{"Resolving the service's Go modules", "Building and testing the service"}, phases)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, []string{
+					"Resolving the service's Go modules", "Building and testing the service",
+					"Resolving the test module's Go modules", "Building and testing the test module",
+					"Committing the starter project",
+				}, phases, "generation runs through the generator, not a command")
+			}
+			seen := map[string]bool{before.Version: true}
+			for _, version := range versions {
+				assert.False(t, seen[version], "each phase gives the list a new version")
+				seen[version] = true
+			}
+			after, err := cp.ListChanges(user)
+			require.NoError(t, err)
+			assert.Nil(t, after.InitializingPhase)
+		})
+	}
 }

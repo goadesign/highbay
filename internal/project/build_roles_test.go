@@ -310,6 +310,7 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"Set an ambiguity's draft_option to the option your draft already implements whenever another option would change the design, Story, examples or preserved behaviors",
 			"ask one short, plain question and wait; never ask for a Go module path, folder name or requirements checklist",
 			"call init_project with dir \".\" and no module path unless the user gave one",
+			"Before that call, tell the user in one sentence that creating the starter downloads Go modules and can take a few minutes the first time, and that the Surla page shows its progress.",
 			"instead of interviewing them in chat: put open product questions",
 			"into the analysis's ambiguities with concrete options, which the user answers on the views page",
 			"call update_draft before each new change",

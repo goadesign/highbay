@@ -112,6 +112,7 @@ export interface ChangeCardResult {
 export interface ChangeList {
   approval_available: boolean;
   changes: ChangeListItem[];
+  initializing_phase?: string;
   version: string;
 }
 
@@ -1659,6 +1660,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "items": {
           "$ref": "#/$defs/ChangeListItem"
         }
+      },
+      "initializing_phase": {
+        "type": "string"
       },
       "version": {
         "type": "string"

@@ -186,14 +186,25 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		}
 		items = append(items, item)
 	}
-	_, err = c.resolvePromotion(ctx)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "resolve promotion target")
+	// init_project holds the workspace for as long as it prepares the
+	// starter, which takes minutes. The two reads below look at the
+	// workspace and would wait for it, so the list would stop answering
+	// just when the page shows the initialization's progress. No project
+	// exists to approve or to evaluate a Story for until it ends.
+	initializing := c.initPhase.Load()
+	approvalAvailable := false
+	var story storyEvaluationVersion
+	if initializing == nil {
+		_, err = c.resolvePromotion(ctx)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "resolve promotion target")
+		}
+		// approve_merge refuses without verification, promotion target or not.
+		_, noVerif := c.verifier.(noVerification)
+		approvalAvailable = err == nil && !noVerif
+		story = c.storyEvaluation(owner)
 	}
-	// approve_merge refuses without verification, promotion target or not.
-	_, noVerif := c.verifier.(noVerification)
-	approvalAvailable := err == nil && !noVerif
 	var team *gensurla.TeamSnapshot
 	if c.team.Owner == owner {
 		team, err = c.team.Service.ReadTeam(ctx)
@@ -208,7 +219,8 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		Team              *gensurla.TeamSnapshot     `json:"team"`
 		StoryEvaluation   storyEvaluationVersion     `json:"story_evaluation"`
 		LiveTarget        liveTargetVersion          `json:"live_target"`
-	}{items, buildVersions, approvalAvailable, team, c.storyEvaluation(owner), c.liveTargetVersion()})
+		Initializing      *string                    `json:"initializing,omitempty"`
+	}{items, buildVersions, approvalAvailable, team, story, c.liveTargetVersion(), initializing})
 	if err != nil {
 		err = fmt.Errorf("encode change list version: %w", err)
 		span.RecordError(err)
@@ -220,6 +232,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		Changes:           items,
 		Version:           hex.EncodeToString(sum[:]),
 		ApprovalAvailable: approvalAvailable,
+		InitializingPhase: initializing,
 	}, nil
 }
 

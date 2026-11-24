@@ -39,6 +39,10 @@ type (
 )
 
 const (
+	// initProgressSteps is how many phases init_project reports: resolving,
+	// generating and building each of the starter's two modules, committing
+	// the starter, and publishing it.
+	initProgressSteps = 8
 	// workspaceGitTimeout bounds git read probes when checking whether a
 	// workspace directory already has a committed HEAD.
 	workspaceGitTimeout = 10 * time.Second
@@ -135,6 +139,13 @@ func (c *ControlPlane) InitProject(
 		))
 	}
 
+	// The change list answers during the initialization only because it
+	// sees a phase before this call takes the workspace: the phase is set
+	// first, and the list forgets it when the initialization ends, however
+	// it ends.
+	checking := "Checking the folder"
+	c.initPhase.Store(&checking)
+	defer c.initPhase.Store(nil)
 	c.workspaceMu.Lock()
 	defer c.workspaceMu.Unlock()
 
@@ -223,8 +234,14 @@ func (c *ControlPlane) InitProject(
 		return nil, failInitFault(span, "resolve init stage directory failed", err)
 	}
 
-	if err := reportProgress(initCtx, 0, 2, "Generating, building, testing, and committing the starter project"); err != nil {
-		return nil, failInitFault(span, "init_project canceled", err)
+	// Each phase reaches the user on the views page through the change list
+	// and the calling agent through its progress updates.
+	done := 0.0
+	reportPhase := func(phase string) error {
+		c.initPhase.Store(&phase)
+		err := reportProgress(initCtx, done, initProgressSteps, phase)
+		done++
+		return err
 	}
 	physCards, err := abspath.Eval(c.cards.dir)
 	if err != nil {
@@ -251,6 +268,7 @@ func (c *ControlPlane) InitProject(
 			WorkDir:      stageParentDir,
 			Module:       modulePath,
 			SurlaVersion: c.surlaVersion,
+			OnPhase:      reportPhase,
 		},
 		run,
 		gen,
@@ -268,7 +286,7 @@ func (c *ControlPlane) InitProject(
 			),
 		)
 	}
-	if err := reportProgress(initCtx, 1, 2, "Publishing the initialized starter workspace"); err != nil {
+	if err := reportPhase("Publishing the starter project into the folder"); err != nil {
 		return nil, failInitFault(
 			span,
 			"init_project canceled",

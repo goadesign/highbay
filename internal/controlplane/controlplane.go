@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -377,6 +378,9 @@ type (
 		// assignmentWait and assignmentPoll override defaultAssignmentWait
 		// and defaultAssignmentPoll in tests when positive.
 		assignmentWait, assignmentPoll time.Duration
+		// initPhase is the sentence naming what a running init_project is
+		// doing, for the change list; nil when none runs.
+		initPhase atomic.Pointer[string]
 		// newGenerator constructs a fresh scaffold.Generator for each
 		// InitProject call when non-nil.
 		newGenerator func() scaffold.Generator

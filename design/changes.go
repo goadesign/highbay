@@ -41,6 +41,7 @@ var ChangeList = Type("ChangeList", func() {
 	Attribute("changes", ArrayOf(ChangeListItem), "Saved Change Cards, most recently saved first.")
 	Attribute("version", String, "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.")
 	Attribute("approval_available", Boolean, "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server surla starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.")
+	Attribute("initializing_phase", String, "What init_project is doing now, as a short sentence for the user, such as \"Resolving the service's Go modules\"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.")
 	Required("changes", "version", "approval_available")
 })
 

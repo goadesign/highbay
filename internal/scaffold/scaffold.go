@@ -61,6 +61,12 @@ type (
 		// evaluator module requires, such as
 		// v0.0.0-20261118203415-bec57123a61f.
 		SurlaVersion string
+		// OnPhase, when set, is called as each slow part of the preparation
+		// begins, with a short sentence for the user naming it: resolving a
+		// module's dependencies, generating its code, building and testing
+		// it, and committing the starter. An error it returns stops the
+		// preparation with that error, as a canceled context does.
+		OnPhase func(phase string) error
 	}
 
 	// Layout names the command packages of one starter project, which the
@@ -128,6 +134,8 @@ type (
 		path string
 		// requireSurla is set for the evaluator module, which pins Surla.
 		requireSurla bool
+		// label names the module in the phases reported to the user.
+		label string
 	}
 
 	// StepError reports the command that failed while creating a project.
@@ -406,7 +414,11 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 		return "", nil, "", err
 	}
 	staging, logs := stage.path, stage.logs
-	if err := build(ctx, staging, logs, d, run, gen); err != nil {
+	phase := o.OnPhase
+	if phase == nil {
+		phase = func(string) error { return nil }
+	}
+	if err := build(ctx, staging, logs, d, run, gen, phase); err != nil {
 		var stuck *stuckError
 		if errors.As(err, &stuck) {
 			return "", nil, "", fmt.Errorf("%w; the staging directory %s is kept because processes may still use it", err, staging)
@@ -422,6 +434,9 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 		return "", nil, "", errors.Join(err, os.RemoveAll(logs), os.RemoveAll(staging))
 	}
 	if commitRepo {
+		if err := phase("Committing the starter project"); err != nil {
+			return "", nil, "", errors.Join(err, os.RemoveAll(logs), os.RemoveAll(staging))
+		}
 		commit, err = commitScaffold(ctx, staging, logs, run)
 		if err != nil {
 			var stuck *stuckError
@@ -495,10 +510,10 @@ func newData(o Options) (data, error) {
 // service package the service module's generation named, the package the
 // test module's design declares too, and the test module's own generation
 // must name the same one.
-func build(ctx context.Context, root, logs string, d data, run Runner, gen Generator) error {
+func build(ctx context.Context, root, logs string, d data, run Runner, gen Generator, phase func(string) error) error {
 	for _, m := range []moduleStep{
-		{dir: ".", templates: "templates/candidate", path: d.Module},
-		{dir: SuiteDir, templates: "templates/eval", path: d.Module + "/" + SuiteDir, requireSurla: true},
+		{dir: ".", templates: "templates/candidate", path: d.Module, label: "service"},
+		{dir: SuiteDir, templates: "templates/eval", path: d.Module + "/" + SuiteDir, requireSurla: true, label: "test module"},
 	} {
 		dir := filepath.Join(root, m.dir)
 		designFiles, err := render(dir, m.templates, d, isDesignFile)
@@ -518,6 +533,9 @@ func build(ctx context.Context, root, logs string, d data, run Runner, gen Gener
 			// versions.
 			steps = append(steps, []string{"go", "get", surlaModule + "@" + d.SurlaVersion})
 		}
+		if err := phase("Resolving the " + m.label + "'s Go modules"); err != nil {
+			return err
+		}
 		if err := runAll(ctx, dir, m.dir, logs, steps, run); err != nil {
 			return err
 		}
@@ -528,6 +546,9 @@ func build(ctx context.Context, root, logs string, d data, run Runner, gen Gener
 				return err
 			}
 			inputs = append(slices.Clone(designFiles), acceptance...)
+		}
+		if err := phase("Generating the " + m.label + "'s code"); err != nil {
+			return err
 		}
 		if err := generate(ctx, dir, m.dir, inputs, gen); err != nil {
 			return err
@@ -546,6 +567,9 @@ func build(ctx context.Context, root, logs string, d data, run Runner, gen Gener
 			return err
 		}
 		steps = [][]string{{"go", "mod", "tidy"}, {"go", "vet", "./..."}, {"go", "test", "./..."}}
+		if err := phase("Building and testing the " + m.label); err != nil {
+			return err
+		}
 		if err := runAll(ctx, dir, m.dir, logs, steps, run); err != nil {
 			return err
 		}

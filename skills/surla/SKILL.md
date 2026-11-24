@@ -49,7 +49,10 @@ Chorus), while you speak to the user in plain language without calling yourself
    `init_project` with `dir: "."` right away to create the starter in place.
    Omit `module_path` unless the user already gave one: Surla derives a default
    Go module path from the folder name. Ask where the project should go only
-   when unrelated existing files block in-place initialization.
+   when unrelated existing files block in-place initialization. Before the
+   call, tell the user in one sentence that creating the starter downloads Go
+   modules and can take a few minutes the first time, and that the Surla page
+   shows its progress.
 4. Read the `surla://golden-path` resource, plus `get_change` for any existing
    Change Card, to see where the project stands.
 

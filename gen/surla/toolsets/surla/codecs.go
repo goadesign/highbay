@@ -8216,6 +8216,11 @@ var listChangesResultFields = []tools.FieldMetadata{
 		JSONType:    "boolean",
 		Description: "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server surla starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
 	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("initializing_phase")},
+		JSONType:    "string",
+		Description: "What init_project is doing now, as a short sentence for the user, such as \"Resolving the service's Go modules\"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.",
+	},
 }
 var listTestWriterAssignmentsPayloadFields = []tools.FieldMetadata{
 	{
@@ -20348,6 +20353,7 @@ func MarshalListChangesResult(v *ListChangesResult) ([]byte, error) {
 	out = &toolhttp.ListChangesResultTransport{
 		Version:           &in.Version,
 		ApprovalAvailable: &in.ApprovalAvailable,
+		InitializingPhase: in.InitializingPhase,
 	}
 	out.Changes = make([]*toolhttp.ChangeListItemTransport, len(in.Changes))
 	for i, val := range in.Changes {
@@ -20383,6 +20389,7 @@ func UnmarshalListChangesResult(data []byte) (*ListChangesResult, error) {
 	out = &ListChangesResult{
 		Version:           *in.Version,
 		ApprovalAvailable: *in.ApprovalAvailable,
+		InitializingPhase: in.InitializingPhase,
 	}
 	out.Changes = make([]*ChangeListItem, len(in.Changes))
 	for i, val := range in.Changes {
@@ -28458,6 +28465,13 @@ func validateListChangesResultJSONValue(path string, value any, description stri
 			); err != nil {
 				return err
 			}
+		case "initializing_phase":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What init_project is doing now, as a short sentence for the user, such as \"Resolving the service's Go modules\"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.",
+			); err != nil {
+				return err
+			}
 		case "version":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -28469,6 +28483,7 @@ func validateListChangesResultJSONValue(path string, value any, description stri
 			return unknownJSONFieldError(path, key, []string{
 				"approval_available",
 				"changes",
+				"initializing_phase",
 				"version",
 			})
 		}

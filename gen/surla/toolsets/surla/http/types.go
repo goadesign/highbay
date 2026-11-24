@@ -736,6 +736,11 @@ type (
 		// and any stored promotion settings could be resolved; false when the server
 		// runs no verification or resolving the promotion target fails.
 		ApprovalAvailable *bool `json:"approval_available"`
+		// What init_project is doing now, as a short sentence for the user, such as
+		// "Resolving the service's Go modules"; absent when no initialization is
+		// running. A first initialization downloads Go modules and can take a few
+		// minutes. version changes with it, so wait_for_changes reports each phase.
+		InitializingPhase *string `json:"initializing_phase,omitempty"`
 	}
 	// ListTestWriterAssignmentsPayloadTransport is the internal JSON transport type for ListTestWriterAssignmentsPayload.
 	// It lives in the toolset-local http package and is used only for JSON

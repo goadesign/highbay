@@ -628,6 +628,11 @@ type (
 		// and any stored promotion settings could be resolved; false when the server
 		// runs no verification or resolving the promotion target fails.
 		ApprovalAvailable bool
+		// What init_project is doing now, as a short sentence for the user, such as
+		// "Resolving the service's Go modules"; absent when no initialization is
+		// running. A first initialization downloads Go modules and can take a few
+		// minutes. version changes with it, so wait_for_changes reports each phase.
+		InitializingPhase *string
 	}
 	// ListTestWriterAssignmentsPayload defines the JSON payload for the surla.list_test_writer_assignments tool.
 	ListTestWriterAssignmentsPayload = struct {

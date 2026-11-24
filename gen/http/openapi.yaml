@@ -7243,6 +7243,10 @@ definitions:
                       saved_at: "2015-06-29T05:47:08Z"
                       status: needs_confirmation
                       summary: Ut saepe incidunt odit.
+            initializing_phase:
+                type: string
+                description: What init_project is doing now, as a short sentence for the user, such as "Resolving the service's Go modules"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.
+                example: Deleniti id.
             version:
                 type: string
                 description: Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.
@@ -7271,6 +7275,7 @@ definitions:
                   saved_at: "2015-06-29T05:47:08Z"
                   status: needs_confirmation
                   summary: Ut saepe incidunt odit.
+            initializing_phase: Deleniti id.
             version: Voluptas voluptates.
         required:
             - changes

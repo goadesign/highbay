@@ -1080,6 +1080,11 @@ type ListChangesResponseBody struct {
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable bool `form:"approval_available" json:"approval_available" xml:"approval_available"`
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string `form:"initializing_phase,omitempty" json:"initializing_phase,omitempty" xml:"initializing_phase,omitempty"`
 }
 
 // WaitForChangesResponseBody is the type of the "surla" service
@@ -10694,6 +10699,7 @@ func NewListChangesResponseBody(res *surla.ChangeList) *ListChangesResponseBody 
 	body := &ListChangesResponseBody{
 		Version:           res.Version,
 		ApprovalAvailable: res.ApprovalAvailable,
+		InitializingPhase: res.InitializingPhase,
 	}
 	if res.Changes != nil {
 		body.Changes = make([]*ChangeListItemResponseBody, len(res.Changes))
