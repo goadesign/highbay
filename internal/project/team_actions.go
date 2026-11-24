@@ -49,6 +49,11 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 		if s.team.headless.running(role.Role) {
 			value.State = "working"
 		}
+		// A registered guide that no Herdr tab ever adopted has no pane in
+		// the workers' space; Herdr cannot say what it is doing.
+		if role.Role == "guide" && record.Tab == "" && value.State == "not_started" {
+			value.State = "unknown"
+		}
 		if role.Role == "guide" && (value.State == "ended" || value.State == "not_started") {
 			result.HerdrMode = s.herdrMode("")
 		}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	genproject "github.com/goadesign/surla/gen/project"
+	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,51 @@ func TestTeamReadCreatesNothing(t *testing.T) {
 	after, err := os.ReadDir(state.Dir)
 	require.NoError(t, err)
 	assert.Equal(t, len(before), len(after))
+}
+
+// TestTeamReadKeepsAGuideWithoutAPaneUnknown separates a registered guide no
+// Herdr tab adopted from an adopted guide whose pane has not appeared: both
+// are observed with no terminal in the team's space.
+func TestTeamReadKeepsAGuideWithoutAPaneUnknown(t *testing.T) {
+	for _, test := range []struct {
+		// name describes how the guide registered.
+		name string
+		// tab is the saved tab of an adopted guide, empty when none adopted it.
+		tab string
+		// want is the guide's state in the read.
+		want string
+	}{
+		{"registered outside a Herdr tab", "", "unknown"},
+		{"adopted in a tab", "tab-guide", "not_started"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			o, _, _ := newSupervisionFixture(t)
+			s := o.server
+			_, err := registerTestAgent(s, "guide-example", "guide", s.state.Record.Directory)
+			require.NoError(t, err)
+			s.state.Record.Tab = test.tab
+			selection, _ := s.teamState()
+			observed := map[string]roleObservation{}
+			for _, role := range selection.Roles {
+				public := gensurla.TeamRoleState{Role: role.Role, Handle: role.Handle, State: "waiting", Attention: "none", Watcher: "unknown", Assignment: "nothing_owed"}
+				if role.Role == "guide" {
+					public.State = "not_started"
+				}
+				observed[role.Role] = roleObservation{handle: role.Handle, space: selection.Space, endpoint: selection.connection.Endpoint, public: public}
+			}
+			s.team.observationMu.Lock()
+			s.team.observed = observed
+			s.team.observationMu.Unlock()
+			snapshot, err := s.ReadTeam(t.Context())
+			require.NoError(t, err)
+			require.Len(t, snapshot.Roles, 2)
+			guide, builder := snapshot.Roles[0], snapshot.Roles[1]
+			require.Equal(t, "guide", guide.Role)
+			assert.Equal(t, test.want, guide.State)
+			assert.Equal(t, "available", snapshot.HerdrMode)
+			assert.Equal(t, "waiting", builder.State, "the workers' observed states are unchanged")
+		})
+	}
 }
 
 // TestTeamShowPaneOverlayAndOwnership refuses all open overlays before any
