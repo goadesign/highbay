@@ -375,7 +375,13 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 		TraceContext:    map[string]string{},
 	}
 	propagation.TraceContext{}.Inject(ctx, propagation.MapCarrier(spec.TraceContext))
-	return c.startCheckHelper(ctx, spec, lock, op)
+	result, err := c.startCheckHelper(ctx, spec, lock, op)
+	if err == nil && result.Check != nil {
+		// The verdict belongs to the build whose copy was just checked, and
+		// is saved before the copy's turn passes to another check.
+		c.recordBuilderCheck(ctx, ready.build.file.StartedAt, result.Check.Passed)
+	}
+	return result, err
 }
 
 // openBuilderLive holds the builder copy as grant and its module as workspace.

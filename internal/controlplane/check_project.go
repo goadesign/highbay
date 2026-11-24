@@ -130,8 +130,7 @@ const (
 // authenticated principal and a read assignment for the open build. The builder
 // turn remains reserved until the helper finishes its operation and cleanup.
 func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
-	principal, ok := PrincipalFromContext(ctx)
-	if !ok {
+	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	request := trace.SpanFromContext(ctx)
@@ -145,12 +144,6 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
-	// The build open now is the one this check belongs to; a build started
-	// while the check runs does not get its verdict.
-	var build time.Time
-	if builds, err := c.ownedBuilds(principal.ID); err == nil && len(builds) > 0 {
-		build = builds[0].file.StartedAt
-	}
 	ctx, cancel := c.checkDeadline(ctx)
 	defer cancel()
 	result, err := c.runCheckHelper(ctx, checkToolProject)
@@ -158,19 +151,17 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 		return nil, err
 	}
 	span.SetAttributes(attribute.Bool("surla.check.passed", result.Check.Passed))
-	c.recordBuilderCheck(ctx, build, result.Check.Passed)
 	return result.Check, nil
 }
 
 // recordBuilderCheck saves a completed check's verdict and time on the open
-// build started at build, for the user's view of the build. It saves nothing
-// when no build was open or another one has replaced it. A failed save does
+// build started at build, the build whose builder copy the check ran in, for
+// the user's view of the build. Its caller still holds that copy's turn, so
+// verdicts of one copy are saved in the order their checks completed. It
+// saves nothing when another build has replaced that one. A failed save does
 // not fail the builder's check: its own span records the failure, and the
 // build keeps the facts of the check before.
 func (c *ControlPlane) recordBuilderCheck(ctx context.Context, build time.Time, passed bool) {
-	if build.IsZero() {
-		return
-	}
 	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.record_builder_check")
 	defer span.End()
 	c.mu.Lock()

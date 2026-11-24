@@ -419,6 +419,55 @@ func configureBuilderCopyCheck(t *testing.T, cp *ControlPlane) {
 	require.NoError(t, os.Mkdir(cp.checkWorkDir, 0o700))
 }
 
+// TestBuilderCheckVerdictStaysWithTheCheckedBuild runs the real check while
+// another start replaces the open build: the verdict of the copy that was
+// checked is not put on the later start, it is saved while the copy's turn
+// is still held, and the next check, of the later start's copy, is recorded
+// on that start.
+func TestBuilderCheckVerdictStaysWithTheCheckedBuild(t *testing.T) {
+	installFakeDocker(t)
+	_, cp, _, assignment := buildGenerationFixture(t, ".")
+	configureBuilderCopyCheck(t, cp)
+	daemon := newFakeDockerDaemon(t)
+	t.Setenv("DOCKER_HOST", daemon.hostURI)
+	writeBuildDesignFixture(t, assignment.WorkingFolder, "go.sum", "builder sum\n")
+	first, found, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.True(t, found)
+	later := first.StartedAt.Add(time.Hour)
+	var replace sync.Once
+	daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+		replace.Do(func() {
+			assert.Len(t, cp.builderCopyTurn, 1, "the check holds the copy's turn")
+			cp.mu.Lock()
+			defer cp.mu.Unlock()
+			saved, _, err := cp.cards.loadOpenBuild()
+			if assert.NoError(t, err) {
+				saved.StartedAt = later
+				assert.NoError(t, cp.cards.saveOpenBuild(saved))
+			}
+		})
+		return "checked builder copy\n", "", 0
+	})
+	builder := asCaller("alice@example.com", CallerBuilder)
+	checked, err := cp.CheckProject(builder)
+	require.NoError(t, err)
+	require.True(t, checked.Passed)
+	replaced, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.True(t, replaced.StartedAt.Equal(later))
+	assert.Nil(t, replaced.Builder.LastCheckPassed, "the earlier start's verdict is not the later start's")
+
+	checked, err = cp.CheckProject(builder)
+	require.NoError(t, err)
+	require.True(t, checked.Passed)
+	recorded, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.NotNil(t, recorded.Builder.LastCheckPassed)
+	assert.True(t, *recorded.Builder.LastCheckPassed)
+	assert.Empty(t, cp.builderCopyTurn)
+}
+
 // TestBuilderCheckRecordBelongsToItsBuild keeps a completed check's verdict
 // on the build that was open when the check started: a check of another
 // start records nothing, and building the change again starts without one.
