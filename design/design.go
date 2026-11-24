@@ -19,6 +19,11 @@ var AmbiguityQuestion = Type("AmbiguityQuestion", func() {
 	Attribute("id", String, "Stable question identifier.")
 	Attribute("question", String, "Plain-English question for the user.")
 	Attribute("options", ArrayOf(String), "Concrete resolution choices.")
+	Attribute("draft_option", String, "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.", func() {
+		// The revision digest and the saved card marshal this type as generated:
+		// an absent value must leave both exactly as they were without the field.
+		Meta("struct:tag:json", "draft_option,omitempty")
+	})
 	Required("id", "question", "options")
 })
 
@@ -793,13 +798,13 @@ var _ = Service("surla", func() {
 	})
 
 	Method("confirm_intent", func() {
-		Description("Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user's browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision's request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card's request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target's current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate's binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.")
+		Description("Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user's browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision's request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card's request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target's current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate's binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision. The same holds for an option the draft does not implement: when a question names its draft_option, any other answer is refused until the guide has revised the change so the design, Story, examples and preserved behaviors implement it.")
 		Payload(ConfirmIntentPayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
 		Error("conflict", ErrorResult, "request_revision names neither the card's revision nor a waiting proposal's, or it names the confirmed revision while a proposal waits (adopt or decline the proposal first); read the change with get_change.")
 		Error("unprocessable", ErrorResult, "The submitted answers or examples did not satisfy the Change Card's requirements; the message states which check failed.")
-		Tool("confirm_intent", "Confirm or refine Checkpoint 1 ambiguity answers and example checks for the card's current request_revision, or adopt a waiting proposed revision by naming its request_revision with answers to its questions. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.")
+		Tool("confirm_intent", "Confirm or refine Checkpoint 1 ambiguity answers and example checks for the card's current request_revision, or adopt a waiting proposed revision by naming its request_revision with answers to its questions. A decision that no option expresses, or an option other than a question's draft_option, goes to the guide, which records it with revise_change; the user then confirms the resulting revision.")
 		HTTP(func() {
 			POST("/changes/confirm")
 			Response(StatusOK)

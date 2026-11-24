@@ -20,71 +20,71 @@ func ToolSchema(name tools.Ident) (*genregistry.ToolSchema, bool) {
 	case "surla.approve_merge":
 		return declarations.schema1(), true
 	case "surla.check_project":
-		return declarations.schema174(), true
+		return declarations.schema176(), true
 	case "surla.configure_model":
-		return declarations.schema184(), true
+		return declarations.schema186(), true
 	case "surla.confirm_intent":
-		return declarations.schema200(), true
+		return declarations.schema202(), true
 	case "surla.decline_revision":
-		return declarations.schema387(), true
+		return declarations.schema391(), true
 	case "surla.diff":
-		return declarations.schema556(), true
+		return declarations.schema562(), true
 	case "surla.draft_override":
-		return declarations.schema585(), true
+		return declarations.schema591(), true
 	case "surla.generate_code":
-		return declarations.schema602(), true
+		return declarations.schema608(), true
 	case "surla.get_build":
-		return declarations.schema616(), true
+		return declarations.schema622(), true
 	case "surla.get_builder_assignment":
-		return declarations.schema700(), true
+		return declarations.schema706(), true
 	case "surla.get_change":
-		return declarations.schema723(), true
+		return declarations.schema729(), true
 	case "surla.get_live_target":
-		return declarations.schema890(), true
+		return declarations.schema898(), true
 	case "surla.get_story_refresh":
-		return declarations.schema920(), true
+		return declarations.schema928(), true
 	case "surla.get_test_writer_assignment":
-		return declarations.schema969(), true
+		return declarations.schema977(), true
 	case "surla.get_verification":
-		return declarations.schema1068(), true
+		return declarations.schema1076(), true
 	case "surla.init_project":
-		return declarations.schema1122(), true
+		return declarations.schema1130(), true
 	case "surla.list_builder_assignments":
-		return declarations.schema1137(), true
+		return declarations.schema1145(), true
 	case "surla.list_changes":
-		return declarations.schema1160(), true
+		return declarations.schema1168(), true
 	case "surla.list_test_writer_assignments":
-		return declarations.schema1181(), true
+		return declarations.schema1189(), true
 	case "surla.list_traces":
-		return declarations.schema1212(), true
+		return declarations.schema1220(), true
 	case "surla.list_verifications":
-		return declarations.schema1241(), true
+		return declarations.schema1249(), true
 	case "surla.open_views":
-		return declarations.schema1298(), true
+		return declarations.schema1306(), true
 	case "surla.preview_architecture":
-		return declarations.schema1307(), true
+		return declarations.schema1315(), true
 	case "surla.propose_change":
-		return declarations.schema1365(), true
+		return declarations.schema1373(), true
 	case "surla.read_check_output":
-		return declarations.schema1568(), true
+		return declarations.schema1580(), true
 	case "surla.refresh_story":
-		return declarations.schema1583(), true
+		return declarations.schema1595(), true
 	case "surla.report_tests_finished":
-		return declarations.schema1632(), true
+		return declarations.schema1644(), true
 	case "surla.review_verification":
-		return declarations.schema1681(), true
+		return declarations.schema1693(), true
 	case "surla.revise_change":
-		return declarations.schema1852(), true
+		return declarations.schema1864(), true
 	case "surla.start_live_target":
-		return declarations.schema2065(), true
+		return declarations.schema2081(), true
 	case "surla.stop_live_target":
-		return declarations.schema2079(), true
+		return declarations.schema2095(), true
 	case "surla.update_dependencies":
-		return declarations.schema2088(), true
+		return declarations.schema2104(), true
 	case "surla.update_draft":
-		return declarations.schema2099(), true
+		return declarations.schema2115(), true
 	case "surla.verify_change":
-		return declarations.schema2116(), true
+		return declarations.schema2132(), true
 	default:
 		return nil, false
 	}

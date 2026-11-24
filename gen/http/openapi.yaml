@@ -1067,7 +1067,7 @@ paths:
             tags:
                 - surla
             summary: confirm_intent surla
-            description: 'Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user''s browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision''s request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card''s request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests'' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target''s current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate''s binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.'
+            description: 'Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user''s browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision''s request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card''s request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests'' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target''s current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate''s binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision. The same holds for an option the draft does not implement: when a question names its draft_option, any other answer is refused until the guide has revised the change so the design, Story, examples and preserved behaviors implement it.'
             operationId: surla#confirm_intent
             parameters:
                 - name: confirm_intent_request_body
@@ -3295,6 +3295,10 @@ definitions:
         title: AmbiguityQuestion
         type: object
         properties:
+            draft_option:
+                type: string
+                description: The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.
+                example: Voluptatem fuga ut deserunt suscipit non.
             id:
                 type: string
                 description: Stable question identifier.
@@ -3316,6 +3320,7 @@ definitions:
                 example: Labore harum illo eos ipsum deleniti possimus.
         description: Domain ambiguity surfaced with concrete examples at Checkpoint 1.
         example:
+            draft_option: Voluptatem fuga ut deserunt suscipit non.
             id: Incidunt quasi molestias itaque tempore animi.
             options:
                 - Et laudantium quibusdam aut voluptas atque magnam.
@@ -4093,17 +4098,20 @@ definitions:
                     $ref: '#/definitions/CP1AnalysisAmbiguity'
                 description: 'Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request or the design already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
                 example:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -4147,17 +4155,20 @@ definitions:
         description: Your analysis of the feature request against the target's current Goa design (its design/*.go files) and the Golden Path playbook served at surla://golden-path. Surla saves it as the Change Card after checking its structure and cross-field rules; it cannot judge whether the analysis is complete or correct.
         example:
             ambiguities:
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
@@ -4187,6 +4198,11 @@ definitions:
         title: CP1AnalysisAmbiguity
         type: object
         properties:
+            draft_option:
+                type: string
+                description: The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.
+                example: "\U000161BE"
+                pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
             options:
                 type: array
                 items:
@@ -4206,6 +4222,7 @@ definitions:
                 pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
         description: One product, domain, or operational choice only the requester can make. Surla gives it the ID <change_id>-ambiguity-NN, numbered in list order.
         example:
+            draft_option: "\U000161BE"
             options:
                 - "\U000556D5"
                 - "\U00103058"
@@ -4261,22 +4278,26 @@ definitions:
                     $ref: '#/definitions/CP1AnalysisAmbiguity'
                 description: 'Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request, the design or a confirmed answer already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
                 example:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -4327,22 +4348,26 @@ definitions:
         description: 'Your analysis of the revised request against the current Change Card (as get_change returns it at request_revision), the target''s current Goa design, and the Golden Path playbook served at surla://golden-path. A confirmed answer stays settled unless the revised request or design contradicts it: do not ask it again, and restate it in summary, examples or preserved_behaviors, because the revised card drops every answer. An explicit instruction in the revised request or design replaces the decisions, examples and preserved behaviors it affects. An unanswered question stays in ambiguities unless the revised request or design answers it or removes its scope. Everything else on the current card stays unless the revised request or design changes it. Surla checks the structure and the example accounting; it cannot judge whether the analysis is complete or correct.'
         example:
             ambiguities:
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
@@ -4842,21 +4867,24 @@ definitions:
                     $ref: '#/definitions/AmbiguityQuestion'
                 description: Domain questions surfaced at CP1, retained for audit after confirmation.
                 example:
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -5490,21 +5518,24 @@ definitions:
         description: Checkpoint 1 Change Card containing examples, preserved behaviors, optional adopted domain Stories, and audit metadata.
         example:
             ambiguities:
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -5548,21 +5579,24 @@ definitions:
             prompt: Ea perferendis neque.
             proposed_revision:
                 ambiguities:
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -9419,17 +9453,20 @@ definitions:
         example:
             analysis:
                 ambiguities:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -9467,21 +9504,24 @@ definitions:
                     $ref: '#/definitions/AmbiguityQuestion'
                 description: Domain questions the user answers when adopting this revision.
                 example:
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -10367,21 +10407,24 @@ definitions:
         description: A revision the guide proposed with revise_change beside the confirmed revision in force. It waits until the user adopts it, by answering its questions and confirming its request_revision with confirm_intent, or declines it with decline_revision. Until then the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source, and architecture preview, verification and approval keep working on it. A later revise_change naming this request_revision replaces it.
         example:
             ambiguities:
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -11336,22 +11379,26 @@ definitions:
         example:
             analysis:
                 ambiguities:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"

@@ -28,6 +28,9 @@ var CP1AnalysisAmbiguity = Type("CP1AnalysisAmbiguity", func() {
 	}), "At least two distinct, self-contained choices; each states the behavior it selects and what follows from it. The requester's answer must be exactly one of these strings.", func() {
 		MinLength(2)
 	})
+	Attribute("draft_option", String, "The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.", func() {
+		Pattern(nonBlank)
+	})
 	Required("question", "options")
 })
 

@@ -2025,6 +2025,9 @@ func ValidateCP1AnalysisAmbiguityTransport(body *CP1AnalysisAmbiguityTransport) 
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
 	}
+	if body.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *body.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
+	}
 	return
 }
 

@@ -4832,7 +4832,8 @@ func unmarshalCP1AnalysisRequestBodyToSurlaCP1Analysis(v *CP1AnalysisRequestBody
 // *CP1AnalysisAmbiguityRequestBody.
 func unmarshalCP1AnalysisAmbiguityRequestBodyToSurlaCP1AnalysisAmbiguity(v *CP1AnalysisAmbiguityRequestBody) *surla.CP1AnalysisAmbiguity {
 	res := &surla.CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -4861,8 +4862,9 @@ func unmarshalCP1AnalysisExampleRequestBodyToSurlaCP1AnalysisExample(v *CP1Analy
 // *surla.AmbiguityQuestion.
 func marshalSurlaAmbiguityQuestionToAmbiguityQuestionResponseBody(v *surla.AmbiguityQuestion) *AmbiguityQuestionResponseBody {
 	res := &AmbiguityQuestionResponseBody{
-		ID:       v.ID,
-		Question: v.Question,
+		ID:          v.ID,
+		Question:    v.Question,
+		DraftOption: v.DraftOption,
 	}
 	if v.Options != nil {
 		res.Options = make([]string, len(v.Options))

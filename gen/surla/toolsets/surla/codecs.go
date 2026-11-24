@@ -1539,6 +1539,11 @@ var approveMergeResultFields = []tools.FieldMetadata{
 		Description: "Concrete resolution choices.",
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
 		JSONType:    "object",
 		Description: "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.",
@@ -2071,6 +2076,11 @@ var approveMergeResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
@@ -2518,6 +2528,11 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 		Description: "Concrete resolution choices.",
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
 		JSONType:    "object",
 		Description: "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.",
@@ -3050,6 +3065,11 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
@@ -3384,6 +3404,11 @@ var declineRevisionResultFields = []tools.FieldMetadata{
 		Description: "Concrete resolution choices.",
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
 		JSONType:    "object",
 		Description: "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.",
@@ -3916,6 +3941,11 @@ var declineRevisionResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
@@ -5523,6 +5553,11 @@ var getChangeResultFields = []tools.FieldMetadata{
 		Description: "Concrete resolution choices.",
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
 		JSONType:    "object",
 		Description: "Owner-confirmed answers keyed by ambiguity question ID when status is confirmed and ambiguities is non-empty (empty when a confirmed card has no ambiguity questions). Each answer equals one of its question's declared options and takes precedence over open phrasing in summary.",
@@ -6055,6 +6090,11 @@ var getChangeResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
@@ -9173,6 +9213,11 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 		Description: "At least two distinct, self-contained choices; each states the behavior it selects and what follows from it. The requester's answer must be exactly one of these strings.",
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.",
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("examples")},
 		JSONType:    "array",
 		Description: "Concrete acceptance examples drawn from the request and the design, never placeholder text; each becomes a check the change must pass.",
@@ -9277,6 +9322,11 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
@@ -9811,6 +9861,11 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
@@ -12539,6 +12594,11 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 		Description: "At least two distinct, self-contained choices; each states the behavior it selects and what follows from it. The requester's answer must be exactly one of these strings.",
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.",
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("examples")},
 		JSONType:    "array",
 		Description: "Concrete acceptance examples drawn from the revised request and the design. Give prior_id for each current example you keep or edit; omit it for new ones.",
@@ -12658,6 +12718,11 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("answers")},
@@ -13192,6 +13257,11 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("options"), tools.DynamicField{}},
 		JSONType:    "string",
 		Description: "Concrete resolution choices.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("draft_option")},
+		JSONType:    "string",
+		Description: "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("proposed_revision"), tools.FixedField("examples")},
@@ -22378,6 +22448,13 @@ func validateProposeChangePayloadCP1AnalysisAmbiguityTransportJSONValue(path str
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "draft_option":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.",
+			); err != nil {
+				return err
+			}
 		case "options":
 			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -22394,10 +22471,27 @@ func validateProposeChangePayloadCP1AnalysisAmbiguityTransportJSONValue(path str
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"draft_option",
 				"options",
 				"question",
 			})
 		}
+	}
+	return nil
+}
+
+// validateStringJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateStringJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "string", "null", description)
+	}
+	_, ok := value.(string)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "string", decodedJSONType(value), description)
 	}
 	return nil
 }
@@ -22422,22 +22516,6 @@ func validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(p
 		); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// validateStringJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateStringJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "string", "null", description)
-	}
-	_, ok := value.(string)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "string", decodedJSONType(value), description)
 	}
 	return nil
 }
@@ -22726,6 +22804,13 @@ func validateProposeChangeResultAmbiguityQuestionTransportJSONValue(path string,
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "draft_option":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+			); err != nil {
+				return err
+			}
 		case "id":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -22749,6 +22834,7 @@ func validateProposeChangeResultAmbiguityQuestionTransportJSONValue(path string,
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"draft_option",
 				"id",
 				"options",
 				"question",
@@ -29760,8 +29846,9 @@ func unknownJSONFieldError(path, field string, allowed []string) error {
 // Helper transform functions
 func decodeAmbiguityQuestionTransportToAmbiguityQuestion(v *toolhttp.AmbiguityQuestionTransport) *AmbiguityQuestion {
 	res := &AmbiguityQuestion{
-		ID:       *v.ID,
-		Question: *v.Question,
+		ID:          *v.ID,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -29991,8 +30078,9 @@ func decodeProposedRevisionItemTransportToProposedRevisionItem(v *toolhttp.Propo
 }
 func encodeAmbiguityQuestionToAmbiguityQuestionTransport(v *AmbiguityQuestion) *toolhttp.AmbiguityQuestionTransport {
 	res := &toolhttp.AmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -31621,7 +31709,8 @@ func decodeCP1AnalysisTransportToCP1Analysis(v *toolhttp.CP1AnalysisTransport) *
 }
 func decodeCP1AnalysisAmbiguityTransportToCP1AnalysisAmbiguity(v *toolhttp.CP1AnalysisAmbiguityTransport) *CP1AnalysisAmbiguity {
 	res := &CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -31672,7 +31761,8 @@ func encodeCP1AnalysisToCP1AnalysisTransport(v *CP1Analysis) *toolhttp.CP1Analys
 }
 func encodeCP1AnalysisAmbiguityToCP1AnalysisAmbiguityTransport(v *CP1AnalysisAmbiguity) *toolhttp.CP1AnalysisAmbiguityTransport {
 	res := &toolhttp.CP1AnalysisAmbiguityTransport{
-		Question: &v.Question,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]*string, len(v.Options))
 	for i, val := range v.Options {

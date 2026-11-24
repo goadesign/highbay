@@ -4876,6 +4876,12 @@ type AmbiguityQuestionResponseBody struct {
 	Question *string `form:"question,omitempty" json:"question,omitempty" xml:"question,omitempty"`
 	// Concrete resolution choices.
 	Options []string `form:"options,omitempty" json:"options,omitempty" xml:"options,omitempty"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ExampleItemResponseBody is used to define fields on response body types.
@@ -5896,6 +5902,15 @@ type CP1AnalysisAmbiguityRequestBody struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []string `form:"options" json:"options" xml:"options"`
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string `form:"draft_option,omitempty" json:"draft_option,omitempty" xml:"draft_option,omitempty"`
 }
 
 // CP1AnalysisExampleRequestBody is used to define fields on request body types.
@@ -24209,6 +24224,9 @@ func ValidateCP1AnalysisAmbiguityRequestBody(body *CP1AnalysisAmbiguityRequestBo
 	for _, e := range body.Options {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
+	if body.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *body.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
+	}
 	return
 }
 
@@ -24224,6 +24242,9 @@ func validateCP1AnalysisAmbiguityRequestBody(body *CP1AnalysisAmbiguityRequestBo
 	}
 	for _, e := range body.Options {
 		err = goa.MergeErrors(err, goa.ValidatePattern(path+".options[*]", e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
+	}
+	if body.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".draft_option", *body.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return
 }

@@ -18,6 +18,7 @@ export interface AgentPolicyItem {
 }
 
 export interface AmbiguityQuestion {
+  draft_option?: string;
   id: string;
   options: string[];
   question: string;
@@ -1022,6 +1023,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "options"
     ],
     "properties": {
+      "draft_option": {
+        "type": "string"
+      },
       "id": {
         "type": "string"
       },

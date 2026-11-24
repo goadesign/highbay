@@ -231,10 +231,16 @@ func validateAmbiguities(changeID string, in []*gensurla.CP1AnalysisAmbiguity) (
 			seenOpts[trimmed] = true
 			opts = append(opts, opt)
 		}
+		// The draft option is one of the options exactly, never a trimmed or
+		// reworded form: the page compares the user's answer with it.
+		if q.DraftOption != nil && !slices.Contains(opts, *q.DraftOption) {
+			return nil, fmt.Errorf("ambiguity %q (ambiguities[%d]) has draft_option %q, which is not one of its options: %q", id, i, *q.DraftOption, opts)
+		}
 		out = append(out, &gensurla.AmbiguityQuestion{
-			ID:       id,
-			Question: q.Question,
-			Options:  opts,
+			ID:          id,
+			Question:    q.Question,
+			Options:     opts,
+			DraftOption: q.DraftOption,
 		})
 	}
 	return out, nil
@@ -244,10 +250,12 @@ func validateAmbiguities(changeID string, in []*gensurla.CP1AnalysisAmbiguity) (
 // question with exactly one of its declared options and names no other
 // question. It reports every problem in one error, so a caller fixes all of
 // them in one retry: missing answers and answers that are not an option, in
-// question order and each with its options quoted, then answers for unknown
+// question order and each with its options quoted, then answers that are an
+// option other than the question's draft option, then answers for unknown
 // question IDs in sorted order. When an answer is missing or is not an
-// option, the error ends by pointing to revise_change for a decision that
-// none of the options expresses.
+// option, the error points to revise_change for a decision that none of the
+// options expresses; when an answer is not what the draft implements, it
+// points to revise_change so the draft implements it before confirmation.
 func validateAmbiguityAnswers(questions []*gensurla.AmbiguityQuestion, answers map[string]string) error {
 	known := make(map[string]bool, len(questions))
 	var problems []string
@@ -262,6 +270,16 @@ func validateAmbiguityAnswers(questions []*gensurla.AmbiguityQuestion, answers m
 		}
 	}
 	unresolved := len(problems) > 0
+	// An option other than the draft's is a valid answer the draft does not
+	// implement yet: confirming it would agree a design, examples and
+	// preserved behaviors that say something else.
+	var undrafted []string
+	for _, q := range questions {
+		if ans, has := answers[q.ID]; has && q.DraftOption != nil && slices.Contains(q.Options, ans) && ans != *q.DraftOption {
+			undrafted = append(undrafted, fmt.Sprintf("answer %q for ambiguity %q is not what the draft implements (%q)", ans, q.ID, *q.DraftOption))
+		}
+	}
+	problems = append(problems, undrafted...)
 	var unknown []string
 	for id := range answers {
 		if !known[id] {
@@ -278,6 +296,9 @@ func validateAmbiguityAnswers(questions []*gensurla.AmbiguityQuestion, answers m
 	msg := strings.Join(problems, "; ")
 	if unresolved {
 		msg += "; each answer must be exactly one of its question's options; for a decision that no option expresses, ask your coding agent to revise the change"
+	}
+	if len(undrafted) > 0 {
+		msg += "; ask your coding agent to revise the change for each such answer, so the design, Story, examples and preserved behaviors implement it, then confirm the revised change"
 	}
 	return errors.New(msg)
 }

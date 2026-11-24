@@ -90,6 +90,12 @@ type ApproveMergeResultAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateApproveMergeResultAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -939,6 +945,12 @@ type ConfirmIntentResultAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateConfirmIntentResultAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -1632,6 +1644,12 @@ type DeclineRevisionResultAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateDeclineRevisionResultAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -3494,6 +3512,12 @@ type GetChangeResultAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateGetChangeResultAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -7424,6 +7448,15 @@ type ProposeChangePayloadCP1AnalysisAmbiguityTransport struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []*string `json:"options"`
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateProposeChangePayloadCP1AnalysisAmbiguityTransport checks decoded JSON before it becomes a service value.
@@ -7450,6 +7483,9 @@ func ValidateProposeChangePayloadCP1AnalysisAmbiguityTransport(value *ProposeCha
 		if e != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
+	}
+	if value.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *value.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return err
 }
@@ -7649,6 +7685,12 @@ type ProposeChangeResultAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateProposeChangeResultAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -10225,6 +10267,15 @@ type ReviseChangePayloadCP1AnalysisAmbiguityTransport struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []*string `json:"options"`
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateReviseChangePayloadCP1AnalysisAmbiguityTransport checks decoded JSON before it becomes a service value.
@@ -10251,6 +10302,9 @@ func ValidateReviseChangePayloadCP1AnalysisAmbiguityTransport(value *ReviseChang
 		if e != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
+	}
+	if value.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *value.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return err
 }
@@ -10497,6 +10551,12 @@ type ReviseChangeResultAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ValidateReviseChangeResultAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -17944,7 +18004,8 @@ func decodeDiffPayloadDesignSnapshotTransportToDesignSnapshot2(v *DiffPayloadDes
 
 func decodeProposeChangePayloadCP1AnalysisAmbiguityTransportToCP1AnalysisAmbiguity(v *ProposeChangePayloadCP1AnalysisAmbiguityTransport) *surla.CP1AnalysisAmbiguity {
 	res := &surla.CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18013,7 +18074,8 @@ func decodeReportTestsFinishedPayloadTestCoverageStatementTransportToTestCoverag
 
 func decodeReviseChangePayloadCP1AnalysisAmbiguityTransportToCP1AnalysisAmbiguity(v *ReviseChangePayloadCP1AnalysisAmbiguityTransport) *surla.CP1AnalysisAmbiguity {
 	res := &surla.CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18247,8 +18309,9 @@ func encodeAgentWrittenTestsToVerifyChangeResultAgentWrittenTestsTransport(v *su
 
 func encodeAmbiguityQuestionToApproveMergeResultAmbiguityQuestionTransport(v *surla.AmbiguityQuestion) *ApproveMergeResultAmbiguityQuestionTransport {
 	res := &ApproveMergeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18260,8 +18323,9 @@ func encodeAmbiguityQuestionToApproveMergeResultAmbiguityQuestionTransport(v *su
 
 func encodeAmbiguityQuestionToApproveMergeResultAmbiguityQuestionTransport2(v *surla.AmbiguityQuestion) *ApproveMergeResultAmbiguityQuestionTransport {
 	res := &ApproveMergeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18273,8 +18337,9 @@ func encodeAmbiguityQuestionToApproveMergeResultAmbiguityQuestionTransport2(v *s
 
 func encodeAmbiguityQuestionToConfirmIntentResultAmbiguityQuestionTransport(v *surla.AmbiguityQuestion) *ConfirmIntentResultAmbiguityQuestionTransport {
 	res := &ConfirmIntentResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18286,8 +18351,9 @@ func encodeAmbiguityQuestionToConfirmIntentResultAmbiguityQuestionTransport(v *s
 
 func encodeAmbiguityQuestionToConfirmIntentResultAmbiguityQuestionTransport2(v *surla.AmbiguityQuestion) *ConfirmIntentResultAmbiguityQuestionTransport {
 	res := &ConfirmIntentResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18299,8 +18365,9 @@ func encodeAmbiguityQuestionToConfirmIntentResultAmbiguityQuestionTransport2(v *
 
 func encodeAmbiguityQuestionToDeclineRevisionResultAmbiguityQuestionTransport(v *surla.AmbiguityQuestion) *DeclineRevisionResultAmbiguityQuestionTransport {
 	res := &DeclineRevisionResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18312,8 +18379,9 @@ func encodeAmbiguityQuestionToDeclineRevisionResultAmbiguityQuestionTransport(v 
 
 func encodeAmbiguityQuestionToDeclineRevisionResultAmbiguityQuestionTransport2(v *surla.AmbiguityQuestion) *DeclineRevisionResultAmbiguityQuestionTransport {
 	res := &DeclineRevisionResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18325,8 +18393,9 @@ func encodeAmbiguityQuestionToDeclineRevisionResultAmbiguityQuestionTransport2(v
 
 func encodeAmbiguityQuestionToGetChangeResultAmbiguityQuestionTransport(v *surla.AmbiguityQuestion) *GetChangeResultAmbiguityQuestionTransport {
 	res := &GetChangeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18338,8 +18407,9 @@ func encodeAmbiguityQuestionToGetChangeResultAmbiguityQuestionTransport(v *surla
 
 func encodeAmbiguityQuestionToGetChangeResultAmbiguityQuestionTransport2(v *surla.AmbiguityQuestion) *GetChangeResultAmbiguityQuestionTransport {
 	res := &GetChangeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18351,8 +18421,9 @@ func encodeAmbiguityQuestionToGetChangeResultAmbiguityQuestionTransport2(v *surl
 
 func encodeAmbiguityQuestionToProposeChangeResultAmbiguityQuestionTransport(v *surla.AmbiguityQuestion) *ProposeChangeResultAmbiguityQuestionTransport {
 	res := &ProposeChangeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18364,8 +18435,9 @@ func encodeAmbiguityQuestionToProposeChangeResultAmbiguityQuestionTransport(v *s
 
 func encodeAmbiguityQuestionToProposeChangeResultAmbiguityQuestionTransport2(v *surla.AmbiguityQuestion) *ProposeChangeResultAmbiguityQuestionTransport {
 	res := &ProposeChangeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18377,8 +18449,9 @@ func encodeAmbiguityQuestionToProposeChangeResultAmbiguityQuestionTransport2(v *
 
 func encodeAmbiguityQuestionToReviseChangeResultAmbiguityQuestionTransport(v *surla.AmbiguityQuestion) *ReviseChangeResultAmbiguityQuestionTransport {
 	res := &ReviseChangeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -18390,8 +18463,9 @@ func encodeAmbiguityQuestionToReviseChangeResultAmbiguityQuestionTransport(v *su
 
 func encodeAmbiguityQuestionToReviseChangeResultAmbiguityQuestionTransport2(v *surla.AmbiguityQuestion) *ReviseChangeResultAmbiguityQuestionTransport {
 	res := &ReviseChangeResultAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {

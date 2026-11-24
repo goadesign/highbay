@@ -1119,6 +1119,12 @@ type (
 		Question string
 		// Concrete resolution choices.
 		Options []string
+		// The option that this revision's draft design, Story, examples and preserved
+		// behaviors already implement. confirm_intent accepts only this answer for the
+		// question; the user asks the coding agent to revise the change before
+		// confirming any other. Absent when every option works with the draft as it
+		// stands.
+		DraftOption *string `json:"draft_option,omitempty"`
 	}
 	// ApprovalItem is a nested type used by the generated JSON contract.
 	ApprovalItem = struct {
@@ -1291,6 +1297,15 @@ type (
 		// selects and what follows from it. The requester's answer must be exactly one
 		// of these strings.
 		Options []string
+		// The one string in options, character for character, that the draft design,
+		// Story, examples and preserved behaviors you send with this proposal already
+		// implement. Set it whenever choosing another option would require changing
+		// any of them. The user can then confirm only this option on the page; when
+		// they want another, the page sends them back to you, and you revise the
+		// change (revise_change) so the draft implements their choice before they
+		// confirm. Omit it only when every option works with the draft exactly as it
+		// stands.
+		DraftOption *string
 	}
 	// CP1AnalysisExample is a nested type used by the generated JSON contract.
 	CP1AnalysisExample = struct {

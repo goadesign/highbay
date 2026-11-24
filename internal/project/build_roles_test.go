@@ -252,6 +252,9 @@ func TestFirstMessagesNameOnlyAllowedOperations(t *testing.T) {
 		for _, operation := range names.FindAllString(files.ReplaceAllString(message, ""), -1) {
 			// Assignment/report fields name data, not calls. All remaining
 			// snake-case words must remain permitted operations for this role.
+			if role == "guide" && operation == "draft_option" {
+				continue
+			}
 			if role == "builder" && (operation == "working_folder" || operation == "gowork_off") {
 				continue
 			}

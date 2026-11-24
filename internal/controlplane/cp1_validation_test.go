@@ -20,14 +20,18 @@ import (
 // confirm_intent's answer check accepts exact option text and otherwise
 // returns one error naming every missing, invalid and unknown answer, with
 // each question's options quoted. The revise_change pointer ends the error
-// only when an answer is missing or is not one of its question's options.
+// only when an answer is missing or is not one of its question's options. A
+// question that names the option its draft implements accepts only that
+// answer; a question that names none accepts each of its options.
 func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
+	drafted := "Listing seller"
 	questions := []*gensurla.AmbiguityQuestion{
 		{ID: "chg-ambiguity-01", Question: "Who signs in?", Options: []string{"Bearer token auth", "Demo persona header"}},
-		{ID: "chg-ambiguity-02", Question: "Who accepts offers?", Options: []string{"Listing seller", "Any seller"}},
+		{ID: "chg-ambiguity-02", Question: "Who accepts offers?", Options: []string{"Listing seller", "Any seller"}, DraftOption: &drafted},
 		{ID: "chg-ambiguity-03", Question: "Keep history?", Options: []string{"Yes", "No"}},
 	}
 	const pointer = "; each answer must be exactly one of its question's options; for a decision that no option expresses, ask your coding agent to revise the change"
+	const draftPointer = "; ask your coding agent to revise the change for each such answer, so the design, Story, examples and preserved behaviors implement it, then confirm the revised change"
 	complete := map[string]string{
 		"chg-ambiguity-01": "Demo persona header",
 		"chg-ambiguity-02": "Listing seller",
@@ -66,6 +70,24 @@ func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
 			want: `answer "Bearer token auth " for ambiguity "chg-ambiguity-01" is not one of its options: ["Bearer token auth" "Demo persona header"]` + pointer,
 		},
 		{
+			name: "an option the draft does not implement is refused until the change is revised",
+			answers: map[string]string{
+				"chg-ambiguity-01": "Bearer token auth",
+				"chg-ambiguity-02": "Any seller",
+				"chg-ambiguity-03": "Yes",
+			},
+			want: `answer "Any seller" for ambiguity "chg-ambiguity-02" is not what the draft implements ("Listing seller")` + draftPointer,
+		},
+		{
+			name: "an undrafted option is reported after unresolved answers, with both pointers",
+			answers: map[string]string{
+				"chg-ambiguity-01": "Bearer token auth",
+				"chg-ambiguity-02": "Any seller",
+			},
+			want: `missing confirmation answer for ambiguity "chg-ambiguity-03" (options: ["Yes" "No"]); ` +
+				`answer "Any seller" for ambiguity "chg-ambiguity-02" is not what the draft implements ("Listing seller")` + pointer + draftPointer,
+		},
+		{
 			name: "only an unknown question ID gets no revise_change pointer",
 			answers: map[string]string{
 				"chg-ambiguity-01": "Demo persona header",
@@ -87,6 +109,104 @@ func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
 			assert.Equal(t, tc.want, err.Error())
 		})
 	}
+}
+
+// A proposal's draft_option must be one of the question's options exactly;
+// the saved question keeps it, and keeps none when the proposal names none.
+func TestValidateAmbiguitiesKeepsTheDraftOption(t *testing.T) {
+	second, spaced, missing := "Any seller", "Any seller ", "Nobody"
+	options := []string{"Listing seller", "Any seller"}
+	cases := []struct {
+		// name describes the proposal's draft_option.
+		name string
+		// draft is the proposal's draft_option, nil when it names none.
+		draft *string
+		// want is the error, empty when the proposal is accepted.
+		want string
+	}{
+		{name: "none named"},
+		{name: "one of the options", draft: &second},
+		{name: "an option with different spacing", draft: &spaced, want: `ambiguity "chg-ambiguity-01" (ambiguities[0]) has draft_option "Any seller ", which is not one of its options: ["Listing seller" "Any seller"]`},
+		{name: "not an option", draft: &missing, want: `ambiguity "chg-ambiguity-01" (ambiguities[0]) has draft_option "Nobody", which is not one of its options: ["Listing seller" "Any seller"]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := validateAmbiguities("chg", []*gensurla.CP1AnalysisAmbiguity{{Question: "Who accepts offers?", Options: options, DraftOption: tc.draft}})
+			if tc.want != "" {
+				require.Error(t, err)
+				assert.Equal(t, tc.want, err.Error())
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, got, 1)
+			assert.Equal(t, tc.draft, got[0].DraftOption)
+		})
+	}
+}
+
+// A card whose questions name no draft option keeps the request_revision it
+// had before questions could name one, and saves no such field: saved builds
+// and approvals refer to that revision. Naming one changes the revision.
+func TestRequestRevisionIgnoresAnAbsentDraftOption(t *testing.T) {
+	by := "user"
+	card := &gensurla.ChangeCardResult{
+		ChangeID: "orders", Status: StatusConfirmed, Prompt: "p", Summary: "s",
+		Ambiguities: []*gensurla.AmbiguityQuestion{{ID: "orders-ambiguity-01", Question: "q?", Options: []string{"a", "b"}}},
+		Answers:     map[string]string{"orders-ambiguity-01": "a"},
+		Examples:    []*gensurla.ExampleItem{{ID: "check_01", Scenario: "sc", InputSummary: "in", ExpectedOutcome: "out", VerificationKind: "deterministic"}},
+		ConfirmedBy: &by,
+	}
+	rev, err := computeCanonicalRevision(card, "owner", "package design")
+	require.NoError(t, err)
+	assert.Equal(t, "801a1d07d2cdcab10579990cea2e983a8c7e7179eb48039dfdb700222b087bf7", rev)
+	saved, err := json.Marshal(card.Ambiguities)
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"ID":"orders-ambiguity-01","Question":"q?","Options":["a","b"]}]`, string(saved))
+
+	drafted := "a"
+	card.Ambiguities[0].DraftOption = &drafted
+	withDraft, err := computeCanonicalRevision(card, "owner", "package design")
+	require.NoError(t, err)
+	assert.NotEqual(t, rev, withDraft)
+}
+
+// TestConfirmIntentRefusesAnAnswerTheDraftDoesNotImplement follows a saved
+// card whose question names its draft option: the read returns it, an answer
+// with another option is refused and leaves the card unconfirmed, and the
+// draft's option confirms the card in place.
+func TestConfirmIntentRefusesAnAnswerTheDraftDoesNotImplement(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{})
+	drafted := "original_payment"
+	proposed := saveProposedCardFixture(t, cp, agreedOwner, "chg", "Refunds up to $50 are instant.", refundAnalysis(
+		"Refunds up to $50 are instant.",
+		&gensurla.CP1AnalysisAmbiguity{Question: "Where does an instant refund go?", Options: []string{"original_payment", "store_credit"}, DraftOption: &drafted},
+	))
+	read, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	require.Len(t, read.Ambiguities, 1)
+	require.NotNil(t, read.Ambiguities[0].DraftOption)
+	assert.Equal(t, drafted, *read.Ambiguities[0].DraftOption)
+
+	confirm := func(answer string) (*gensurla.ChangeCardResult, error) {
+		return cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+			ChangeID: "chg", RequestRevision: proposed.RequestRevision,
+			Answers: map[string]string{read.Ambiguities[0].ID: answer}, Examples: proposed.Examples,
+		})
+	}
+	_, err = confirm("store_credit")
+	assertServiceError(t, err, "unprocessable")
+	assert.ErrorContains(t, err, `answer "store_credit" for ambiguity "chg-ambiguity-01" is not what the draft implements ("original_payment")`)
+	assert.ErrorContains(t, err, "ask your coding agent to revise the change")
+	unchanged, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	assert.Equal(t, StatusNeedsConfirmation, unchanged.Status)
+	assert.Equal(t, proposed.RequestRevision, unchanged.RequestRevision)
+
+	confirmed, err := confirm("original_payment")
+	require.NoError(t, err)
+	assert.Equal(t, StatusConfirmed, confirmed.Status)
+	require.NotNil(t, confirmed.Ambiguities[0].DraftOption)
+	assert.Equal(t, drafted, *confirmed.Ambiguities[0].DraftOption)
 }
 
 // TestChangeCardHTTPErrorsAndMCPToolPreservation verifies that established

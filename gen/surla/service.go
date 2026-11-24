@@ -84,7 +84,10 @@ type Service interface {
 	// promotion target's current binaries, or in unverified_approval when a
 	// promotion target is configured and cannot measure the candidate's binaries.
 	// A decision that no option expresses goes to the guide, which records it with
-	// revise_change; the user then confirms the resulting revision.
+	// revise_change; the user then confirms the resulting revision. The same holds
+	// for an option the draft does not implement: when a question names its
+	// draft_option, any other answer is refused until the guide has revised the
+	// change so the design, Story, examples and preserved behaviors implement it.
 	ConfirmIntent(context.Context, *ConfirmIntentPayload) (res *ChangeCardResult, err error)
 	// Return the current Change Card, including its request_revision, to its
 	// owner, for example after confirm_intent or revise_change refused an edit
@@ -578,6 +581,12 @@ type AmbiguityQuestion struct {
 	Question string
 	// Concrete resolution choices.
 	Options []string
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // Checkpoint 5 approval recorded by approve_merge after the verification
@@ -873,6 +882,15 @@ type CP1AnalysisAmbiguity struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []string
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string
 }
 
 // One concrete acceptance example that becomes a check the change must pass.
@@ -3098,6 +3116,12 @@ type jsonAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // validatejsonAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -3808,6 +3832,15 @@ type jsonCP1AnalysisAmbiguityTransport struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []*string `json:"options"`
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // validatejsonCP1AnalysisAmbiguityTransport checks decoded JSON before it becomes a service value.
@@ -3834,6 +3867,9 @@ func validatejsonCP1AnalysisAmbiguityTransport(value *jsonCP1AnalysisAmbiguityTr
 		if e != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
+	}
+	if value.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *value.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return err
 }
@@ -9008,6 +9044,9 @@ func validateCP1AnalysisAmbiguityOriginal(value *CP1AnalysisAmbiguity) (err erro
 	for _, e := range value.Options {
 		err = goa.MergeErrors(err, goa.ValidatePattern("value.options[*]", e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
+	if value.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("value.draft_option", *value.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
+	}
 	return err
 }
 
@@ -13882,8 +13921,9 @@ func EncodeAmbiguityQuestion(in *AmbiguityQuestion) ([]byte, error) {
 	var body *jsonAmbiguityQuestionTransport
 	{
 		body = &jsonAmbiguityQuestionTransport{
-			ID:       &in.ID,
-			Question: &in.Question,
+			ID:          &in.ID,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]string, len(in.Options))
 		for i, val := range in.Options {
@@ -13918,8 +13958,9 @@ func ValidateAmbiguityQuestionValue(in *AmbiguityQuestion) error {
 	var body *jsonAmbiguityQuestionTransport
 	{
 		body = &jsonAmbiguityQuestionTransport{
-			ID:       &in.ID,
-			Question: &in.Question,
+			ID:          &in.ID,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]string, len(in.Options))
 		for i, val := range in.Options {
@@ -13958,8 +13999,9 @@ func DecodeAmbiguityQuestion(data []byte) (out *AmbiguityQuestion, err error) {
 	}
 	{
 		out = &AmbiguityQuestion{
-			ID:       *body.ID,
-			Question: *body.Question,
+			ID:          *body.ID,
+			Question:    *body.Question,
+			DraftOption: body.DraftOption,
 		}
 		out.Options = make([]string, len(body.Options))
 		for i, val := range body.Options {
@@ -16127,7 +16169,8 @@ func EncodeCP1AnalysisAmbiguity(in *CP1AnalysisAmbiguity) ([]byte, error) {
 	var body *jsonCP1AnalysisAmbiguityTransport
 	{
 		body = &jsonCP1AnalysisAmbiguityTransport{
-			Question: &in.Question,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]*string, len(in.Options))
 		for i, val := range in.Options {
@@ -16164,7 +16207,8 @@ func ValidateCP1AnalysisAmbiguityValue(in *CP1AnalysisAmbiguity) error {
 	var body *jsonCP1AnalysisAmbiguityTransport
 	{
 		body = &jsonCP1AnalysisAmbiguityTransport{
-			Question: &in.Question,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]*string, len(in.Options))
 		for i, val := range in.Options {
@@ -16205,7 +16249,8 @@ func DecodeCP1AnalysisAmbiguity(data []byte) (out *CP1AnalysisAmbiguity, err err
 	}
 	{
 		out = &CP1AnalysisAmbiguity{
-			Question: *body.Question,
+			Question:    *body.Question,
+			DraftOption: body.DraftOption,
 		}
 		out.Options = make([]string, len(body.Options))
 		for i, val := range body.Options {
@@ -28859,8 +28904,9 @@ func decodeAgentWrittenTestsTransportToAgentWrittenTests(v *jsonAgentWrittenTest
 
 func decodeAmbiguityQuestionTransportToAmbiguityQuestion(v *jsonAmbiguityQuestionTransport) *AmbiguityQuestion {
 	res := &AmbiguityQuestion{
-		ID:       *v.ID,
-		Question: *v.Question,
+		ID:          *v.ID,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -29095,7 +29141,8 @@ func decodeC4EdgeItemTransportToC4EdgeItem(v *jsonC4EdgeItemTransport) *C4EdgeIt
 
 func decodeCP1AnalysisAmbiguityTransportToCP1AnalysisAmbiguity(v *jsonCP1AnalysisAmbiguityTransport) *CP1AnalysisAmbiguity {
 	res := &CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -30236,8 +30283,9 @@ func encodeAgentWrittenTestsToAgentWrittenTestsTransport(v *AgentWrittenTests) *
 
 func encodeAmbiguityQuestionToAmbiguityQuestionTransport(v *AmbiguityQuestion) *jsonAmbiguityQuestionTransport {
 	res := &jsonAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -30566,7 +30614,8 @@ func encodeC4EdgeItemToC4EdgeItemTransport(v *C4EdgeItem) *jsonC4EdgeItemTranspo
 
 func encodeCP1AnalysisAmbiguityToCP1AnalysisAmbiguityTransport(v *CP1AnalysisAmbiguity) *jsonCP1AnalysisAmbiguityTransport {
 	res := &jsonCP1AnalysisAmbiguityTransport{
-		Question: &v.Question,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]*string, len(v.Options))
 	for i, val := range v.Options {
@@ -32188,6 +32237,13 @@ func validateAmbiguityQuestionJSONValue(path string, value any, description stri
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "draft_option":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+			); err != nil {
+				return err
+			}
 		case "id":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -32211,6 +32267,7 @@ func validateAmbiguityQuestionJSONValue(path string, value any, description stri
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"draft_option",
 				"id",
 				"options",
 				"question",
@@ -34193,6 +34250,13 @@ func validateCP1AnalysisJSONValue3(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "draft_option":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.",
+			); err != nil {
+				return err
+			}
 		case "options":
 			if err := validateCP1AnalysisJSONValue4(
 				generatedJSONChildPath(path, key, false),
@@ -34209,6 +34273,7 @@ func validateCP1AnalysisJSONValue3(path string, value any, description string) e
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"draft_option",
 				"options",
 				"question",
 			})
@@ -42576,6 +42641,11 @@ func checkAmbiguityQuestionAmbiguityQuestionValue(in *AmbiguityQuestion, field s
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "options", false), strconv.Itoa(index1), true))
 			}
 		}
+		if in.DraftOption != nil {
+			if !utf8.ValidString(string(*in.DraftOption)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_option", false))
+			}
+		}
 	}
 	return nil
 }
@@ -43605,6 +43675,11 @@ func checkCP1AnalysisCP1AnalysisAmbiguityValue(in *CP1AnalysisAmbiguity, field s
 			_ = item1
 			if !utf8.ValidString(string(item1)) {
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "options", false), strconv.Itoa(index1), true))
+			}
+		}
+		if in.DraftOption != nil {
+			if !utf8.ValidString(string(*in.DraftOption)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_option", false))
 			}
 		}
 	}
