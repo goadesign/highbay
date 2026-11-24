@@ -18,54 +18,56 @@ import (
 
 // Server lists the surla service endpoint HTTP handlers.
 type Server struct {
-	Mounts                    []*MountPoint
-	GoldenPath                http.Handler
-	ProposeChange             http.Handler
-	ReviseChange              http.Handler
-	ConfirmIntent             http.Handler
-	GetChange                 http.Handler
-	DeclineRevision           http.Handler
-	PreviewArchitecture       http.Handler
-	DraftOverride             http.Handler
-	StartLiveTarget           http.Handler
-	StopLiveTarget            http.Handler
-	GetLiveTarget             http.Handler
-	VerifyChange              http.Handler
-	GetVerification           http.Handler
-	ListVerifications         http.Handler
-	ApproveMerge              http.Handler
-	Diff                      http.Handler
-	ConfigureModel            http.Handler
-	GetModelConnection        http.Handler
-	HandOverModelSettings     http.Handler
-	InitProject               http.Handler
-	GenerateCode              http.Handler
-	CheckProject              http.Handler
-	UpdateDependencies        http.Handler
-	ReadCheckOutput           http.Handler
-	ListTraces                http.Handler
-	RefreshStory              http.Handler
-	GetStoryRefresh           http.Handler
-	UpdateDraft               http.Handler
-	GetTeam                   http.Handler
-	ShowTeamPane              http.Handler
-	StartTeamAgents           http.Handler
-	ListTeamAgentOptions      http.Handler
-	DismissTeamNotice         http.Handler
-	OpenViews                 http.Handler
-	MergeChange               http.Handler
-	ListChanges               http.Handler
-	WaitForChanges            http.Handler
-	StartBuild                http.Handler
-	DropBuild                 http.Handler
-	GetBuild                  http.Handler
-	GetTestFindings           http.Handler
-	ListBuilderAssignments    http.Handler
-	GetBuilderAssignment      http.Handler
-	ListTestWriterAssignments http.Handler
-	GetTestWriterAssignment   http.Handler
-	ReportTestsFinished       http.Handler
-	ReviewVerification        http.Handler
+	Mounts                      []*MountPoint
+	GoldenPath                  http.Handler
+	ProposeChange               http.Handler
+	ReviseChange                http.Handler
+	ConfirmIntent               http.Handler
+	GetChange                   http.Handler
+	DeclineRevision             http.Handler
+	PreviewArchitecture         http.Handler
+	DraftOverride               http.Handler
+	StartLiveTarget             http.Handler
+	StopLiveTarget              http.Handler
+	GetLiveTarget               http.Handler
+	VerifyChange                http.Handler
+	GetVerification             http.Handler
+	ListVerifications           http.Handler
+	ApproveMerge                http.Handler
+	Diff                        http.Handler
+	ConfigureModel              http.Handler
+	GetModelConnection          http.Handler
+	HandOverModelSettings       http.Handler
+	InitProject                 http.Handler
+	GenerateCode                http.Handler
+	CheckProject                http.Handler
+	UpdateDependencies          http.Handler
+	ReadCheckOutput             http.Handler
+	ListTraces                  http.Handler
+	RefreshStory                http.Handler
+	GetStoryRefresh             http.Handler
+	UpdateDraft                 http.Handler
+	GetTeam                     http.Handler
+	ShowTeamPane                http.Handler
+	StartTeamAgents             http.Handler
+	ListTeamAgentOptions        http.Handler
+	DismissTeamNotice           http.Handler
+	OpenViews                   http.Handler
+	MergeChange                 http.Handler
+	ListChanges                 http.Handler
+	WaitForChanges              http.Handler
+	StartBuild                  http.Handler
+	DropBuild                   http.Handler
+	GetBuild                    http.Handler
+	GetTestFindings             http.Handler
+	ListBuilderAssignments      http.Handler
+	WaitForBuilderAssignment    http.Handler
+	GetBuilderAssignment        http.Handler
+	ListTestWriterAssignments   http.Handler
+	WaitForTestWriterAssignment http.Handler
+	GetTestWriterAssignment     http.Handler
+	ReportTestsFinished         http.Handler
+	ReviewVerification          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -137,59 +139,63 @@ func New(
 			{"GetBuild", "GET", "/changes/{change_id}/build"},
 			{"GetTestFindings", "GET", "/changes/{change_id}/build/findings"},
 			{"ListBuilderAssignments", "GET", "/assignments/builder"},
+			{"WaitForBuilderAssignment", "GET", "/assignment-updates/builder"},
 			{"GetBuilderAssignment", "GET", "/assignments/builder/{change_id}"},
 			{"ListTestWriterAssignments", "GET", "/assignments/test-writer"},
+			{"WaitForTestWriterAssignment", "GET", "/assignment-updates/test-writer"},
 			{"GetTestWriterAssignment", "GET", "/assignments/test-writer/{change_id}"},
 			{"ReportTestsFinished", "POST", "/assignments/test-writer/{change_id}/finished"},
 			{"ReviewVerification", "GET", "/verifications/{run_id}/review"},
 		},
-		GoldenPath:                NewGoldenPathHandler(e.GoldenPath, mux, decoder, encoder, errhandler, formatter),
-		ProposeChange:             NewProposeChangeHandler(e.ProposeChange, mux, decoder, encoder, errhandler, formatter),
-		ReviseChange:              NewReviseChangeHandler(e.ReviseChange, mux, decoder, encoder, errhandler, formatter),
-		ConfirmIntent:             NewConfirmIntentHandler(e.ConfirmIntent, mux, decoder, encoder, errhandler, formatter),
-		GetChange:                 NewGetChangeHandler(e.GetChange, mux, decoder, encoder, errhandler, formatter),
-		DeclineRevision:           NewDeclineRevisionHandler(e.DeclineRevision, mux, decoder, encoder, errhandler, formatter),
-		PreviewArchitecture:       NewPreviewArchitectureHandler(e.PreviewArchitecture, mux, decoder, encoder, errhandler, formatter),
-		DraftOverride:             NewDraftOverrideHandler(e.DraftOverride, mux, decoder, encoder, errhandler, formatter),
-		StartLiveTarget:           NewStartLiveTargetHandler(e.StartLiveTarget, mux, decoder, encoder, errhandler, formatter),
-		StopLiveTarget:            NewStopLiveTargetHandler(e.StopLiveTarget, mux, decoder, encoder, errhandler, formatter),
-		GetLiveTarget:             NewGetLiveTargetHandler(e.GetLiveTarget, mux, decoder, encoder, errhandler, formatter),
-		VerifyChange:              NewVerifyChangeHandler(e.VerifyChange, mux, decoder, encoder, errhandler, formatter),
-		GetVerification:           NewGetVerificationHandler(e.GetVerification, mux, decoder, encoder, errhandler, formatter),
-		ListVerifications:         NewListVerificationsHandler(e.ListVerifications, mux, decoder, encoder, errhandler, formatter),
-		ApproveMerge:              NewApproveMergeHandler(e.ApproveMerge, mux, decoder, encoder, errhandler, formatter),
-		Diff:                      NewDiffHandler(e.Diff, mux, decoder, encoder, errhandler, formatter),
-		ConfigureModel:            NewConfigureModelHandler(e.ConfigureModel, mux, decoder, encoder, errhandler, formatter),
-		GetModelConnection:        NewGetModelConnectionHandler(e.GetModelConnection, mux, decoder, encoder, errhandler, formatter),
-		HandOverModelSettings:     NewHandOverModelSettingsHandler(e.HandOverModelSettings, mux, decoder, encoder, errhandler, formatter),
-		InitProject:               NewInitProjectHandler(e.InitProject, mux, decoder, encoder, errhandler, formatter),
-		GenerateCode:              NewGenerateCodeHandler(e.GenerateCode, mux, decoder, encoder, errhandler, formatter),
-		CheckProject:              NewCheckProjectHandler(e.CheckProject, mux, decoder, encoder, errhandler, formatter),
-		UpdateDependencies:        NewUpdateDependenciesHandler(e.UpdateDependencies, mux, decoder, encoder, errhandler, formatter),
-		ReadCheckOutput:           NewReadCheckOutputHandler(e.ReadCheckOutput, mux, decoder, encoder, errhandler, formatter),
-		ListTraces:                NewListTracesHandler(e.ListTraces, mux, decoder, encoder, errhandler, formatter),
-		RefreshStory:              NewRefreshStoryHandler(e.RefreshStory, mux, decoder, encoder, errhandler, formatter),
-		GetStoryRefresh:           NewGetStoryRefreshHandler(e.GetStoryRefresh, mux, decoder, encoder, errhandler, formatter),
-		UpdateDraft:               NewUpdateDraftHandler(e.UpdateDraft, mux, decoder, encoder, errhandler, formatter),
-		GetTeam:                   NewGetTeamHandler(e.GetTeam, mux, decoder, encoder, errhandler, formatter),
-		ShowTeamPane:              NewShowTeamPaneHandler(e.ShowTeamPane, mux, decoder, encoder, errhandler, formatter),
-		StartTeamAgents:           NewStartTeamAgentsHandler(e.StartTeamAgents, mux, decoder, encoder, errhandler, formatter),
-		ListTeamAgentOptions:      NewListTeamAgentOptionsHandler(e.ListTeamAgentOptions, mux, decoder, encoder, errhandler, formatter),
-		DismissTeamNotice:         NewDismissTeamNoticeHandler(e.DismissTeamNotice, mux, decoder, encoder, errhandler, formatter),
-		OpenViews:                 NewOpenViewsHandler(e.OpenViews, mux, decoder, encoder, errhandler, formatter),
-		MergeChange:               NewMergeChangeHandler(e.MergeChange, mux, decoder, encoder, errhandler, formatter),
-		ListChanges:               NewListChangesHandler(e.ListChanges, mux, decoder, encoder, errhandler, formatter),
-		WaitForChanges:            NewWaitForChangesHandler(e.WaitForChanges, mux, decoder, encoder, errhandler, formatter),
-		StartBuild:                NewStartBuildHandler(e.StartBuild, mux, decoder, encoder, errhandler, formatter),
-		DropBuild:                 NewDropBuildHandler(e.DropBuild, mux, decoder, encoder, errhandler, formatter),
-		GetBuild:                  NewGetBuildHandler(e.GetBuild, mux, decoder, encoder, errhandler, formatter),
-		GetTestFindings:           NewGetTestFindingsHandler(e.GetTestFindings, mux, decoder, encoder, errhandler, formatter),
-		ListBuilderAssignments:    NewListBuilderAssignmentsHandler(e.ListBuilderAssignments, mux, decoder, encoder, errhandler, formatter),
-		GetBuilderAssignment:      NewGetBuilderAssignmentHandler(e.GetBuilderAssignment, mux, decoder, encoder, errhandler, formatter),
-		ListTestWriterAssignments: NewListTestWriterAssignmentsHandler(e.ListTestWriterAssignments, mux, decoder, encoder, errhandler, formatter),
-		GetTestWriterAssignment:   NewGetTestWriterAssignmentHandler(e.GetTestWriterAssignment, mux, decoder, encoder, errhandler, formatter),
-		ReportTestsFinished:       NewReportTestsFinishedHandler(e.ReportTestsFinished, mux, decoder, encoder, errhandler, formatter),
-		ReviewVerification:        NewReviewVerificationHandler(e.ReviewVerification, mux, decoder, encoder, errhandler, formatter),
+		GoldenPath:                  NewGoldenPathHandler(e.GoldenPath, mux, decoder, encoder, errhandler, formatter),
+		ProposeChange:               NewProposeChangeHandler(e.ProposeChange, mux, decoder, encoder, errhandler, formatter),
+		ReviseChange:                NewReviseChangeHandler(e.ReviseChange, mux, decoder, encoder, errhandler, formatter),
+		ConfirmIntent:               NewConfirmIntentHandler(e.ConfirmIntent, mux, decoder, encoder, errhandler, formatter),
+		GetChange:                   NewGetChangeHandler(e.GetChange, mux, decoder, encoder, errhandler, formatter),
+		DeclineRevision:             NewDeclineRevisionHandler(e.DeclineRevision, mux, decoder, encoder, errhandler, formatter),
+		PreviewArchitecture:         NewPreviewArchitectureHandler(e.PreviewArchitecture, mux, decoder, encoder, errhandler, formatter),
+		DraftOverride:               NewDraftOverrideHandler(e.DraftOverride, mux, decoder, encoder, errhandler, formatter),
+		StartLiveTarget:             NewStartLiveTargetHandler(e.StartLiveTarget, mux, decoder, encoder, errhandler, formatter),
+		StopLiveTarget:              NewStopLiveTargetHandler(e.StopLiveTarget, mux, decoder, encoder, errhandler, formatter),
+		GetLiveTarget:               NewGetLiveTargetHandler(e.GetLiveTarget, mux, decoder, encoder, errhandler, formatter),
+		VerifyChange:                NewVerifyChangeHandler(e.VerifyChange, mux, decoder, encoder, errhandler, formatter),
+		GetVerification:             NewGetVerificationHandler(e.GetVerification, mux, decoder, encoder, errhandler, formatter),
+		ListVerifications:           NewListVerificationsHandler(e.ListVerifications, mux, decoder, encoder, errhandler, formatter),
+		ApproveMerge:                NewApproveMergeHandler(e.ApproveMerge, mux, decoder, encoder, errhandler, formatter),
+		Diff:                        NewDiffHandler(e.Diff, mux, decoder, encoder, errhandler, formatter),
+		ConfigureModel:              NewConfigureModelHandler(e.ConfigureModel, mux, decoder, encoder, errhandler, formatter),
+		GetModelConnection:          NewGetModelConnectionHandler(e.GetModelConnection, mux, decoder, encoder, errhandler, formatter),
+		HandOverModelSettings:       NewHandOverModelSettingsHandler(e.HandOverModelSettings, mux, decoder, encoder, errhandler, formatter),
+		InitProject:                 NewInitProjectHandler(e.InitProject, mux, decoder, encoder, errhandler, formatter),
+		GenerateCode:                NewGenerateCodeHandler(e.GenerateCode, mux, decoder, encoder, errhandler, formatter),
+		CheckProject:                NewCheckProjectHandler(e.CheckProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateDependencies:          NewUpdateDependenciesHandler(e.UpdateDependencies, mux, decoder, encoder, errhandler, formatter),
+		ReadCheckOutput:             NewReadCheckOutputHandler(e.ReadCheckOutput, mux, decoder, encoder, errhandler, formatter),
+		ListTraces:                  NewListTracesHandler(e.ListTraces, mux, decoder, encoder, errhandler, formatter),
+		RefreshStory:                NewRefreshStoryHandler(e.RefreshStory, mux, decoder, encoder, errhandler, formatter),
+		GetStoryRefresh:             NewGetStoryRefreshHandler(e.GetStoryRefresh, mux, decoder, encoder, errhandler, formatter),
+		UpdateDraft:                 NewUpdateDraftHandler(e.UpdateDraft, mux, decoder, encoder, errhandler, formatter),
+		GetTeam:                     NewGetTeamHandler(e.GetTeam, mux, decoder, encoder, errhandler, formatter),
+		ShowTeamPane:                NewShowTeamPaneHandler(e.ShowTeamPane, mux, decoder, encoder, errhandler, formatter),
+		StartTeamAgents:             NewStartTeamAgentsHandler(e.StartTeamAgents, mux, decoder, encoder, errhandler, formatter),
+		ListTeamAgentOptions:        NewListTeamAgentOptionsHandler(e.ListTeamAgentOptions, mux, decoder, encoder, errhandler, formatter),
+		DismissTeamNotice:           NewDismissTeamNoticeHandler(e.DismissTeamNotice, mux, decoder, encoder, errhandler, formatter),
+		OpenViews:                   NewOpenViewsHandler(e.OpenViews, mux, decoder, encoder, errhandler, formatter),
+		MergeChange:                 NewMergeChangeHandler(e.MergeChange, mux, decoder, encoder, errhandler, formatter),
+		ListChanges:                 NewListChangesHandler(e.ListChanges, mux, decoder, encoder, errhandler, formatter),
+		WaitForChanges:              NewWaitForChangesHandler(e.WaitForChanges, mux, decoder, encoder, errhandler, formatter),
+		StartBuild:                  NewStartBuildHandler(e.StartBuild, mux, decoder, encoder, errhandler, formatter),
+		DropBuild:                   NewDropBuildHandler(e.DropBuild, mux, decoder, encoder, errhandler, formatter),
+		GetBuild:                    NewGetBuildHandler(e.GetBuild, mux, decoder, encoder, errhandler, formatter),
+		GetTestFindings:             NewGetTestFindingsHandler(e.GetTestFindings, mux, decoder, encoder, errhandler, formatter),
+		ListBuilderAssignments:      NewListBuilderAssignmentsHandler(e.ListBuilderAssignments, mux, decoder, encoder, errhandler, formatter),
+		WaitForBuilderAssignment:    NewWaitForBuilderAssignmentHandler(e.WaitForBuilderAssignment, mux, decoder, encoder, errhandler, formatter),
+		GetBuilderAssignment:        NewGetBuilderAssignmentHandler(e.GetBuilderAssignment, mux, decoder, encoder, errhandler, formatter),
+		ListTestWriterAssignments:   NewListTestWriterAssignmentsHandler(e.ListTestWriterAssignments, mux, decoder, encoder, errhandler, formatter),
+		WaitForTestWriterAssignment: NewWaitForTestWriterAssignmentHandler(e.WaitForTestWriterAssignment, mux, decoder, encoder, errhandler, formatter),
+		GetTestWriterAssignment:     NewGetTestWriterAssignmentHandler(e.GetTestWriterAssignment, mux, decoder, encoder, errhandler, formatter),
+		ReportTestsFinished:         NewReportTestsFinishedHandler(e.ReportTestsFinished, mux, decoder, encoder, errhandler, formatter),
+		ReviewVerification:          NewReviewVerificationHandler(e.ReviewVerification, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -240,8 +246,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetBuild = m(s.GetBuild)
 	s.GetTestFindings = m(s.GetTestFindings)
 	s.ListBuilderAssignments = m(s.ListBuilderAssignments)
+	s.WaitForBuilderAssignment = m(s.WaitForBuilderAssignment)
 	s.GetBuilderAssignment = m(s.GetBuilderAssignment)
 	s.ListTestWriterAssignments = m(s.ListTestWriterAssignments)
+	s.WaitForTestWriterAssignment = m(s.WaitForTestWriterAssignment)
 	s.GetTestWriterAssignment = m(s.GetTestWriterAssignment)
 	s.ReportTestsFinished = m(s.ReportTestsFinished)
 	s.ReviewVerification = m(s.ReviewVerification)
@@ -294,8 +302,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetBuildHandler(mux, h.GetBuild)
 	MountGetTestFindingsHandler(mux, h.GetTestFindings)
 	MountListBuilderAssignmentsHandler(mux, h.ListBuilderAssignments)
+	MountWaitForBuilderAssignmentHandler(mux, h.WaitForBuilderAssignment)
 	MountGetBuilderAssignmentHandler(mux, h.GetBuilderAssignment)
 	MountListTestWriterAssignmentsHandler(mux, h.ListTestWriterAssignments)
+	MountWaitForTestWriterAssignmentHandler(mux, h.WaitForTestWriterAssignment)
 	MountGetTestWriterAssignmentHandler(mux, h.GetTestWriterAssignment)
 	MountReportTestsFinishedHandler(mux, h.ReportTestsFinished)
 	MountReviewVerificationHandler(mux, h.ReviewVerification)
@@ -2434,6 +2444,60 @@ func NewListBuilderAssignmentsHandler(
 	})
 }
 
+// MountWaitForBuilderAssignmentHandler configures the mux to serve the "surla"
+// service "wait_for_builder_assignment" endpoint.
+func MountWaitForBuilderAssignmentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/assignment-updates/builder", f)
+}
+
+// NewWaitForBuilderAssignmentHandler creates a HTTP handler which loads the
+// HTTP request and calls the "surla" service "wait_for_builder_assignment"
+// endpoint.
+func NewWaitForBuilderAssignmentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeWaitForBuilderAssignmentRequest(mux, decoder)
+		encodeResponse = EncodeWaitForBuilderAssignmentResponse(encoder)
+		encodeError    = EncodeWaitForBuilderAssignmentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "wait_for_builder_assignment")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetBuilderAssignmentHandler configures the mux to serve the "surla"
 // service "get_builder_assignment" endpoint.
 func MountGetBuilderAssignmentHandler(mux goahttp.Muxer, h http.Handler) {
@@ -2520,6 +2584,60 @@ func NewListTestWriterAssignmentsHandler(
 		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 		var err error
 		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountWaitForTestWriterAssignmentHandler configures the mux to serve the
+// "surla" service "wait_for_test_writer_assignment" endpoint.
+func MountWaitForTestWriterAssignmentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/assignment-updates/test-writer", f)
+}
+
+// NewWaitForTestWriterAssignmentHandler creates a HTTP handler which loads the
+// HTTP request and calls the "surla" service "wait_for_test_writer_assignment"
+// endpoint.
+func NewWaitForTestWriterAssignmentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeWaitForTestWriterAssignmentRequest(mux, decoder)
+		encodeResponse = EncodeWaitForTestWriterAssignmentResponse(encoder)
+		encodeError    = EncodeWaitForTestWriterAssignmentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "wait_for_test_writer_assignment")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
 				errhandler(ctx, w, err)

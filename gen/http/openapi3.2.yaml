@@ -8,6 +8,160 @@ servers:
       name: surla
       description: Default server for surla
 paths:
+    /assignment-updates/builder:
+        get:
+            tags:
+                - surla
+            summary: wait_for_builder_assignment surla
+            description: Return the builder's assignment list, as list_builder_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla accepted the tests, the user built the change again or dropped the build, or a verification of the build passed, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A builder uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting builder does not push real operations out of view.
+            operationId: surla#wait_for_builder_assignment
+            parameters:
+                - name: since_version
+                  in: query
+                  description: version returned by your last wait_for_builder_assignment call. Omit it on the first call.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: version returned by your last wait_for_builder_assignment call. Omit it on the first call.
+                    example: ji1
+                    maxLength: 128
+                  example: ji1
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/BuilderAssignmentWait'
+                            example:
+                                assignments:
+                                    - change_id: Et quos quod.
+                                      gowork_off: false
+                                      in_force: true
+                                      read: false
+                                      request_revision: Incidunt enim in.
+                                      working_folder: Nihil omnis.
+                                      written_tests:
+                                        state: not_used
+                                    - change_id: Et quos quod.
+                                      gowork_off: false
+                                      in_force: true
+                                      read: false
+                                      request_revision: Incidunt enim in.
+                                      working_folder: Nihil omnis.
+                                      written_tests:
+                                        state: not_used
+                                    - change_id: Et quos quod.
+                                      gowork_off: false
+                                      in_force: true
+                                      read: false
+                                      request_revision: Incidunt enim in.
+                                      working_folder: Nihil omnis.
+                                      written_tests:
+                                        state: not_used
+                                    - change_id: Et quos quod.
+                                      gowork_off: false
+                                      in_force: true
+                                      read: false
+                                      request_revision: Incidunt enim in.
+                                      working_folder: Nihil omnis.
+                                      written_tests:
+                                        state: not_used
+                                version: Rerum autem quis quo ut.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
+    /assignment-updates/test-writer:
+        get:
+            tags:
+                - surla
+            summary: wait_for_test_writer_assignment surla
+            description: Return the test writer's assignment list, as list_test_writer_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla's check of a report reached a verdict, the user built the change again or dropped the build, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A test writer uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting test writer does not push real operations out of view.
+            operationId: surla#wait_for_test_writer_assignment
+            parameters:
+                - name: since_version
+                  in: query
+                  description: version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.
+                    example: zs1
+                    maxLength: 128
+                  example: zs1
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TestWriterAssignmentWait'
+                            example:
+                                assignments:
+                                    - change_id: Veniam ex reiciendis.
+                                      in_force: true
+                                      progress:
+                                        read: true
+                                        report: 7108203204833819401
+                                        tests:
+                                            checked_at: "1972-09-26T18:55:16Z"
+                                            finding_count: 5254885262627643994
+                                            state: needs_changes
+                                      request_revision: Quidem nulla minima at voluptatum delectus.
+                                    - change_id: Veniam ex reiciendis.
+                                      in_force: true
+                                      progress:
+                                        read: true
+                                        report: 7108203204833819401
+                                        tests:
+                                            checked_at: "1972-09-26T18:55:16Z"
+                                            finding_count: 5254885262627643994
+                                            state: needs_changes
+                                      request_revision: Quidem nulla minima at voluptatum delectus.
+                                    - change_id: Veniam ex reiciendis.
+                                      in_force: true
+                                      progress:
+                                        read: true
+                                        report: 7108203204833819401
+                                        tests:
+                                            checked_at: "1972-09-26T18:55:16Z"
+                                            finding_count: 5254885262627643994
+                                            state: needs_changes
+                                      request_revision: Quidem nulla minima at voluptatum delectus.
+                                    - change_id: Veniam ex reiciendis.
+                                      in_force: true
+                                      progress:
+                                        read: true
+                                        report: 7108203204833819401
+                                        tests:
+                                            checked_at: "1972-09-26T18:55:16Z"
+                                            finding_count: 5254885262627643994
+                                            state: needs_changes
+                                      request_revision: Quidem nulla minima at voluptatum delectus.
+                                version: Commodi et at.
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: forbidden
+                                temporary: false
+                                timeout: false
     /assignments/builder:
         get:
             tags:
@@ -19016,6 +19170,90 @@ components:
                         state: not_used
             required:
                 - assignments
+        BuilderAssignmentWait:
+            type: object
+            properties:
+                assignments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/BuilderAssignment'
+                    description: The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.
+                    example:
+                        - change_id: Et quos quod.
+                          gowork_off: false
+                          in_force: true
+                          read: false
+                          request_revision: Incidunt enim in.
+                          working_folder: Nihil omnis.
+                          written_tests:
+                            state: not_used
+                        - change_id: Et quos quod.
+                          gowork_off: false
+                          in_force: true
+                          read: false
+                          request_revision: Incidunt enim in.
+                          working_folder: Nihil omnis.
+                          written_tests:
+                            state: not_used
+                        - change_id: Et quos quod.
+                          gowork_off: false
+                          in_force: true
+                          read: false
+                          request_revision: Incidunt enim in.
+                          working_folder: Nihil omnis.
+                          written_tests:
+                            state: not_used
+                        - change_id: Et quos quod.
+                          gowork_off: false
+                          in_force: true
+                          read: false
+                          request_revision: Incidunt enim in.
+                          working_folder: Nihil omnis.
+                          written_tests:
+                            state: not_used
+                version:
+                    type: string
+                    description: Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.
+                    example: Rerum autem quis quo ut.
+            description: The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.
+            example:
+                assignments:
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                version: Rerum autem quis quo ut.
+            required:
+                - assignments
+                - version
         BuilderProgress:
             type: object
             properties:
@@ -32005,6 +32243,106 @@ components:
                       request_revision: Quidem nulla minima at voluptatum delectus.
             required:
                 - assignments
+        TestWriterAssignmentWait:
+            type: object
+            properties:
+                assignments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TestWriterAssignmentItem'
+                    description: The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.
+                    example:
+                        - change_id: Veniam ex reiciendis.
+                          in_force: true
+                          progress:
+                            read: true
+                            report: 7108203204833819401
+                            tests:
+                                checked_at: "1972-09-26T18:55:16Z"
+                                finding_count: 5254885262627643994
+                                state: needs_changes
+                          request_revision: Quidem nulla minima at voluptatum delectus.
+                        - change_id: Veniam ex reiciendis.
+                          in_force: true
+                          progress:
+                            read: true
+                            report: 7108203204833819401
+                            tests:
+                                checked_at: "1972-09-26T18:55:16Z"
+                                finding_count: 5254885262627643994
+                                state: needs_changes
+                          request_revision: Quidem nulla minima at voluptatum delectus.
+                        - change_id: Veniam ex reiciendis.
+                          in_force: true
+                          progress:
+                            read: true
+                            report: 7108203204833819401
+                            tests:
+                                checked_at: "1972-09-26T18:55:16Z"
+                                finding_count: 5254885262627643994
+                                state: needs_changes
+                          request_revision: Quidem nulla minima at voluptatum delectus.
+                        - change_id: Veniam ex reiciendis.
+                          in_force: true
+                          progress:
+                            read: true
+                            report: 7108203204833819401
+                            tests:
+                                checked_at: "1972-09-26T18:55:16Z"
+                                finding_count: 5254885262627643994
+                                state: needs_changes
+                          request_revision: Quidem nulla minima at voluptatum delectus.
+                version:
+                    type: string
+                    description: Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.
+                    example: Commodi et at.
+            description: The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.
+            example:
+                assignments:
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                version: Commodi et at.
+            required:
+                - assignments
+                - version
         TestWriterProgress:
             type: object
             properties:

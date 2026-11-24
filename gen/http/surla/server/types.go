@@ -1159,6 +1159,17 @@ type ListBuilderAssignmentsResponseBody struct {
 	Assignments []*BuilderAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
 }
 
+// WaitForBuilderAssignmentResponseBody is the type of the "surla" service
+// "wait_for_builder_assignment" endpoint HTTP response body.
+type WaitForBuilderAssignmentResponseBody struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*BuilderAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string `form:"version" json:"version" xml:"version"`
+}
+
 // GetBuilderAssignmentResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body.
 type GetBuilderAssignmentResponseBody struct {
@@ -1195,6 +1206,17 @@ type GetBuilderAssignmentResponseBody struct {
 type ListTestWriterAssignmentsResponseBody struct {
 	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+}
+
+// WaitForTestWriterAssignmentResponseBody is the type of the "surla" service
+// "wait_for_test_writer_assignment" endpoint HTTP response body.
+type WaitForTestWriterAssignmentResponseBody struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // GetTestWriterAssignmentResponseBody is the type of the "surla" service
@@ -4394,6 +4416,25 @@ type ListBuilderAssignmentsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// WaitForBuilderAssignmentForbiddenResponseBody is the type of the "surla"
+// service "wait_for_builder_assignment" endpoint HTTP response body for the
+// "forbidden" error.
+type WaitForBuilderAssignmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetBuilderAssignmentNoBuildResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body for the "no_build"
 // error.
@@ -4519,6 +4560,25 @@ type GetBuilderAssignmentForbiddenResponseBody struct {
 // service "list_test_writer_assignments" endpoint HTTP response body for the
 // "forbidden" error.
 type ListTestWriterAssignmentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WaitForTestWriterAssignmentForbiddenResponseBody is the type of the "surla"
+// service "wait_for_test_writer_assignment" endpoint HTTP response body for
+// the "forbidden" error.
+type WaitForTestWriterAssignmentForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10790,6 +10850,28 @@ func NewListBuilderAssignmentsResponseBody(res *surla.BuilderAssignmentList) *Li
 	return body
 }
 
+// NewWaitForBuilderAssignmentResponseBody builds the HTTP response body from
+// the result of the "wait_for_builder_assignment" endpoint of the "surla"
+// service.
+func NewWaitForBuilderAssignmentResponseBody(res *surla.BuilderAssignmentWait) *WaitForBuilderAssignmentResponseBody {
+	body := &WaitForBuilderAssignmentResponseBody{
+		Version: res.Version,
+	}
+	if res.Assignments != nil {
+		body.Assignments = make([]*BuilderAssignmentResponseBody, len(res.Assignments))
+		for i, val := range res.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = marshalSurlaBuilderAssignmentToBuilderAssignmentResponseBody(val)
+		}
+	} else {
+		body.Assignments = []*BuilderAssignmentResponseBody{}
+	}
+	return body
+}
+
 // NewGetBuilderAssignmentResponseBody builds the HTTP response body from the
 // result of the "get_builder_assignment" endpoint of the "surla" service.
 func NewGetBuilderAssignmentResponseBody(res *surla.BuilderAssignment) *GetBuilderAssignmentResponseBody {
@@ -10840,6 +10922,28 @@ func NewGetBuilderAssignmentResponseBody(res *surla.BuilderAssignment) *GetBuild
 // service.
 func NewListTestWriterAssignmentsResponseBody(res *surla.TestWriterAssignmentList) *ListTestWriterAssignmentsResponseBody {
 	body := &ListTestWriterAssignmentsResponseBody{}
+	if res.Assignments != nil {
+		body.Assignments = make([]*TestWriterAssignmentItemResponseBody, len(res.Assignments))
+		for i, val := range res.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = marshalSurlaTestWriterAssignmentItemToTestWriterAssignmentItemResponseBody(val)
+		}
+	} else {
+		body.Assignments = []*TestWriterAssignmentItemResponseBody{}
+	}
+	return body
+}
+
+// NewWaitForTestWriterAssignmentResponseBody builds the HTTP response body
+// from the result of the "wait_for_test_writer_assignment" endpoint of the
+// "surla" service.
+func NewWaitForTestWriterAssignmentResponseBody(res *surla.TestWriterAssignmentWait) *WaitForTestWriterAssignmentResponseBody {
+	body := &WaitForTestWriterAssignmentResponseBody{
+		Version: res.Version,
+	}
 	if res.Assignments != nil {
 		body.Assignments = make([]*TestWriterAssignmentItemResponseBody, len(res.Assignments))
 		for i, val := range res.Assignments {
@@ -13436,6 +13540,21 @@ func NewListBuilderAssignmentsForbiddenResponseBody(res *goa.ServiceError) *List
 	return body
 }
 
+// NewWaitForBuilderAssignmentForbiddenResponseBody builds the HTTP response
+// body from the result of the "wait_for_builder_assignment" endpoint of the
+// "surla" service.
+func NewWaitForBuilderAssignmentForbiddenResponseBody(res *goa.ServiceError) *WaitForBuilderAssignmentForbiddenResponseBody {
+	body := &WaitForBuilderAssignmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetBuilderAssignmentNoBuildResponseBody builds the HTTP response body
 // from the result of the "get_builder_assignment" endpoint of the "surla"
 // service.
@@ -13539,6 +13658,21 @@ func NewGetBuilderAssignmentForbiddenResponseBody(res *goa.ServiceError) *GetBui
 // "surla" service.
 func NewListTestWriterAssignmentsForbiddenResponseBody(res *goa.ServiceError) *ListTestWriterAssignmentsForbiddenResponseBody {
 	body := &ListTestWriterAssignmentsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWaitForTestWriterAssignmentForbiddenResponseBody builds the HTTP response
+// body from the result of the "wait_for_test_writer_assignment" endpoint of
+// the "surla" service.
+func NewWaitForTestWriterAssignmentForbiddenResponseBody(res *goa.ServiceError) *WaitForTestWriterAssignmentForbiddenResponseBody {
+	body := &WaitForTestWriterAssignmentForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -14159,11 +14293,29 @@ func NewGetTestFindingsPayload(changeID string) *surla.GetTestFindingsPayload {
 	return v
 }
 
+// NewWaitForBuilderAssignmentPayload builds a surla service
+// wait_for_builder_assignment endpoint payload.
+func NewWaitForBuilderAssignmentPayload(sinceVersion *string) *surla.WaitForBuilderAssignmentPayload {
+	v := &surla.WaitForBuilderAssignmentPayload{}
+	v.SinceVersion = sinceVersion
+
+	return v
+}
+
 // NewGetBuilderAssignmentPayload builds a surla service get_builder_assignment
 // endpoint payload.
 func NewGetBuilderAssignmentPayload(changeID string) *surla.GetBuilderAssignmentPayload {
 	v := &surla.GetBuilderAssignmentPayload{}
 	v.ChangeID = changeID
+
+	return v
+}
+
+// NewWaitForTestWriterAssignmentPayload builds a surla service
+// wait_for_test_writer_assignment endpoint payload.
+func NewWaitForTestWriterAssignmentPayload(sinceVersion *string) *surla.WaitForTestWriterAssignmentPayload {
+	v := &surla.WaitForTestWriterAssignmentPayload{}
+	v.SinceVersion = sinceVersion
 
 	return v
 }

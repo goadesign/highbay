@@ -1719,6 +1719,62 @@ func ValidateVerifyChangeResultTransport(body *VerifyChangeResultTransport) (err
 	return
 }
 
+// ValidateWaitForBuilderAssignmentPayloadTransport runs the validations defined on WaitForBuilderAssignmentPayloadTransport.
+func ValidateWaitForBuilderAssignmentPayloadTransport(body *WaitForBuilderAssignmentPayloadTransport) (err error) {
+	if body.SinceVersion != nil {
+		if utf8.RuneCountInString(*body.SinceVersion) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.since_version", *body.SinceVersion, utf8.RuneCountInString(*body.SinceVersion), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateWaitForBuilderAssignmentResultTransport runs the validations defined on WaitForBuilderAssignmentResultTransport.
+func ValidateWaitForBuilderAssignmentResultTransport(body *WaitForBuilderAssignmentResultTransport) (err error) {
+	if body.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.Assignments {
+		if e != nil {
+			if err2 := ValidateBuilderAssignmentTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWaitForTestWriterAssignmentPayloadTransport runs the validations defined on WaitForTestWriterAssignmentPayloadTransport.
+func ValidateWaitForTestWriterAssignmentPayloadTransport(body *WaitForTestWriterAssignmentPayloadTransport) (err error) {
+	if body.SinceVersion != nil {
+		if utf8.RuneCountInString(*body.SinceVersion) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.since_version", *body.SinceVersion, utf8.RuneCountInString(*body.SinceVersion), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateWaitForTestWriterAssignmentResultTransport runs the validations defined on WaitForTestWriterAssignmentResultTransport.
+func ValidateWaitForTestWriterAssignmentResultTransport(body *WaitForTestWriterAssignmentResultTransport) (err error) {
+	if body.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.Assignments {
+		if e != nil {
+			if err2 := ValidateTestWriterAssignmentItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateAgentPolicyItemTransport runs the validations defined on AgentPolicyItemTransport.
 func ValidateAgentPolicyItemTransport(body *AgentPolicyItemTransport) (err error) {
 	if body.AgentID == nil {

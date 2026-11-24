@@ -61,6 +61,8 @@ func ToolSchemas() []*genregistry.ToolSchema {
 		declarations.schema2104(),
 		declarations.schema2115(),
 		declarations.schema2132(),
+		declarations.schema2190(),
+		declarations.schema2216(),
 	}
 } // schema1 constructs one generated schema declaration.
 func (declarations registryDeclarations) schema1() *genregistry.ToolSchema {
@@ -38476,6 +38478,1043 @@ func (registryDeclarations) field2189() *genregistry.ToolFieldMetadata {
 	return &genregistry.ToolFieldMetadata{
 		Path: []*genregistry.ToolFieldPathSegment{
 			{Segment: genregistry.NewToolFieldSegmentField("candidate_commit")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// schema2190 constructs one generated schema declaration.
+func (declarations registryDeclarations) schema2190() *genregistry.ToolSchema {
+	registryText1 := "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus."
+	return &genregistry.ToolSchema{
+		Name:                   "surla.wait_for_builder_assignment",
+		Description:            &registryText1,
+		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ResultSchema:           []byte("{\"$defs\":{\"BuilderAssignment\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.\",\"properties\":{\"change_id\":{\"description\":\"Change Card to build; get_change takes it.\",\"type\":\"string\"},\"gowork_off\":{\"description\":\"True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.\",\"type\":\"boolean\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.\",\"type\":\"boolean\"},\"read\":{\"description\":\"True once you read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision to build; verify_change takes it.\",\"type\":\"string\"},\"working_folder\":{\"description\":\"Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-\\u003cn\\u003e. Run git and go there, never in the project folder.\",\"type\":\"string\"},\"written_tests\":{\"description\":\"Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The build records no accepted tests.\",\"properties\":{\"state\":{\"enum\":[\"not_yet_accepted\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"read\",\"written_tests\",\"working_folder\",\"gowork_off\"],\"title\":\"BuilderAssignment\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/BuilderAssignment\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+		ConsumerContract: &genregistry.ConsumerContract{
+			Kind:  "service",
+			Title: "Wait For Builder Assignment",
+			Search: &genregistry.ToolSearchDocument{
+				Length: 111,
+				Terms:  map[string]int{"30": 1, "about": 1, "accepted": 2, "accepts": 1, "after": 1, "again": 3, "and": 4, "as": 3, "assignment": 3, "be": 1, "becomes": 1, "build": 1, "builder": 2, "call": 3, "change": 1, "chorus": 1, "differs": 1, "empty": 1, "example": 1, "for": 5, "get": 1, "is": 1, "it": 5, "its": 1, "list": 4, "longer": 1, "needs": 2, "no": 2, "of": 1, "once": 1, "or": 1, "otherwise": 1, "pass": 1, "reading": 1, "returns": 1, "same": 1, "say": 1, "seconds": 1, "since": 2, "so": 1, "soon": 1, "state": 1, "stop": 1, "surla": 2, "tests": 3, "that": 2, "the": 9, "then": 1, "to": 3, "use": 1, "version": 6, "wait": 4, "when": 1, "whenever": 1, "with": 2, "without": 2, "written": 1, "you": 2, "your": 1},
+			},
+			RequiresUI: false,
+			TextOnly: &genregistry.TextOnlyToolContract{
+				ExecutionSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				Description:     "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.",
+				Search: &genregistry.ToolSearchDocument{
+					Length: 111,
+					Terms:  map[string]int{"30": 1, "about": 1, "accepted": 2, "accepts": 1, "after": 1, "again": 3, "and": 4, "as": 3, "assignment": 3, "be": 1, "becomes": 1, "build": 1, "builder": 2, "call": 3, "change": 1, "chorus": 1, "differs": 1, "empty": 1, "example": 1, "for": 5, "get": 1, "is": 1, "it": 5, "its": 1, "list": 4, "longer": 1, "needs": 2, "no": 2, "of": 1, "once": 1, "or": 1, "otherwise": 1, "pass": 1, "reading": 1, "returns": 1, "same": 1, "say": 1, "seconds": 1, "since": 2, "so": 1, "soon": 1, "state": 1, "stop": 1, "surla": 2, "tests": 3, "that": 2, "the": 9, "then": 1, "to": 3, "use": 1, "version": 6, "wait": 4, "when": 1, "whenever": 1, "with": 2, "without": 2, "written": 1, "you": 2, "your": 1},
+				},
+				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				Payload:       declarations.metadata2213(),
+			},
+			Payload: declarations.metadata2191(),
+			Result:  declarations.metadata2194(),
+		},
+	}
+}
+
+// metadata2191 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2191() *genregistry.ToolTypeMetadata {
+	registryText1 := "WaitForBuilderAssignmentPayload"
+	return &genregistry.ToolTypeMetadata{
+		Name:                     &registryText1,
+		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		Fields: []*genregistry.ToolFieldMetadata{
+			declarations.field2192(),
+			declarations.field2193(),
+		},
+	}
+}
+
+// field2192 constructs one generated field declaration.
+func (registryDeclarations) field2192() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	return &genregistry.ToolFieldMetadata{
+		JSONType: &registryText1,
+	}
+}
+
+// field2193 constructs one generated field declaration.
+func (registryDeclarations) field2193() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "version returned by your last wait_for_builder_assignment call. Omit it on the first call."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("since_version")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// metadata2194 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2194() *genregistry.ToolTypeMetadata {
+	registryText1 := "WaitForBuilderAssignmentResult"
+	return &genregistry.ToolTypeMetadata{
+		Name:                     &registryText1,
+		SchemaWithoutRootExample: []byte("{\"$defs\":{\"BuilderAssignment\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.\",\"properties\":{\"change_id\":{\"description\":\"Change Card to build; get_change takes it.\",\"type\":\"string\"},\"gowork_off\":{\"description\":\"True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.\",\"type\":\"boolean\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.\",\"type\":\"boolean\"},\"read\":{\"description\":\"True once you read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision to build; verify_change takes it.\",\"type\":\"string\"},\"working_folder\":{\"description\":\"Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-\\u003cn\\u003e. Run git and go there, never in the project folder.\",\"type\":\"string\"},\"written_tests\":{\"description\":\"Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The build records no accepted tests.\",\"properties\":{\"state\":{\"enum\":[\"not_yet_accepted\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"read\",\"written_tests\",\"working_folder\",\"gowork_off\"],\"title\":\"BuilderAssignment\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/BuilderAssignment\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+		Fields: []*genregistry.ToolFieldMetadata{
+			declarations.field2195(),
+			declarations.field2196(),
+			declarations.field2197(),
+			declarations.field2198(),
+			declarations.field2199(),
+			declarations.field2200(),
+			declarations.field2201(),
+			declarations.field2202(),
+			declarations.field2203(),
+			declarations.field2204(),
+			declarations.field2205(),
+			declarations.field2206(),
+			declarations.field2207(),
+			declarations.field2208(),
+			declarations.field2209(),
+			declarations.field2210(),
+			declarations.field2211(),
+			declarations.field2212(),
+		},
+	}
+}
+
+// field2195 constructs one generated field declaration.
+func (registryDeclarations) field2195() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The builder's assignment list when wait_for_builder_assignment returned, with the version that names it."
+	return &genregistry.ToolFieldMetadata{
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2196 constructs one generated field declaration.
+func (registryDeclarations) field2196() *genregistry.ToolFieldMetadata {
+	registryText1 := "array"
+	registryText2 := "The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2197 constructs one generated field declaration.
+func (registryDeclarations) field2197() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2198 constructs one generated field declaration.
+func (registryDeclarations) field2198() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Change Card to build; get_change takes it."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("change_id")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2199 constructs one generated field declaration.
+func (registryDeclarations) field2199() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Change Card revision to build; verify_change takes it."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("request_revision")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2200 constructs one generated field declaration.
+func (registryDeclarations) field2200() *genregistry.ToolFieldMetadata {
+	registryText1 := "boolean"
+	registryText2 := "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("in_force")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2201 constructs one generated field declaration.
+func (registryDeclarations) field2201() *genregistry.ToolFieldMetadata {
+	registryText1 := "boolean"
+	registryText2 := "True once you read this assignment in full with get_builder_assignment."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("read")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2202 constructs one generated field declaration.
+func (registryDeclarations) field2202() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2203 constructs one generated field declaration.
+func (registryDeclarations) field2203() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("state")},
+		},
+		JSONType:            &registryText1,
+		DiscriminatorValues: []string{"not_used", "not_yet_accepted", "accepted"},
+	}
+}
+
+// field2204 constructs one generated field declaration.
+func (registryDeclarations) field2204() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("written_tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "not_used"}),
+			},
+		},
+	}
+}
+
+// field2205 constructs one generated field declaration.
+func (registryDeclarations) field2205() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The build records no accepted tests."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("written_tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "not_yet_accepted"}),
+			},
+		},
+	}
+}
+
+// field2206 constructs one generated field declaration.
+func (registryDeclarations) field2206() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Surla checked the reported tests and recorded them as a commit."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("written_tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2207 constructs one generated field declaration.
+func (registryDeclarations) field2207() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters)."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("commit")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("written_tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2208 constructs one generated field declaration.
+func (registryDeclarations) field2208() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "When Surla's check reached this verdict."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("checked_at")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("written_tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2209 constructs one generated field declaration.
+func (registryDeclarations) field2209() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "What Surla's check did not judge, always the same sentence."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("written_tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("not_judged")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("written_tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2210 constructs one generated field declaration.
+func (registryDeclarations) field2210() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-<n>. Run git and go there, never in the project folder."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("working_folder")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2211 constructs one generated field declaration.
+func (registryDeclarations) field2211() *genregistry.ToolFieldMetadata {
+	registryText1 := "boolean"
+	registryText2 := "True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("gowork_off")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2212 constructs one generated field declaration.
+func (registryDeclarations) field2212() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("version")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// metadata2213 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2213() *genregistry.ToolTypeMetadata {
+	registryText1 := "WaitForBuilderAssignmentPayload"
+	return &genregistry.ToolTypeMetadata{
+		Name:                     &registryText1,
+		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		Fields: []*genregistry.ToolFieldMetadata{
+			declarations.field2214(),
+			declarations.field2215(),
+		},
+	}
+}
+
+// field2214 constructs one generated field declaration.
+func (registryDeclarations) field2214() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	return &genregistry.ToolFieldMetadata{
+		JSONType: &registryText1,
+	}
+}
+
+// field2215 constructs one generated field declaration.
+func (registryDeclarations) field2215() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "version returned by your last wait_for_builder_assignment call. Omit it on the first call."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("since_version")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// schema2216 constructs one generated schema declaration.
+func (declarations registryDeclarations) schema2216() *genregistry.ToolSchema {
+	registryText1 := "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus."
+	return &genregistry.ToolSchema{
+		Name:                   "surla.wait_for_test_writer_assignment",
+		Description:            &registryText1,
+		PayloadSchema:          []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ExecutionPayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ResultSchema:           []byte("{\"$defs\":{\"TestWriterAssignmentItem\":{\"additionalProperties\":false,\"description\":\"One of the test writer's assignments as list_test_writer_assignments reports it.\",\"properties\":{\"change_id\":{\"description\":\"Change Card the tests are for; get_test_writer_assignment takes it.\",\"type\":\"string\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"progress\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"Where this assignment stands.\"},\"request_revision\":{\"description\":\"Change Card revision the tests are for.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"progress\"],\"title\":\"TestWriterAssignmentItem\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/TestWriterAssignmentItem\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+		ConsumerContract: &genregistry.ConsumerContract{
+			Kind:  "service",
+			Title: "Wait For Test Writer Assignment",
+			Search: &genregistry.ToolSearchDocument{
+				Length: 125,
+				Terms:  map[string]int{"30": 1, "a": 1, "about": 1, "accepted": 1, "after": 2, "again": 3, "and": 4, "as": 3, "assignment": 3, "becomes": 1, "build": 1, "call": 3, "change": 1, "changes": 1, "check": 1, "chorus": 1, "could": 1, "differs": 1, "empty": 1, "example": 1, "finished": 1, "for": 5, "get": 1, "in": 1, "is": 1, "it": 5, "its": 1, "list": 4, "longer": 1, "needs": 3, "no": 2, "not": 1, "of": 1, "once": 1, "or": 2, "otherwise": 1, "pass": 1, "progress": 1, "reaches": 1, "reading": 1, "report": 2, "returns": 1, "run": 1, "s": 1, "same": 1, "say": 1, "seconds": 1, "since": 2, "so": 1, "soon": 1, "state": 1, "stop": 1, "surla": 2, "test": 2, "tests": 2, "that": 2, "the": 8, "then": 1, "to": 2, "use": 1, "verdict": 2, "version": 6, "wait": 4, "when": 1, "while": 1, "with": 2, "without": 2, "writer": 2, "you": 2, "your": 2},
+			},
+			RequiresUI: false,
+			TextOnly: &genregistry.TextOnlyToolContract{
+				ExecutionSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				Description:     "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus.",
+				Search: &genregistry.ToolSearchDocument{
+					Length: 125,
+					Terms:  map[string]int{"30": 1, "a": 1, "about": 1, "accepted": 1, "after": 2, "again": 3, "and": 4, "as": 3, "assignment": 3, "becomes": 1, "build": 1, "call": 3, "change": 1, "changes": 1, "check": 1, "chorus": 1, "could": 1, "differs": 1, "empty": 1, "example": 1, "finished": 1, "for": 5, "get": 1, "in": 1, "is": 1, "it": 5, "its": 1, "list": 4, "longer": 1, "needs": 3, "no": 2, "not": 1, "of": 1, "once": 1, "or": 2, "otherwise": 1, "pass": 1, "progress": 1, "reaches": 1, "reading": 1, "report": 2, "returns": 1, "run": 1, "s": 1, "same": 1, "say": 1, "seconds": 1, "since": 2, "so": 1, "soon": 1, "state": 1, "stop": 1, "surla": 2, "test": 2, "tests": 2, "that": 2, "the": 8, "then": 1, "to": 2, "use": 1, "verdict": 2, "version": 6, "wait": 4, "when": 1, "while": 1, "with": 2, "without": 2, "writer": 2, "you": 2, "your": 2},
+				},
+				PayloadSchema: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				Payload:       declarations.metadata2247(),
+			},
+			Payload: declarations.metadata2217(),
+			Result:  declarations.metadata2220(),
+		},
+	}
+}
+
+// metadata2217 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2217() *genregistry.ToolTypeMetadata {
+	registryText1 := "WaitForTestWriterAssignmentPayload"
+	return &genregistry.ToolTypeMetadata{
+		Name:                     &registryText1,
+		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		Fields: []*genregistry.ToolFieldMetadata{
+			declarations.field2218(),
+			declarations.field2219(),
+		},
+	}
+}
+
+// field2218 constructs one generated field declaration.
+func (registryDeclarations) field2218() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	return &genregistry.ToolFieldMetadata{
+		JSONType: &registryText1,
+	}
+}
+
+// field2219 constructs one generated field declaration.
+func (registryDeclarations) field2219() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "version returned by your last wait_for_test_writer_assignment call. Omit it on the first call."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("since_version")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// metadata2220 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2220() *genregistry.ToolTypeMetadata {
+	registryText1 := "WaitForTestWriterAssignmentResult"
+	return &genregistry.ToolTypeMetadata{
+		Name:                     &registryText1,
+		SchemaWithoutRootExample: []byte("{\"$defs\":{\"TestWriterAssignmentItem\":{\"additionalProperties\":false,\"description\":\"One of the test writer's assignments as list_test_writer_assignments reports it.\",\"properties\":{\"change_id\":{\"description\":\"Change Card the tests are for; get_test_writer_assignment takes it.\",\"type\":\"string\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"progress\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"Where this assignment stands.\"},\"request_revision\":{\"description\":\"Change Card revision the tests are for.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"progress\"],\"title\":\"TestWriterAssignmentItem\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/TestWriterAssignmentItem\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+		Fields: []*genregistry.ToolFieldMetadata{
+			declarations.field2221(),
+			declarations.field2222(),
+			declarations.field2223(),
+			declarations.field2224(),
+			declarations.field2225(),
+			declarations.field2226(),
+			declarations.field2227(),
+			declarations.field2228(),
+			declarations.field2229(),
+			declarations.field2230(),
+			declarations.field2231(),
+			declarations.field2232(),
+			declarations.field2233(),
+			declarations.field2234(),
+			declarations.field2235(),
+			declarations.field2236(),
+			declarations.field2237(),
+			declarations.field2238(),
+			declarations.field2239(),
+			declarations.field2240(),
+			declarations.field2241(),
+			declarations.field2242(),
+			declarations.field2243(),
+			declarations.field2244(),
+			declarations.field2245(),
+			declarations.field2246(),
+		},
+	}
+}
+
+// field2221 constructs one generated field declaration.
+func (registryDeclarations) field2221() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it."
+	return &genregistry.ToolFieldMetadata{
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2222 constructs one generated field declaration.
+func (registryDeclarations) field2222() *genregistry.ToolFieldMetadata {
+	registryText1 := "array"
+	registryText2 := "The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2223 constructs one generated field declaration.
+func (registryDeclarations) field2223() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2224 constructs one generated field declaration.
+func (registryDeclarations) field2224() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Change Card the tests are for; get_test_writer_assignment takes it."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("change_id")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2225 constructs one generated field declaration.
+func (registryDeclarations) field2225() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Change Card revision the tests are for."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("request_revision")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2226 constructs one generated field declaration.
+func (registryDeclarations) field2226() *genregistry.ToolFieldMetadata {
+	registryText1 := "boolean"
+	registryText2 := "True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("in_force")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2227 constructs one generated field declaration.
+func (registryDeclarations) field2227() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Where this assignment stands."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2228 constructs one generated field declaration.
+func (registryDeclarations) field2228() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2229 constructs one generated field declaration.
+func (registryDeclarations) field2229() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("state")},
+		},
+		JSONType:            &registryText1,
+		DiscriminatorValues: []string{"not_used", "assigned", "reported", "needs_changes", "accepted", "could_not_run"},
+	}
+}
+
+// field2230 constructs one generated field declaration.
+func (registryDeclarations) field2230() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "not_used"}),
+			},
+		},
+	}
+}
+
+// field2231 constructs one generated field declaration.
+func (registryDeclarations) field2231() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Surla assigned the tests for this build; the test writer has not reported them finished."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "assigned"}),
+			},
+		},
+	}
+}
+
+// field2232 constructs one generated field declaration.
+func (registryDeclarations) field2232() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "reported"}),
+			},
+		},
+	}
+}
+
+// field2233 constructs one generated field declaration.
+func (registryDeclarations) field2233() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "needs_changes"}),
+			},
+		},
+	}
+}
+
+// field2234 constructs one generated field declaration.
+func (registryDeclarations) field2234() *genregistry.ToolFieldMetadata {
+	registryText1 := "integer"
+	registryText2 := "Number of problems Surla found."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("finding_count")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "needs_changes"}),
+			},
+		},
+	}
+}
+
+// field2235 constructs one generated field declaration.
+func (registryDeclarations) field2235() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "When Surla's check reached this verdict."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("checked_at")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "needs_changes"}),
+			},
+		},
+	}
+}
+
+// field2236 constructs one generated field declaration.
+func (registryDeclarations) field2236() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Surla checked the reported tests and recorded them as a commit."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2237 constructs one generated field declaration.
+func (registryDeclarations) field2237() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters)."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("commit")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2238 constructs one generated field declaration.
+func (registryDeclarations) field2238() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "When Surla's check reached this verdict."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("checked_at")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2239 constructs one generated field declaration.
+func (registryDeclarations) field2239() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "What Surla's check did not judge, always the same sentence."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("not_judged")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "accepted"}),
+			},
+		},
+	}
+}
+
+// field2240 constructs one generated field declaration.
+func (registryDeclarations) field2240() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	registryText2 := "Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "could_not_run"}),
+			},
+		},
+	}
+}
+
+// field2241 constructs one generated field declaration.
+func (registryDeclarations) field2241() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Why the check could not run."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("reason")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "could_not_run"}),
+			},
+		},
+	}
+}
+
+// field2242 constructs one generated field declaration.
+func (registryDeclarations) field2242() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "What the user does so the check can run."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("step")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "could_not_run"}),
+			},
+		},
+	}
+}
+
+// field2243 constructs one generated field declaration.
+func (registryDeclarations) field2243() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "When Surla's check stopped."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("tests")},
+			{Segment: genregistry.NewToolFieldSegmentField("checked_at")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+		Branches: []*genregistry.ToolUnionBranch{
+			{
+				Selection: genregistry.NewToolUnionSelectionTagged(&genregistry.ToolTaggedUnionBranch{Discriminator: []*genregistry.ToolFieldPathSegment{{Segment: genregistry.NewToolFieldSegmentField("assignments")}, {Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})}, {Segment: genregistry.NewToolFieldSegmentField("progress")}, {Segment: genregistry.NewToolFieldSegmentField("tests")}, {Segment: genregistry.NewToolFieldSegmentField("state")}}, Value: "could_not_run"}),
+			},
+		},
+	}
+}
+
+// field2244 constructs one generated field declaration.
+func (registryDeclarations) field2244() *genregistry.ToolFieldMetadata {
+	registryText1 := "boolean"
+	registryText2 := "True once the test writer read this assignment in full with get_test_writer_assignment."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("read")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2245 constructs one generated field declaration.
+func (registryDeclarations) field2245() *genregistry.ToolFieldMetadata {
+	registryText1 := "integer"
+	registryText2 := "Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("assignments")},
+			{Segment: genregistry.NewToolFieldSegmentElement(&genregistry.ToolCollectionElement{})},
+			{Segment: genregistry.NewToolFieldSegmentField("progress")},
+			{Segment: genregistry.NewToolFieldSegmentField("report")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// field2246 constructs one generated field declaration.
+func (registryDeclarations) field2246() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("version")},
+		},
+		JSONType:    &registryText1,
+		Description: &registryText2,
+	}
+}
+
+// metadata2247 constructs one generated metadata declaration.
+func (declarations registryDeclarations) metadata2247() *genregistry.ToolTypeMetadata {
+	registryText1 := "WaitForTestWriterAssignmentPayload"
+	return &genregistry.ToolTypeMetadata{
+		Name:                     &registryText1,
+		SchemaWithoutRootExample: []byte("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		Fields: []*genregistry.ToolFieldMetadata{
+			declarations.field2248(),
+			declarations.field2249(),
+		},
+	}
+}
+
+// field2248 constructs one generated field declaration.
+func (registryDeclarations) field2248() *genregistry.ToolFieldMetadata {
+	registryText1 := "object"
+	return &genregistry.ToolFieldMetadata{
+		JSONType: &registryText1,
+	}
+}
+
+// field2249 constructs one generated field declaration.
+func (registryDeclarations) field2249() *genregistry.ToolFieldMetadata {
+	registryText1 := "string"
+	registryText2 := "version returned by your last wait_for_test_writer_assignment call. Omit it on the first call."
+	return &genregistry.ToolFieldMetadata{
+		Path: []*genregistry.ToolFieldPathSegment{
+			{Segment: genregistry.NewToolFieldSegmentField("since_version")},
 		},
 		JSONType:    &registryText1,
 		Description: &registryText2,

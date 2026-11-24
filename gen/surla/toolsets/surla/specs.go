@@ -17,40 +17,42 @@ import (
 
 // Tool IDs for this toolset.
 const (
-	ApproveMerge              tools.Ident = "surla.approve_merge"
-	CheckProject              tools.Ident = "surla.check_project"
-	ConfigureModel            tools.Ident = "surla.configure_model"
-	ConfirmIntent             tools.Ident = "surla.confirm_intent"
-	DeclineRevision           tools.Ident = "surla.decline_revision"
-	Diff                      tools.Ident = "surla.diff"
-	DraftOverride             tools.Ident = "surla.draft_override"
-	GenerateCode              tools.Ident = "surla.generate_code"
-	GetBuild                  tools.Ident = "surla.get_build"
-	GetBuilderAssignment      tools.Ident = "surla.get_builder_assignment"
-	GetChange                 tools.Ident = "surla.get_change"
-	GetLiveTarget             tools.Ident = "surla.get_live_target"
-	GetStoryRefresh           tools.Ident = "surla.get_story_refresh"
-	GetTestWriterAssignment   tools.Ident = "surla.get_test_writer_assignment"
-	GetVerification           tools.Ident = "surla.get_verification"
-	InitProject               tools.Ident = "surla.init_project"
-	ListBuilderAssignments    tools.Ident = "surla.list_builder_assignments"
-	ListChanges               tools.Ident = "surla.list_changes"
-	ListTestWriterAssignments tools.Ident = "surla.list_test_writer_assignments"
-	ListTraces                tools.Ident = "surla.list_traces"
-	ListVerifications         tools.Ident = "surla.list_verifications"
-	OpenViews                 tools.Ident = "surla.open_views"
-	PreviewArchitecture       tools.Ident = "surla.preview_architecture"
-	ProposeChange             tools.Ident = "surla.propose_change"
-	ReadCheckOutput           tools.Ident = "surla.read_check_output"
-	RefreshStory              tools.Ident = "surla.refresh_story"
-	ReportTestsFinished       tools.Ident = "surla.report_tests_finished"
-	ReviewVerification        tools.Ident = "surla.review_verification"
-	ReviseChange              tools.Ident = "surla.revise_change"
-	StartLiveTarget           tools.Ident = "surla.start_live_target"
-	StopLiveTarget            tools.Ident = "surla.stop_live_target"
-	UpdateDependencies        tools.Ident = "surla.update_dependencies"
-	UpdateDraft               tools.Ident = "surla.update_draft"
-	VerifyChange              tools.Ident = "surla.verify_change"
+	ApproveMerge                tools.Ident = "surla.approve_merge"
+	CheckProject                tools.Ident = "surla.check_project"
+	ConfigureModel              tools.Ident = "surla.configure_model"
+	ConfirmIntent               tools.Ident = "surla.confirm_intent"
+	DeclineRevision             tools.Ident = "surla.decline_revision"
+	Diff                        tools.Ident = "surla.diff"
+	DraftOverride               tools.Ident = "surla.draft_override"
+	GenerateCode                tools.Ident = "surla.generate_code"
+	GetBuild                    tools.Ident = "surla.get_build"
+	GetBuilderAssignment        tools.Ident = "surla.get_builder_assignment"
+	GetChange                   tools.Ident = "surla.get_change"
+	GetLiveTarget               tools.Ident = "surla.get_live_target"
+	GetStoryRefresh             tools.Ident = "surla.get_story_refresh"
+	GetTestWriterAssignment     tools.Ident = "surla.get_test_writer_assignment"
+	GetVerification             tools.Ident = "surla.get_verification"
+	InitProject                 tools.Ident = "surla.init_project"
+	ListBuilderAssignments      tools.Ident = "surla.list_builder_assignments"
+	ListChanges                 tools.Ident = "surla.list_changes"
+	ListTestWriterAssignments   tools.Ident = "surla.list_test_writer_assignments"
+	ListTraces                  tools.Ident = "surla.list_traces"
+	ListVerifications           tools.Ident = "surla.list_verifications"
+	OpenViews                   tools.Ident = "surla.open_views"
+	PreviewArchitecture         tools.Ident = "surla.preview_architecture"
+	ProposeChange               tools.Ident = "surla.propose_change"
+	ReadCheckOutput             tools.Ident = "surla.read_check_output"
+	RefreshStory                tools.Ident = "surla.refresh_story"
+	ReportTestsFinished         tools.Ident = "surla.report_tests_finished"
+	ReviewVerification          tools.Ident = "surla.review_verification"
+	ReviseChange                tools.Ident = "surla.revise_change"
+	StartLiveTarget             tools.Ident = "surla.start_live_target"
+	StopLiveTarget              tools.Ident = "surla.stop_live_target"
+	UpdateDependencies          tools.Ident = "surla.update_dependencies"
+	UpdateDraft                 tools.Ident = "surla.update_draft"
+	VerifyChange                tools.Ident = "surla.verify_change"
+	WaitForBuilderAssignment    tools.Ident = "surla.wait_for_builder_assignment"
+	WaitForTestWriterAssignment tools.Ident = "surla.wait_for_test_writer_assignment"
 )
 
 // SchemaFingerprint returns the generated schema fingerprint for toolset.
@@ -58,7 +60,7 @@ const (
 func SchemaFingerprint(toolset string) (string, error) {
 	switch toolset {
 	case "surla.surla":
-		return "4008259214a4a77f3b80dd070df3a46bf5ca93bd415913f4b222243d1c9bc4ab", nil
+		return "6c80d16ce0181c7a3b9d3658f076d27d09a70f74dae4a0772493a5538705fe09", nil
 	default:
 		return "", fmt.Errorf("toolset %q is not generated by this package", toolset)
 	}
@@ -101,6 +103,8 @@ func Specs() []tools.ToolSpec {
 		newSpecUpdateDependencies(),
 		newSpecUpdateDraft(),
 		newSpecVerifyChange(),
+		newSpecWaitForBuilderAssignment(),
+		newSpecWaitForTestWriterAssignment(),
 	}
 }
 
@@ -5402,6 +5406,372 @@ func SpecVerifyChange() tools.ToolSpec {
 	return newSpecVerifyChange()
 }
 
+// newSpecWaitForBuilderAssignment builds the immutable generated contract for
+// surla.wait_for_builder_assignment. Each call owns all mutable slices and maps in the result.
+func newSpecWaitForBuilderAssignment() tools.ToolSpec {
+	return tools.ToolSpec{
+		Name:        WaitForBuilderAssignment,
+		Description: "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.",
+		RequiresUI:  false,
+		TextOnly: &tools.ModelContract{
+			ExecutionSchema: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+			ExecutionCodec:  waitForBuilderAssignmentPayloadCodec,
+			ResultReminder:  "",
+			Description:     "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.",
+			Search: tools.SearchDocument{Length: 111, Terms: map[string]int{
+				"30":         1,
+				"about":      1,
+				"accepted":   2,
+				"accepts":    1,
+				"after":      1,
+				"again":      3,
+				"and":        4,
+				"as":         3,
+				"assignment": 3,
+				"be":         1,
+				"becomes":    1,
+				"build":      1,
+				"builder":    2,
+				"call":       3,
+				"change":     1,
+				"chorus":     1,
+				"differs":    1,
+				"empty":      1,
+				"example":    1,
+				"for":        5,
+				"get":        1,
+				"is":         1,
+				"it":         5,
+				"its":        1,
+				"list":       4,
+				"longer":     1,
+				"needs":      2,
+				"no":         2,
+				"of":         1,
+				"once":       1,
+				"or":         1,
+				"otherwise":  1,
+				"pass":       1,
+				"reading":    1,
+				"returns":    1,
+				"same":       1,
+				"say":        1,
+				"seconds":    1,
+				"since":      2,
+				"so":         1,
+				"soon":       1,
+				"state":      1,
+				"stop":       1,
+				"surla":      2,
+				"tests":      3,
+				"that":       2,
+				"the":        9,
+				"then":       1,
+				"to":         3,
+				"use":        1,
+				"version":    6,
+				"wait":       4,
+				"when":       1,
+				"whenever":   1,
+				"with":       2,
+				"without":    2,
+				"written":    1,
+				"you":        2,
+				"your":       1,
+			}},
+			Payload: tools.TypeSpec{
+				Name:                     "WaitForBuilderAssignmentPayload",
+				Schema:                   tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				SchemaWithoutRootExample: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				ExampleJSON:              nil,
+				Fields:                   tools.CloneFieldMetadata(waitForBuilderAssignmentPayloadFields),
+				Codec:                    waitForBuilderAssignmentPayloadCodec,
+			},
+		},
+		Search: tools.SearchDocument{
+			Length: 111,
+			Terms: map[string]int{
+				"30":         1,
+				"about":      1,
+				"accepted":   2,
+				"accepts":    1,
+				"after":      1,
+				"again":      3,
+				"and":        4,
+				"as":         3,
+				"assignment": 3,
+				"be":         1,
+				"becomes":    1,
+				"build":      1,
+				"builder":    2,
+				"call":       3,
+				"change":     1,
+				"chorus":     1,
+				"differs":    1,
+				"empty":      1,
+				"example":    1,
+				"for":        5,
+				"get":        1,
+				"is":         1,
+				"it":         5,
+				"its":        1,
+				"list":       4,
+				"longer":     1,
+				"needs":      2,
+				"no":         2,
+				"of":         1,
+				"once":       1,
+				"or":         1,
+				"otherwise":  1,
+				"pass":       1,
+				"reading":    1,
+				"returns":    1,
+				"same":       1,
+				"say":        1,
+				"seconds":    1,
+				"since":      2,
+				"so":         1,
+				"soon":       1,
+				"state":      1,
+				"stop":       1,
+				"surla":      2,
+				"tests":      3,
+				"that":       2,
+				"the":        9,
+				"then":       1,
+				"to":         3,
+				"use":        1,
+				"version":    6,
+				"wait":       4,
+				"when":       1,
+				"whenever":   1,
+				"with":       2,
+				"without":    2,
+				"written":    1,
+				"you":        2,
+				"your":       1,
+			},
+		},
+		Tags:                   []string{},
+		ExecutionPayloadSchema: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ExecutionPayloadCodec:  waitForBuilderAssignmentPayloadCodec,
+		Payload: tools.TypeSpec{
+			Name:                     "WaitForBuilderAssignmentPayload",
+			Schema:                   tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+			SchemaWithoutRootExample: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+			ExampleJSON:              nil,
+			Fields:                   tools.CloneFieldMetadata(waitForBuilderAssignmentPayloadFields),
+			Codec:                    waitForBuilderAssignmentPayloadCodec,
+		},
+		Result: tools.TypeSpec{
+			Name:                     "WaitForBuilderAssignmentResult",
+			Schema:                   tools.RawJSON("{\"$defs\":{\"BuilderAssignment\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.\",\"properties\":{\"change_id\":{\"description\":\"Change Card to build; get_change takes it.\",\"type\":\"string\"},\"gowork_off\":{\"description\":\"True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.\",\"type\":\"boolean\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.\",\"type\":\"boolean\"},\"read\":{\"description\":\"True once you read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision to build; verify_change takes it.\",\"type\":\"string\"},\"working_folder\":{\"description\":\"Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-\\u003cn\\u003e. Run git and go there, never in the project folder.\",\"type\":\"string\"},\"written_tests\":{\"description\":\"Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The build records no accepted tests.\",\"properties\":{\"state\":{\"enum\":[\"not_yet_accepted\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"read\",\"written_tests\",\"working_folder\",\"gowork_off\"],\"title\":\"BuilderAssignment\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/BuilderAssignment\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+			SchemaWithoutRootExample: tools.RawJSON("{\"$defs\":{\"BuilderAssignment\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.\",\"properties\":{\"change_id\":{\"description\":\"Change Card to build; get_change takes it.\",\"type\":\"string\"},\"gowork_off\":{\"description\":\"True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.\",\"type\":\"boolean\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.\",\"type\":\"boolean\"},\"read\":{\"description\":\"True once you read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision to build; verify_change takes it.\",\"type\":\"string\"},\"working_folder\":{\"description\":\"Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-\\u003cn\\u003e. Run git and go there, never in the project folder.\",\"type\":\"string\"},\"written_tests\":{\"description\":\"Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The build records no accepted tests.\",\"properties\":{\"state\":{\"enum\":[\"not_yet_accepted\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"read\",\"written_tests\",\"working_folder\",\"gowork_off\"],\"title\":\"BuilderAssignment\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/BuilderAssignment\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+			Fields:                   tools.CloneFieldMetadata(waitForBuilderAssignmentResultFields),
+			Codec:                    waitForBuilderAssignmentResultCodec,
+		},
+	}
+}
+
+// SpecWaitForBuilderAssignment returns a fresh surla.wait_for_builder_assignment specification.
+func SpecWaitForBuilderAssignment() tools.ToolSpec {
+	return newSpecWaitForBuilderAssignment()
+}
+
+// newSpecWaitForTestWriterAssignment builds the immutable generated contract for
+// surla.wait_for_test_writer_assignment. Each call owns all mutable slices and maps in the result.
+func newSpecWaitForTestWriterAssignment() tools.ToolSpec {
+	return tools.ToolSpec{
+		Name:        WaitForTestWriterAssignment,
+		Description: "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus.",
+		RequiresUI:  false,
+		TextOnly: &tools.ModelContract{
+			ExecutionSchema: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+			ExecutionCodec:  waitForTestWriterAssignmentPayloadCodec,
+			ResultReminder:  "",
+			Description:     "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus.",
+			Search: tools.SearchDocument{Length: 125, Terms: map[string]int{
+				"30":         1,
+				"a":          1,
+				"about":      1,
+				"accepted":   1,
+				"after":      2,
+				"again":      3,
+				"and":        4,
+				"as":         3,
+				"assignment": 3,
+				"becomes":    1,
+				"build":      1,
+				"call":       3,
+				"change":     1,
+				"changes":    1,
+				"check":      1,
+				"chorus":     1,
+				"could":      1,
+				"differs":    1,
+				"empty":      1,
+				"example":    1,
+				"finished":   1,
+				"for":        5,
+				"get":        1,
+				"in":         1,
+				"is":         1,
+				"it":         5,
+				"its":        1,
+				"list":       4,
+				"longer":     1,
+				"needs":      3,
+				"no":         2,
+				"not":        1,
+				"of":         1,
+				"once":       1,
+				"or":         2,
+				"otherwise":  1,
+				"pass":       1,
+				"progress":   1,
+				"reaches":    1,
+				"reading":    1,
+				"report":     2,
+				"returns":    1,
+				"run":        1,
+				"s":          1,
+				"same":       1,
+				"say":        1,
+				"seconds":    1,
+				"since":      2,
+				"so":         1,
+				"soon":       1,
+				"state":      1,
+				"stop":       1,
+				"surla":      2,
+				"test":       2,
+				"tests":      2,
+				"that":       2,
+				"the":        8,
+				"then":       1,
+				"to":         2,
+				"use":        1,
+				"verdict":    2,
+				"version":    6,
+				"wait":       4,
+				"when":       1,
+				"while":      1,
+				"with":       2,
+				"without":    2,
+				"writer":     2,
+				"you":        2,
+				"your":       2,
+			}},
+			Payload: tools.TypeSpec{
+				Name:                     "WaitForTestWriterAssignmentPayload",
+				Schema:                   tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				SchemaWithoutRootExample: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+				ExampleJSON:              nil,
+				Fields:                   tools.CloneFieldMetadata(waitForTestWriterAssignmentPayloadFields),
+				Codec:                    waitForTestWriterAssignmentPayloadCodec,
+			},
+		},
+		Search: tools.SearchDocument{
+			Length: 125,
+			Terms: map[string]int{
+				"30":         1,
+				"a":          1,
+				"about":      1,
+				"accepted":   1,
+				"after":      2,
+				"again":      3,
+				"and":        4,
+				"as":         3,
+				"assignment": 3,
+				"becomes":    1,
+				"build":      1,
+				"call":       3,
+				"change":     1,
+				"changes":    1,
+				"check":      1,
+				"chorus":     1,
+				"could":      1,
+				"differs":    1,
+				"empty":      1,
+				"example":    1,
+				"finished":   1,
+				"for":        5,
+				"get":        1,
+				"in":         1,
+				"is":         1,
+				"it":         5,
+				"its":        1,
+				"list":       4,
+				"longer":     1,
+				"needs":      3,
+				"no":         2,
+				"not":        1,
+				"of":         1,
+				"once":       1,
+				"or":         2,
+				"otherwise":  1,
+				"pass":       1,
+				"progress":   1,
+				"reaches":    1,
+				"reading":    1,
+				"report":     2,
+				"returns":    1,
+				"run":        1,
+				"s":          1,
+				"same":       1,
+				"say":        1,
+				"seconds":    1,
+				"since":      2,
+				"so":         1,
+				"soon":       1,
+				"state":      1,
+				"stop":       1,
+				"surla":      2,
+				"test":       2,
+				"tests":      2,
+				"that":       2,
+				"the":        8,
+				"then":       1,
+				"to":         2,
+				"use":        1,
+				"verdict":    2,
+				"version":    6,
+				"wait":       4,
+				"when":       1,
+				"while":      1,
+				"with":       2,
+				"without":    2,
+				"writer":     2,
+				"you":        2,
+				"your":       2,
+			},
+		},
+		Tags:                   []string{},
+		ExecutionPayloadSchema: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+		ExecutionPayloadCodec:  waitForTestWriterAssignmentPayloadCodec,
+		Payload: tools.TypeSpec{
+			Name:                     "WaitForTestWriterAssignmentPayload",
+			Schema:                   tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+			SchemaWithoutRootExample: tools.RawJSON("{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"type\":\"object\"}"),
+			ExampleJSON:              nil,
+			Fields:                   tools.CloneFieldMetadata(waitForTestWriterAssignmentPayloadFields),
+			Codec:                    waitForTestWriterAssignmentPayloadCodec,
+		},
+		Result: tools.TypeSpec{
+			Name:                     "WaitForTestWriterAssignmentResult",
+			Schema:                   tools.RawJSON("{\"$defs\":{\"TestWriterAssignmentItem\":{\"additionalProperties\":false,\"description\":\"One of the test writer's assignments as list_test_writer_assignments reports it.\",\"properties\":{\"change_id\":{\"description\":\"Change Card the tests are for; get_test_writer_assignment takes it.\",\"type\":\"string\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"progress\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"Where this assignment stands.\"},\"request_revision\":{\"description\":\"Change Card revision the tests are for.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"progress\"],\"title\":\"TestWriterAssignmentItem\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/TestWriterAssignmentItem\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+			SchemaWithoutRootExample: tools.RawJSON("{\"$defs\":{\"TestWriterAssignmentItem\":{\"additionalProperties\":false,\"description\":\"One of the test writer's assignments as list_test_writer_assignments reports it.\",\"properties\":{\"change_id\":{\"description\":\"Change Card the tests are for; get_test_writer_assignment takes it.\",\"type\":\"string\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"progress\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"Where this assignment stands.\"},\"request_revision\":{\"description\":\"Change Card revision the tests are for.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"progress\"],\"title\":\"TestWriterAssignmentItem\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/TestWriterAssignmentItem\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"type\":\"object\"}"),
+			Fields:                   tools.CloneFieldMetadata(waitForTestWriterAssignmentResultFields),
+			Codec:                    waitForTestWriterAssignmentResultCodec,
+		},
+	}
+}
+
+// SpecWaitForTestWriterAssignment returns a fresh surla.wait_for_test_writer_assignment specification.
+func SpecWaitForTestWriterAssignment() tools.ToolSpec {
+	return newSpecWaitForTestWriterAssignment()
+}
+
 // ApproveMergeTool pairs the surla.approve_merge identifier with its generated
 // typed payload and result codecs so consumers decode tool JSON without
 // restating the name-to-codec pairing fixed by the design.
@@ -5980,6 +6350,40 @@ func VerifyChangeTool() tools.TypedTool[*VerifyChangePayload, *VerifyChangeResul
 	}
 }
 
+// WaitForBuilderAssignmentTool pairs the surla.wait_for_builder_assignment identifier with its generated
+// typed payload and result codecs so consumers decode tool JSON without
+// restating the name-to-codec pairing fixed by the design.
+func WaitForBuilderAssignmentTool() tools.TypedTool[*WaitForBuilderAssignmentPayload, *WaitForBuilderAssignmentResult] {
+	return tools.TypedTool[*WaitForBuilderAssignmentPayload, *WaitForBuilderAssignmentResult]{
+		Name: WaitForBuilderAssignment,
+		Payload: tools.JSONCodec[*WaitForBuilderAssignmentPayload]{
+			ToJSON:   MarshalWaitForBuilderAssignmentPayload,
+			FromJSON: UnmarshalWaitForBuilderAssignmentPayload,
+		},
+		Result: tools.JSONCodec[*WaitForBuilderAssignmentResult]{
+			ToJSON:   MarshalWaitForBuilderAssignmentResult,
+			FromJSON: UnmarshalWaitForBuilderAssignmentResult,
+		},
+	}
+}
+
+// WaitForTestWriterAssignmentTool pairs the surla.wait_for_test_writer_assignment identifier with its generated
+// typed payload and result codecs so consumers decode tool JSON without
+// restating the name-to-codec pairing fixed by the design.
+func WaitForTestWriterAssignmentTool() tools.TypedTool[*WaitForTestWriterAssignmentPayload, *WaitForTestWriterAssignmentResult] {
+	return tools.TypedTool[*WaitForTestWriterAssignmentPayload, *WaitForTestWriterAssignmentResult]{
+		Name: WaitForTestWriterAssignment,
+		Payload: tools.JSONCodec[*WaitForTestWriterAssignmentPayload]{
+			ToJSON:   MarshalWaitForTestWriterAssignmentPayload,
+			FromJSON: UnmarshalWaitForTestWriterAssignmentPayload,
+		},
+		Result: tools.JSONCodec[*WaitForTestWriterAssignmentResult]{
+			ToJSON:   MarshalWaitForTestWriterAssignmentResult,
+			FromJSON: UnmarshalWaitForTestWriterAssignmentResult,
+		},
+	}
+}
+
 // Metadata returns fresh policy metadata for every generated tool.
 func Metadata() []policy.ToolMetadata {
 	return []policy.ToolMetadata{
@@ -6221,6 +6625,20 @@ func Metadata() []policy.ToolMetadata {
 			Tags:        []string{},
 			BudgetClass: policy.ToolBudgetClassBudgeted,
 		},
+		{
+			ID:          WaitForBuilderAssignment,
+			Title:       "Wait For Builder Assignment",
+			Description: "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.",
+			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
+		},
+		{
+			ID:          WaitForTestWriterAssignment,
+			Title:       "Wait For Test Writer Assignment",
+			Description: "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus.",
+			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
+		},
 	}
 }
 
@@ -6261,6 +6679,8 @@ func Names() []tools.Ident {
 		UpdateDependencies,
 		UpdateDraft,
 		VerifyChange,
+		WaitForBuilderAssignment,
+		WaitForTestWriterAssignment,
 	}
 }
 
@@ -6344,6 +6764,10 @@ func Spec(name tools.Ident) (tools.ToolSpec, bool) {
 		return newSpecUpdateDraft(), true
 	case VerifyChange:
 		return newSpecVerifyChange(), true
+	case WaitForBuilderAssignment:
+		return newSpecWaitForBuilderAssignment(), true
+	case WaitForTestWriterAssignment:
+		return newSpecWaitForTestWriterAssignment(), true
 	default:
 		return tools.ToolSpec{}, false
 	}
@@ -6621,6 +7045,22 @@ func MetadataByName(name tools.Ident) (policy.ToolMetadata, bool) {
 			ID:          VerifyChange,
 			Title:       "Verify Change",
 			Description: "Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Surla must also have accepted the build's tests (your assignment says when). A refusal states what Surla found and the goal: put your work right with git and verify again.",
+			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
+		}, true
+	case WaitForBuilderAssignment:
+		return policy.ToolMetadata{
+			ID:          WaitForBuilderAssignment,
+			Title:       "Wait For Builder Assignment",
+			Description: "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.",
+			Tags:        []string{},
+			BudgetClass: policy.ToolBudgetClassBudgeted,
+		}, true
+	case WaitForTestWriterAssignment:
+		return policy.ToolMetadata{
+			ID:          WaitForTestWriterAssignment,
+			Title:       "Wait For Test Writer Assignment",
+			Description: "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus.",
 			Tags:        []string{},
 			BudgetClass: policy.ToolBudgetClassBudgeted,
 		}, true

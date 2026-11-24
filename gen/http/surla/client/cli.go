@@ -903,6 +903,28 @@ func BuildGetTestFindingsPayload(surlaGetTestFindingsChangeID *string) (*surla.G
 	return v, nil
 }
 
+// BuildWaitForBuilderAssignmentPayload builds the payload for the surla
+// wait_for_builder_assignment endpoint from CLI flags.
+func BuildWaitForBuilderAssignmentPayload(surlaWaitForBuilderAssignmentSinceVersion *string) (*surla.WaitForBuilderAssignmentPayload, error) {
+	var err error
+	var sinceVersion *string
+	{
+		if surlaWaitForBuilderAssignmentSinceVersion != nil {
+			sinceVersion = surlaWaitForBuilderAssignmentSinceVersion
+			if utf8.RuneCountInString(*surlaWaitForBuilderAssignmentSinceVersion) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("since_version", *surlaWaitForBuilderAssignmentSinceVersion, utf8.RuneCountInString(*surlaWaitForBuilderAssignmentSinceVersion), 128, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &surla.WaitForBuilderAssignmentPayload{}
+	v.SinceVersion = sinceVersion
+
+	return v, nil
+}
+
 // BuildGetBuilderAssignmentPayload builds the payload for the surla
 // get_builder_assignment endpoint from CLI flags.
 func BuildGetBuilderAssignmentPayload(surlaGetBuilderAssignmentChangeID *string) (*surla.GetBuilderAssignmentPayload, error) {
@@ -922,6 +944,28 @@ func BuildGetBuilderAssignmentPayload(surlaGetBuilderAssignmentChangeID *string)
 	}
 	v := &surla.GetBuilderAssignmentPayload{}
 	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildWaitForTestWriterAssignmentPayload builds the payload for the surla
+// wait_for_test_writer_assignment endpoint from CLI flags.
+func BuildWaitForTestWriterAssignmentPayload(surlaWaitForTestWriterAssignmentSinceVersion *string) (*surla.WaitForTestWriterAssignmentPayload, error) {
+	var err error
+	var sinceVersion *string
+	{
+		if surlaWaitForTestWriterAssignmentSinceVersion != nil {
+			sinceVersion = surlaWaitForTestWriterAssignmentSinceVersion
+			if utf8.RuneCountInString(*surlaWaitForTestWriterAssignmentSinceVersion) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("since_version", *surlaWaitForTestWriterAssignmentSinceVersion, utf8.RuneCountInString(*surlaWaitForTestWriterAssignmentSinceVersion), 128, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &surla.WaitForTestWriterAssignmentPayload{}
+	v.SinceVersion = sinceVersion
 
 	return v, nil
 }

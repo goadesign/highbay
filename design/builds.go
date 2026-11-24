@@ -222,6 +222,22 @@ var BuilderAssignmentList = Type("BuilderAssignmentList", func() {
 	Required("assignments")
 })
 
+// BuilderAssignmentWait is the builder's assignment list when a wait ends.
+var BuilderAssignmentWait = Type("BuilderAssignmentWait", func() {
+	Description("The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.")
+	Attribute("assignments", ArrayOf(BuilderAssignment), "The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.")
+	Attribute("version", String, "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.")
+	Required("assignments", "version")
+})
+
+// TestWriterAssignmentWait is the test writer's assignment list when a wait ends.
+var TestWriterAssignmentWait = Type("TestWriterAssignmentWait", func() {
+	Description("The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.")
+	Attribute("assignments", ArrayOf(TestWriterAssignmentItem), "The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.")
+	Attribute("version", String, "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.")
+	Required("assignments", "version")
+})
+
 // RequiredTest names one test a build's Story requires.
 var RequiredTest = Type("RequiredTest", func() {
 	Description("One test the agreed Story requires: the evaluation scenario Surla generates for one finished flow and the hook method the test writer implements for it.")
@@ -382,6 +398,20 @@ func buildMethods() {
 		})
 	})
 
+	Method("wait_for_builder_assignment", func() {
+		Description("Return the builder's assignment list, as list_builder_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla accepted the tests, the user built the change again or dropped the build, or a verification of the build passed, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A builder uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting builder does not push real operations out of view.")
+		Payload(func() {
+			Attribute("since_version", String, "version returned by your last wait_for_builder_assignment call. Omit it on the first call.", func() { MaxLength(128) })
+		})
+		Result(BuilderAssignmentWait)
+		Tool("wait_for_builder_assignment", "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.")
+		HTTP(func() {
+			GET("/assignment-updates/builder")
+			Param("since_version")
+			Response(StatusOK)
+		})
+	})
+
 	Method("get_builder_assignment", func() {
 		Description("Return the builder's assignment for the open build's change in full and record that the builder read it at its revision. The first read of a new build joins the builder's working copy to the build's own branch, surla/build-<n> at the build's base: a copy with uncommitted work on an earlier build branch first gets that work committed there with the message \"Left uncommitted when change <change_id> started\"; a copy with nothing uncommitted joins from any branch. A copy with uncommitted work on any other branch, or a Git operation in progress, is refused with copy_off_branch, and a copy whose turn is held with working_copy_busy; nothing is marked read then. Building the change again makes the assignment unread.")
 		Payload(func() {
@@ -412,6 +442,20 @@ func buildMethods() {
 		Tool("list_test_writer_assignments", "List your assignment for the project's open build while it needs your work. An empty list means no build needs you: say so and stop. Read the assignment in full with get_test_writer_assignment(change_id) before working.")
 		HTTP(func() {
 			GET("/assignments/test-writer")
+			Response(StatusOK)
+		})
+	})
+
+	Method("wait_for_test_writer_assignment", func() {
+		Description("Return the test writer's assignment list, as list_test_writer_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla's check of a report reached a verdict, the user built the change again or dropped the build, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A test writer uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting test writer does not push real operations out of view.")
+		Payload(func() {
+			Attribute("since_version", String, "version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.", func() { MaxLength(128) })
+		})
+		Result(TestWriterAssignmentWait)
+		Tool("wait_for_test_writer_assignment", "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus.")
+		HTTP(func() {
+			GET("/assignment-updates/test-writer")
+			Param("since_version")
 			Response(StatusOK)
 		})
 	})

@@ -1084,6 +1084,36 @@ type (
 		// Exactly one of running, completed or not_completed.
 		State State
 	}
+	// WaitForBuilderAssignmentPayload defines the JSON payload for the surla.wait_for_builder_assignment tool.
+	WaitForBuilderAssignmentPayload = struct {
+		// version returned by your last wait_for_builder_assignment call. Omit it on
+		// the first call.
+		SinceVersion *string
+	}
+	// WaitForBuilderAssignmentResult defines the JSON result for the surla.wait_for_builder_assignment tool.
+	WaitForBuilderAssignmentResult = struct {
+		// The open build's assignment while it needs this role, exactly as
+		// list_builder_assignments returns it; empty otherwise.
+		Assignments []*BuilderAssignment
+		// Opaque value naming this list. Pass it as since_version to wait until the
+		// list differs; compare it only for equality.
+		Version string
+	}
+	// WaitForTestWriterAssignmentPayload defines the JSON payload for the surla.wait_for_test_writer_assignment tool.
+	WaitForTestWriterAssignmentPayload = struct {
+		// version returned by your last wait_for_test_writer_assignment call. Omit it
+		// on the first call.
+		SinceVersion *string
+	}
+	// WaitForTestWriterAssignmentResult defines the JSON result for the surla.wait_for_test_writer_assignment tool.
+	WaitForTestWriterAssignmentResult = struct {
+		// The open build's assignment while it needs this role, exactly as
+		// list_test_writer_assignments returns it; empty otherwise.
+		Assignments []*TestWriterAssignmentItem
+		// Opaque value naming this list. Pass it as since_version to wait until the
+		// list differs; compare it only for equality.
+		Version string
+	}
 	// AgentPolicyItem is a nested type used by the generated JSON contract.
 	AgentPolicyItem = struct {
 		// Scoped agent container identifier.

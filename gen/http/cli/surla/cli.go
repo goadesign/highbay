@@ -25,7 +25,7 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"project (identity|ensure-team|attach-guide|status|stop|browser-link|exchange-browser-link)",
-		"surla (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-team-agent-options|dismiss-team-notice|open-views|merge-change|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|get-builder-assignment|list-test-writer-assignments|get-test-writer-assignment|report-tests-finished|review-verification)",
+		"surla (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-team-agent-options|dismiss-team-notice|open-views|merge-change|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|wait-for-builder-assignment|get-builder-assignment|list-test-writer-assignments|wait-for-test-writer-assignment|get-test-writer-assignment|report-tests-finished|review-verification)",
 	}
 }
 
@@ -203,10 +203,16 @@ func ParseEndpoint(
 
 		surlaListBuilderAssignmentsFlags = flag.NewFlagSet("list-builder-assignments", flag.ExitOnError)
 
+		surlaWaitForBuilderAssignmentFlags            = flag.NewFlagSet("wait-for-builder-assignment", flag.ExitOnError)
+		surlaWaitForBuilderAssignmentSinceVersionFlag = new(cliStringFlag)
+
 		surlaGetBuilderAssignmentFlags        = flag.NewFlagSet("get-builder-assignment", flag.ExitOnError)
 		surlaGetBuilderAssignmentChangeIDFlag = new(cliStringFlag)
 
 		surlaListTestWriterAssignmentsFlags = flag.NewFlagSet("list-test-writer-assignments", flag.ExitOnError)
+
+		surlaWaitForTestWriterAssignmentFlags            = flag.NewFlagSet("wait-for-test-writer-assignment", flag.ExitOnError)
+		surlaWaitForTestWriterAssignmentSinceVersionFlag = new(cliStringFlag)
 
 		surlaGetTestWriterAssignmentFlags        = flag.NewFlagSet("get-test-writer-assignment", flag.ExitOnError)
 		surlaGetTestWriterAssignmentChangeIDFlag = new(cliStringFlag)
@@ -252,7 +258,9 @@ func ParseEndpoint(
 	surlaDropBuildFlags.Var(surlaDropBuildChangeIDFlag, "change-id", "change_id of the open build the page showed.")
 	surlaGetBuildFlags.Var(surlaGetBuildChangeIDFlag, "change-id", "Change Card identifier.")
 	surlaGetTestFindingsFlags.Var(surlaGetTestFindingsChangeIDFlag, "change-id", "Change Card identifier.")
+	surlaWaitForBuilderAssignmentFlags.Var(surlaWaitForBuilderAssignmentSinceVersionFlag, "since-version", "")
 	surlaGetBuilderAssignmentFlags.Var(surlaGetBuilderAssignmentChangeIDFlag, "change-id", "Change Card identifier from list_builder_assignments.")
+	surlaWaitForTestWriterAssignmentFlags.Var(surlaWaitForTestWriterAssignmentSinceVersionFlag, "since-version", "")
 	surlaGetTestWriterAssignmentFlags.Var(surlaGetTestWriterAssignmentChangeIDFlag, "change-id", "Change Card identifier from list_test_writer_assignments.")
 	surlaReportTestsFinishedFlags.Var(surlaReportTestsFinishedBodyFlag, "body", "")
 	surlaReportTestsFinishedFlags.Var(surlaReportTestsFinishedChangeIDFlag, "change-id", "Change Card identifier from your test assignment.")
@@ -310,8 +318,10 @@ func ParseEndpoint(
 	surlaGetBuildFlags.Usage = surlaGetBuildUsage
 	surlaGetTestFindingsFlags.Usage = surlaGetTestFindingsUsage
 	surlaListBuilderAssignmentsFlags.Usage = surlaListBuilderAssignmentsUsage
+	surlaWaitForBuilderAssignmentFlags.Usage = surlaWaitForBuilderAssignmentUsage
 	surlaGetBuilderAssignmentFlags.Usage = surlaGetBuilderAssignmentUsage
 	surlaListTestWriterAssignmentsFlags.Usage = surlaListTestWriterAssignmentsUsage
+	surlaWaitForTestWriterAssignmentFlags.Usage = surlaWaitForTestWriterAssignmentUsage
 	surlaGetTestWriterAssignmentFlags.Usage = surlaGetTestWriterAssignmentUsage
 	surlaReportTestsFinishedFlags.Usage = surlaReportTestsFinishedUsage
 	surlaReviewVerificationFlags.Usage = surlaReviewVerificationUsage
@@ -503,11 +513,17 @@ func ParseEndpoint(
 			case "list-builder-assignments":
 				epf = surlaListBuilderAssignmentsFlags
 
+			case "wait-for-builder-assignment":
+				epf = surlaWaitForBuilderAssignmentFlags
+
 			case "get-builder-assignment":
 				epf = surlaGetBuilderAssignmentFlags
 
 			case "list-test-writer-assignments":
 				epf = surlaListTestWriterAssignmentsFlags
+
+			case "wait-for-test-writer-assignment":
+				epf = surlaWaitForTestWriterAssignmentFlags
 
 			case "get-test-writer-assignment":
 				epf = surlaGetTestWriterAssignmentFlags
@@ -675,11 +691,17 @@ func ParseEndpoint(
 				data, err = surlac.BuildGetTestFindingsPayload(surlaGetTestFindingsChangeIDFlag.value)
 			case "list-builder-assignments":
 				endpoint = c.ListBuilderAssignments()
+			case "wait-for-builder-assignment":
+				endpoint = c.WaitForBuilderAssignment()
+				data, err = surlac.BuildWaitForBuilderAssignmentPayload(surlaWaitForBuilderAssignmentSinceVersionFlag.value)
 			case "get-builder-assignment":
 				endpoint = c.GetBuilderAssignment()
 				data, err = surlac.BuildGetBuilderAssignmentPayload(surlaGetBuilderAssignmentChangeIDFlag.value)
 			case "list-test-writer-assignments":
 				endpoint = c.ListTestWriterAssignments()
+			case "wait-for-test-writer-assignment":
+				endpoint = c.WaitForTestWriterAssignment()
+				data, err = surlac.BuildWaitForTestWriterAssignmentPayload(surlaWaitForTestWriterAssignmentSinceVersionFlag.value)
 			case "get-test-writer-assignment":
 				endpoint = c.GetTestWriterAssignment()
 				data, err = surlac.BuildGetTestWriterAssignmentPayload(surlaGetTestWriterAssignmentChangeIDFlag.value)
@@ -878,8 +900,10 @@ func surlaUsage() {
 	fmt.Fprintln(os.Stderr, `    get-build: Return a change's build when it is the project's open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the test writer's state with the number of Surla's findings (never their text), and whether the build is for the change's revision in force. Reading changes nothing; deciding merged reads the project's repository.`)
 	fmt.Fprintln(os.Stderr, `    get-test-findings: Return the text of Surla's findings on the tests of a change's build, which get_build only counts, with the build's revision and start time, the number of the report Surla checked and when it reached the verdict. A build whose tests do not need changes is refused. Reading changes nothing.`)
 	fmt.Fprintln(os.Stderr, `    list-builder-assignments: List the builder's assignment for the project's open build while that role has work; empty otherwise. Reading the list records nothing and moves no working copy.`)
+	fmt.Fprintln(os.Stderr, `    wait-for-builder-assignment: Return the builder's assignment list, as list_builder_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla accepted the tests, the user built the change again or dropped the build, or a verification of the build passed, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A builder uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting builder does not push real operations out of view.`)
 	fmt.Fprintln(os.Stderr, `    get-builder-assignment: Return the builder's assignment for the open build's change in full and record that the builder read it at its revision. The first read of a new build joins the builder's working copy to the build's own branch, surla/build-<n> at the build's base: a copy with uncommitted work on an earlier build branch first gets that work committed there with the message "Left uncommitted when change <change_id> started"; a copy with nothing uncommitted joins from any branch. A copy with uncommitted work on any other branch, or a Git operation in progress, is refused with copy_off_branch, and a copy whose turn is held with working_copy_busy; nothing is marked read then. Building the change again makes the assignment unread.`)
 	fmt.Fprintln(os.Stderr, `    list-test-writer-assignments: List the test writer's assignment for the project's open build while that role has work; empty otherwise. Reading the list records nothing and moves no working copy.`)
+	fmt.Fprintln(os.Stderr, `    wait-for-test-writer-assignment: Return the test writer's assignment list, as list_test_writer_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla's check of a report reached a verdict, the user built the change again or dropped the build, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A test writer uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting test writer does not push real operations out of view.`)
 	fmt.Fprintln(os.Stderr, `    get-test-writer-assignment: Return the test writer's assignment for a change in full (the working folder, the design and Story as agreed at the built revision, the user's confirmed answers, confirmation examples and preserved behaviors of that revision, the tests it requires, and the state with the text of any findings) and record that the test writer read it at its revision. Later revisions do not change what the build saved. A new build of the change replaces the assignment, which then counts as unread, and so does each verdict of Surla's check. The first read of a new build joins your working copy to the build's branch, surla/tests-<n> at the build's base. A read that marks the assignment read also writes the required tests' generated folder into your copy. A copy with uncommitted work on an earlier tests build branch first gets that work committed there; a clean copy joins from any branch. Other uncommitted work or a Git operation is refused with copy_off_branch; nothing is marked read then.`)
 	fmt.Fprintln(os.Stderr, `    report-tests-finished: The test writer reports that its tests for a change at the build's revision are finished. Every report raises the build's report number by one and makes the state reported, from any state, clearing an earlier verdict, and returns at once. Surla then checks the tests in the working folder against the build's Story; its verdict, needs_changes, accepted or could_not_run, replaces reported in the test writer's assignment, which then counts as unread. A report for another revision, or in a project with stored verification settings, where no test writer is used, is refused and changes nothing.`)
 	fmt.Fprintln(os.Stderr, `    review-verification: Read one saved run for the authenticated user before approval: its existing builder-safe result, the Story recorded at acceptance and exact required-test mapping when known, and the owner's current approval observation. This read records no approval and changes no workflow state. Agents use get_verification instead.`)
@@ -1627,6 +1651,24 @@ func surlaListBuilderAssignmentsUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla list-builder-assignments")
 }
 
+func surlaWaitForBuilderAssignmentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla wait-for-builder-assignment", os.Args[0])
+	fmt.Fprint(os.Stderr, " -since-version STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the builder's assignment list, as list_builder_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla accepted the tests, the user built the change again or dropped the build, or a verification of the build passed, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A builder uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting builder does not push real operations out of view.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -since-version STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla wait-for-builder-assignment --since-version \"ji1\"")
+}
+
 func surlaGetBuilderAssignmentUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] surla get-builder-assignment", os.Args[0])
@@ -1659,6 +1701,24 @@ func surlaListTestWriterAssignmentsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla list-test-writer-assignments")
+}
+
+func surlaWaitForTestWriterAssignmentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] surla wait-for-test-writer-assignment", os.Args[0])
+	fmt.Fprint(os.Stderr, " -since-version STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the test writer's assignment list, as list_test_writer_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla's check of a report reached a verdict, the user built the change again or dropped the build, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A test writer uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting test writer does not push real operations out of view.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -since-version STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "surla wait-for-test-writer-assignment --since-version \"zs1\"")
 }
 
 func surlaGetTestWriterAssignmentUsage() {

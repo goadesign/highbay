@@ -548,19 +548,46 @@ func runDiagnosticPanic(ctx context.Context, tracer trace.Tracer, direct bool) (
 	panic("private-panic-evidence")
 }
 
-// TestWaitingReadBoundaryExportsWithoutRecording excludes periodic browser waits from private operation history.
+// TestWaitingReadBoundaryExportsWithoutRecording excludes the periodic waits of
+// the browser and of the workers from private operation history, at the
+// request boundary and inside the control plane. A worker's other spans are
+// saved, so only the exclusion keeps its waits out.
 func TestWaitingReadBoundaryExportsWithoutRecording(t *testing.T) {
 	exported := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{TracerProvider: provider})
-	caller := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session", Kind: CallerUser})
-	_, span := cp.tracer("surla/requests").Start(caller, "surla.request.wait_for_changes")
-	span.End()
-	assert.Len(t, exported.GetSpans(), 1)
+	waits := []struct {
+		// kind is the caller that keeps the wait open.
+		kind CallerKind
+		// names are the wait's request boundary span and inner span.
+		names []string
+	}{
+		{CallerUser, []string{"surla.request.wait_for_changes", waitForChangesSpan}},
+		{CallerBuilder, []string{"surla.request.wait_for_builder_assignment", waitForBuilderAssignmentSpan}},
+		{CallerTestWriter, []string{"surla.request.wait_for_test_writer_assignment", waitForTestWriterAssignmentSpan}},
+	}
+	count := 0
+	for _, wait := range waits {
+		caller := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session", Kind: wait.kind})
+		for _, name := range wait.names {
+			_, span := cp.tracer("surla/requests").Start(caller, name)
+			span.SetStatus(codes.Error, "the caller went away")
+			span.End()
+			count++
+		}
+	}
+	assert.Len(t, exported.GetSpans(), count)
 	history, err := cp.traces.List("owner", "all", 20, nil)
 	require.NoError(t, err)
 	assert.Empty(t, history.Spans)
+
+	builder := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "builder", Kind: CallerBuilder})
+	_, span := cp.tracer("surla/requests").Start(builder, "surla.request.list_builder_assignments")
+	span.End()
+	history, err = cp.traces.List("owner", "all", 20, nil)
+	require.NoError(t, err)
+	assert.Len(t, history.Spans, 1)
 }
 
 // TestHistoryLeavesOutOnlyTheUsersSuccessfulReads sends one call through the

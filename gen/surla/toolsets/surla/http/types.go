@@ -1288,6 +1288,48 @@ type (
 		// Exactly one of running, completed or not_completed.
 		State *State `json:"state"`
 	}
+	// WaitForBuilderAssignmentPayloadTransport is the internal JSON transport type for WaitForBuilderAssignmentPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForBuilderAssignmentPayloadTransport struct {
+		// version returned by your last wait_for_builder_assignment call. Omit it on
+		// the first call.
+		SinceVersion *string `json:"since_version,omitempty"`
+	}
+	// WaitForBuilderAssignmentResultTransport is the internal JSON transport type for WaitForBuilderAssignmentResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForBuilderAssignmentResultTransport struct {
+		// The open build's assignment while it needs this role, exactly as
+		// list_builder_assignments returns it; empty otherwise.
+		Assignments []*BuilderAssignmentTransport `json:"assignments"`
+		// Opaque value naming this list. Pass it as since_version to wait until the
+		// list differs; compare it only for equality.
+		Version *string `json:"version"`
+	}
+	// WaitForTestWriterAssignmentPayloadTransport is the internal JSON transport type for WaitForTestWriterAssignmentPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForTestWriterAssignmentPayloadTransport struct {
+		// version returned by your last wait_for_test_writer_assignment call. Omit it
+		// on the first call.
+		SinceVersion *string `json:"since_version,omitempty"`
+	}
+	// WaitForTestWriterAssignmentResultTransport is the internal JSON transport type for WaitForTestWriterAssignmentResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForTestWriterAssignmentResultTransport struct {
+		// The open build's assignment while it needs this role, exactly as
+		// list_test_writer_assignments returns it; empty otherwise.
+		Assignments []*TestWriterAssignmentItemTransport `json:"assignments"`
+		// Opaque value naming this list. Pass it as since_version to wait until the
+		// list differs; compare it only for equality.
+		Version *string `json:"version"`
+	}
 	// AgentPolicyItemTransport is the internal JSON transport type for AgentPolicyItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into

@@ -66,6 +66,7 @@ var operationRoles = map[string][]CallerKind{
 	// TestUserGETRoutesOnlyRead fails until then.
 	"list_builder_assignments": {CallerBuilder}, "get_builder_assignment": {CallerBuilder},
 	"list_test_writer_assignments": {CallerTestWriter}, "get_test_writer_assignment": {CallerTestWriter},
+	"wait_for_builder_assignment": {CallerBuilder}, "wait_for_test_writer_assignment": {CallerTestWriter},
 	"report_tests_finished": {CallerTestWriter},
 	"decline_revision":      {CallerUser},
 }
@@ -147,6 +148,8 @@ func applyOperationPolicy(e *gensurla.Endpoints, recorder trace.Tracer) {
 	e.ListBuilderAssignments = wrap("list_builder_assignments", e.ListBuilderAssignments)
 	e.GetBuilderAssignment = wrap("get_builder_assignment", e.GetBuilderAssignment)
 	e.ListTestWriterAssignments = wrap("list_test_writer_assignments", e.ListTestWriterAssignments)
+	e.WaitForBuilderAssignment = wrap("wait_for_builder_assignment", e.WaitForBuilderAssignment)
+	e.WaitForTestWriterAssignment = wrap("wait_for_test_writer_assignment", e.WaitForTestWriterAssignment)
 	e.GetTestWriterAssignment = wrap("get_test_writer_assignment", e.GetTestWriterAssignment)
 	e.ReportTestsFinished = wrap("report_tests_finished", e.ReportTestsFinished)
 	e.DeclineRevision = wrap("decline_revision", e.DeclineRevision)

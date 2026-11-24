@@ -669,9 +669,27 @@ func (a *MCPAdapter) invokeMCPMethod28(ctx context.Context) (*surla.BuilderAssig
 	return result, nil
 }
 
-// invokeMCPMethod29 sends validated input to the configured GetBuilderAssignment endpoint
+// invokeMCPMethod29 sends validated input to the configured WaitForBuilderAssignment endpoint
 // and returns its declared result. An unexpected Go type is an internal error.
-func (a *MCPAdapter) invokeMCPMethod29(ctx context.Context, payload *surla.GetBuilderAssignmentPayload) (*surla.BuilderAssignment, error) {
+func (a *MCPAdapter) invokeMCPMethod29(ctx context.Context, payload *surla.WaitForBuilderAssignmentPayload) (*surla.BuilderAssignmentWait, error) {
+	// The original endpoint middleware observes its authored service and method.
+	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+	ctx = context.WithValue(ctx, goa.MethodKey, "wait_for_builder_assignment")
+	raw, err := a.endpoints.WaitForBuilderAssignment(ctx, payload)
+	var zero *surla.BuilderAssignmentWait
+	if err != nil {
+		return zero, err
+	}
+	result, ok := raw.(*surla.BuilderAssignmentWait)
+	if !ok {
+		return zero, &endpointResultError{method: "WaitForBuilderAssignment"}
+	}
+	return result, nil
+}
+
+// invokeMCPMethod30 sends validated input to the configured GetBuilderAssignment endpoint
+// and returns its declared result. An unexpected Go type is an internal error.
+func (a *MCPAdapter) invokeMCPMethod30(ctx context.Context, payload *surla.GetBuilderAssignmentPayload) (*surla.BuilderAssignment, error) {
 	// The original endpoint middleware observes its authored service and method.
 	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 	ctx = context.WithValue(ctx, goa.MethodKey, "get_builder_assignment")
@@ -687,9 +705,9 @@ func (a *MCPAdapter) invokeMCPMethod29(ctx context.Context, payload *surla.GetBu
 	return result, nil
 }
 
-// invokeMCPMethod30 sends validated input to the configured ListTestWriterAssignments endpoint
+// invokeMCPMethod31 sends validated input to the configured ListTestWriterAssignments endpoint
 // and returns its declared result. An unexpected Go type is an internal error.
-func (a *MCPAdapter) invokeMCPMethod30(ctx context.Context) (*surla.TestWriterAssignmentList, error) {
+func (a *MCPAdapter) invokeMCPMethod31(ctx context.Context) (*surla.TestWriterAssignmentList, error) {
 	// The original endpoint middleware observes its authored service and method.
 	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 	ctx = context.WithValue(ctx, goa.MethodKey, "list_test_writer_assignments")
@@ -705,9 +723,27 @@ func (a *MCPAdapter) invokeMCPMethod30(ctx context.Context) (*surla.TestWriterAs
 	return result, nil
 }
 
-// invokeMCPMethod31 sends validated input to the configured GetTestWriterAssignment endpoint
+// invokeMCPMethod32 sends validated input to the configured WaitForTestWriterAssignment endpoint
 // and returns its declared result. An unexpected Go type is an internal error.
-func (a *MCPAdapter) invokeMCPMethod31(ctx context.Context, payload *surla.GetTestWriterAssignmentPayload) (*surla.TestWriterAssignment, error) {
+func (a *MCPAdapter) invokeMCPMethod32(ctx context.Context, payload *surla.WaitForTestWriterAssignmentPayload) (*surla.TestWriterAssignmentWait, error) {
+	// The original endpoint middleware observes its authored service and method.
+	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
+	ctx = context.WithValue(ctx, goa.MethodKey, "wait_for_test_writer_assignment")
+	raw, err := a.endpoints.WaitForTestWriterAssignment(ctx, payload)
+	var zero *surla.TestWriterAssignmentWait
+	if err != nil {
+		return zero, err
+	}
+	result, ok := raw.(*surla.TestWriterAssignmentWait)
+	if !ok {
+		return zero, &endpointResultError{method: "WaitForTestWriterAssignment"}
+	}
+	return result, nil
+}
+
+// invokeMCPMethod33 sends validated input to the configured GetTestWriterAssignment endpoint
+// and returns its declared result. An unexpected Go type is an internal error.
+func (a *MCPAdapter) invokeMCPMethod33(ctx context.Context, payload *surla.GetTestWriterAssignmentPayload) (*surla.TestWriterAssignment, error) {
 	// The original endpoint middleware observes its authored service and method.
 	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 	ctx = context.WithValue(ctx, goa.MethodKey, "get_test_writer_assignment")
@@ -723,9 +759,9 @@ func (a *MCPAdapter) invokeMCPMethod31(ctx context.Context, payload *surla.GetTe
 	return result, nil
 }
 
-// invokeMCPMethod32 sends validated input to the configured ReportTestsFinished endpoint
+// invokeMCPMethod34 sends validated input to the configured ReportTestsFinished endpoint
 // and returns its declared result. An unexpected Go type is an internal error.
-func (a *MCPAdapter) invokeMCPMethod32(ctx context.Context, payload *surla.ReportTestsFinishedPayload) (*surla.TestWriterAssignmentItem, error) {
+func (a *MCPAdapter) invokeMCPMethod34(ctx context.Context, payload *surla.ReportTestsFinishedPayload) (*surla.TestWriterAssignmentItem, error) {
 	// The original endpoint middleware observes its authored service and method.
 	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 	ctx = context.WithValue(ctx, goa.MethodKey, "report_tests_finished")
@@ -741,9 +777,9 @@ func (a *MCPAdapter) invokeMCPMethod32(ctx context.Context, payload *surla.Repor
 	return result, nil
 }
 
-// invokeMCPMethod33 sends validated input to the configured ReviewVerification endpoint
+// invokeMCPMethod35 sends validated input to the configured ReviewVerification endpoint
 // and returns its declared result. An unexpected Go type is an internal error.
-func (a *MCPAdapter) invokeMCPMethod33(ctx context.Context, payload *surla.GetVerificationPayload) (*surla.VerificationReviewResult, error) {
+func (a *MCPAdapter) invokeMCPMethod35(ctx context.Context, payload *surla.GetVerificationPayload) (*surla.VerificationReviewResult, error) {
 	// The original endpoint middleware observes its authored service and method.
 	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 	ctx = context.WithValue(ctx, goa.MethodKey, "review_verification")
@@ -759,9 +795,9 @@ func (a *MCPAdapter) invokeMCPMethod33(ctx context.Context, payload *surla.GetVe
 	return result, nil
 }
 
-// invokeMCPMethod34 sends validated input to the configured GoldenPath endpoint
+// invokeMCPMethod36 sends validated input to the configured GoldenPath endpoint
 // and returns its declared result. An unexpected Go type is an internal error.
-func (a *MCPAdapter) invokeMCPMethod34(ctx context.Context) (string, error) {
+func (a *MCPAdapter) invokeMCPMethod36(ctx context.Context) (string, error) {
 	// The original endpoint middleware observes its authored service and method.
 	ctx = context.WithValue(ctx, goa.ServiceKey, "surla")
 	ctx = context.WithValue(ctx, goa.MethodKey, "golden_path")
@@ -1003,6 +1039,18 @@ func (a *MCPAdapter) ToolsList(ctx context.Context, p *ToolsListPayload) (*Tools
 			Description:  stringPtr("Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Surla must also have accepted the build's tests (your assignment says when). A refusal states what Surla found and the goal: put your work right with git and verify again."),
 			InputSchema:  json.RawMessage("{\"$defs\":{\"VerifyChangePayload\":{\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"title\":\"VerifyChangePayload\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.\",\"properties\":{\"candidate_commit\":{\"description\":\"Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"change_id\":{\"description\":\"Confirmed Change Card identifier.\",\"type\":\"string\"},\"request_revision\":{\"description\":\"Current request_revision of the confirmed Change Card.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"candidate_commit\"],\"title\":\"VerifyChangePayload\",\"type\":\"object\"}"),
 			OutputSchema: json.RawMessage("{\"$defs\":{\"BuilderVerificationReport\":{\"additionalProperties\":false,\"description\":\"The builder view of a Checkpoint 4 verification report: counts, verdict and repair scenario checks. Holdout details, evidence and logs stay with the evaluator.\",\"properties\":{\"counts\":{\"$ref\":\"#/$defs/VerificationCounts\",\"description\":\"Every declared scenario, counted by outcome.\"},\"passed\":{\"description\":\"The verdict: true only when every declared scenario passed and the suite ran cleanly.\",\"type\":\"boolean\"},\"report_digest\":{\"description\":\"SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest.\",\"type\":\"string\"},\"scenarios\":{\"description\":\"Every declared scenario in declaration order.\",\"items\":{\"$ref\":\"#/$defs/VerificationScenario\"},\"type\":\"array\"},\"suite_failed\":{\"description\":\"Whether the evaluator suite itself failed or ended abnormally.\",\"type\":\"boolean\"}},\"required\":[\"report_digest\",\"counts\",\"passed\",\"suite_failed\",\"scenarios\"],\"title\":\"BuilderVerificationReport\",\"type\":\"object\"},\"VerificationCheck\":{\"additionalProperties\":false,\"description\":\"One deterministic check of a repair scenario.\",\"properties\":{\"diagnostic\":{\"description\":\"Why the check failed; empty when it passed.\",\"type\":\"string\"},\"name\":{\"description\":\"Check name.\",\"type\":\"string\"},\"passed\":{\"description\":\"Whether the check passed.\",\"type\":\"boolean\"}},\"required\":[\"name\",\"passed\"],\"title\":\"VerificationCheck\",\"type\":\"object\"},\"VerificationCompleted\":{\"additionalProperties\":false,\"description\":\"The run produced a verification report. Its verdict is report.passed.\",\"properties\":{\"environment\":{\"description\":\"Dependency profile the suite ran the candidate with, such as sim.\",\"type\":\"string\"},\"report\":{\"$ref\":\"#/$defs/BuilderVerificationReport\",\"description\":\"The builder view of the report.\"},\"suite_id\":{\"description\":\"Evaluator suite the report was produced by.\",\"type\":\"string\"}},\"required\":[\"suite_id\",\"environment\",\"report\"],\"title\":\"VerificationCompleted\",\"type\":\"object\"},\"VerificationCounts\":{\"additionalProperties\":false,\"description\":\"Every declared scenario, counted by outcome.\",\"properties\":{\"failed\":{\"description\":\"Scenarios whose checks failed.\",\"format\":\"int64\",\"type\":\"integer\"},\"harness_error\":{\"description\":\"Scenarios that could not be evaluated.\",\"format\":\"int64\",\"type\":\"integer\"},\"not_run\":{\"description\":\"Declared scenarios the suite did not report.\",\"format\":\"int64\",\"type\":\"integer\"},\"passed\":{\"description\":\"Scenarios that passed.\",\"format\":\"int64\",\"type\":\"integer\"},\"required\":{\"description\":\"Scenarios the suite declares.\",\"format\":\"int64\",\"type\":\"integer\"}},\"required\":[\"required\",\"passed\",\"failed\",\"not_run\",\"harness_error\"],\"title\":\"VerificationCounts\",\"type\":\"object\"},\"VerificationNotCompleted\":{\"additionalProperties\":false,\"description\":\"The run was accepted but did not complete: a step failed, or its processes ended or were canceled or timed out before it finished. The summary states where it stopped, without command output; full evidence, including any partial report saved while it was being stopped, stays with the evaluator.\",\"properties\":{\"kind\":{\"description\":\"execution_failed when a step failed; interrupted when the run's process ended before it finished.\",\"enum\":[\"execution_failed\",\"interrupted\"],\"type\":\"string\"},\"stage\":{\"description\":\"Where the run stopped.\",\"enum\":[\"checkout\",\"build\",\"describe\",\"suite\",\"report\",\"supervise\"],\"type\":\"string\"},\"summary\":{\"description\":\"Builder-safe description of what stopped the run; never command output.\",\"type\":\"string\"}},\"required\":[\"kind\",\"stage\",\"summary\"],\"title\":\"VerificationNotCompleted\",\"type\":\"object\"},\"VerificationRunning\":{\"additionalProperties\":false,\"description\":\"The run is still building or evaluating the candidate.\",\"properties\":{\"started_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"}},\"required\":[\"started_at\"],\"title\":\"VerificationRunning\",\"type\":\"object\"},\"VerificationScenario\":{\"additionalProperties\":false,\"description\":\"One declared scenario as builders see it. Repair scenarios carry their name, checks and environment error; holdout scenarios appear only as holdout-\\u003cn\\u003e with their outcome.\",\"properties\":{\"checks\":{\"description\":\"The repair scenario's checks; empty for holdouts.\",\"items\":{\"$ref\":\"#/$defs/VerificationCheck\"},\"type\":\"array\"},\"error\":{\"description\":\"The repair scenario's environment error; empty for holdouts.\",\"type\":\"string\"},\"id\":{\"description\":\"Scenario name for a repair scenario, or holdout-\\u003cn\\u003e for a holdout.\",\"type\":\"string\"},\"outcome\":{\"description\":\"How the scenario ended.\",\"enum\":[\"passed\",\"failed\",\"not_run\",\"harness_error\"],\"type\":\"string\"}},\"required\":[\"id\",\"outcome\"],\"title\":\"VerificationScenario\",\"type\":\"object\"},\"VerificationStatusResult\":{\"description\":\"One Checkpoint 4 verification run of a candidate commit for a confirmed Change Card revision, and its current state. The run keeps the revision it was started for, so a later confirm_intent does not change it.\",\"properties\":{\"accepted_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"},\"candidate_binaries_dir\":{\"description\":\"Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.\",\"minLength\":1,\"type\":\"string\"},\"candidate_commit\":{\"description\":\"Candidate commit the run builds and verifies.\",\"type\":\"string\"},\"change_id\":{\"description\":\"Change Card the run verifies.\",\"type\":\"string\"},\"inputs_current\":{\"description\":\"Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the run verifies.\",\"type\":\"string\"},\"run_id\":{\"description\":\"Verification run identifier; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"description\":\"Exactly one of running, completed or not_completed.\",\"oneOf\":[{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"running\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationRunning\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"not_completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationNotCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"}],\"type\":\"object\"},\"suite_commit\":{\"description\":\"Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.\",\"type\":\"string\"},\"test_source\":{\"description\":\"Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.\",\"properties\":{\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at; the same as suite_commit.\",\"type\":\"string\"},\"notice\":{\"description\":\"Always: These tests were written by a separate agent on this machine and are not isolated from the builder.\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"notice\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"change_id\",\"request_revision\",\"candidate_commit\",\"suite_commit\",\"accepted_at\",\"inputs_current\",\"test_source\",\"state\"],\"title\":\"VerificationStatusResult\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"One Checkpoint 4 verification run of a candidate commit for a confirmed Change Card revision, and its current state. The run keeps the revision it was started for, so a later confirm_intent does not change it.\",\"properties\":{\"accepted_at\":{\"description\":\"When the run was accepted.\",\"format\":\"date-time\",\"type\":\"string\"},\"candidate_binaries_dir\":{\"description\":\"Absolute folder containing the binaries built by this completed run. Returned only to the user when promotion settings are configured, so the user can publish these exact binaries before approval. Agents never receive this private path.\",\"minLength\":1,\"type\":\"string\"},\"candidate_commit\":{\"description\":\"Candidate commit the run builds and verifies.\",\"type\":\"string\"},\"change_id\":{\"description\":\"Change Card the run verifies.\",\"type\":\"string\"},\"inputs_current\":{\"description\":\"Whether this run's agreed revision and selected tests match the current Change Card and the usable build or the stored verification settings. This observation does not establish the current candidate working tree, deployment or approval.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision the run verifies.\",\"type\":\"string\"},\"run_id\":{\"description\":\"Verification run identifier; get_verification takes it.\",\"type\":\"string\"},\"state\":{\"description\":\"Exactly one of running, completed or not_completed.\",\"oneOf\":[{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"running\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationRunning\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"},{\"additionalProperties\":false,\"properties\":{\"type\":{\"enum\":[\"not_completed\"],\"type\":\"string\"},\"value\":{\"$ref\":\"#/$defs/VerificationNotCompleted\"}},\"required\":[\"type\",\"value\"],\"type\":\"object\"}],\"type\":\"object\"},\"suite_commit\":{\"description\":\"Commit of the tests the run uses: the operator's evaluator, or the tests accepted for the change's build.\",\"type\":\"string\"},\"test_source\":{\"description\":\"Where the run's tests came from, recorded when the run started: evaluator, or written_tests with their commit and a notice.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.\",\"properties\":{\"source\":{\"enum\":[\"evaluator\"],\"type\":\"string\"}},\"required\":[\"source\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.\",\"properties\":{\"commit\":{\"description\":\"Commit Surla recorded the accepted tests at; the same as suite_commit.\",\"type\":\"string\"},\"notice\":{\"description\":\"Always: These tests were written by a separate agent on this machine and are not isolated from the builder.\",\"type\":\"string\"},\"source\":{\"enum\":[\"written_tests\"],\"type\":\"string\"}},\"required\":[\"commit\",\"notice\",\"source\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"run_id\",\"change_id\",\"request_revision\",\"candidate_commit\",\"suite_commit\",\"accepted_at\",\"inputs_current\",\"test_source\",\"state\"],\"title\":\"VerificationStatusResult\",\"type\":\"object\"}"),
+		},
+		{
+			Name:         "wait_for_builder_assignment",
+			Description:  stringPtr("Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus."),
+			InputSchema:  json.RawMessage("{\"$defs\":{\"WaitForBuilderAssignmentPayload\":{\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"title\":\"WaitForBuilderAssignmentPayload\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_builder_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"title\":\"WaitForBuilderAssignmentPayload\",\"type\":\"object\"}"),
+			OutputSchema: json.RawMessage("{\"$defs\":{\"BuilderAssignment\":{\"additionalProperties\":false,\"description\":\"The builder's assignment for the project's open build: build this change at this revision in working_folder, your own working copy of the project on the build's own branch, where generate_code, check_project and update_dependencies act and where verify_change looks for the candidate.\",\"properties\":{\"change_id\":{\"description\":\"Change Card to build; get_change takes it.\",\"type\":\"string\"},\"gowork_off\":{\"description\":\"True when no go.work lies in working_folder or in a folder between it and the working copy's root: run every go command there as GOWORK=off go …, so a go.work of the project folder around your copy does not take it over.\",\"type\":\"boolean\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; verify_change refuses this earlier revision, and the assignment stays as it is until the user builds again.\",\"type\":\"boolean\"},\"read\":{\"description\":\"True once you read this assignment in full with get_builder_assignment.\",\"type\":\"boolean\"},\"request_revision\":{\"description\":\"Change Card revision to build; verify_change takes it.\",\"type\":\"string\"},\"working_folder\":{\"description\":\"Absolute path of the folder to build in: the project's folder inside your working copy .surla-build, on the build's branch surla/build-\\u003cn\\u003e. Run git and go there, never in the project folder.\",\"type\":\"string\"},\"written_tests\":{\"description\":\"Where the test writer's tests for this build stand: not_used when no test writer is used because the project has stored verification settings; otherwise accepted, with the commit and time, when the build records accepted tests, and not_yet_accepted when it records none.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The build records no accepted tests.\",\"properties\":{\"state\":{\"enum\":[\"not_yet_accepted\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"read\",\"written_tests\",\"working_folder\",\"gowork_off\"],\"title\":\"BuilderAssignment\",\"type\":\"object\"},\"BuilderAssignmentWait\":{\"description\":\"The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/BuilderAssignment\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"title\":\"BuilderAssignmentWait\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/BuilderAssignment\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"title\":\"BuilderAssignmentWait\",\"type\":\"object\"}"),
+		},
+		{
+			Name:         "wait_for_test_writer_assignment",
+			Description:  stringPtr("Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla's check of your report reaches a verdict (the tests' state in progress becomes accepted, needs_changes or could_not_run) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it after report_tests_finished while you wait for the verdict. It needs no Chorus."),
+			InputSchema:  json.RawMessage("{\"$defs\":{\"WaitForTestWriterAssignmentPayload\":{\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"title\":\"WaitForTestWriterAssignmentPayload\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"properties\":{\"since_version\":{\"description\":\"version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.\",\"maxLength\":128,\"type\":\"string\"}},\"title\":\"WaitForTestWriterAssignmentPayload\",\"type\":\"object\"}"),
+			OutputSchema: json.RawMessage("{\"$defs\":{\"TestWriterAssignmentItem\":{\"additionalProperties\":false,\"description\":\"One of the test writer's assignments as list_test_writer_assignments reports it.\",\"properties\":{\"change_id\":{\"description\":\"Change Card the tests are for; get_test_writer_assignment takes it.\",\"type\":\"string\"},\"in_force\":{\"description\":\"True when request_revision is the change's agreed revision, the one in force, as get_build reports it. It stays true while a proposed revision waits and when a refreshed draft is adopted without changing request_revision. If adoption or confirmation changes the agreed request_revision, it becomes false; the assignment stays on the earlier revision until the user builds again.\",\"type\":\"boolean\"},\"progress\":{\"$ref\":\"#/$defs/TestWriterProgress\",\"description\":\"Where this assignment stands.\"},\"request_revision\":{\"description\":\"Change Card revision the tests are for.\",\"type\":\"string\"}},\"required\":[\"change_id\",\"request_revision\",\"in_force\",\"progress\"],\"title\":\"TestWriterAssignmentItem\",\"type\":\"object\"},\"TestWriterAssignmentWait\":{\"description\":\"The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/TestWriterAssignmentItem\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"title\":\"TestWriterAssignmentWait\",\"type\":\"object\"},\"TestWriterProgress\":{\"additionalProperties\":false,\"description\":\"Where the test writer's assignment for one build stands.\",\"properties\":{\"read\":{\"description\":\"True once the test writer read this assignment in full with get_test_writer_assignment.\",\"type\":\"boolean\"},\"report\":{\"description\":\"Number of the test writer's latest report of this build: 0 until its first report, and one more with each report_tests_finished.\",\"format\":\"int64\",\"minimum\":0,\"type\":\"integer\"},\"tests\":{\"description\":\"The tests' state: not_used when the project has stored verification settings; otherwise assigned, reported, needs_changes with the number of Surla's findings, accepted with the commit Surla recorded, or could_not_run with the reason and the user's step. Each verdict carries the time Surla reached it.\",\"oneOf\":[{\"additionalProperties\":false,\"description\":\"No test writer is used: the project verifies with the evaluator stored with surla verification set. Every read of a build in such a project shows this, whatever the build recorded.\",\"properties\":{\"state\":{\"enum\":[\"not_used\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla assigned the tests for this build; the test writer has not reported them finished.\",\"properties\":{\"state\":{\"enum\":[\"assigned\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"The test writer reported its tests finished at this build's revision. Surla checks them right after each report; its verdict replaces this state.\",\"properties\":{\"state\":{\"enum\":[\"reported\"],\"type\":\"string\"}},\"required\":[\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and found problems the test writer must fix before reporting again, including a working copy that is off its build's branch or holds another build's work. Their text is in get_test_writer_assignment and, for the user, in get_test_findings.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"finding_count\":{\"description\":\"Number of problems Surla found.\",\"format\":\"int64\",\"minimum\":1,\"type\":\"integer\"},\"state\":{\"enum\":[\"needs_changes\"],\"type\":\"string\"}},\"required\":[\"finding_count\",\"checked_at\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla checked the reported tests and recorded them as a commit.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check reached this verdict.\",\"format\":\"date-time\",\"type\":\"string\"},\"commit\":{\"description\":\"Full commit ID Surla recorded the accepted tests at (40 or 64 lowercase hex characters).\",\"pattern\":\"^([0-9a-f]{40}|[0-9a-f]{64})$\",\"type\":\"string\"},\"not_judged\":{\"description\":\"What Surla's check did not judge, always the same sentence.\",\"enum\":[\"Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.\"],\"type\":\"string\"},\"state\":{\"enum\":[\"accepted\"],\"type\":\"string\"}},\"required\":[\"commit\",\"checked_at\",\"not_judged\",\"state\"],\"type\":\"object\"},{\"additionalProperties\":false,\"description\":\"Surla's check of the reported tests could not run, for a cause the test writer cannot fix; the user's step makes it possible.\",\"properties\":{\"checked_at\":{\"description\":\"When Surla's check stopped.\",\"format\":\"date-time\",\"type\":\"string\"},\"reason\":{\"description\":\"Why the check could not run.\",\"maxLength\":1024,\"minLength\":1,\"type\":\"string\"},\"state\":{\"enum\":[\"could_not_run\"],\"type\":\"string\"},\"step\":{\"description\":\"What the user does so the check can run.\",\"maxLength\":512,\"minLength\":1,\"type\":\"string\"}},\"required\":[\"reason\",\"step\",\"checked_at\",\"state\"],\"type\":\"object\"}],\"type\":\"object\"}},\"required\":[\"tests\",\"read\",\"report\"],\"title\":\"TestWriterProgress\",\"type\":\"object\"}},\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"additionalProperties\":false,\"description\":\"The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.\",\"properties\":{\"assignments\":{\"description\":\"The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.\",\"items\":{\"$ref\":\"#/$defs/TestWriterAssignmentItem\"},\"type\":\"array\"},\"version\":{\"description\":\"Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.\",\"type\":\"string\"}},\"required\":[\"assignments\",\"version\"],\"title\":\"TestWriterAssignmentWait\",\"type\":\"object\"}"),
 		},
 	}
 	return &ToolsListResult{
@@ -1302,7 +1350,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (*Tools
 		if err != nil {
 			return toolCallError("invalid arguments: " + err.Error()), nil
 		}
-		result, err := a.invokeMCPMethod29(ctx, payload)
+		result, err := a.invokeMCPMethod30(ctx, payload)
 		if err != nil {
 			failure := a.mapError(err, isEndpointFault(err))
 			span.RecordError(failure.err)
@@ -1412,7 +1460,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (*Tools
 		if err != nil {
 			return toolCallError("invalid arguments: " + err.Error()), nil
 		}
-		result, err := a.invokeMCPMethod31(ctx, payload)
+		result, err := a.invokeMCPMethod33(ctx, payload)
 		if err != nil {
 			failure := a.mapError(err, isEndpointFault(err))
 			span.RecordError(failure.err)
@@ -1547,7 +1595,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (*Tools
 		if err := validateNoArguments(p.Arguments); err != nil {
 			return toolCallError("invalid arguments: " + err.Error()), nil
 		}
-		result, err := a.invokeMCPMethod30(ctx)
+		result, err := a.invokeMCPMethod31(ctx)
 		if err != nil {
 			failure := a.mapError(err, isEndpointFault(err))
 			span.RecordError(failure.err)
@@ -1777,7 +1825,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (*Tools
 		if err != nil {
 			return toolCallError("invalid arguments: " + err.Error()), nil
 		}
-		result, err := a.invokeMCPMethod32(ctx, payload)
+		result, err := a.invokeMCPMethod34(ctx, payload)
 		if err != nil {
 			failure := a.mapError(err, isEndpointFault(err))
 			span.RecordError(failure.err)
@@ -1807,7 +1855,7 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (*Tools
 		if err != nil {
 			return toolCallError("invalid arguments: " + err.Error()), nil
 		}
-		result, err := a.invokeMCPMethod33(ctx, payload)
+		result, err := a.invokeMCPMethod35(ctx, payload)
 		if err != nil {
 			failure := a.mapError(err, isEndpointFault(err))
 			span.RecordError(failure.err)
@@ -1993,6 +2041,66 @@ func (a *MCPAdapter) ToolsCall(ctx context.Context, p *ToolsCallPayload) (*Tools
 			Content:           []*ContentItem{},
 			StructuredContent: json.RawMessage(encoded),
 		})}, nil
+	case "wait_for_builder_assignment":
+		arguments := p.Arguments
+		if len(arguments) == 0 {
+			arguments = json.RawMessage("{}")
+		}
+		payload, err := mcpcodec.DecodeWaitForBuilderAssignmentPayload(arguments)
+		if err != nil {
+			return toolCallError("invalid arguments: " + err.Error()), nil
+		}
+		result, err := a.invokeMCPMethod29(ctx, payload)
+		if err != nil {
+			failure := a.mapError(err, isEndpointFault(err))
+			span.RecordError(failure.err)
+			span.SetStatus(codes.Error, failure.err.Error())
+			if failure.internal {
+				return nil, failure.err
+			}
+			return toolCallError(failure.err.Error()), nil
+		}
+		encoded, err := mcpcodec.EncodeWaitForBuilderAssignmentResult(result)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, goa.PermanentError("internal_error", "%s", err.Error())
+		}
+		return &ToolsCallResult{Outcome: NewToolsCallOutcomeComplete(&ToolsCallCompleteResult{
+			Meta:              resultMeta(),
+			Content:           []*ContentItem{},
+			StructuredContent: json.RawMessage(encoded),
+		})}, nil
+	case "wait_for_test_writer_assignment":
+		arguments := p.Arguments
+		if len(arguments) == 0 {
+			arguments = json.RawMessage("{}")
+		}
+		payload, err := mcpcodec.DecodeWaitForTestWriterAssignmentPayload(arguments)
+		if err != nil {
+			return toolCallError("invalid arguments: " + err.Error()), nil
+		}
+		result, err := a.invokeMCPMethod32(ctx, payload)
+		if err != nil {
+			failure := a.mapError(err, isEndpointFault(err))
+			span.RecordError(failure.err)
+			span.SetStatus(codes.Error, failure.err.Error())
+			if failure.internal {
+				return nil, failure.err
+			}
+			return toolCallError(failure.err.Error()), nil
+		}
+		encoded, err := mcpcodec.EncodeWaitForTestWriterAssignmentResult(result)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, goa.PermanentError("internal_error", "%s", err.Error())
+		}
+		return &ToolsCallResult{Outcome: NewToolsCallOutcomeComplete(&ToolsCallCompleteResult{
+			Meta:              resultMeta(),
+			Content:           []*ContentItem{},
+			StructuredContent: json.RawMessage(encoded),
+		})}, nil
 	default:
 		return nil, goa.PermanentError("invalid_params", "unknown tool: %s", p.Name)
 	}
@@ -2024,7 +2132,7 @@ func (a *MCPAdapter) ResourcesRead(ctx context.Context, p *ResourcesReadPayload)
 
 	switch p.URI {
 	case "surla://golden-path":
-		result, err := a.invokeMCPMethod34(ctx)
+		result, err := a.invokeMCPMethod36(ctx)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())

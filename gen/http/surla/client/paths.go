@@ -219,6 +219,11 @@ func ListBuilderAssignmentsSurlaPath() string {
 	return "/assignments/builder"
 }
 
+// WaitForBuilderAssignmentSurlaPath returns the URL path to the surla service wait_for_builder_assignment HTTP endpoint.
+func WaitForBuilderAssignmentSurlaPath() string {
+	return "/assignment-updates/builder"
+}
+
 // GetBuilderAssignmentSurlaPath returns the URL path to the surla service get_builder_assignment HTTP endpoint.
 func GetBuilderAssignmentSurlaPath(changeID string) string {
 	return fmt.Sprintf("/assignments/builder/%v", changeID)
@@ -227,6 +232,11 @@ func GetBuilderAssignmentSurlaPath(changeID string) string {
 // ListTestWriterAssignmentsSurlaPath returns the URL path to the surla service list_test_writer_assignments HTTP endpoint.
 func ListTestWriterAssignmentsSurlaPath() string {
 	return "/assignments/test-writer"
+}
+
+// WaitForTestWriterAssignmentSurlaPath returns the URL path to the surla service wait_for_test_writer_assignment HTTP endpoint.
+func WaitForTestWriterAssignmentSurlaPath() string {
+	return "/assignment-updates/test-writer"
 }
 
 // GetTestWriterAssignmentSurlaPath returns the URL path to the surla service get_test_writer_assignment HTTP endpoint.

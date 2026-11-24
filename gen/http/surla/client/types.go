@@ -1159,6 +1159,17 @@ type ListBuilderAssignmentsResponseBody struct {
 	Assignments []*BuilderAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
 }
 
+// WaitForBuilderAssignmentResponseBody is the type of the "surla" service
+// "wait_for_builder_assignment" endpoint HTTP response body.
+type WaitForBuilderAssignmentResponseBody struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*BuilderAssignmentResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
 // GetBuilderAssignmentResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body.
 type GetBuilderAssignmentResponseBody struct {
@@ -1195,6 +1206,17 @@ type GetBuilderAssignmentResponseBody struct {
 type ListTestWriterAssignmentsResponseBody struct {
 	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
+}
+
+// WaitForTestWriterAssignmentResponseBody is the type of the "surla" service
+// "wait_for_test_writer_assignment" endpoint HTTP response body.
+type WaitForTestWriterAssignmentResponseBody struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments,omitempty" json:"assignments,omitempty" xml:"assignments,omitempty"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // GetTestWriterAssignmentResponseBody is the type of the "surla" service
@@ -4394,6 +4416,25 @@ type ListBuilderAssignmentsForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// WaitForBuilderAssignmentForbiddenResponseBody is the type of the "surla"
+// service "wait_for_builder_assignment" endpoint HTTP response body for the
+// "forbidden" error.
+type WaitForBuilderAssignmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // GetBuilderAssignmentNoBuildResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body for the "no_build"
 // error.
@@ -4519,6 +4560,25 @@ type GetBuilderAssignmentForbiddenResponseBody struct {
 // service "list_test_writer_assignments" endpoint HTTP response body for the
 // "forbidden" error.
 type ListTestWriterAssignmentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// WaitForTestWriterAssignmentForbiddenResponseBody is the type of the "surla"
+// service "wait_for_test_writer_assignment" endpoint HTTP response body for
+// the "forbidden" error.
+type WaitForTestWriterAssignmentForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -13478,6 +13538,39 @@ func NewListBuilderAssignmentsForbidden(body *ListBuilderAssignmentsForbiddenRes
 	return v
 }
 
+// NewWaitForBuilderAssignmentBuilderAssignmentWaitOK builds a "surla" service
+// "wait_for_builder_assignment" endpoint result from a HTTP "OK" response.
+func NewWaitForBuilderAssignmentBuilderAssignmentWaitOK(body *WaitForBuilderAssignmentResponseBody) *surla.BuilderAssignmentWait {
+	v := &surla.BuilderAssignmentWait{
+		Version: *body.Version,
+	}
+	v.Assignments = make([]*surla.BuilderAssignment, len(body.Assignments))
+	for i, val := range body.Assignments {
+		if val == nil {
+			v.Assignments[i] = nil
+			continue
+		}
+		v.Assignments[i] = unmarshalBuilderAssignmentResponseBodyToSurlaBuilderAssignment(val)
+	}
+
+	return v
+}
+
+// NewWaitForBuilderAssignmentForbidden builds a surla service
+// wait_for_builder_assignment endpoint forbidden error.
+func NewWaitForBuilderAssignmentForbidden(body *WaitForBuilderAssignmentForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewGetBuilderAssignmentBuilderAssignmentOK builds a "surla" service
 // "get_builder_assignment" endpoint result from a HTTP "OK" response.
 func NewGetBuilderAssignmentBuilderAssignmentOK(body *GetBuilderAssignmentResponseBody) *surla.BuilderAssignment {
@@ -13636,6 +13729,40 @@ func NewListTestWriterAssignmentsTestWriterAssignmentListOK(body *ListTestWriter
 // NewListTestWriterAssignmentsForbidden builds a surla service
 // list_test_writer_assignments endpoint forbidden error.
 func NewListTestWriterAssignmentsForbidden(body *ListTestWriterAssignmentsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewWaitForTestWriterAssignmentTestWriterAssignmentWaitOK builds a "surla"
+// service "wait_for_test_writer_assignment" endpoint result from a HTTP "OK"
+// response.
+func NewWaitForTestWriterAssignmentTestWriterAssignmentWaitOK(body *WaitForTestWriterAssignmentResponseBody) *surla.TestWriterAssignmentWait {
+	v := &surla.TestWriterAssignmentWait{
+		Version: *body.Version,
+	}
+	v.Assignments = make([]*surla.TestWriterAssignmentItem, len(body.Assignments))
+	for i, val := range body.Assignments {
+		if val == nil {
+			v.Assignments[i] = nil
+			continue
+		}
+		v.Assignments[i] = unmarshalTestWriterAssignmentItemResponseBodyToSurlaTestWriterAssignmentItem(val)
+	}
+
+	return v
+}
+
+// NewWaitForTestWriterAssignmentForbidden builds a surla service
+// wait_for_test_writer_assignment endpoint forbidden error.
+func NewWaitForTestWriterAssignmentForbidden(body *WaitForTestWriterAssignmentForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -15503,6 +15630,25 @@ func ValidateListBuilderAssignmentsResponseBody(body *ListBuilderAssignmentsResp
 	return
 }
 
+// ValidateWaitForBuilderAssignmentResponseBody runs the validations defined on
+// WaitForBuilderAssignmentResponseBody
+func ValidateWaitForBuilderAssignmentResponseBody(body *WaitForBuilderAssignmentResponseBody) (err error) {
+	if body.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.Assignments {
+		if e != nil {
+			if err2 := validateBuilderAssignmentResponseBody(e, "body.assignments[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateGetBuilderAssignmentResponseBody runs the validations defined on
 // GetBuilderAssignmentResponseBody
 func ValidateGetBuilderAssignmentResponseBody(body *GetBuilderAssignmentResponseBody) (err error) {
@@ -15552,6 +15698,25 @@ func ValidateGetBuilderAssignmentResponseBody(body *GetBuilderAssignmentResponse
 func ValidateListTestWriterAssignmentsResponseBody(body *ListTestWriterAssignmentsResponseBody) (err error) {
 	if body.Assignments == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	for _, e := range body.Assignments {
+		if e != nil {
+			if err2 := validateTestWriterAssignmentItemResponseBody(e, "body.assignments[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWaitForTestWriterAssignmentResponseBody runs the validations defined
+// on WaitForTestWriterAssignmentResponseBody
+func ValidateWaitForTestWriterAssignmentResponseBody(body *WaitForTestWriterAssignmentResponseBody) (err error) {
+	if body.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
 	for _, e := range body.Assignments {
 		if e != nil {
@@ -19840,6 +20005,30 @@ func ValidateListBuilderAssignmentsForbiddenResponseBody(body *ListBuilderAssign
 	return
 }
 
+// ValidateWaitForBuilderAssignmentForbiddenResponseBody runs the validations
+// defined on WaitForBuilderAssignmentForbiddenResponseBody
+func ValidateWaitForBuilderAssignmentForbiddenResponseBody(body *WaitForBuilderAssignmentForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateGetBuilderAssignmentNoBuildResponseBody runs the validations defined
 // on GetBuilderAssignmentNoBuildResponseBody
 func ValidateGetBuilderAssignmentNoBuildResponseBody(body *GetBuilderAssignmentNoBuildResponseBody) (err error) {
@@ -19997,6 +20186,30 @@ func ValidateGetBuilderAssignmentForbiddenResponseBody(body *GetBuilderAssignmen
 // ValidateListTestWriterAssignmentsForbiddenResponseBody runs the validations
 // defined on ListTestWriterAssignmentsForbiddenResponseBody
 func ValidateListTestWriterAssignmentsForbiddenResponseBody(body *ListTestWriterAssignmentsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateWaitForTestWriterAssignmentForbiddenResponseBody runs the
+// validations defined on WaitForTestWriterAssignmentForbiddenResponseBody
+func ValidateWaitForTestWriterAssignmentForbiddenResponseBody(body *WaitForTestWriterAssignmentForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

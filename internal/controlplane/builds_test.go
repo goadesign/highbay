@@ -630,6 +630,8 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 		{name: "list_builder_assignments", method: http.MethodGet, path: "/assignments/builder", arguments: `{}`, callers: []string{"builder"}},
 		{name: "get_builder_assignment", method: http.MethodGet, path: "/assignments/builder/chg", arguments: `{"change_id":"chg"}`, callers: []string{"builder"}},
 		{name: "list_test_writer_assignments", method: http.MethodGet, path: "/assignments/test-writer", arguments: `{}`, callers: []string{"tests"}},
+		{name: "wait_for_builder_assignment", method: http.MethodGet, path: "/assignment-updates/builder", arguments: `{}`, callers: []string{"builder"}},
+		{name: "wait_for_test_writer_assignment", method: http.MethodGet, path: "/assignment-updates/test-writer", arguments: `{}`, callers: []string{"tests"}},
 		{name: "get_test_writer_assignment", method: http.MethodGet, path: "/assignments/test-writer/chg", arguments: `{"change_id":"chg"}`, callers: []string{"tests"}},
 		{name: "report_tests_finished", method: http.MethodPost, path: "/assignments/test-writer/chg/finished", body: fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, card.RequestRevision),
 			arguments: `{"change_id":"chg","request_revision":"` + card.RequestRevision + `","coverage_statements":[]}`, callers: []string{"tests"}},

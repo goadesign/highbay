@@ -295,7 +295,10 @@ func resolveTargetRole(target project.WorkerTrustTarget) string {
 
 // requiredSurlaTools returns the minimal Surla MCP operations that role
 // necessarily invokes to execute its assigned startup and workflow. Optional
-// operations such as start_live_target do not block ordinary worker admission.
+// operations such as start_live_target do not block ordinary worker admission,
+// and neither do the waiting reads wait_for_builder_assignment and
+// wait_for_test_writer_assignment: a worker whose client filters them out
+// reads its assignment list again instead.
 func requiredSurlaTools(role string) []string {
 	switch role {
 	case "guide":

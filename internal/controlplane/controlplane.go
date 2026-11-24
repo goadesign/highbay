@@ -374,6 +374,9 @@ type (
 		// changesWait and changesPoll override defaultChangesWait and
 		// defaultChangesPoll in tests when positive.
 		changesWait, changesPoll time.Duration
+		// assignmentWait and assignmentPoll override defaultAssignmentWait
+		// and defaultAssignmentPoll in tests when positive.
+		assignmentWait, assignmentPoll time.Duration
 		// newGenerator constructs a fresh scaffold.Generator for each
 		// InitProject call when non-nil.
 		newGenerator func() scaffold.Generator

@@ -85,6 +85,10 @@ func ToolSchema(name tools.Ident) (*genregistry.ToolSchema, bool) {
 		return declarations.schema2115(), true
 	case "surla.verify_change":
 		return declarations.schema2132(), true
+	case "surla.wait_for_builder_assignment":
+		return declarations.schema2190(), true
+	case "surla.wait_for_test_writer_assignment":
+		return declarations.schema2216(), true
 	default:
 		return nil, false
 	}

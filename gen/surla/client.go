@@ -15,105 +15,109 @@ import (
 
 // Client is the "surla" service client.
 type Client struct {
-	GoldenPathEndpoint                goa.Endpoint
-	ProposeChangeEndpoint             goa.Endpoint
-	ReviseChangeEndpoint              goa.Endpoint
-	ConfirmIntentEndpoint             goa.Endpoint
-	GetChangeEndpoint                 goa.Endpoint
-	DeclineRevisionEndpoint           goa.Endpoint
-	PreviewArchitectureEndpoint       goa.Endpoint
-	DraftOverrideEndpoint             goa.Endpoint
-	StartLiveTargetEndpoint           goa.Endpoint
-	StopLiveTargetEndpoint            goa.Endpoint
-	GetLiveTargetEndpoint             goa.Endpoint
-	VerifyChangeEndpoint              goa.Endpoint
-	GetVerificationEndpoint           goa.Endpoint
-	ListVerificationsEndpoint         goa.Endpoint
-	ApproveMergeEndpoint              goa.Endpoint
-	DiffEndpoint                      goa.Endpoint
-	ConfigureModelEndpoint            goa.Endpoint
-	GetModelConnectionEndpoint        goa.Endpoint
-	HandOverModelSettingsEndpoint     goa.Endpoint
-	InitProjectEndpoint               goa.Endpoint
-	GenerateCodeEndpoint              goa.Endpoint
-	CheckProjectEndpoint              goa.Endpoint
-	UpdateDependenciesEndpoint        goa.Endpoint
-	ReadCheckOutputEndpoint           goa.Endpoint
-	ListTracesEndpoint                goa.Endpoint
-	RefreshStoryEndpoint              goa.Endpoint
-	GetStoryRefreshEndpoint           goa.Endpoint
-	UpdateDraftEndpoint               goa.Endpoint
-	GetTeamEndpoint                   goa.Endpoint
-	ShowTeamPaneEndpoint              goa.Endpoint
-	StartTeamAgentsEndpoint           goa.Endpoint
-	ListTeamAgentOptionsEndpoint      goa.Endpoint
-	DismissTeamNoticeEndpoint         goa.Endpoint
-	OpenViewsEndpoint                 goa.Endpoint
-	MergeChangeEndpoint               goa.Endpoint
-	ListChangesEndpoint               goa.Endpoint
-	WaitForChangesEndpoint            goa.Endpoint
-	StartBuildEndpoint                goa.Endpoint
-	DropBuildEndpoint                 goa.Endpoint
-	GetBuildEndpoint                  goa.Endpoint
-	GetTestFindingsEndpoint           goa.Endpoint
-	ListBuilderAssignmentsEndpoint    goa.Endpoint
-	GetBuilderAssignmentEndpoint      goa.Endpoint
-	ListTestWriterAssignmentsEndpoint goa.Endpoint
-	GetTestWriterAssignmentEndpoint   goa.Endpoint
-	ReportTestsFinishedEndpoint       goa.Endpoint
-	ReviewVerificationEndpoint        goa.Endpoint
+	GoldenPathEndpoint                  goa.Endpoint
+	ProposeChangeEndpoint               goa.Endpoint
+	ReviseChangeEndpoint                goa.Endpoint
+	ConfirmIntentEndpoint               goa.Endpoint
+	GetChangeEndpoint                   goa.Endpoint
+	DeclineRevisionEndpoint             goa.Endpoint
+	PreviewArchitectureEndpoint         goa.Endpoint
+	DraftOverrideEndpoint               goa.Endpoint
+	StartLiveTargetEndpoint             goa.Endpoint
+	StopLiveTargetEndpoint              goa.Endpoint
+	GetLiveTargetEndpoint               goa.Endpoint
+	VerifyChangeEndpoint                goa.Endpoint
+	GetVerificationEndpoint             goa.Endpoint
+	ListVerificationsEndpoint           goa.Endpoint
+	ApproveMergeEndpoint                goa.Endpoint
+	DiffEndpoint                        goa.Endpoint
+	ConfigureModelEndpoint              goa.Endpoint
+	GetModelConnectionEndpoint          goa.Endpoint
+	HandOverModelSettingsEndpoint       goa.Endpoint
+	InitProjectEndpoint                 goa.Endpoint
+	GenerateCodeEndpoint                goa.Endpoint
+	CheckProjectEndpoint                goa.Endpoint
+	UpdateDependenciesEndpoint          goa.Endpoint
+	ReadCheckOutputEndpoint             goa.Endpoint
+	ListTracesEndpoint                  goa.Endpoint
+	RefreshStoryEndpoint                goa.Endpoint
+	GetStoryRefreshEndpoint             goa.Endpoint
+	UpdateDraftEndpoint                 goa.Endpoint
+	GetTeamEndpoint                     goa.Endpoint
+	ShowTeamPaneEndpoint                goa.Endpoint
+	StartTeamAgentsEndpoint             goa.Endpoint
+	ListTeamAgentOptionsEndpoint        goa.Endpoint
+	DismissTeamNoticeEndpoint           goa.Endpoint
+	OpenViewsEndpoint                   goa.Endpoint
+	MergeChangeEndpoint                 goa.Endpoint
+	ListChangesEndpoint                 goa.Endpoint
+	WaitForChangesEndpoint              goa.Endpoint
+	StartBuildEndpoint                  goa.Endpoint
+	DropBuildEndpoint                   goa.Endpoint
+	GetBuildEndpoint                    goa.Endpoint
+	GetTestFindingsEndpoint             goa.Endpoint
+	ListBuilderAssignmentsEndpoint      goa.Endpoint
+	WaitForBuilderAssignmentEndpoint    goa.Endpoint
+	GetBuilderAssignmentEndpoint        goa.Endpoint
+	ListTestWriterAssignmentsEndpoint   goa.Endpoint
+	WaitForTestWriterAssignmentEndpoint goa.Endpoint
+	GetTestWriterAssignmentEndpoint     goa.Endpoint
+	ReportTestsFinishedEndpoint         goa.Endpoint
+	ReviewVerificationEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "surla" service client given the endpoints.
-func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listTeamAgentOptions, dismissTeamNotice, openViews, mergeChange, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, getBuilderAssignment, listTestWriterAssignments, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
+func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listTeamAgentOptions, dismissTeamNotice, openViews, mergeChange, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, waitForBuilderAssignment, getBuilderAssignment, listTestWriterAssignments, waitForTestWriterAssignment, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
 	return &Client{
-		GoldenPathEndpoint:                goldenPath,
-		ProposeChangeEndpoint:             proposeChange,
-		ReviseChangeEndpoint:              reviseChange,
-		ConfirmIntentEndpoint:             confirmIntent,
-		GetChangeEndpoint:                 getChange,
-		DeclineRevisionEndpoint:           declineRevision,
-		PreviewArchitectureEndpoint:       previewArchitecture,
-		DraftOverrideEndpoint:             draftOverride,
-		StartLiveTargetEndpoint:           startLiveTarget,
-		StopLiveTargetEndpoint:            stopLiveTarget,
-		GetLiveTargetEndpoint:             getLiveTarget,
-		VerifyChangeEndpoint:              verifyChange,
-		GetVerificationEndpoint:           getVerification,
-		ListVerificationsEndpoint:         listVerifications,
-		ApproveMergeEndpoint:              approveMerge,
-		DiffEndpoint:                      diff,
-		ConfigureModelEndpoint:            configureModel,
-		GetModelConnectionEndpoint:        getModelConnection,
-		HandOverModelSettingsEndpoint:     handOverModelSettings,
-		InitProjectEndpoint:               initProject,
-		GenerateCodeEndpoint:              generateCode,
-		CheckProjectEndpoint:              checkProject,
-		UpdateDependenciesEndpoint:        updateDependencies,
-		ReadCheckOutputEndpoint:           readCheckOutput,
-		ListTracesEndpoint:                listTraces,
-		RefreshStoryEndpoint:              refreshStory,
-		GetStoryRefreshEndpoint:           getStoryRefresh,
-		UpdateDraftEndpoint:               updateDraft,
-		GetTeamEndpoint:                   getTeam,
-		ShowTeamPaneEndpoint:              showTeamPane,
-		StartTeamAgentsEndpoint:           startTeamAgents,
-		ListTeamAgentOptionsEndpoint:      listTeamAgentOptions,
-		DismissTeamNoticeEndpoint:         dismissTeamNotice,
-		OpenViewsEndpoint:                 openViews,
-		MergeChangeEndpoint:               mergeChange,
-		ListChangesEndpoint:               listChanges,
-		WaitForChangesEndpoint:            waitForChanges,
-		StartBuildEndpoint:                startBuild,
-		DropBuildEndpoint:                 dropBuild,
-		GetBuildEndpoint:                  getBuild,
-		GetTestFindingsEndpoint:           getTestFindings,
-		ListBuilderAssignmentsEndpoint:    listBuilderAssignments,
-		GetBuilderAssignmentEndpoint:      getBuilderAssignment,
-		ListTestWriterAssignmentsEndpoint: listTestWriterAssignments,
-		GetTestWriterAssignmentEndpoint:   getTestWriterAssignment,
-		ReportTestsFinishedEndpoint:       reportTestsFinished,
-		ReviewVerificationEndpoint:        reviewVerification,
+		GoldenPathEndpoint:                  goldenPath,
+		ProposeChangeEndpoint:               proposeChange,
+		ReviseChangeEndpoint:                reviseChange,
+		ConfirmIntentEndpoint:               confirmIntent,
+		GetChangeEndpoint:                   getChange,
+		DeclineRevisionEndpoint:             declineRevision,
+		PreviewArchitectureEndpoint:         previewArchitecture,
+		DraftOverrideEndpoint:               draftOverride,
+		StartLiveTargetEndpoint:             startLiveTarget,
+		StopLiveTargetEndpoint:              stopLiveTarget,
+		GetLiveTargetEndpoint:               getLiveTarget,
+		VerifyChangeEndpoint:                verifyChange,
+		GetVerificationEndpoint:             getVerification,
+		ListVerificationsEndpoint:           listVerifications,
+		ApproveMergeEndpoint:                approveMerge,
+		DiffEndpoint:                        diff,
+		ConfigureModelEndpoint:              configureModel,
+		GetModelConnectionEndpoint:          getModelConnection,
+		HandOverModelSettingsEndpoint:       handOverModelSettings,
+		InitProjectEndpoint:                 initProject,
+		GenerateCodeEndpoint:                generateCode,
+		CheckProjectEndpoint:                checkProject,
+		UpdateDependenciesEndpoint:          updateDependencies,
+		ReadCheckOutputEndpoint:             readCheckOutput,
+		ListTracesEndpoint:                  listTraces,
+		RefreshStoryEndpoint:                refreshStory,
+		GetStoryRefreshEndpoint:             getStoryRefresh,
+		UpdateDraftEndpoint:                 updateDraft,
+		GetTeamEndpoint:                     getTeam,
+		ShowTeamPaneEndpoint:                showTeamPane,
+		StartTeamAgentsEndpoint:             startTeamAgents,
+		ListTeamAgentOptionsEndpoint:        listTeamAgentOptions,
+		DismissTeamNoticeEndpoint:           dismissTeamNotice,
+		OpenViewsEndpoint:                   openViews,
+		MergeChangeEndpoint:                 mergeChange,
+		ListChangesEndpoint:                 listChanges,
+		WaitForChangesEndpoint:              waitForChanges,
+		StartBuildEndpoint:                  startBuild,
+		DropBuildEndpoint:                   dropBuild,
+		GetBuildEndpoint:                    getBuild,
+		GetTestFindingsEndpoint:             getTestFindings,
+		ListBuilderAssignmentsEndpoint:      listBuilderAssignments,
+		WaitForBuilderAssignmentEndpoint:    waitForBuilderAssignment,
+		GetBuilderAssignmentEndpoint:        getBuilderAssignment,
+		ListTestWriterAssignmentsEndpoint:   listTestWriterAssignments,
+		WaitForTestWriterAssignmentEndpoint: waitForTestWriterAssignment,
+		GetTestWriterAssignmentEndpoint:     getTestWriterAssignment,
+		ReportTestsFinishedEndpoint:         reportTestsFinished,
+		ReviewVerificationEndpoint:          reviewVerification,
 	}
 }
 
@@ -794,6 +798,20 @@ func (c *Client) ListBuilderAssignments(ctx context.Context) (res *BuilderAssign
 	return ires.(*BuilderAssignmentList), nil
 }
 
+// WaitForBuilderAssignment calls the "wait_for_builder_assignment" endpoint of
+// the "surla" service.
+// WaitForBuilderAssignment may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) WaitForBuilderAssignment(ctx context.Context, p *WaitForBuilderAssignmentPayload) (res *BuilderAssignmentWait, err error) {
+	var ires any
+	ires, err = c.WaitForBuilderAssignmentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*BuilderAssignmentWait), nil
+}
+
 // GetBuilderAssignment calls the "get_builder_assignment" endpoint of the
 // "surla" service.
 // GetBuilderAssignment may return the following errors:
@@ -825,6 +843,20 @@ func (c *Client) ListTestWriterAssignments(ctx context.Context) (res *TestWriter
 		return
 	}
 	return ires.(*TestWriterAssignmentList), nil
+}
+
+// WaitForTestWriterAssignment calls the "wait_for_test_writer_assignment"
+// endpoint of the "surla" service.
+// WaitForTestWriterAssignment may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) WaitForTestWriterAssignment(ctx context.Context, p *WaitForTestWriterAssignmentPayload) (res *TestWriterAssignmentWait, err error) {
+	var ires any
+	ires, err = c.WaitForTestWriterAssignmentEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TestWriterAssignmentWait), nil
 }
 
 // GetTestWriterAssignment calls the "get_test_writer_assignment" endpoint of

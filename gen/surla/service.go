@@ -479,6 +479,18 @@ type Service interface {
 	// has work; empty otherwise. Reading the list records nothing and moves no
 	// working copy.
 	ListBuilderAssignments(context.Context) (res *BuilderAssignmentList, err error)
+	// Return the builder's assignment list, as list_builder_assignments does, with
+	// a version naming it. With since_version, the version an earlier call
+	// returned, the call waits until the list differs from it, for example because
+	// Surla accepted the tests, the user built the change again or dropped the
+	// build, or a verification of the build passed, and otherwise returns the
+	// unchanged list after a bounded wait of about 30 seconds. Without
+	// since_version it returns at once. It records nothing and moves no working
+	// copy. A builder uses it in place of repeated list calls while it waits,
+	// whether or not Chorus delivers reminders. Each call is traced but never
+	// saved in the diagnostics history list_traces reads, so a waiting builder
+	// does not push real operations out of view.
+	WaitForBuilderAssignment(context.Context, *WaitForBuilderAssignmentPayload) (res *BuilderAssignmentWait, err error)
 	// Return the builder's assignment for the open build's change in full and
 	// record that the builder read it at its revision. The first read of a new
 	// build joins the builder's working copy to the build's own branch,
@@ -494,6 +506,18 @@ type Service interface {
 	// role has work; empty otherwise. Reading the list records nothing and moves
 	// no working copy.
 	ListTestWriterAssignments(context.Context) (res *TestWriterAssignmentList, err error)
+	// Return the test writer's assignment list, as list_test_writer_assignments
+	// does, with a version naming it. With since_version, the version an earlier
+	// call returned, the call waits until the list differs from it, for example
+	// because Surla's check of a report reached a verdict, the user built the
+	// change again or dropped the build, and otherwise returns the unchanged list
+	// after a bounded wait of about 30 seconds. Without since_version it returns
+	// at once. It records nothing and moves no working copy. A test writer uses it
+	// in place of repeated list calls while it waits, whether or not Chorus
+	// delivers reminders. Each call is traced but never saved in the diagnostics
+	// history list_traces reads, so a waiting test writer does not push real
+	// operations out of view.
+	WaitForTestWriterAssignment(context.Context, *WaitForTestWriterAssignmentPayload) (res *TestWriterAssignmentWait, err error)
 	// Return the test writer's assignment for a change in full (the working
 	// folder, the design and Story as agreed at the built revision, the user's
 	// confirmed answers, confirmation examples and preserved behaviors of that
@@ -541,7 +565,7 @@ const ServiceName = "surla"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
+var MethodNames = [49]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "wait_for_builder_assignment", "get_builder_assignment", "list_test_writer_assignments", "wait_for_test_writer_assignment", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
 
 // Evaluated Goa-AI cost, safety, history, and cache policy for a single agent.
 type AgentPolicyItem struct {
@@ -792,6 +816,17 @@ type BuilderAssignment struct {
 type BuilderAssignmentList struct {
 	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*BuilderAssignment
+}
+
+// BuilderAssignmentWait is the result type of the surla service
+// wait_for_builder_assignment method.
+type BuilderAssignmentWait struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*BuilderAssignment
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string
 }
 
 // The builder's assignment for one build. It exists from the moment the user
@@ -2293,6 +2328,17 @@ type TestWriterAssignmentList struct {
 	Assignments []*TestWriterAssignmentItem
 }
 
+// TestWriterAssignmentWait is the result type of the surla service
+// wait_for_test_writer_assignment method.
+type TestWriterAssignmentWait struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*TestWriterAssignmentItem
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string
+}
+
 // Where the test writer's assignment for one build stands.
 type TestWriterProgress struct {
 	// The tests' state: not_used when the project has stored verification
@@ -2657,11 +2703,27 @@ type VerifyChangePayload struct {
 	CandidateCommit string
 }
 
+// WaitForBuilderAssignmentPayload is the payload type of the surla service
+// wait_for_builder_assignment method.
+type WaitForBuilderAssignmentPayload struct {
+	// version returned by your last wait_for_builder_assignment call. Omit it on
+	// the first call.
+	SinceVersion *string
+}
+
 // WaitForChangesPayload is the payload type of the surla service
 // wait_for_changes method.
 type WaitForChangesPayload struct {
 	// version of the change list the caller last read.
 	Since string
+}
+
+// WaitForTestWriterAssignmentPayload is the payload type of the surla service
+// wait_for_test_writer_assignment method.
+type WaitForTestWriterAssignmentPayload struct {
+	// version returned by your last wait_for_test_writer_assignment call. Omit it
+	// on the first call.
+	SinceVersion *string
 }
 
 // Error returns an error description.
@@ -3687,6 +3749,37 @@ func validatejsonBuilderAssignmentTransport(value *jsonBuilderAssignmentTranspor
 			}
 		}
 
+	}
+	return err
+}
+
+// jsonBuilderAssignmentWaitTransport stores JSON fields until they have been validated.
+type jsonBuilderAssignmentWaitTransport struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*jsonBuilderAssignmentTransport `json:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version *string `json:"version"`
+}
+
+// validatejsonBuilderAssignmentWaitTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuilderAssignmentWaitTransport(value *jsonBuilderAssignmentWaitTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if value.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validatejsonBuilderAssignmentTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return err
 }
@@ -7551,6 +7644,37 @@ func validatejsonTestWriterAssignmentTransport(value *jsonTestWriterAssignmentTr
 	return err
 }
 
+// jsonTestWriterAssignmentWaitTransport stores JSON fields until they have been validated.
+type jsonTestWriterAssignmentWaitTransport struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*jsonTestWriterAssignmentItemTransport `json:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version *string `json:"version"`
+}
+
+// validatejsonTestWriterAssignmentWaitTransport checks decoded JSON before it becomes a service value.
+func validatejsonTestWriterAssignmentWaitTransport(value *jsonTestWriterAssignmentWaitTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if value.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validatejsonTestWriterAssignmentItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
 // jsonTestWriterProgressTransport stores JSON fields until they have been validated.
 type jsonTestWriterProgressTransport struct {
 	// The tests' state: not_used when the project has stored verification
@@ -8952,6 +9076,21 @@ func validateTestsAcceptedOriginal(value *TestsAccepted) (err error) {
 
 // validateBuilderAssignmentListOriginal checks the original typed value before JSON conversion.
 func validateBuilderAssignmentListOriginal(value *BuilderAssignmentList) (err error) {
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validateBuilderAssignmentOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// validateBuilderAssignmentWaitOriginal checks the original typed value before JSON conversion.
+func validateBuilderAssignmentWaitOriginal(value *BuilderAssignmentWait) (err error) {
 	if value.Assignments == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
 	}
@@ -10409,6 +10548,21 @@ func validateTestWriterAssignmentItemOriginal(value *TestWriterAssignmentItem) (
 
 // validateTestWriterAssignmentListOriginal checks the original typed value before JSON conversion.
 func validateTestWriterAssignmentListOriginal(value *TestWriterAssignmentList) (err error) {
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validateTestWriterAssignmentItemOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// validateTestWriterAssignmentWaitOriginal checks the original typed value before JSON conversion.
+func validateTestWriterAssignmentWaitOriginal(value *TestWriterAssignmentWait) (err error) {
 	if value.Assignments == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
 	}
@@ -15628,6 +15782,113 @@ func DecodeBuilderAssignmentList(data []byte) (out *BuilderAssignmentList, err e
 	}
 	{
 		out = &BuilderAssignmentList{}
+		out.Assignments = make([]*BuilderAssignment, len(body.Assignments))
+		for i, val := range body.Assignments {
+			if val == nil {
+				out.Assignments[i] = nil
+				continue
+			}
+			out.Assignments[i] = decodeBuilderAssignmentTransportToBuilderAssignment(val)
+		}
+	}
+	return out, nil
+}
+
+// EncodeBuilderAssignmentWait turns a service value into JSON using the field names in the Goa design.
+func EncodeBuilderAssignmentWait(in *BuilderAssignmentWait) ([]byte, error) {
+	if err := checkBuilderAssignmentWaitValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuilderAssignmentWait JSON: %w", err)
+	}
+	if err := validateBuilderAssignmentWaitOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+	var body *jsonBuilderAssignmentWaitTransport
+	{
+		body = &jsonBuilderAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonBuilderAssignmentTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeBuilderAssignmentToBuilderAssignmentTransport(val)
+		}
+	}
+	if err := validatejsonBuilderAssignmentWaitTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuilderAssignmentWait JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuilderAssignmentWait JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuilderAssignmentWaitValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuilderAssignmentWaitValue(in *BuilderAssignmentWait) error {
+	if err := checkBuilderAssignmentWaitValue(in); err != nil {
+		return fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+	if err := validateBuilderAssignmentWaitOriginal(in); err != nil {
+		return fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuilderAssignmentWait")
+	}
+
+	var body *jsonBuilderAssignmentWaitTransport
+	{
+		body = &jsonBuilderAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonBuilderAssignmentTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeBuilderAssignmentToBuilderAssignmentTransport(val)
+		}
+	}
+	if err := validatejsonBuilderAssignmentWaitTransport(body); err != nil {
+		return fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuilderAssignmentWait checks JSON field names from the Goa design and returns a service value.
+func DecodeBuilderAssignmentWait(data []byte) (out *BuilderAssignmentWait, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON: %w", err)
+	}
+	if err := validateBuilderAssignmentWaitJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON: %w", err)
+	}
+	var body *jsonBuilderAssignmentWaitTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuilderAssignmentWait JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON after first value: %w", err)
+	}
+	if err := validatejsonBuilderAssignmentWaitTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuilderAssignmentWait JSON: %w", err)
+	}
+	{
+		out = &BuilderAssignmentWait{
+			Version: *body.Version,
+		}
 		out.Assignments = make([]*BuilderAssignment, len(body.Assignments))
 		for i, val := range body.Assignments {
 			if val == nil {
@@ -25793,6 +26054,113 @@ func DecodeTestWriterAssignmentList(data []byte) (out *TestWriterAssignmentList,
 	return out, nil
 }
 
+// EncodeTestWriterAssignmentWait turns a service value into JSON using the field names in the Goa design.
+func EncodeTestWriterAssignmentWait(in *TestWriterAssignmentWait) ([]byte, error) {
+	if err := checkTestWriterAssignmentWaitValue(in); err != nil {
+		return nil, fmt.Errorf("encode TestWriterAssignmentWait JSON: %w", err)
+	}
+	if err := validateTestWriterAssignmentWaitOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+	var body *jsonTestWriterAssignmentWaitTransport
+	{
+		body = &jsonTestWriterAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonTestWriterAssignmentItemTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeTestWriterAssignmentItemToTestWriterAssignmentItemTransport(val)
+		}
+	}
+	if err := validatejsonTestWriterAssignmentWaitTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TestWriterAssignmentWait JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TestWriterAssignmentWait JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTestWriterAssignmentWaitValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTestWriterAssignmentWaitValue(in *TestWriterAssignmentWait) error {
+	if err := checkTestWriterAssignmentWaitValue(in); err != nil {
+		return fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+	if err := validateTestWriterAssignmentWaitOriginal(in); err != nil {
+		return fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TestWriterAssignmentWait")
+	}
+
+	var body *jsonTestWriterAssignmentWaitTransport
+	{
+		body = &jsonTestWriterAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonTestWriterAssignmentItemTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeTestWriterAssignmentItemToTestWriterAssignmentItemTransport(val)
+		}
+	}
+	if err := validatejsonTestWriterAssignmentWaitTransport(body); err != nil {
+		return fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTestWriterAssignmentWait checks JSON field names from the Goa design and returns a service value.
+func DecodeTestWriterAssignmentWait(data []byte) (out *TestWriterAssignmentWait, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: %w", err)
+	}
+	if err := validateTestWriterAssignmentWaitJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: %w", err)
+	}
+	var body *jsonTestWriterAssignmentWaitTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON after first value: %w", err)
+	}
+	if err := validatejsonTestWriterAssignmentWaitTransport(body); err != nil {
+		return out, fmt.Errorf("validate TestWriterAssignmentWait JSON: %w", err)
+	}
+	{
+		out = &TestWriterAssignmentWait{
+			Version: *body.Version,
+		}
+		out.Assignments = make([]*TestWriterAssignmentItem, len(body.Assignments))
+		for i, val := range body.Assignments {
+			if val == nil {
+				out.Assignments[i] = nil
+				continue
+			}
+			out.Assignments[i] = decodeTestWriterAssignmentItemTransportToTestWriterAssignmentItem(val)
+		}
+	}
+	return out, nil
+}
+
 // EncodeTestWriterProgress turns a service value into JSON using the field names in the Goa design.
 func EncodeTestWriterProgress(in *TestWriterProgress) ([]byte, error) {
 	if err := checkTestWriterProgressValue(in); err != nil {
@@ -33800,6 +34168,77 @@ func validateBuilderAssignmentListJSONValue2(path string, value any, description
 	return nil
 }
 
+// validateBuilderAssignmentWaitJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuilderAssignmentWaitJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignments":
+			if err := validateBuilderAssignmentWaitJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignments",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateBuilderAssignmentWaitJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuilderAssignmentWaitJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateBuilderAssignmentJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateBuilderProgressJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateBuilderProgressJSONValue(path string, value any, description string) error {
 	field := path
@@ -41413,6 +41852,77 @@ func validateTestWriterAssignmentListJSONValue2(path string, value any, descript
 	return nil
 }
 
+// validateTestWriterAssignmentWaitJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTestWriterAssignmentWaitJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignments":
+			if err := validateTestWriterAssignmentWaitJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignments",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTestWriterAssignmentWaitJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTestWriterAssignmentWaitJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateTestWriterAssignmentItemJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateTraceListJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateTraceListJSONValue(path string, value any, description string) error {
 	field := path
@@ -43433,6 +43943,43 @@ func checkBuilderAssignmentListBuilderAssignmentListValue(in *BuilderAssignmentL
 			if err := checkBuilderAssignmentBuilderAssignmentValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// checkBuilderAssignmentWaitValue checks text and cycles before conversion.
+func checkBuilderAssignmentWaitValue(in *BuilderAssignmentWait) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuilderAssignmentWaitBuilderAssignmentWaitValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBuilderAssignmentWaitBuilderAssignmentWaitValue checks one generated value on the active path.
+func checkBuilderAssignmentWaitBuilderAssignmentWaitValue(in *BuilderAssignmentWait, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.Assignments {
+			_ = index1
+			_ = item1
+			if err := checkBuilderAssignmentBuilderAssignmentValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		if !utf8.ValidString(string(in.Version)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
 		}
 	}
 	return nil
@@ -47519,6 +48066,43 @@ func checkTestWriterAssignmentListTestWriterAssignmentListValue(in *TestWriterAs
 			if err := checkTestWriterAssignmentItemTestWriterAssignmentItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// checkTestWriterAssignmentWaitValue checks text and cycles before conversion.
+func checkTestWriterAssignmentWaitValue(in *TestWriterAssignmentWait) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTestWriterAssignmentWaitTestWriterAssignmentWaitValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTestWriterAssignmentWaitTestWriterAssignmentWaitValue checks one generated value on the active path.
+func checkTestWriterAssignmentWaitTestWriterAssignmentWaitValue(in *TestWriterAssignmentWait, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.Assignments {
+			_ = index1
+			_ = item1
+			if err := checkTestWriterAssignmentItemTestWriterAssignmentItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		if !utf8.ValidString(string(in.Version)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
 		}
 	}
 	return nil
