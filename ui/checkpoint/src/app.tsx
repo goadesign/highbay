@@ -20,7 +20,7 @@ import { BuildMergeInstructions, BuildSectionView, BuildStartReceipt, runBelongs
 import { AgentPickerView } from "./components/agent-picker";
 import { choicesForRoles, proposeWorkerChoices, workerChoicesReady } from "./agent-choices";
 import type { WorkerChoices, WorkerRole } from "./agent-choices";
-import { MergeFeedback, MergePrimaryAction } from "./components/merge-action";
+import { MergeFeedback, MergePrimaryAction, MergedBranchVerification } from "./components/merge-action";
 import type { MergeControls } from "./components/merge-action";
 import { VerificationView } from "./components/cp4-verification";
 import { ProposedRevisionView } from "./components/proposal";
@@ -1459,16 +1459,22 @@ export function bootstrapViewsPage() {
     });
   }
 
-  // mergePanel keeps manual commands secondary and available only after the
-  // same live approval that permits the server action has been read.
-  function mergePanel(run: VerificationStatusResult | null, idPrefix: string): React.ReactNode {
-    if (run === null) return null;
+  // mergePanel keeps manual merge commands secondary. A fresh merged build
+  // can also supply inputs for a separate check of the resulting commit.
+  function mergePanel(run: VerificationStatusResult | null, idPrefix: string, observedBuild: StartedBuild | null = null): React.ReactNode {
     const controls = mergeControls(run);
-    const build = knownTakingBuild(run.change_id);
-    const review = selectedReview?.runId === run.run_id ? selectedReview.review : null;
-    const approvedBuild = build !== null && build.in_force && runBelongsToBuild(run.change_id, build, run) &&
+    const build = run !== null ? knownTakingBuild(run.change_id) : observedBuild;
+    const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
+    const approvedBuild = run !== null && build !== null && build.in_force && runBelongsToBuild(run.change_id, build, run) &&
       (build.taking.state === "passed" || build.taking.state === "merged") && review?.approval.state === "recorded";
-    if (!approvedBuild && !controls.pending && controls.receipt === null && controls.error === null) return null;
+    const tests = build?.test_writer.tests;
+    const postMerge = build?.taking.state === "merged" && (approvedBuild || observedBuild !== null)
+      ? <MergedBranchVerification id={idPrefix + "-verify-merged"} requestRevision={build.request_revision}
+        suiteCommit={approvedBuild ? run.suite_commit : tests?.state === "accepted" ? tests.commit : null}
+        approvedSuite={approvedBuild} mergedCommit={approvedBuild ? controls.receipt?.head_commit ?? null : null}
+        storedEvaluator={tests?.state === "not_used"} />
+      : null;
+    if (run === null || !approvedBuild && !controls.pending && controls.receipt === null && controls.error === null) return postMerge;
     let manualInstructions: React.ReactNode = null;
     if (controls.eligible && build !== null && build.taking.state === "passed" &&
       review?.approval.state === "recorded" && approvalReviewFresh(run) &&
@@ -1478,7 +1484,7 @@ export function bootstrapViewsPage() {
         onFocusedControlRemoved={focusVerificationHeading} />;
     }
     return <><MergeFeedback idPrefix={idPrefix} controls={controls} />
-      {manualInstructions}</>;
+      {manualInstructions}{postMerge}</>;
   }
 
   // isViewingChangeResult reports whether the active result view currently
@@ -1755,8 +1761,8 @@ export function bootstrapViewsPage() {
       text: "Surla can use it for both workers. A second model family can give the builder and test writer different perspectives.",
     });
     if (snapshot.herdr_mode === "available") notices.push({
-      notice: "outside_herdr", title: "Your coding agent is outside Herdr.",
-      text: "Workers will open in the project’s Herdr tab. Starting them selects that tab without bringing the Herdr window to the foreground. You can keep using this coding-agent session.",
+      notice: "outside_herdr", title: "No Herdr pane linked.",
+      text: "To link your coding agent’s pane, open a project tab in Herdr and run /surla there. Starting workers opens their panes in Herdr without bringing its window to the foreground.",
     });
     if (snapshot.herdr_mode === "unavailable") notices.push({
       notice: "herdr_unavailable", title: "Workers will run in the background.",
@@ -2490,14 +2496,14 @@ export function bootstrapViewsPage() {
         onClick: handleReturnToChangeCard,
       });
       tabs.push({
-        id: "surla-nav-build", label: "Build", active: cp1Active && editorStage === "build",
-        onClick: () => { showChangeEditor("build"); focusResult("#surla-build-title"); },
-      });
-      tabs.push({
         id: "surla-nav-cp2",
         label: "Architecture",
         active: activeResult?.kind === "cp2-architecture-preview",
         onClick: openArchitecture,
+      });
+      tabs.push({
+        id: "surla-nav-build", label: "Build", active: cp1Active && editorStage === "build",
+        onClick: () => { showChangeEditor("build"); focusResult("#surla-build-title"); },
       });
     }
     if (activeEditor !== null || selectedVerificationChangeId !== null) {
@@ -2572,7 +2578,9 @@ export function bootstrapViewsPage() {
     }
 
     navEl.hidden = false;
-    const journeyIds = new Set(["surla-nav-changes", "surla-nav-cp1", "surla-nav-build", "surla-nav-cp4", "surla-nav-cp5"]);
+    const journeyIds = new Set([
+      "surla-nav-changes", "surla-nav-cp1", "surla-nav-cp2", "surla-nav-build", "surla-nav-cp4", "surla-nav-cp5",
+    ]);
     const run = resolveDisplayedVerificationRun();
     const review = displayedApprovalReview();
     const onApproval = activeResult?.kind === "cp5-approval";
@@ -2641,6 +2649,13 @@ export function bootstrapViewsPage() {
         attention = "Merging the approved result.";
         next = <MergePrimaryAction id="surla-cp5-merge" controls={mergeControls(run)} />;
       }
+    } else if (cp1Active && activeEditor !== null && activeEditor.card.status === "confirmed" &&
+        activeEditor.card.proposed_revision !== undefined && activeEditor.incomingCard === null &&
+        sessionState === "active" && editorRequest === null && !cardLoadErrors.has(activeEditor.card.change_id) &&
+        !hasPending("merge_change", activeEditor.card.change_id)) {
+      attention = "Adopt or decline the proposed revision.";
+      next = <Button id="surla-review-proposal" variant="primary"
+        onClick={() => focusResult("#surla-proposal")}>Review proposed revision</Button>;
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
         ? buildSnapshot : null;
@@ -2659,10 +2674,7 @@ export function bootstrapViewsPage() {
           attention = "The verified commits are merged.";
           next = <span>Describe the next change when you are ready.</span>;
         } else if (tests.state === "needs_changes") {
-          const needs = teamError === null ? teamRoles.filter((role) => role.state === "needs_you") : [];
-          attention = needs.length > 0
-            ? needs.map((role) => teamAttentionText(role, roleHasPane(role.role, herdrMode))).join(". ")
-            : teamError !== null || teamSnapshot === null || teamStatusUnknown
+          attention = teamError !== null || teamSnapshot === null || teamStatusUnknown
             ? "Team status unknown." : "Nothing now.";
           next = <span>The test writer corrects the tests and reports again.</span>;
         } else if (tests.state === "could_not_run") {
@@ -2679,8 +2691,10 @@ export function bootstrapViewsPage() {
           attention = "Surla is checking the reported tests.";
           next = <span>Wait for Surla's verdict.</span>;
         } else {
-          attention = tests.state === "accepted" ? "The tests are accepted; application verification is still separate."
-            : "The build's assignments are ready.";
+          const assignmentsRead = build.builder.read &&
+            (build.test_writer.read || tests.state === "accepted" || tests.state === "not_used");
+          attention = teamError !== null || teamSnapshot === null || teamStatusUnknown
+            ? "Team status unknown." : assignmentsRead ? "Nothing now." : "A worker assignment is unread.";
           next = <span>{tests.state === "accepted" || tests.state === "not_used"
             ? "The builder implements and verifies the change." : "The test writer prepares and reports the tests."}</span>;
         }
@@ -2688,6 +2702,10 @@ export function bootstrapViewsPage() {
       if (hasPending("merge_change", activeEditor.card.change_id)) {
         attention = "Merging the approved result.";
         next = <MergePrimaryAction id="surla-build-merge" controls={mergeControls(buildApprovalRun(activeEditor.card))} />;
+      }
+      if (next !== null && teamError === null && teamNeedsYou !== undefined) {
+        attention = teamRoles.filter((role) => role.state === "needs_you")
+          .map((role) => teamAttentionText(role, roleHasPane(role.role, herdrMode))).join(". ");
       }
     } else if (activeResult?.kind === "cp4-verification") {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
@@ -2890,7 +2908,7 @@ export function bootstrapViewsPage() {
                   {subj.requestRevision ? (
                     <>
                       {" · "}
-                      <code>{subj.requestRevision.slice(0, 15)}</code>
+                      <code>{subj.requestRevision.slice(0, 12)}</code>
                     </>
                   ) : null}
                   {subj.detail ? (
@@ -2965,7 +2983,7 @@ export function bootstrapViewsPage() {
             <p>You opened a new Surla link in this tab. Save or discard your edits, then choose Open link.</p>
             {hasPendingEditorSave() ? <p>Wait for the current save to finish.</p> : null}
             {activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0 ? (
-              <p>For proposal answers, choose Adopt or Discard Unsaved Edits. Discard clears your answers without declining the proposal.</p>
+              <p>For proposal answers, choose Adopt this revision or Discard proposal answers. Discard clears your answers without declining the proposal.</p>
             ) : null}
             {modelDraftDirty ? <p>For the model choice, choose Apply or Discard model edits.</p> : null}
             <p>The link expires two minutes after it was printed, even while you finish your edits.</p>
@@ -3062,6 +3080,12 @@ export function bootstrapViewsPage() {
             }}
             onAdopt={handleAdopt}
             onDecline={handleDecline}
+            onDiscardAnswers={() => {
+              if (activeEditor === null || editorRequest !== null) return;
+              activeEditor = { ...activeEditor, proposalAnswers: {} };
+              syncAllRegions();
+              focusResult("#surla-proposal");
+            }}
           />
         ) : null}
         <CP1EditorView
@@ -3094,7 +3118,7 @@ export function bootstrapViewsPage() {
               approvalAvailable={approvalUnavailable === null && changeList?.approval_available === true}
               agentPicker={workerPicker("surla-build-agents", buildWorkerRoles())}
               agentsReady={workersReady(buildWorkerRoles())}
-              mergeAction={mergePanel(buildApprovalRun(ed.card), "surla-build-merge-feedback")}
+              mergeAction={mergePanel(buildApprovalRun(ed.card), "surla-build-merge-feedback", knownTakingBuild(ed.card.change_id))}
               onRefresh={() => readBuild(ed.card.change_id)}
               onReadFindings={readBuildFindings}
               onBuild={startBuild}
@@ -3801,12 +3825,15 @@ export function bootstrapViewsPage() {
     const card = activeEditor.card;
     statusEl.textContent = activeEditor.incomingCard
       ? "A newer Change Card arrived while you were editing; your unsaved draft is preserved."
+      : card.proposed_revision !== undefined
+      ? "Review the proposed revision, then choose whether to adopt or decline it."
       : card.status === "confirmed"
       ? card.approval
         ? "Showing the recorded approval for these inputs."
         : card.unverified_approval
         ? "Showing the saved approval record (current promotion inputs could not be verified)."
-        : "Review the build and its next step. The agreed details stay available below."
+        : stage === "build" ? "Review the build and its next step. The agreed details stay available below."
+        : "Review the current agreement."
       : "Review the open questions and examples below, then confirm your intent.";
     syncAllRegions();
   }
@@ -4242,7 +4269,9 @@ export function bootstrapViewsPage() {
     editorOpen = true;
     editorStage = card.status === "confirmed" ? "build" : "agree";
     statusEl.textContent =
-      card.status === "confirmed"
+      card.proposed_revision !== undefined
+        ? "Review the proposed revision, then choose whether to adopt or decline it."
+      : card.status === "confirmed"
         ? card.approval
           ? "Showing the recorded approval for these inputs."
           : card.unverified_approval

@@ -159,7 +159,7 @@ function WorkerFields({
           <input id={idPrefix + "-yolo"} type="checkbox" checked={choice.yolo} disabled={unavailable}
             aria-describedby={option.yolo_effect !== undefined ? idPrefix + "-yolo-effect" : undefined}
             onChange={(event) => changeChoice({ ...choice, yolo: event.currentTarget.checked })} />{" "}
-          Skip permission prompts (YOLO)
+          Skip permission prompts (YOLO)<span className="surla-visually-hidden"> for {roleLabels[role]}</span>
         </label>
         {option.yolo_effect !== undefined ? <p id={idPrefix + "-yolo-effect"}>{option.yolo_effect}</p> : null}
         {headless && !choice.yolo ? <p>Enable this permission switch to run this worker in the background.</p> : null}

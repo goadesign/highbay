@@ -103,7 +103,10 @@ expect(JSON.stringify(ids) === JSON.stringify(["chg-second", "chg-first"]), "lis
 expect(page.text("#surla-change-list").includes("Needs confirmation") && page.text("#surla-change-list").includes("No saved runs"), "list omitted state or saved-run history");
 
 checkControl(page, page.$("#surla-open-change-chg-first"), "list control");
-expect(page.$("#surla-open-change-chg-first").textContent.includes("Route refunds to a manager."), "the list control is not named by its change");
+const openFirst = page.$("#surla-open-change-chg-first");
+expect(openFirst.textContent === "Open: Route refunds to a manager." &&
+       openFirst.getAttribute("aria-label") === openFirst.textContent + " (chg-first)",
+       "the list control's accessible name omitted its visible label or change ID");
 page.$("#surla-open-change-chg-first").click();
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-first", "opening a listed change did not show its card");
 const answer = page.$('[data-ambiguity-id="chg-first-ambiguity-01"][data-option="subtotal_only"]');
@@ -190,13 +193,16 @@ const card = await propose("chg-live", "Route refunds to a manager.", "Auto-appr
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-live", "the change did not open");
 const next = () => page.text("#surla-frame-next dd");
+const journey = page.$$('[aria-label="Change journey"] button').map((button) => button.textContent);
+expect(journey.slice(-5).join(", ") === "Agree, Architecture, Build, Check, Approve", "wrong change journey: " + journey);
 expect(page.$("#surla-cp1-next-question"), "Agree did not guide the user to the unanswered question");
 page.$("#surla-nav-build").click();
 expect(page.$("#surla-nav-build").getAttribute("aria-current") === "step" && page.$("#surla-confirm-submit") && !page.$("#surla-build-section"), "unconfirmed Build did not expose the existing confirmation form");
 expect(next().includes("then confirm the change"), "unconfirmed Build pointed to controls it did not have");
 await control(origin, "hold", { key: "POST /changes/preview" });
 page.$("#surla-nav-cp2").click();
-expect(page.$("#surla-cp2-loading") && next().includes("Wait for Surla to evaluate the design"), "Architecture did not guide the pending preview");
+expect(page.$("#surla-nav-cp2").getAttribute("aria-current") === "step" &&
+       page.$("#surla-cp2-loading") && next().includes("Wait for Surla to evaluate the design"), "Architecture did not guide the pending preview");
 await control(origin, "release", { key: "POST /changes/preview" });
 await until(() => page.$("#surla-cp2-error"), "Architecture did not show its refusal");
 expect(next().includes("Open Agree to confirm the change"), "Architecture did not guide recovery from an unconfirmed request");

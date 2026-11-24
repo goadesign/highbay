@@ -160,6 +160,7 @@ export function CP1EditorView({
   const stories = card.stories ?? [];
   const localExamplesEdited = areExamplesModified(card.examples, draftExamples);
   const draftDirty = isDraftDirty(card, draftAnswers, draftExamples);
+  const priorWasDraft = priorCard?.status === "needs_confirmation" && card.status === "confirmed";
   const ctxValue: CP1DraftContextValue = {
     card,
     draftAnswers,
@@ -234,12 +235,6 @@ export function CP1EditorView({
         <strong>Requested change: </strong>
         {card.prompt}
       </p> : null}
-      {card.revision_note ? (
-        <p id="surla-agreement-revision-note">
-          <strong>Revision note: </strong>
-          {card.revision_note}
-        </p>
-      ) : null}
       {card.confirmed_by ? (
         <p>
           <strong>
@@ -290,6 +285,12 @@ export function CP1EditorView({
             ) : null}
           </div>
         </div>
+        <p id="surla-agreement-revision">
+          {card.status === "confirmed" ? "Agreed revision" : "Draft revision"} <code>{card.request_revision.slice(0, 12)}</code>
+        </p>
+        {card.revision_note ? (
+          <p id="surla-agreement-revision-note"><strong>Revision note: </strong>{card.revision_note}</p>
+        ) : null}
         {card.status === "confirmed" ? (
           <details className="surla-details" id="surla-agreement-details">
             <summary>Agreement details</summary>
@@ -312,18 +313,17 @@ export function CP1EditorView({
       ) : null}
 
       {priorCard ? (
-        <Card
+        <details
           id="surla-prior-revision"
-          className="surla-card"
-          role="region"
-          aria-label="Previous Saved Revision"
+          className="surla-card surla-details"
+          key={priorCard.request_revision}
+          open={priorWasDraft ? undefined : true}
         >
-          <div className="surla-field-row">
-            <h3>Previous Saved Revision</h3>
-            <Badge>{priorCard.status === "confirmed" ? "Confirmed" : "Needs confirmation"}</Badge>
-            <code>{priorCard.request_revision}</code>
-          </div>
-          {priorCard.status === "needs_confirmation" && card.status === "confirmed" ? (
+          <summary>
+            {priorWasDraft ? "Previous unconfirmed draft" : "Previous saved revision"}{" "}
+            <code>{priorCard.request_revision.slice(0, 12)}</code>
+          </summary>
+          {priorWasDraft ? (
             <p>This is the proposal before confirmation. Your confirmed answers are saved in the current agreement.</p>
           ) : null}
           <p>
@@ -413,7 +413,11 @@ export function CP1EditorView({
           ) : (
             <p>None declared.</p>
           )}
-        </Card>
+          <details className="surla-details">
+            <summary>Details</summary>
+            <p>Previous saved revision: <code>{priorCard.request_revision}</code></p>
+          </details>
+        </details>
       ) : null}
 
       {preservedDraft && Array.isArray(preservedDraft.lines) ? (
@@ -443,7 +447,7 @@ export function CP1EditorView({
 
       <RefinementDisclosure
         confirmed={card.status === "confirmed"}
-        keepOpen={draftDirty || proposalWaiting || preservedDraft !== null || formError !== null}
+        keepOpen={draftDirty || preservedDraft !== null || formError !== null}
       >
         {openUINode}
 
@@ -471,6 +475,11 @@ export function CP1EditorView({
           </> : null}
 
           <h3>Concrete examples</h3>
+          {draftExamples.length > 0 ? <p className="surla-muted" id="surla-example-check-labels">
+            Check labels guide test writing. Use scenario coverage to see how an example is tested.
+            Verification reports results for the selected suite’s scenarios. Starter tests use a scripted model and need no API key.
+            Configure a model in Live target to try live prompt responses.
+          </p> : null}
           <div className="surla-examples-list">
             {draftExamples.map((ex, idx) => (
               <section key={ex.id} className="surla-example-card" aria-label={"Example " + (idx + 1)}

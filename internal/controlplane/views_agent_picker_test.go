@@ -41,6 +41,11 @@ expect(page.state() !== "cp5-approval", "opening an unbuilt change navigated to 
 const client = (role) => JSON.parse(page.$("#surla-build-agents-" + role + "-client").value)[0];
 expect(client("builder") === "codex" && client("test_writer") === "claude", "default workers did not use different installed families");
 expect(!page.$("#surla-build-agents-builder-yolo").checked && !page.$("#surla-build-agents-test_writer-yolo").checked, "discovery granted permissions");
+for (const [role, label] of [["builder", "Builder"], ["test_writer", "Test writer"]]) {
+  const toggle = page.$("#surla-build-agents-" + role + "-yolo");
+  expect(toggle.labels[0]?.textContent.trim().replace(/\s+/g, " ") === "Skip permission prompts (YOLO) for " + label,
+         "permission toggle did not include its worker role in its native label");
+}
 const model = page.$("#surla-build-agents-builder-model");
 Object.getOwnPropertyDescriptor(page.win.HTMLInputElement.prototype, "value").set.call(model, "custom-model-id");
 model.dispatchEvent(new page.win.Event("input", { bubbles: true }));

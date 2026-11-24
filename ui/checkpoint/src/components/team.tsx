@@ -96,7 +96,7 @@ const attentionLabels: Record<TeamRoleState["attention"], string> = {
   permission: "permission",
   question: "question",
   auth: "sign-in required",
-  silent: "no status reported",
+  silent: "no status reported (may be waiting at a startup or folder-trust prompt)",
   assignment: "idle with an unread assignment.",
   unknown: "reason unknown",
 };
@@ -200,7 +200,7 @@ export function TeamStageView({
             <ul id="surla-team-roles" className="surla-trace-list">
               {snapshot.roles.map((role) => {
                 const hasPane = roleHasPane(role.role, snapshot.herdr_mode);
-                const externalGuideUnknown = role.role === "guide" && !hasPane && role.state === "unknown";
+                const guidePaneUnlinked = role.role === "guide" && !hasPane && role.state === "unknown";
                 return <li key={role.role} id={"surla-team-role-" + role.role} data-state={role.state}>
                   <div className="surla-trace-heading">
                     <strong>{roleLabels[role.role]}</strong>
@@ -210,12 +210,12 @@ export function TeamStageView({
                         role.state === "error" ? "destructive" : "default"
                       }
                     >
-                      {externalGuideUnknown ? "Attached in coding agent" : stateLabels[role.state]}
+                      {guidePaneUnlinked ? "Coding agent registered · No Herdr pane linked" : stateLabels[role.state]}
                       {role.state === "needs_you" && attentionLabels[role.attention] !== ""
                         ? ": " + attentionReason(role, hasPane) : ""}
                     </Badge>
                   </div>
-                  {externalGuideUnknown && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
+                  {guidePaneUnlinked && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
                   <p>{role.role === "guide" ? "No assignments" : assignmentLabels[role.assignment]}</p>
                   {hasPane ? <div className="surla-field-row">
                     <PaneButton
@@ -229,6 +229,7 @@ export function TeamStageView({
                   </div> : null}
                   <details className="surla-details">
                     <summary>{roleLabels[role.role]} details</summary>
+                    {guidePaneUnlinked ? <p>To link a pane, open a project tab in Herdr and run <code>/surla</code> there.</p> : null}
                     <p>Registered handle: <code>{role.handle}</code></p>
                   </details>
                 </li>;

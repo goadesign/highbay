@@ -2,7 +2,7 @@
 // Reading a page never takes ownership of the Change Card's editable state.
 import React from "react";
 import { TraceList, TraceSpan } from "../types";
-import { Alert, Button } from "./shadcn";
+import { Alert, Badge, Button } from "./shadcn";
 
 // TraceFilter adds the API's all-status option to the generated span statuses.
 export type TraceFilter = "all" | Exclude<TraceSpan["status"], "unset">;
@@ -91,7 +91,10 @@ function TraceRow({ span }: { span: TraceSpan }) {
     <li>
       <div className="surla-trace-heading">
         <strong>{span.name || "Unnamed operation"}</strong>
-        <span>{span.status === "error" ? "Error" : span.status === "ok" ? "OK" : "Status unset"}</span>
+        <span>
+          <Badge>{callerLabel(span.attributes["surla.caller_kind"])}</Badge>{" "}
+          {span.status === "error" ? "Error" : span.status === "ok" ? "OK" : "Status unset"}
+        </span>
       </div>
       <p>{span.summary}</p>
       <p className="surla-muted">
@@ -112,4 +115,16 @@ function TraceRow({ span }: { span: TraceSpan }) {
       </details>
     </li>
   );
+}
+
+// callerLabel translates the authenticated role recorded with the diagnostic.
+function callerLabel(kind: string | undefined): string {
+  switch (kind) {
+    case "builder": return "Builder";
+    case "guide": return "Coding agent";
+    case "test_writer": return "Test writer";
+    case "user": return "You";
+    case "management": return "Project management";
+    default: return "Caller unknown";
+  }
 }

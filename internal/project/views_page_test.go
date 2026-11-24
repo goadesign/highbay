@@ -83,10 +83,28 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
     expect(text.includes("coding agent") && text.includes("Open Surla Window") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
     expect(!text.includes("Run surla") && !text.includes("run surla"), "session recovery still requires a typed terminal command: " + text);
   };
+  const expectPromptCopy = async (page, selector) => {
+    const copied = [];
+    Object.defineProperty(page.win.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (text) => { copied.push(text); } },
+    });
+    const button = page.$(selector + " button");
+    expect(button.textContent === "Copy prompt for coding agent", "the copy prompt action is missing");
+    button.click();
+    const status = () => page.text(selector + ' [role="status"]');
+    await until(() => status() === "Prompt copied.", "the copy success was not announced");
+    expect(copied.length === 1 && copied[0] === "Open Surla views", "copy included something other than the recovery prompt");
+    Object.defineProperty(page.win.navigator, "clipboard", { value: undefined });
+    button.click();
+    await until(() => status().includes("Could not copy"), "clipboard failure did not offer a fallback");
+    expect(page.text(selector + " code") === "Open Surla views", "clipboard failure left no selectable prompt");
+  };
   // Without a link the page explains how to open it and asks the server nothing.
   const bare = await openPage(origin);
   await until(() => bare.$("#surla-signed-out"), "a page without a link did not say how to open it");
   expectRecovery(bare, "#surla-signed-out");
+  await expectPromptCopy(bare, "#surla-signed-out");
   expect(!bare.text("#surla-signed-out-title").includes("with surla"), "the no-link heading still directs the user to the CLI");
   const lifetime = bare.text("#surla-signed-out .surla-muted");
   expect(lifetime.includes("fresh session") && lifetime.includes("one of those routes"), "the session-lifetime note omitted the established reopen routes: " + lifetime);
@@ -155,6 +173,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   page.$("#surla-confirm-submit").click();
   await until(() => page.$("#surla-session-ended"), "the page did not say its session ended");
   expectRecovery(page, "#surla-session-ended");
+  await expectPromptCopy(page, "#surla-session-ended");
   expect(page.$('textarea[data-field="expected_outcome"]').value === "Typed before the restart", "typed edits were lost");
   expect(page.text("#surla-session-ended-edits").includes("Typed before the restart"), "the unsaved edits are not shown for copying");
   expect(page.$("#surla-open-pending-link").disabled && page.beforeUnload(), "a failed save released unsaved input");

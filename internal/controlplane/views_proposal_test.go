@@ -29,10 +29,11 @@ expect(page.beforeUnload(), "an unadopted proposal answer did not guard leaving"
 page.win.location.hash = "link=pending-proposal-link";
 await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "proposal choices did not defer the replacement link");
 expect(page.$("#surla-open-pending-link").disabled, "unadopted choices allowed the replacement link");
-expect(page.text("#surla-pending-link").includes("Adopt or Discard Unsaved Edits") && page.text("#surla-pending-link").includes("without declining"), "the notice did not name the local way to clear proposal answers");
-page.$("#surla-discard-draft").click();
+expect(page.text("#surla-pending-link").includes("Discard proposal answers") && page.text("#surla-pending-link").includes("without declining"), "the notice did not name the local way to clear proposal answers");
+expect(!page.$("#surla-refine-agreement").open, "local proposal choices opened the clean agreement form");
+page.$("#surla-proposal-discard-answers").click();
 await until(() => !page.$("#surla-open-pending-link").disabled, "local discard did not resolve the proposal choices");
-expect(!page.beforeUnload() && page.$("#surla-proposal"), "local discard removed the proposal or retained its choices");
+expect(!page.beforeUnload() && page.doc.activeElement === page.$("#surla-proposal"), "local discard removed the proposal, retained its choices or lost focus");
 expect(page.sent("POST", "/changes/confirm").length === 0 && page.sent("POST", "/changes/decline").length === 0, "local discard changed the saved agreement or proposal");
 page.close();
 `)
@@ -90,8 +91,16 @@ expect(next().includes("Save or discard your refinements"), "dirty Agree did not
 
 await control(origin, "act", { key: "propose" });
 await until(() => page.$("#surla-proposal"), "the guide's revision did not appear without a reload");
-expect(next().includes("Adopt or Decline") && page.text(".surla-frame-summary") === agreement, "the proposal did not guide the decision while retaining the current agreement");
 expect(page.status().includes("proposed a new revision"), "the proposal was not announced: " + page.status());
+for (const view of ["cp1", "build", "cp1"]) {
+  page.$("#surla-nav-" + view).click();
+  expect(next() === "Review proposed revision" &&
+         page.text(".surla-frame-attention dd") === "Adopt or decline the proposed revision." &&
+         page.text(".surla-frame-summary") === agreement, "the proposal did not guide the decision in " + view);
+  page.$("#surla-review-proposal").click();
+  expect(page.doc.activeElement === page.$("#surla-proposal"), "review did not focus the proposal");
+  expect(page.status().includes("Review the proposed revision"), "navigation pointed away from the waiting proposal");
+}
 expect(editor().dataset.requestRevision === input.agreed && outcome().value === "Typed on the agreed revision", "the proposal replaced the agreed revision or lost a typed edit");
 expect(page.$("#surla-proposal-summary").dataset.changed === "true" && page.text("#surla-proposal-summary").includes("exchanges ship a replacement"), "the changed summary is not shown");
 const question = page.$('#surla-proposal [data-question-id="chg-proposal-ambiguity-01"]');

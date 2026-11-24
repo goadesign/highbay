@@ -93,7 +93,9 @@ export function BuildSectionView({
   const open = saved !== null && (saved.taking.state === "building" || saved.taking.state === "passed");
   const current = saved !== null && saved.in_force;
   const replay = current && saved.taking.state === "merged";
-  const requiresConfirmation = (current && open) || saved?.taking.state === "building" || replay;
+  const proposalRevision = card.proposed_revision?.request_revision;
+  const replacesBuild = (current && open) || saved?.taking.state === "building" || replay;
+  const requiresConfirmation = proposalRevision !== undefined || replacesBuild;
   const displayedCurrent = currentRevision === card.request_revision &&
     (!current || saved.request_revision === card.request_revision);
   const confirmed = card.status === "confirmed";
@@ -109,8 +111,11 @@ export function BuildSectionView({
   const sentBack = open && current && saved.test_writer.tests.state === "needs_changes";
   const reviewPrimary = open && approvalAvailable && !otherPrimary && !sentBack && matchedCheck &&
     report?.passed === true && !recordedCheck;
-  // identity binds the question to the exact subject and start it described.
-  const identity = JSON.stringify([card.change_id, card.request_revision, saved?.request_revision ?? null, saved?.started_at ?? null, saved?.taking.state ?? null, draftedBeforeDrop]);
+  // identity binds the question to the exact agreement, proposal and start it described.
+  const subject = [card.change_id, card.request_revision, proposalRevision];
+  const identity = JSON.stringify([
+    ...subject, saved?.request_revision ?? null, saved?.started_at ?? null, saved?.taking.state ?? null, draftedBeforeDrop,
+  ]);
   const [question, setQuestion] = useState<BuildQuestion | null>(null);
   const confirming = question?.kind === "rebuild" && question.identity === identity && requiresConfirmation && eligible && !disabled && !starting && !dropping && blockingBuild === null;
   const questionBusy = question !== null;
@@ -212,7 +217,7 @@ export function BuildSectionView({
     setQuestion(null);
   }
 
-  // start is called only by the direct first/earlier action or final confirm.
+  // start consumes consent when a proposal or previous build requires it.
   function start() {
     if (blocked || sent.current || (requiresConfirmation && !confirming)) {
       return;
@@ -224,7 +229,7 @@ export function BuildSectionView({
       : undefined);
   }
 
-  // ask reads the owner again before describing the build that will be replaced.
+  // ask refreshes the build before presenting the confirmation.
   function ask() {
     if (blocked || questionBusy || reading.current) return;
     reading.current = true;
@@ -235,7 +240,7 @@ export function BuildSectionView({
         return;
       }
       const freshIdentity = JSON.stringify([
-        card.change_id, card.request_revision, fresh.build.state === "started" ? fresh.build.request_revision : null,
+        ...subject, fresh.build.state === "started" ? fresh.build.request_revision : null,
         fresh.build.state === "started" ? fresh.build.started_at : null, fresh.build.state === "started" ? fresh.build.taking.state : null,
         fresh.drafted_before_drop,
       ]);
@@ -327,7 +332,9 @@ export function BuildSectionView({
         {saved.taking.state === "building" ? "Building" : saved.taking.state === "passed" ? "Passed" :
           saved.taking.state === "merged" ? "Merged" : "Dropped"}
       </Badge>
-      <Badge variant={current ? "accent" : "default"}>{current ? "Agreed revision" : "Earlier revision"}</Badge>
+      <Badge variant={current ? "accent" : "default"}>
+        {current ? "Built agreement" : "Earlier built agreement"} <code>{saved.request_revision.slice(0, 12)}</code>
+      </Badge>
     </div> : null}
   </>;
   const observations = <>
@@ -416,10 +423,16 @@ export function BuildSectionView({
           }}
         >
           <Alert>
-            <p id="surla-build-question-title"><strong>{current
+            <p id="surla-build-question-title"><strong>{proposalRevision !== undefined
+              ? "Build the earlier agreed revision?"
+              : current
               ? "Build the agreed revision again?"
               : "Replace the earlier build with the agreed revision?"}</strong></p>
-            <p>
+            {proposalRevision !== undefined ? <p>
+              Build will use <strong>{card.summary}</strong> (agreed revision <code>{card.request_revision.slice(0, 12)}</code>).
+              The proposed revision will remain open for your decision.
+            </p> : null}
+            {replacesBuild ? <p>
               {replay
                 ? saved?.test_writer.tests.state === "not_used"
                   ? "This starts a new build number from your branch as it is now, for the same agreed revision, with a fresh unread builder assignment and this project’s configured tests. Earlier reports do not establish that the new build passed."
@@ -427,11 +440,13 @@ export function BuildSectionView({
                 : saved?.test_writer.tests.state === "not_used"
                 ? "Building again replaces this build and makes the builder’s assignment unread again."
                 : "Building again replaces this build, makes both assignments unread, sets the test writer’s work to Assigned, clears its report and verdict, and requires its tests to be reported, judged and accepted again before verification or a new live target."}
-            </p>
+            </p> : null}
             <p id="surla-build-confirm-explanation">{startExplanation}</p>
             <div className="surla-field-row">
               {agentPicker}
-              <Button id="surla-build-confirm" disabled={blocked} onClick={start}>Build again</Button>
+              <Button id="surla-build-confirm" disabled={blocked} onClick={start}>
+                {proposalRevision !== undefined ? "Build earlier agreed revision" : "Build again"}
+              </Button>
               <Button id="surla-build-cancel" disabled={disabled || starting} onClick={cancel}>Cancel</Button>
             </div>
           </Alert>
@@ -677,7 +692,10 @@ function BuildDetails({ card, build, children }: { card: ChangeCardResult; build
       <p>Agreed revision: <code>{card.request_revision}</code></p>
       {build !== null ? (
         <>
-          <p>Built revision: <code>{build.request_revision}</code></p>
+          <p>Built agreement: <code>{build.request_revision}</code></p>
+          {build.request_revision === card.request_revision && card.revision_note ? (
+            <p>Revision note: {card.revision_note}</p>
+          ) : null}
           <p>Build started: <time dateTime={build.started_at}>{build.started_at}</time></p>
           {build.required_tests.length > 0 ? <dl id="surla-build-test-hooks">
             {build.required_tests.map((test) => <React.Fragment key={test.scenario}>

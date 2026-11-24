@@ -208,6 +208,9 @@ expect(writer.required_tests.length === 1 && writer.required_tests[0].hook === "
 expect(writer.stories.length === 1 && writer.stories[0].flows.length === 2 && writer.working_folder.length > 0, "the full assignment lacks its saved Story or working folder");
 await version("read-1");
 await until(() => page.text("#surla-build-builder").includes("assignment read") && page.text("#surla-build-test-writer").includes("assignment read"), "full agent reads did not update the page's assignment facts");
+expect(page.text(".surla-frame-attention dd") === "Nothing now." &&
+       page.text("#surla-frame-next dd").includes("The test writer prepares and reports the tests"),
+       "agents reading their assignments did not clear user attention or preserve the next step");
 const inputSelector = 'textarea[data-field="expected_outcome"]';
 const typed = page.$(inputSelector);
 page.type(typed, "Keep this unsaved expected outcome");

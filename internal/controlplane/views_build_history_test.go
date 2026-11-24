@@ -353,11 +353,13 @@ func TestViewsPageApprovalFollowsTheRealMerge(t *testing.T) {
 		require.True(t, found)
 		require.NoError(t, cp.cards.save(record))
 	})
-	runPageScript(t, ps, map[string]any{"run": runID, "otherRun": otherRunID, "candidate": candidate, "otherCandidate": otherCandidate, "tests": tests}, `
+	runPageScript(t, ps, map[string]any{"run": runID, "otherRun": otherRunID, "candidate": candidate, "otherCandidate": otherCandidate, "tests": tests, "revision": card.RequestRevision}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-review-approval"), "saved approval did not load");
 page.$("#surla-review-approval").click();
 await until(() => page.$("#surla-cp5-approval") && page.$("#surla-cp5-merge") && !page.$("#surla-cp5-merge").disabled, "approval did not show the open build's merge action");
+const verifyMerged = () => page.$("#surla-cp5-merge-feedback-verify-merged");
+expect(!verifyMerged(), "post-merge verification was offered before the merge");
 const record = page.text("#surla-cp5-approval");
 const mergedBasis = "This saved result names the builder’s commit " + input.candidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
 const otherMergedBasis = "This saved result names the builder’s commit " + input.otherCandidate + " and the tests’ commit " + input.tests + ". This build is merged into your branch; this verification covered these commits, not your branch after the merge.";
@@ -368,13 +370,23 @@ await until(() => page.text("#surla-frame-next").includes("Describe the next cha
 expect(page.$("#surla-approval-stage").dataset.runId === input.run && page.text("#surla-cp5-approval") === record, "merge completion replaced the selected approval or evidence");
 expect(!page.text("#surla-frame-next").includes("Merge the verified commits"), "completed build still instructs another merge");
 expect(page.text(".surla-approval-basis").includes(mergedBasis) && !page.text(".surla-approval-basis").includes("before merging") && !page.text(".surla-approval-basis").includes("merge commit"), "merged written-tests approval did not explain the merged build state");
+const template = verifyMerged();
+expect(template && !template.open && template.querySelector("summary").textContent === "Verify the merged branch from the terminal",
+       "the separate post-merge check did not stay behind a disclosure");
+const command = template.querySelector("pre code").textContent;
+expect(command.includes('-candidate-commit "$(git rev-parse --verify HEAD)"') &&
+       command.includes("-suite-commit '" + input.tests + "'") &&
+       command.includes("-request-revision '" + input.revision + "'") &&
+       !command.includes(input.candidate) &&
+       template.textContent.includes("separate verification report"),
+       "the command used the pre-merge candidate or lost the exact suite and revision");
 const buildPath = "/changes/chg-merged-review/build";
 const before = page.sent("GET", buildPath).length;
 await control(origin, "reply", { key: "GET " + buildPath, status: 503, body: { name: "internal", message: "Build could not be read." } });
 await control(origin, "hold", { key: "GET " + buildPath });
 await control(origin, "act", { key: "resave-merged-card" });
 await until(() => page.sent("GET", buildPath).length > before, "changed owner facts did not refresh the build");
-expect(!page.text("#surla-frame-next").includes("Describe the next change") && page.text(".surla-approval-basis").includes(fallbackBasis), "pending build read retained a completion claim");
+expect(!verifyMerged() && !page.text("#surla-frame-next").includes("Describe the next change") && page.text(".surla-approval-basis").includes(fallbackBasis), "pending build read retained a completion claim");
 await control(origin, "release", { key: "GET " + buildPath });
 await until(() => page.sent("GET", buildPath).slice(before).some((r) => r.status === 503) && !page.$("#surla-frame-next button").disabled, "failed build read did not settle");
 expect(page.text("#surla-frame-next").includes("Read current build") && !page.text("#surla-frame-next").includes("Describe the next change") && page.text(".surla-approval-basis").includes(fallbackBasis), "failed build read claimed completion or lost its recovery action");
@@ -395,6 +407,7 @@ expect(page.text("#surla-cp4-details").includes(otherMergedBasis) && !page.text(
 page.$("#surla-nav-cp5").click();
 await until(() => page.$("#surla-approval-stage").dataset.runId === input.otherRun && !page.$("#surla-cp5-observation-status"), "untaken pass B did not open in Approve");
 expect(page.text(".surla-approval-basis").includes(otherMergedBasis) && !page.text(".surla-approval-basis").includes("This run verified") && !page.text(".surla-approval-basis").includes("Merged into your branch."), "Approve claimed untaken pass B was merged");
+expect(!verifyMerged(), "the untaken pass borrowed the approved merge's verification command");
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0, "observing the merge approved or started work");
 page.close();
 `)

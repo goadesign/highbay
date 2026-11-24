@@ -96,7 +96,9 @@ for (const mode of ["available", "unavailable"]) {
          !page.$("#surla-nav-changes") && !page.$(".surla-frame-context"), "healthy empty state kept unnecessary frame chrome");
   page.$("#surla-nav-team").click();
   const codingAgent = page.$("#surla-team-role-guide");
-  expect(codingAgent.textContent.includes("Attached in coding agent") && !codingAgent.textContent.includes("Chorus watcher unknown") &&
+  expect(codingAgent.textContent.includes("Coding agent registered · No Herdr pane linked") &&
+         codingAgent.textContent.includes("open a project tab in Herdr and run /surla") &&
+         !codingAgent.textContent.includes("Chorus watcher unknown") &&
          !page.$("#surla-team-show-guide"), "Team showed a false warning or pane action for external mode " + mode);
   page.$("#surla-nav-changes").click();
 }

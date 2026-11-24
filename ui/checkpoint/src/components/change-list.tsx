@@ -150,6 +150,7 @@ function ChangeListRow({
   busy: boolean;
   onOpen: (changeId: string) => void;
 }) {
+  const openLabel = "Open: " + item.summary;
   // IDs are application data and may contain whitespace; React owns this
   // accessibility reference so it remains one valid, unique ID token.
   const inputsDescriptionId = React.useId();
@@ -158,11 +159,12 @@ function ChangeListRow({
       <Button
         id={"surla-open-change-" + item.change_id}
         className="surla-change-open"
+        aria-label={openLabel + " (" + item.change_id + ")"}
         aria-current={open ? "true" : undefined}
         disabled={busy}
         onClick={() => onOpen(item.change_id)}
       >
-        {"Open: " + item.summary}
+        {openLabel}
       </Button>{" "}
       <Badge variant={item.status === "confirmed" ? "success" : "warning"}>
         {item.status === "confirmed" ? "Confirmed" : "Needs confirmation"}
@@ -199,6 +201,10 @@ function ChangeListRow({
       <span className="surla-muted">
         Saved <time dateTime={item.saved_at}>{new Date(item.saved_at).toLocaleString()}</time>
       </span>
+      <p className="surla-muted">
+        {item.status === "confirmed" ? "Agreed revision" : "Draft revision"} <code>{item.request_revision.slice(0, 12)}</code>
+        {item.proposed_revision ? <> · Proposed revision <code>{item.proposed_revision.slice(0, 12)}</code></> : null}
+      </p>
       <details className="surla-details">
         <summary>Details</summary>
         <p>

@@ -31,6 +31,8 @@ export interface ProposedRevisionViewProps {
   onAdopt: () => void;
   // onDecline removes the proposal, keeping the agreed revision.
   onDecline: () => void;
+  // onDiscardAnswers clears only the unsubmitted answers to this proposal.
+  onDiscardAnswers: () => void;
 }
 
 // ProposedRevisionView renders the waiting proposal against the agreed
@@ -45,6 +47,7 @@ export function ProposedRevisionView({
   onAnswer,
   onAdopt,
   onDecline,
+  onDiscardAnswers,
 }: ProposedRevisionViewProps) {
   const questions = proposal.ambiguities ?? [];
   const agreedQuestions = new Set((card.ambiguities ?? []).map((question) => question.question));
@@ -61,12 +64,13 @@ export function ProposedRevisionView({
       className="surla-card surla-proposal"
       role="region"
       aria-labelledby="surla-proposal-title"
+      tabIndex={-1}
       aria-busy={busy ? "true" : undefined}
       data-request-revision={proposal.request_revision}
     >
       <div className="surla-region-header">
         <div className="surla-region-title-group">
-          <h2 id="surla-proposal-title">Proposed revision</h2>
+          <h2 id="surla-proposal-title">Proposed revision <code>{proposal.request_revision.slice(0, 12)}</code></h2>
           <Badge variant="warning">Waiting for you</Badge>
         </div>
       </div>
@@ -232,10 +236,19 @@ export function ProposedRevisionView({
         <Button id="surla-proposal-decline" disabled={busy} onClick={onDecline}>
           Decline
         </Button>
+        {Object.keys(answers).length > 0 ? (
+          <Button id="surla-proposal-discard-answers" variant="ghost" disabled={busy} onClick={onDiscardAnswers}>
+            Discard proposal answers
+          </Button>
+        ) : null}
       </div>
       {unanswered.length > 0 ? (
         <p id="surla-proposal-adopt-hint">Answer every question to adopt this revision.</p>
       ) : null}
+      <details className="surla-details">
+        <summary>Details</summary>
+        <p>Proposed revision: <code>{proposal.request_revision}</code></p>
+      </details>
     </Card>
   );
 }
