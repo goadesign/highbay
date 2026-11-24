@@ -3531,6 +3531,10 @@ paths:
                                           id: Autem facilis doloribus quo vero accusantium eos.
                                           question: Sit eius quasi.
                                     builder:
+                                        branch: Sint dolores dolor.
+                                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                        last_check_at: "1994-05-28T12:02:31Z"
+                                        last_check_passed: true
                                         read: false
                                     coverage_statements:
                                         - example_ids:
@@ -3687,6 +3691,10 @@ paths:
                                           id: Autem facilis doloribus quo vero accusantium eos.
                                           question: Sit eius quasi.
                                     builder:
+                                        branch: Sint dolores dolor.
+                                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                        last_check_at: "1994-05-28T12:02:31Z"
+                                        last_check_passed: true
                                         read: false
                                     coverage_statements:
                                         - example_ids:
@@ -3826,6 +3834,10 @@ paths:
                                                   id: Autem facilis doloribus quo vero accusantium eos.
                                                   question: Sit eius quasi.
                                             builder:
+                                                branch: Sint dolores dolor.
+                                                head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                                last_check_at: "1994-05-28T12:02:31Z"
+                                                last_check_passed: true
                                                 read: false
                                             coverage_statements:
                                                 - example_ids:
@@ -3908,6 +3920,10 @@ paths:
                                                   id: Autem facilis doloribus quo vero accusantium eos.
                                                   question: Sit eius quasi.
                                             builder:
+                                                branch: Sint dolores dolor.
+                                                head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                                last_check_at: "1994-05-28T12:02:31Z"
+                                                last_check_passed: true
                                                 read: false
                                             coverage_statements:
                                                 - example_ids:
@@ -4133,6 +4149,10 @@ paths:
                                           id: Autem facilis doloribus quo vero accusantium eos.
                                           question: Sit eius quasi.
                                     builder:
+                                        branch: Sint dolores dolor.
+                                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                        last_check_at: "1994-05-28T12:02:31Z"
+                                        last_check_passed: true
                                         read: false
                                     coverage_statements:
                                         - example_ids:
@@ -4249,6 +4269,10 @@ paths:
                                           id: Autem facilis doloribus quo vero accusantium eos.
                                           question: Sit eius quasi.
                                     builder:
+                                        branch: Sint dolores dolor.
+                                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                        last_check_at: "1994-05-28T12:02:31Z"
+                                        last_check_passed: true
                                         read: false
                                     coverage_statements:
                                         - example_ids:
@@ -19258,12 +19282,34 @@ components:
         BuilderProgress:
             type: object
             properties:
+                branch:
+                    type: string
+                    description: The build's builder branch, surla/build-<n>.
+                    example: Sint dolores dolor.
+                head_commit:
+                    type: string
+                    description: 'The commit the builder''s branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.'
+                    example: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                    pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+                last_check_at:
+                    type: string
+                    description: When that check_project completed; absent with last_check_passed.
+                    example: "1994-05-28T12:02:31Z"
+                    format: date-time
+                last_check_passed:
+                    type: boolean
+                    description: Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.
+                    example: true
                 read:
                     type: boolean
                     description: True once the builder read this assignment in full with get_builder_assignment.
                     example: false
-            description: The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.
+            description: 'The builder''s assignment for one build. It exists from the moment the user starts the build; verification of the build''s revision, not the assignment, judges the builder''s work. branch, head_commit and the last check are three independent recorded facts: none says that a check or a verification ran on head_commit.'
             example:
+                branch: Sint dolores dolor.
+                head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                last_check_at: "1994-05-28T12:02:31Z"
+                last_check_passed: true
                 read: false
             required:
                 - read
@@ -19825,6 +19871,10 @@ components:
                               id: Autem facilis doloribus quo vero accusantium eos.
                               question: Sit eius quasi.
                         builder:
+                            branch: Sint dolores dolor.
+                            head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                            last_check_at: "1994-05-28T12:02:31Z"
+                            last_check_passed: true
                             read: false
                         coverage_statements:
                             - example_ids:
@@ -20151,6 +20201,10 @@ components:
                                   id: Autem facilis doloribus quo vero accusantium eos.
                                   question: Sit eius quasi.
                             builder:
+                                branch: Sint dolores dolor.
+                                head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                                last_check_at: "1994-05-28T12:02:31Z"
+                                last_check_passed: true
                                 read: false
                             coverage_statements:
                                 - example_ids:
@@ -20255,6 +20309,10 @@ components:
                           id: Autem facilis doloribus quo vero accusantium eos.
                           question: Sit eius quasi.
                     builder:
+                        branch: Sint dolores dolor.
+                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                        last_check_at: "1994-05-28T12:02:31Z"
+                        last_check_passed: true
                         read: false
                     coverage_statements:
                         - example_ids:
@@ -24153,6 +24211,10 @@ components:
                           id: Autem facilis doloribus quo vero accusantium eos.
                           question: Sit eius quasi.
                     builder:
+                        branch: Sint dolores dolor.
+                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                        last_check_at: "1994-05-28T12:02:31Z"
+                        last_check_passed: true
                         read: false
                     coverage_statements:
                         - example_ids:
@@ -26805,6 +26867,10 @@ components:
                           id: Autem facilis doloribus quo vero accusantium eos.
                           question: Sit eius quasi.
                     builder:
+                        branch: Sint dolores dolor.
+                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                        last_check_at: "1994-05-28T12:02:31Z"
+                        last_check_passed: true
                         read: false
                     coverage_statements:
                         - example_ids:
@@ -27177,6 +27243,10 @@ components:
                       id: Autem facilis doloribus quo vero accusantium eos.
                       question: Sit eius quasi.
                 builder:
+                    branch: Sint dolores dolor.
+                    head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                    last_check_at: "1994-05-28T12:02:31Z"
+                    last_check_passed: true
                     read: false
                 coverage_statements:
                     - example_ids:

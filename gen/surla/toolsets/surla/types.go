@@ -1258,6 +1258,18 @@ type (
 		// True once the builder read this assignment in full with
 		// get_builder_assignment.
 		Read bool
+		// The build's builder branch, surla/build-<n>.
+		Branch *string
+		// The commit the builder's branch points at, in get_build and list_changes
+		// only: present once the branch exists and points at another commit than the
+		// one the build started from.
+		HeadCommit *string
+		// Whether the builder's latest completed check_project in this build passed;
+		// absent until one completed. The check covered the builder's working folder
+		// as it was then, committed or not.
+		LastCheckPassed *bool
+		// When that check_project completed; absent with last_check_passed.
+		LastCheckAt *string
 	}
 	// BuilderVerificationReport is a nested type used by the generated JSON contract.
 	BuilderVerificationReport = struct {

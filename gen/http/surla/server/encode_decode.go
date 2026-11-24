@@ -6080,7 +6080,11 @@ func marshalSurlaStartedBuildToStartedBuildResponseBody(v *surla.StartedBuild) *
 // *surla.BuilderProgress.
 func marshalSurlaBuilderProgressToBuilderProgressResponseBody(v *surla.BuilderProgress) *BuilderProgressResponseBody {
 	res := &BuilderProgressResponseBody{
-		Read: v.Read,
+		Read:            v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res

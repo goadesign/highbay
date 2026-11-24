@@ -5629,6 +5629,18 @@ type BuilderProgressResponseBody struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read bool `form:"read" json:"read" xml:"read"`
+	// The build's builder branch, surla/build-<n>.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The commit the builder's branch points at, in get_build and list_changes
+	// only: present once the branch exists and points at another commit than the
+	// one the build started from.
+	HeadCommit *string `form:"head_commit,omitempty" json:"head_commit,omitempty" xml:"head_commit,omitempty"`
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool `form:"last_check_passed,omitempty" json:"last_check_passed,omitempty" xml:"last_check_passed,omitempty"`
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string `form:"last_check_at,omitempty" json:"last_check_at,omitempty" xml:"last_check_at,omitempty"`
 }
 
 // TestWriterProgressResponseBody is used to define fields on response body

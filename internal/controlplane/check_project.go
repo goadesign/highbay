@@ -129,7 +129,8 @@ const (
 // authenticated principal and a read assignment for the open build. The builder
 // turn remains reserved until the helper finishes its operation and cleanup.
 func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
-	if _, ok := PrincipalFromContext(ctx); !ok {
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
@@ -141,6 +142,12 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
+	// The build open now is the one this check belongs to; a build started
+	// while the check runs does not get its verdict.
+	var build time.Time
+	if builds, err := c.ownedBuilds(principal.ID); err == nil && len(builds) > 0 {
+		build = builds[0].file.StartedAt
+	}
 	ctx, cancel := c.checkDeadline(ctx)
 	defer cancel()
 	result, err := c.runCheckHelper(ctx, checkToolProject)
@@ -148,7 +155,33 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 		return nil, err
 	}
 	span.SetAttributes(attribute.Bool("surla.check.passed", result.Check.Passed))
+	c.recordBuilderCheck(ctx, build, result.Check.Passed)
 	return result.Check, nil
+}
+
+// recordBuilderCheck saves a completed check's verdict and time on the open
+// build started at build, for the user's view of the build. It saves nothing
+// when no build was open or another one has replaced it. A failed save does
+// not fail the builder's check: its own span records the failure, and the
+// build keeps the facts of the check before.
+func (c *ControlPlane) recordBuilderCheck(ctx context.Context, build time.Time, passed bool) {
+	if build.IsZero() {
+		return
+	}
+	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.record_builder_check")
+	defer span.End()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	saved, found, err := c.cards.loadOpenBuild()
+	if err == nil && found && saved.StartedAt.Equal(build) {
+		at := time.Now().UTC()
+		saved.Builder.LastCheckPassed, saved.Builder.LastCheckAt = &passed, &at
+		err = c.cards.saveOpenBuild(saved)
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "save the check's verdict on the open build")
+	}
 }
 
 // admitCheckOperation registers a new operation with checkOps, or refuses it

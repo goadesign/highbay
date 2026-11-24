@@ -8192,7 +8192,11 @@ func unmarshalStartedBuildResponseBodyToSurlaStartedBuild(v *StartedBuildRespons
 // *BuilderProgressResponseBody.
 func unmarshalBuilderProgressResponseBodyToSurlaBuilderProgress(v *BuilderProgressResponseBody) *surla.BuilderProgress {
 	res := &surla.BuilderProgress{
-		Read: *v.Read,
+		Read:            *v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res

@@ -831,11 +831,25 @@ type BuilderAssignmentWait struct {
 
 // The builder's assignment for one build. It exists from the moment the user
 // starts the build; verification of the build's revision, not the assignment,
-// judges the builder's work.
+// judges the builder's work. branch, head_commit and the last check are three
+// independent recorded facts: none says that a check or a verification ran on
+// head_commit.
 type BuilderProgress struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read bool
+	// The build's builder branch, surla/build-<n>.
+	Branch *string
+	// The commit the builder's branch points at, in get_build and list_changes
+	// only: present once the branch exists and points at another commit than the
+	// one the build started from.
+	HeadCommit *string
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string
 }
 
 // The builder view of a Checkpoint 4 verification report: counts, verdict and
@@ -3799,6 +3813,18 @@ type jsonBuilderProgressTransport struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read *bool `json:"read"`
+	// The build's builder branch, surla/build-<n>.
+	Branch *string `json:"branch,omitempty"`
+	// The commit the builder's branch points at, in get_build and list_changes
+	// only: present once the branch exists and points at another commit than the
+	// one the build started from.
+	HeadCommit *string `json:"head_commit,omitempty"`
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool `json:"last_check_passed,omitempty"`
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string `json:"last_check_at,omitempty"`
 }
 
 // validatejsonBuilderProgressTransport checks decoded JSON before it becomes a service value.
@@ -3808,6 +3834,12 @@ func validatejsonBuilderProgressTransport(value *jsonBuilderProgressTransport) (
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.head_commit", *value.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_check_at", *value.LastCheckAt, goa.FormatDateTime))
 	}
 	return err
 }
@@ -9129,6 +9161,17 @@ func validateBuilderAssignmentWaitOriginal(value *BuilderAssignmentWait) (err er
 	return err
 }
 
+// validateBuilderProgressOriginal checks the original typed value before JSON conversion.
+func validateBuilderProgressOriginal(value *BuilderProgress) (err error) {
+	if value.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("value.head_commit", *value.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("value.last_check_at", *value.LastCheckAt, goa.FormatDateTime))
+	}
+	return err
+}
+
 // validateBuilderVerificationReportOriginal checks the original typed value before JSON conversion.
 func validateBuilderVerificationReportOriginal(value *BuilderVerificationReport) (err error) {
 	if value.Counts == nil {
@@ -9337,6 +9380,11 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidateFormat("value.started_at", value.StartedAt, goa.FormatDateTime))
+	if value.Builder != nil {
+		if err2 := validateBuilderProgressOriginal(value.Builder); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if value.TestWriter != nil {
 		if err2 := validateTestWriterProgressOriginal(value.TestWriter); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -15936,10 +15984,17 @@ func EncodeBuilderProgress(in *BuilderProgress) ([]byte, error) {
 	if err := checkBuilderProgressValue(in); err != nil {
 		return nil, fmt.Errorf("encode BuilderProgress JSON: %w", err)
 	}
+	if err := validateBuilderProgressOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuilderProgress value: %w", err)
+	}
 	var body *jsonBuilderProgressTransport
 	{
 		body = &jsonBuilderProgressTransport{
-			Read: &in.Read,
+			Read:            &in.Read,
+			Branch:          in.Branch,
+			HeadCommit:      in.HeadCommit,
+			LastCheckPassed: in.LastCheckPassed,
+			LastCheckAt:     in.LastCheckAt,
 		}
 	}
 	if err := validatejsonBuilderProgressTransport(body); err != nil {
@@ -15959,6 +16014,9 @@ func ValidateBuilderProgressValue(in *BuilderProgress) error {
 	if err := checkBuilderProgressValue(in); err != nil {
 		return fmt.Errorf("validate BuilderProgress value: %w", err)
 	}
+	if err := validateBuilderProgressOriginal(in); err != nil {
+		return fmt.Errorf("validate BuilderProgress value: %w", err)
+	}
 
 	if in == nil {
 		return goa.MissingFieldError("result", "BuilderProgress")
@@ -15967,7 +16025,11 @@ func ValidateBuilderProgressValue(in *BuilderProgress) error {
 	var body *jsonBuilderProgressTransport
 	{
 		body = &jsonBuilderProgressTransport{
-			Read: &in.Read,
+			Read:            &in.Read,
+			Branch:          in.Branch,
+			HeadCommit:      in.HeadCommit,
+			LastCheckPassed: in.LastCheckPassed,
+			LastCheckAt:     in.LastCheckAt,
 		}
 	}
 	if err := validatejsonBuilderProgressTransport(body); err != nil {
@@ -16002,7 +16064,11 @@ func DecodeBuilderProgress(data []byte) (out *BuilderProgress, err error) {
 	}
 	{
 		out = &BuilderProgress{
-			Read: *body.Read,
+			Read:            *body.Read,
+			Branch:          body.Branch,
+			HeadCommit:      body.HeadCommit,
+			LastCheckPassed: body.LastCheckPassed,
+			LastCheckAt:     body.LastCheckAt,
 		}
 	}
 	return out, nil
@@ -29494,7 +29560,11 @@ func decodeBuilderAssignmentTransportToBuilderAssignment(v *jsonBuilderAssignmen
 
 func decodeBuilderProgressTransportToBuilderProgress(v *jsonBuilderProgressTransport) *BuilderProgress {
 	res := &BuilderProgress{
-		Read: *v.Read,
+		Read:            *v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res
@@ -30967,7 +31037,11 @@ func encodeBuilderAssignmentToBuilderAssignmentTransport(v *BuilderAssignment) *
 
 func encodeBuilderProgressToBuilderProgressTransport(v *BuilderProgress) *jsonBuilderProgressTransport {
 	res := &jsonBuilderProgressTransport{
-		Read: &v.Read,
+		Read:            &v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res
@@ -34292,6 +34366,34 @@ func validateBuilderProgressJSONValue(path string, value any, description string
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "branch":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's builder branch, surla/build-<n>.",
+			); err != nil {
+				return err
+			}
+		case "head_commit":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.",
+			); err != nil {
+				return err
+			}
+		case "last_check_at":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When that check_project completed; absent with last_check_passed.",
+			); err != nil {
+				return err
+			}
+		case "last_check_passed":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.",
+			); err != nil {
+				return err
+			}
 		case "read":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
@@ -34301,6 +34403,10 @@ func validateBuilderProgressJSONValue(path string, value any, description string
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"head_commit",
+				"last_check_at",
+				"last_check_passed",
 				"read",
 			})
 		}
@@ -44049,6 +44155,21 @@ func checkBuilderProgressBuilderProgressValue(in *BuilderProgress, field string,
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
+		if in.Branch != nil {
+			if !utf8.ValidString(string(*in.Branch)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "branch", false))
+			}
+		}
+		if in.HeadCommit != nil {
+			if !utf8.ValidString(string(*in.HeadCommit)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "head_commit", false))
+			}
+		}
+		if in.LastCheckAt != nil {
+			if !utf8.ValidString(string(*in.LastCheckAt)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "last_check_at", false))
+			}
+		}
 	}
 	return nil
 }

@@ -88,10 +88,17 @@ var TestWriterProgress = Type("TestWriterProgress", func() {
 	Required("tests", "read", "report")
 })
 
-// BuilderProgress says whether the builder read its assignment.
+// BuilderProgress says whether the builder read its assignment and what it
+// has recorded since: its branch's commit and its latest check.
 var BuilderProgress = Type("BuilderProgress", func() {
-	Description("The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.")
+	Description("The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work. branch, head_commit and the last check are three independent recorded facts: none says that a check or a verification ran on head_commit.")
 	Attribute("read", Boolean, "True once the builder read this assignment in full with get_builder_assignment.")
+	Attribute("branch", String, "The build's builder branch, surla/build-<n>.")
+	Attribute("head_commit", String, "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.", func() {
+		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
+	})
+	Attribute("last_check_passed", Boolean, "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.")
+	Attribute("last_check_at", String, "When that check_project completed; absent with last_check_passed.", func() { Format(FormatDateTime) })
 	Required("read")
 })
 

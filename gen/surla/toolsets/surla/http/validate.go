@@ -1988,6 +1988,12 @@ func ValidateBuilderProgressTransport(body *BuilderProgressTransport) (err error
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
 	}
+	if body.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.head_commit", *body.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if body.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_check_at", *body.LastCheckAt, goa.FormatDateTime))
+	}
 	return
 }
 

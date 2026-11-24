@@ -56,6 +56,10 @@ export interface ArchitecturePreviewResult {
 }
 
 export interface BuilderProgress {
+  branch?: string;
+  head_commit?: string;
+  last_check_at?: string;
+  last_check_passed?: boolean;
   read: boolean;
 }
 
@@ -1215,6 +1219,19 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "read"
     ],
     "properties": {
+      "branch": {
+        "type": "string"
+      },
+      "head_commit": {
+        "type": "string"
+      },
+      "last_check_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "last_check_passed": {
+        "type": "boolean"
+      },
       "read": {
         "type": "boolean"
       }

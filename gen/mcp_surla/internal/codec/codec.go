@@ -2660,6 +2660,18 @@ type GetBuildResultBuilderProgressTransport struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read *bool `json:"read"`
+	// The build's builder branch, surla/build-<n>.
+	Branch *string `json:"branch,omitempty"`
+	// The commit the builder's branch points at, in get_build and list_changes
+	// only: present once the branch exists and points at another commit than the
+	// one the build started from.
+	HeadCommit *string `json:"head_commit,omitempty"`
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool `json:"last_check_passed,omitempty"`
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string `json:"last_check_at,omitempty"`
 }
 
 // ValidateGetBuildResultBuilderProgressTransport checks decoded JSON before it becomes a service value.
@@ -2669,6 +2681,12 @@ func ValidateGetBuildResultBuilderProgressTransport(value *GetBuildResultBuilder
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.head_commit", *value.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_check_at", *value.LastCheckAt, goa.FormatDateTime))
 	}
 	return err
 }
@@ -20201,7 +20219,11 @@ func encodeBuilderAssignmentToWaitForBuilderAssignmentResultBuilderAssignmentTra
 
 func encodeBuilderProgressToGetBuildResultBuilderProgressTransport(v *surla.BuilderProgress) *GetBuildResultBuilderProgressTransport {
 	res := &GetBuildResultBuilderProgressTransport{
-		Read: &v.Read,
+		Read:            &v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res

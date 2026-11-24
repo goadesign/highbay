@@ -4584,6 +4584,50 @@ var getBuildResultFields = []tools.FieldMetadata{
 		},
 	},
 	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("branch")},
+		JSONType:    "string",
+		Description: "The build's builder branch, surla/build-<n>.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("head_commit")},
+		JSONType:    "string",
+		Description: "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("last_check_passed")},
+		JSONType:    "boolean",
+		Description: "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("last_check_at")},
+		JSONType:    "string",
+		Description: "When that check_project completed; absent with last_check_passed.",
+		Branches: []tools.UnionBranch{
+			tools.TaggedUnionBranch{
+				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
+				Value:         "started",
+			},
+		},
+	},
+	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer")},
 		JSONType:    "object",
 		Description: "The test writer's assignment.",
@@ -28890,6 +28934,34 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "branch":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's builder branch, surla/build-<n>.",
+			); err != nil {
+				return err
+			}
+		case "head_commit":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.",
+			); err != nil {
+				return err
+			}
+		case "last_check_at":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When that check_project completed; absent with last_check_passed.",
+			); err != nil {
+				return err
+			}
+		case "last_check_passed":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.",
+			); err != nil {
+				return err
+			}
 		case "read":
 			if err := validateBooleanJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -28899,6 +28971,10 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"head_commit",
+				"last_check_at",
+				"last_check_passed",
 				"read",
 			})
 		}
@@ -31462,7 +31538,11 @@ func decodeStartedBuildTransportToStartedBuild(v *toolhttp.StartedBuildTransport
 }
 func decodeBuilderProgressTransportToBuilderProgress(v *toolhttp.BuilderProgressTransport) *BuilderProgress {
 	res := &BuilderProgress{
-		Read: *v.Read,
+		Read:            *v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res
@@ -31755,7 +31835,11 @@ func encodeStartedBuildToStartedBuildTransport(v *StartedBuild) *toolhttp.Starte
 }
 func encodeBuilderProgressToBuilderProgressTransport(v *BuilderProgress) *toolhttp.BuilderProgressTransport {
 	res := &toolhttp.BuilderProgressTransport{
-		Read: &v.Read,
+		Read:            &v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res

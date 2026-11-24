@@ -85,6 +85,27 @@ func TestBuilderCopyCheckPublishesOnlyInItsCopy(t *testing.T) {
 			assertFileContent(t, filepath.Join(project, "go.sum"), "user sum\n")
 			assertFileContent(t, filepath.Join(project, "go.work"), "user workspace\n")
 			assert.Empty(t, cp.builderCopyTurn)
+
+			// The user's read of the build shows the check as a recorded fact
+			// of its own, and the branch's commit only once the builder made one.
+			user := asCaller("alice@example.com", CallerUser)
+			build := mustStartedBuild(t, cp, user, card.ChangeID)
+			require.NotNil(t, build.Builder.Branch)
+			assert.Regexp(t, `^surla/build-\d+$`, *build.Builder.Branch)
+			require.NotNil(t, build.Builder.LastCheckPassed)
+			assert.True(t, *build.Builder.LastCheckPassed)
+			require.NotNil(t, build.Builder.LastCheckAt)
+			checkedAt, err := time.Parse(time.RFC3339Nano, *build.Builder.LastCheckAt)
+			require.NoError(t, err)
+			assert.WithinDuration(t, time.Now(), checkedAt, time.Minute)
+			assert.Nil(t, build.Builder.HeadCommit, "the branch is still at the build's base")
+			runGitForTest(t, working, "-c", "user.name=builder", "-c", "user.email=builder@example.com", "commit", "--quiet", "--allow-empty", "-m", "Build the change")
+			tip, err := exec.Command("git", "-C", working, "rev-parse", "HEAD").Output()
+			require.NoError(t, err)
+			build = mustStartedBuild(t, cp, user, card.ChangeID)
+			require.NotNil(t, build.Builder.HeadCommit)
+			assert.Equal(t, strings.TrimSpace(string(tip)), *build.Builder.HeadCommit)
+			assert.True(t, *build.Builder.LastCheckPassed, "a commit changes nothing about the recorded check")
 		})
 	}
 }
@@ -395,4 +416,38 @@ func configureBuilderCopyCheck(t *testing.T, cp *ControlPlane) {
 	cp.checkTimeout = time.Minute
 	cp.checkWorkDir = filepath.Join(cp.cards.dir, "check-work")
 	require.NoError(t, os.Mkdir(cp.checkWorkDir, 0o700))
+}
+
+// TestBuilderCheckRecordBelongsToItsBuild keeps a completed check's verdict
+// on the build that was open when the check started: a check of another
+// start records nothing, and building the change again starts without one.
+func TestBuilderCheckRecordBelongsToItsBuild(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{})
+	agreed := confirmAgreedTerms(t, cp, "chg")
+	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	require.NoError(t, err)
+	open, found, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.True(t, found)
+
+	cp.recordBuilderCheck(t.Context(), open.StartedAt.Add(-time.Second), true)
+	cp.recordBuilderCheck(t.Context(), time.Time{}, true)
+	unchanged, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	assert.Nil(t, unchanged.Builder.LastCheckPassed)
+	assert.Nil(t, unchanged.Builder.LastCheckAt)
+
+	cp.recordBuilderCheck(t.Context(), open.StartedAt, false)
+	recorded, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.NotNil(t, recorded.Builder.LastCheckPassed)
+	assert.False(t, *recorded.Builder.LastCheckPassed)
+	require.NotNil(t, recorded.Builder.LastCheckAt)
+
+	_, err = startBuildAgain(t, cp, agreedUser, "chg", agreed.RequestRevision)
+	require.NoError(t, err)
+	again, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	assert.Nil(t, again.Builder.LastCheckPassed)
+	assert.Nil(t, again.Builder.LastCheckAt)
 }
