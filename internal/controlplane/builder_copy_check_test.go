@@ -4,6 +4,7 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -450,4 +451,68 @@ func TestBuilderCheckRecordBelongsToItsBuild(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, again.Builder.LastCheckPassed)
 	assert.Nil(t, again.Builder.LastCheckAt)
+}
+
+// TestCheckFailureGetsASafeSummary names why a failed check_project or
+// update_dependencies failed, on its span and on the request span that
+// carries it, in words that hold no path and no raw error text. A refusal
+// whose tool error instructs the caller keeps the history's own wording.
+func TestCheckFailureGetsASafeSummary(t *testing.T) {
+	timedOut := gensurla.MakeUnavailable(errors.New("engine did not answer in /private/path"))
+	timedOut.Timeout = true
+	for _, tc := range []struct {
+		// name describes the failure.
+		name string
+		// err is what the operation returned.
+		err error
+		// want is the summary, empty when none is set.
+		want string
+	}{
+		{"none", nil, ""},
+		{"time limit", fmt.Errorf("run go test in /private/path: %w", context.DeadlineExceeded), "Timed out after 5m0s. Call it again; a first run downloads modules and images."},
+		{"helper time limit", timedOut, "Timed out after 5m0s. Call it again; a first run downloads modules and images."},
+		{"canceled", fmt.Errorf("copy /private/path: %w", context.Canceled), "Canceled before it finished: the caller went away or the server was stopping."},
+		{"container engine", gensurla.MakeUnavailable(errors.New("dial unix /private/docker.sock")), "The local container engine was not available. Start it, then call again."},
+		{"busy copy", gensurla.MakeWorkingCopyBusy(errors.New("The builder's working copy is in use")), ""},
+		{"helper fault", errors.New("decode the check result: unexpected end of JSON input"), "The check helper failed before it produced a result. Call it again."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := checkFailureSummary(tc.err, 5*time.Minute)
+			assert.Equal(t, tc.want, got)
+			assert.NotContains(t, got, "/private")
+		})
+	}
+
+	exported := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
+	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+	cp := newControlPlane(t, Options{TracerProvider: provider})
+	builder := asCaller("alice@example.com", CallerBuilder)
+	for _, operation := range []string{"check_project", "update_dependencies"} {
+		ctx, request := cp.tracer("surla/requests").Start(builder, "surla.request."+operation)
+		_, span := cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane."+operation)
+		summarizeCheckFailure(request, span, operation, context.DeadlineExceeded, 5*time.Minute)
+		endCheckRequestSpan(span, context.DeadlineExceeded)
+		request.End()
+	}
+	// An unrelated parent span is left alone.
+	ctx, parent := cp.tracer("surla/requests").Start(builder, "surla.request.verify_change")
+	_, span := cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
+	summarizeCheckFailure(parent, span, "check_project", context.Canceled, time.Minute)
+	endCheckRequestSpan(span, context.Canceled)
+	parent.End()
+
+	history, err := cp.traces.List("alice@example.com", "all", 20, nil)
+	require.NoError(t, err)
+	summaries := map[string][]string{}
+	for _, record := range history.Spans {
+		summaries[record.Name] = append(summaries[record.Name], record.Summary)
+	}
+	timeout := "Timed out after 5m0s. Call it again; a first run downloads modules and images."
+	assert.Equal(t, []string{timeout}, summaries["surla.request.check_project"])
+	assert.Equal(t, []string{timeout}, summaries["surla.request.update_dependencies"])
+	assert.Equal(t, []string{timeout}, summaries["surla.controlplane.update_dependencies"])
+	assert.ElementsMatch(t, []string{timeout, "Canceled before it finished: the caller went away or the server was stopping."}, summaries["surla.controlplane.check_project"])
+	require.Len(t, summaries["surla.request.verify_change"], 1)
+	assert.NotContains(t, summaries["surla.request.verify_change"][0], "Canceled")
 }

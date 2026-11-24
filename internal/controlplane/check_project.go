@@ -33,6 +33,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/surla/internal/traceview"
 	"github.com/goadesign/surla/verify/candidate"
 )
 
@@ -133,12 +134,14 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
+	request := trace.SpanFromContext(ctx)
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
 	if err := c.admitCheckOperation(); err != nil {
 		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
+		summarizeCheckFailure(request, span, "check_project", retErr, c.checkTimeout)
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
@@ -784,6 +787,45 @@ func endCheckRequestSpan(span trace.Span, err error) {
 		return
 	}
 	endCheckSpan(span, err)
+}
+
+// summarizeCheckFailure gives a failed check_project or update_dependencies
+// a code-authored sentence without paths or raw error text, on its span and
+// on the request span that carries it, so the diagnostics history says why it
+// failed. A failure the sentence cannot name keeps the history's own wording.
+func summarizeCheckFailure(request, span trace.Span, operation string, err error, timeout time.Duration) {
+	summary := checkFailureSummary(err, timeout)
+	if summary == "" {
+		return
+	}
+	public := attribute.String(traceview.SummaryAttribute, summary)
+	span.SetAttributes(public)
+	if named, ok := request.(interface{ Name() string }); ok && named.Name() == "surla.request."+operation {
+		request.SetAttributes(public)
+	}
+}
+
+// checkFailureSummary names why a check operation that ran its helper failed:
+// its time limit, a cancellation, the container engine, or the helper itself.
+// It returns "" for no failure and for a refusal whose tool error is the
+// caller's instruction, such as a busy working copy.
+func checkFailureSummary(err error, timeout time.Duration) string {
+	var service *goa.ServiceError
+	named := errors.As(err, &service)
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.DeadlineExceeded) || named && service.Timeout:
+		return fmt.Sprintf("Timed out after %s. Call it again; a first run downloads modules and images.", timeout)
+	case errors.Is(err, context.Canceled):
+		return "Canceled before it finished: the caller went away or the server was stopping."
+	case named && service.Name == "unavailable":
+		return "The local container engine was not available. Start it, then call again."
+	case named && !service.Fault:
+		return ""
+	default:
+		return "The check helper failed before it produced a result. Call it again."
+	}
 }
 
 // endCheckSpan records a failed operation's error with error status and

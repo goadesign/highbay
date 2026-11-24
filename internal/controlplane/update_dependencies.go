@@ -63,12 +63,14 @@ func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.Up
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
+	request := trace.SpanFromContext(ctx)
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_dependencies")
 	if err := c.admitCheckOperation(); err != nil {
 		endCheckRequestSpan(span, err)
 		return nil, err
 	}
 	defer func() {
+		summarizeCheckFailure(request, span, "update_dependencies", retErr, c.checkTimeout)
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
