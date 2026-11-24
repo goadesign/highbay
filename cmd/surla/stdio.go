@@ -692,20 +692,38 @@ func newStdioMCPRequest(ctx context.Context, target string, payload []byte, raw 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if raw != nil && !raw.Invalid {
-		var params map[string]json.RawMessage
+		// Typed fields keep the lookup the same as the generated decoder's,
+		// so the header names the target the server dispatches.
+		var params struct {
+			// Name is a tools/call tool name or a prompts/get prompt name.
+			Name json.RawMessage `json:"name"`
+			// URI is a resources/read resource.
+			URI json.RawMessage `json:"uri"`
+			// TaskID is a task method's task.
+			TaskID json.RawMessage `json:"taskId"`
+			// Meta carries the modern protocol version.
+			Meta map[string]any `json:"_meta"`
+		}
 		if len(raw.Params) > 0 && json.Unmarshal(raw.Params, &params) == nil {
-			var meta map[string]any
-			if json.Unmarshal(params["_meta"], &meta) == nil {
-				if version, ok := meta["io.modelcontextprotocol/protocolVersion"].(string); ok && version != "" {
-					req.Header.Set("MCP-Protocol-Version", version)
-					req.Header.Set("Mcp-Method", raw.Method)
-					var name string
-					field := stdioNameField(raw.Method)
-					if field != "" && json.Unmarshal(params[field], &name) == nil {
-						req.Header.Set("Mcp-Name", encodeMCPHeaderValue(name))
-					}
-					return req, nil
+			if version, ok := params.Meta["io.modelcontextprotocol/protocolVersion"].(string); ok && version != "" {
+				req.Header.Set("MCP-Protocol-Version", version)
+				req.Header.Set("Mcp-Method", raw.Method)
+				// The protocol mirrors one params field per method in the
+				// name header; the server refuses a missing or different one.
+				var field json.RawMessage
+				switch raw.Method {
+				case "tools/call", "prompts/get":
+					field = params.Name
+				case "resources/read":
+					field = params.URI
+				case "tasks/get", "tasks/update", "tasks/cancel":
+					field = params.TaskID
 				}
+				var name string
+				if len(field) > 0 && json.Unmarshal(field, &name) == nil {
+					req.Header.Set("Mcp-Name", encodeMCPHeaderValue(name))
+				}
+				return req, nil
 			}
 		}
 		if raw.Method == "initialize" {
@@ -714,22 +732,6 @@ func newStdioMCPRequest(ctx context.Context, target string, payload []byte, raw 
 	}
 	req.Header.Set("MCP-Protocol-Version", mcpruntime.LegacyProtocolVersion)
 	return req, nil
-}
-
-// stdioNameField returns the params field whose value the 2026-07-28 protocol
-// mirrors in the Mcp-Name header for method, or "" when the method names no
-// target. The server refuses a request whose header is missing or differs.
-func stdioNameField(method string) string {
-	switch method {
-	case "tools/call", "prompts/get":
-		return "name"
-	case "resources/read":
-		return "uri"
-	case "tasks/get", "tasks/update", "tasks/cancel":
-		return "taskId"
-	default:
-		return ""
-	}
 }
 
 // encodeMCPHeaderValue wraps a header value in MCP's base64 envelope when it

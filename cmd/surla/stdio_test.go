@@ -487,6 +487,9 @@ func TestStdioRequestHeadersNameTheFrameTarget(t *testing.T) {
 		{"prompt", "prompts/get", `{"name":"p",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"p"}},
 		{"task", "tasks/get", `{"taskId":"t-1",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"t-1"}},
 		{"encoded name", "resources/read", `{"uri":"surla://é",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"=?base64?c3VybGE6Ly/DqQ==?="}},
+		{"field in another case", "resources/read", `{"URI":"surla://golden-path","_META":{"io.modelcontextprotocol/protocolVersion":"` +
+			mcpruntime.ProtocolVersion + `"}}`, mcpruntime.ProtocolVersion, []string{"surla://golden-path"}},
+		{"target not a string", "resources/read", `{"uri":7,` + modern + `}`, mcpruntime.ProtocolVersion, nil},
 		{"no target", "tools/list", `{"name":"ignored",` + modern + `}`, mcpruntime.ProtocolVersion, nil},
 		{"legacy frame", "resources/read", `{"uri":"surla://golden-path"}`, mcpruntime.LegacyProtocolVersion, nil},
 	}
