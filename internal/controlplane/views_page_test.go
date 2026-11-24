@@ -85,6 +85,10 @@ page.close();
 func TestViewsPageFindsOpensAndConfirmsChanges(t *testing.T) {
 	cp := pageControlPlane(t, Options{})
 	ps := startPageServer(t, cp)
+	resolving, generating := "Resolving the service's Go modules", "Generating the service's code"
+	ps.act("resolving", func() { cp.initPhase.Store(&resolving) })
+	ps.act("generating", func() { cp.initPhase.Store(&generating) })
+	ps.act("initialized", func() { cp.initPhase.Store(nil) })
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-change-list-empty"), "empty project did not show its empty state");
@@ -92,6 +96,17 @@ expect(page.text("#surla-change-list-title") === "Start in your coding agent wit
        page.text("#surla-change-list-empty").includes("Your Change Card will appear here automatically."),
        "empty state did not say where to start and how a change appears");
 expect(page.win.location.href === origin + "/views", "the link stayed in the address: " + page.win.location.href);
+
+const phaseStatus = page.$("#surla-change-list-empty");
+await control(origin, "act", { key: "resolving" });
+await until(() => phaseStatus.textContent === "Resolving the service's Go modules", "the waiting page did not show initializer progress");
+expect(phaseStatus.getAttribute("role") === "status" && !page.$(".surla-frame-slots") &&
+       page.text("#surla-change-list-title") === "Preparing your project", "initialization still prompted project setup or was not announced");
+await control(origin, "act", { key: "generating" });
+await until(() => phaseStatus.textContent === "Generating the service's code", "the next phase did not update the same live status");
+await control(origin, "act", { key: "initialized" });
+await until(() => phaseStatus.textContent.includes("Your Change Card will appear here automatically."), "completion did not restore the welcome card");
+expect(!phaseStatus.hasAttribute("role") && page.sent("POST", "/project/browser-session").length === 1, "clearing initialization replaced the current browser session");
 
 await propose("chg-first", "Route refunds to a manager.", "Auto-approved");
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-first", "the first proposal did not open without a reload");

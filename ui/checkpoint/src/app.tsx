@@ -947,16 +947,14 @@ export function bootstrapViewsPage() {
       openChange(next.changes[0].change_id);
       return;
     }
-    if (previous === null) {
-      if (activeResult?.kind === "changes") {
-        statusEl.textContent =
-          next.changes.length === 0
-            ? "This project has no changes yet."
-            : "Showing this project's " + next.changes.length + " changes.";
-      }
-      return;
+    const initializing = next.initializing_phase !== undefined;
+    const wasInitializing = previous?.initializing_phase !== undefined;
+    if (activeResult?.kind === "changes" && (previous === null || initializing !== wasInitializing)) {
+      statusEl.textContent = initializing ? "Preparing the starter project."
+        : next.changes.length === 0 ? "This project has no changes yet."
+        : "Showing this project's " + next.changes.length + " changes.";
     }
-    if (activeEditor === null) {
+    if (previous === null || activeEditor === null) {
       return;
     }
     const openId = activeEditor.card.change_id;
@@ -2603,7 +2601,9 @@ export function bootstrapViewsPage() {
         ? "#surla-proposal-revision-needed" : null
       : answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0
         ? "#surla-confirm-revision-needed" : null;
-    const showSlots = !(onDescribe && !editorOpen && listError === null &&
+    const showingInitialization = onDescribe && !editorOpen && listError === null &&
+      changeList?.initializing_phase !== undefined && changeList.changes.length === 0;
+    const showSlots = !showingInitialization && !(onDescribe && !editorOpen && listError === null &&
       (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)) &&
       changeList !== null && changeList.changes.length === 0 && teamError === null &&
       !teamLoading && !teamStarting && teamSnapshot !== null && teamNeedsYou === undefined &&
