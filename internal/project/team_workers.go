@@ -487,7 +487,7 @@ func teamRoster(record Record, roles []launcherRole) (launcherRoster, error) {
 			return launcherRoster{}, errors.New("a role working folder cannot be used")
 		}
 		if workerRole(role.Role) {
-			role.FirstMessage += " Keep your Chorus watcher running. Surla messages you there when you have an unread assignment; read your assignments when asked."
+			role.FirstMessage += " Keep your Chorus watcher running. Surla messages you there when you have an unread assignment; read your assignments when asked. If you cannot join Chorus or its watcher fails, do not stop and do not inspect, start, stop or reconfigure Chorus or any other service or process on this computer: carry on through your surla connection alone."
 		}
 		if i := len(roster.Roles); i > 0 {
 			direction := "down"

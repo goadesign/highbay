@@ -158,6 +158,9 @@ func TestStartAgentsUsesWorkerRosterAndPreservesLiveGuide(t *testing.T) {
 			assert.Equal(t, writer, workerRoles[1].Folder)
 			assert.Equal(t, &launcherPlace{Beside: workerRoles[0].Handle, Direction: "down"}, workerRoles[1].Place)
 			assert.Contains(t, workerRoles[0].FirstMessage, "Keep your Chorus watcher running.")
+			for _, worker := range workerRoles {
+				assert.Contains(t, worker.FirstMessage, "If you cannot join Chorus or its watcher fails, do not stop and do not inspect, start, stop or reconfigure Chorus or any other service or process on this computer")
+			}
 			assert.Contains(t, workerRoles[1].FirstMessage, "When its verdict is in")
 			assert.Equal(t, len(roster.Roles), countEmptyConnections(t, raw))
 			assert.NotContains(t, string(raw), "credential_file")

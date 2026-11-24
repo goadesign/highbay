@@ -1014,6 +1014,15 @@ type GetTeamResponseBody struct {
 	SavedChoices map[string]*RoleAgentChoiceResponseBody `form:"saved_choices,omitempty" json:"saved_choices,omitempty" xml:"saved_choices,omitempty"`
 	// Dismissed project notices.
 	DismissedNotices []string `form:"dismissed_notices,omitempty" json:"dismissed_notices,omitempty" xml:"dismissed_notices,omitempty"`
+	// Whether Chorus serves this team: not_used when workers run outside Herdr and
+	// never use it; connected after Surla's latest read of the team's Chorus view
+	// succeeded; unavailable after that read failed or when the team's space has
+	// no Chorus connection. While unavailable no Chorus reminder reaches a worker:
+	// workers wait on Surla with wait_for_builder_assignment and
+	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
+	// prompt. Absent before a team space exists or before the first read settled
+	// it.
+	ChorusStatus *string `form:"chorus_status,omitempty" json:"chorus_status,omitempty" xml:"chorus_status,omitempty"`
 }
 
 // StartTeamAgentsResponseBody is the type of the "surla" service
@@ -5474,7 +5483,8 @@ type TeamRoleStateResponseBody struct {
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention *string `form:"attention,omitempty" json:"attention,omitempty" xml:"attention,omitempty"`
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -12532,8 +12542,9 @@ func NewUpdateDraftForbidden(body *UpdateDraftForbiddenResponseBody) *goa.Servic
 // from a HTTP "OK" response.
 func NewGetTeamTeamSnapshotOK(body *GetTeamResponseBody) *surla.TeamSnapshot {
 	v := &surla.TeamSnapshot{
-		Team:      *body.Team,
-		HerdrMode: *body.HerdrMode,
+		Team:         *body.Team,
+		HerdrMode:    *body.HerdrMode,
+		ChorusStatus: body.ChorusStatus,
 	}
 	v.Roles = make([]*surla.TeamRoleState, len(body.Roles))
 	for i, val := range body.Roles {
@@ -15317,6 +15328,11 @@ func ValidateGetTeamResponseBody(body *GetTeamResponseBody) (err error) {
 	for _, e := range body.DismissedNotices {
 		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		}
+	}
+	if body.ChorusStatus != nil {
+		if !(*body.ChorusStatus == "connected" || *body.ChorusStatus == "unavailable" || *body.ChorusStatus == "not_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *body.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
 		}
 	}
 	return

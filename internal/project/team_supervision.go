@@ -73,6 +73,12 @@ type (
 		handle, space, endpoint string
 		public                  gensurla.TeamRoleState
 	}
+	// chorusObservation is the published answer to whether Chorus serves the
+	// team in space at endpoint: connected, unavailable, or empty when no
+	// read has settled it.
+	chorusObservation struct {
+		space, endpoint, status string
+	}
 	// supervisedRole keeps only current terminals and current owed generations.
 	// Unknown reads preserve latches; only a known clear removes a generation.
 	supervisedRole struct {
@@ -108,6 +114,9 @@ type (
 		roles     map[string]*supervisedRole
 		// restartReaders latches a stale stream until the driver resubscribes.
 		restartReaders bool
+		// watchFailed reports that the latest Chorus view read for this
+		// selection failed; no read yet leaves it false.
+		watchFailed bool
 	}
 )
 
@@ -127,8 +136,14 @@ const (
 	// message, which already asks for the read, before Surla reminds it.
 	teamJoinSettle = 60 * time.Second
 	// teamIdleUnreadBound is how long a role may wait with an unread assignment
-	// before the user is asked to prompt it; it reuses the watcher grace.
+	// before the user is asked to prompt it; it reuses the watcher grace, so a
+	// Chorus reminder settles first.
 	teamIdleUnreadBound = teamWatcherGrace
+	// teamIdleUnreadNoChorusBound replaces teamIdleUnreadBound while the last
+	// Chorus view read is not known to have succeeded: no reminder can reach
+	// the role, so the user is asked sooner. It outlasts one terminal status
+	// report, which a worker between two tool calls sends as waiting.
+	teamIdleUnreadNoChorusBound = 15 * time.Second
 )
 
 // Error returns fixed text; Post and Kind carry the bounded facts.
@@ -179,6 +194,7 @@ func (o *teamSupervisor) syncSelection(selection TeamSelection) bool {
 	}
 	o.selection, o.roles = selection, next
 	o.restartReaders = false
+	o.watchFailed = false
 	return true
 }
 
@@ -323,6 +339,7 @@ func (o *teamSupervisor) refresh(ctx context.Context, role *supervisedRole) {
 // An outage makes both unknown and restarts the absence clock, but keeps the
 // listing clock: only a successful read that omits the handle restarts it.
 func (o *teamSupervisor) watchers(view TeamWatcherView, err error, now time.Time) {
+	o.watchFailed = err != nil
 	for _, role := range o.roles {
 		role.watchKnown = err == nil
 		if err != nil {
@@ -367,8 +384,28 @@ func (o *teamSupervisor) publish(ctx context.Context, now time.Time, periodic bo
 	}
 	o.server.team.observationMu.Lock()
 	o.server.team.observed = observed
+	o.server.team.chorus = chorusObservation{space: o.selection.Space, endpoint: o.selection.connection.Endpoint, status: o.chorusStatus()}
 	o.server.team.observationMu.Unlock()
 	return stalled
+}
+
+// chorusStatus says whether Chorus serves the team's space: connected after
+// a view read that succeeded, unavailable after one that failed or when the
+// space has no Chorus connection to read, and empty before any read settled
+// it or when the team has no space yet.
+func (o *teamSupervisor) chorusStatus() string {
+	if o.selection.Space == "" || len(o.roles) == 0 {
+		return ""
+	}
+	if o.selection.connection.Observer == nil || o.watchFailed {
+		return "unavailable"
+	}
+	for _, role := range o.roles {
+		if role.watchKnown {
+			return "connected"
+		}
+	}
+	return ""
 }
 
 // expireStream latches unknown for every subscription, so an ordinary heartbeat
@@ -478,7 +515,9 @@ func (role *supervisedRole) value(now time.Time, allReady bool, shell string) ge
 
 // idleUnread turns a role that has waited with an unread assignment for the
 // bound into needs_you with attention assignment, so the page names the user's
-// step. Working, reading or any unknown fact restarts the clock.
+// step. The bound is shorter while Chorus is not known to work, since no
+// reminder reaches the role then. Working, reading or any unknown terminal
+// or assignment fact restarts the clock.
 func (role *supervisedRole) idleUnread(value gensurla.TeamRoleState, now time.Time) gensurla.TeamRoleState {
 	if value.State != "waiting" || value.Assignment != "unread" {
 		role.idleUnreadSince = time.Time{}
@@ -487,7 +526,11 @@ func (role *supervisedRole) idleUnread(value gensurla.TeamRoleState, now time.Ti
 	if role.idleUnreadSince.IsZero() {
 		role.idleUnreadSince = now
 	}
-	if now.Sub(role.idleUnreadSince) >= teamIdleUnreadBound {
+	bound := teamIdleUnreadBound
+	if !role.watchKnown {
+		bound = teamIdleUnreadNoChorusBound
+	}
+	if now.Sub(role.idleUnreadSince) >= bound {
 		value.State, value.Attention = "needs_you", "assignment"
 	}
 	return value

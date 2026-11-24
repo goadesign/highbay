@@ -394,6 +394,7 @@ export interface TeamRoleState {
 }
 
 export interface TeamSnapshot {
+  chorus_status?: "connected" | "unavailable" | "not_used";
   dismissed_notices: ("single_agent_family" | "outside_herdr" | "herdr_unavailable")[];
   herdr_mode: "attached" | "available" | "unavailable";
   roles: TeamRoleState[];
@@ -3205,6 +3206,14 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "dismissed_notices"
     ],
     "properties": {
+      "chorus_status": {
+        "type": "string",
+        "enum": [
+          "connected",
+          "unavailable",
+          "not_used"
+        ]
+      },
       "dismissed_notices": {
         "type": "array",
         "items": {

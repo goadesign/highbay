@@ -2181,7 +2181,8 @@ type TeamRoleState struct {
 	State string
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention string
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -2207,6 +2208,15 @@ type TeamSnapshot struct {
 	SavedChoices map[string]*RoleAgentChoice
 	// Dismissed project notices.
 	DismissedNotices []string
+	// Whether Chorus serves this team: not_used when workers run outside Herdr and
+	// never use it; connected after Surla's latest read of the team's Chorus view
+	// succeeded; unavailable after that read failed or when the team's space has
+	// no Chorus connection. While unavailable no Chorus reminder reaches a worker:
+	// workers wait on Surla with wait_for_builder_assignment and
+	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
+	// prompt. Absent before a team space exists or before the first read settled
+	// it.
+	ChorusStatus *string
 }
 
 // No test-writer coverage snapshot was recorded. Never infer it from today's
@@ -7162,7 +7172,8 @@ type jsonTeamRoleStateTransport struct {
 	State *string `json:"state"`
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention *string `json:"attention"`
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -7239,6 +7250,15 @@ type jsonTeamSnapshotTransport struct {
 	SavedChoices map[string]*jsonRoleAgentChoiceTransport `json:"saved_choices"`
 	// Dismissed project notices.
 	DismissedNotices []string `json:"dismissed_notices"`
+	// Whether Chorus serves this team: not_used when workers run outside Herdr and
+	// never use it; connected after Surla's latest read of the team's Chorus view
+	// succeeded; unavailable after that read failed or when the team's space has
+	// no Chorus connection. While unavailable no Chorus reminder reaches a worker:
+	// workers wait on Surla with wait_for_builder_assignment and
+	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
+	// prompt. Absent before a team space exists or before the first read settled
+	// it.
+	ChorusStatus *string `json:"chorus_status,omitempty"`
 }
 
 // validatejsonTeamSnapshotTransport checks decoded JSON before it becomes a service value.
@@ -7286,6 +7306,11 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 	for _, e := range value.DismissedNotices {
 		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		}
+	}
+	if value.ChorusStatus != nil {
+		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable" || *value.ChorusStatus == "not_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
 		}
 	}
 	return err
@@ -10446,6 +10471,11 @@ func validateTeamSnapshotOriginal(value *TeamSnapshot) (err error) {
 	for _, e := range value.DismissedNotices {
 		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		}
+	}
+	if value.ChorusStatus != nil {
+		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable" || *value.ChorusStatus == "not_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
 		}
 	}
 	return err
@@ -25108,8 +25138,9 @@ func EncodeTeamSnapshot(in *TeamSnapshot) ([]byte, error) {
 	var body *jsonTeamSnapshotTransport
 	{
 		body = &jsonTeamSnapshotTransport{
-			Team:      &in.Team,
-			HerdrMode: &in.HerdrMode,
+			Team:         &in.Team,
+			HerdrMode:    &in.HerdrMode,
+			ChorusStatus: in.ChorusStatus,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -25161,8 +25192,9 @@ func ValidateTeamSnapshotValue(in *TeamSnapshot) error {
 	var body *jsonTeamSnapshotTransport
 	{
 		body = &jsonTeamSnapshotTransport{
-			Team:      &in.Team,
-			HerdrMode: &in.HerdrMode,
+			Team:         &in.Team,
+			HerdrMode:    &in.HerdrMode,
+			ChorusStatus: in.ChorusStatus,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -25218,8 +25250,9 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 	}
 	{
 		out = &TeamSnapshot{
-			Team:      *body.Team,
-			HerdrMode: *body.HerdrMode,
+			Team:         *body.Team,
+			HerdrMode:    *body.HerdrMode,
+			ChorusStatus: body.ChorusStatus,
 		}
 		out.Roles = make([]*TeamRoleState, len(body.Roles))
 		for i, val := range body.Roles {
@@ -41120,7 +41153,7 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 		case "attention":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds.",
+				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds, or for 15 seconds while Chorus is not known to be reachable and so no reminder can arrive.",
 			); err != nil {
 				return err
 			}
@@ -41186,6 +41219,13 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "chorus_status":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether Chorus serves this team: not_used when workers run outside Herdr and never use it; connected after Surla's latest read of the team's Chorus view succeeded; unavailable after that read failed or when the team's space has no Chorus connection. While unavailable no Chorus reminder reaches a worker: workers wait on Surla with wait_for_builder_assignment and wait_for_test_writer_assignment, and a worker that stopped needs the user's prompt. Absent before a team space exists or before the first read settled it.",
+			); err != nil {
+				return err
+			}
 		case "dismissed_notices":
 			if err := validateTeamSnapshotJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -41223,6 +41263,7 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"chorus_status",
 				"dismissed_notices",
 				"herdr_mode",
 				"roles",
@@ -47825,6 +47866,11 @@ func checkTeamSnapshotTeamSnapshotValue(in *TeamSnapshot, field string, active m
 			_ = item1
 			if !utf8.ValidString(string(item1)) {
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "dismissed_notices", false), strconv.Itoa(index1), true))
+			}
+		}
+		if in.ChorusStatus != nil {
+			if !utf8.ValidString(string(*in.ChorusStatus)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "chorus_status", false))
 			}
 		}
 	}

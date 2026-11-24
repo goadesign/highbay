@@ -191,7 +191,8 @@ type TeamRoleState struct {
 	State string
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention string
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -461,7 +462,8 @@ type jsonTeamRoleStateTransport struct {
 	State *string `json:"state"`
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention *string `json:"attention"`
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -1540,7 +1542,7 @@ func validateProjectStatusJSONValue3(path string, value any, description string)
 		case "attention":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds.",
+				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds, or for 15 seconds while Chorus is not known to be reachable and so no reminder can arrive.",
 			); err != nil {
 				return err
 			}
