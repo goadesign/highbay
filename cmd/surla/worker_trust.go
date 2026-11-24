@@ -1,6 +1,9 @@
 // This file checks explicit client permission policies against each role's
 // required MCP operations and pre-populates missing user-scoped folder trust
-// outside git working copies before project roles launch.
+// outside git working copies before project roles launch. Skipping permission
+// prompts for a role skips its tool-policy check only: a client still asks
+// for folder trust at startup, so missing folder trust is written and an
+// explicit untrusted folder is refused for every role.
 package main
 
 import (
@@ -40,9 +43,11 @@ type (
 
 	// clientTrustPlan groups the folders and required MCP operations for one coding client.
 	clientTrustPlan struct {
-		// folders lists unique absolute folders needing folder trust when Yolo is false.
+		// folders lists the unique absolute folders of every role of this
+		// client; each needs folder trust whether or not the role skips prompts.
 		folders []string
-		// checkPolicy is true when at least one role for this client runs with Yolo false.
+		// checkPolicy is true when at least one role for this client runs with
+		// Yolo false and so depends on the client's MCP tool policies.
 		checkPolicy bool
 		// requiredServers lists MCP servers ("surla", and "chorus" when needed) in deterministic order.
 		requiredServers []string
@@ -224,7 +229,8 @@ func collectProtectedRoots(targets []project.WorkerTrustTarget) []string {
 	return roots
 }
 
-// buildClientTrustPlans aggregates non-Yolo folders and role-specific MCP tools per client.
+// buildClientTrustPlans aggregates every role's folders, and the MCP tools of
+// the roles that keep permission prompts, per client.
 func buildClientTrustPlans(
 	targets []project.WorkerTrustTarget,
 ) (map[string]clientTrustPlan, []string) {
@@ -261,14 +267,14 @@ func buildClientTrustPlans(
 			if target.RequireChorus {
 				addTools(&plan, "chorus", chorusMCPToolNames)
 			}
-			for _, candidate := range []string{target.ProjectDir, target.Folder} {
-				if !filepath.IsAbs(candidate) {
-					continue
-				}
-				cleaned := filepath.Clean(candidate)
-				if !slices.Contains(plan.folders, cleaned) {
-					plan.folders = append(plan.folders, cleaned)
-				}
+		}
+		for _, candidate := range []string{target.ProjectDir, target.Folder} {
+			if !filepath.IsAbs(candidate) {
+				continue
+			}
+			cleaned := filepath.Clean(candidate)
+			if !slices.Contains(plan.folders, cleaned) {
+				plan.folders = append(plan.folders, cleaned)
 			}
 		}
 		plans[target.Client] = plan
@@ -343,8 +349,10 @@ func preflightClientWorkerTrust(
 	switch client {
 	case "codex":
 		codexPath := filepath.Join(cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex")), "config.toml")
+		// requiredServers is empty for roles that skip prompts, which leaves
+		// the folder rules as the only refusal.
 		checkPath(codexPath, "config.toml", func(p string) error {
-			if !plan.checkPolicy {
+			if !plan.checkPolicy && len(plan.folders) == 0 {
 				return nil
 			}
 			return checkCodexWorkerPolicy(p, plan.requiredServers, plan.folders)
@@ -378,7 +386,7 @@ func preflightClientWorkerTrust(
 		})
 		trustedPath := geminiTrustedFoldersPath(home, getenv)
 		checkPath(trustedPath, filepath.Base(trustedPath), func(p string) error {
-			if !plan.checkPolicy {
+			if len(plan.folders) == 0 {
 				return nil
 			}
 			return checkGeminiTrustedFoldersPolicy(p, plan.folders)
