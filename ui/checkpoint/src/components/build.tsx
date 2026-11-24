@@ -271,7 +271,20 @@ export function BuildSectionView({
       ? "assignment read"
       : saved.test_writer.tests.state === "accepted"
         ? "assignment unread; accepted tests are ready to read"
-        : "assignment unread"}</li>
+        : "assignment unread"}
+      {saved.builder.branch !== undefined ? <p id="surla-build-builder-branch">
+        Builder branch <code>{saved.builder.branch}</code>
+      </p> : null}
+      {saved.builder.head_commit !== undefined ? <p id="surla-build-branch-tip">
+        Branch tip <code>{saved.builder.head_commit.slice(0, 12)}</code>
+      </p> : null}
+      {saved.builder.last_check_passed !== undefined && saved.builder.last_check_at !== undefined ? (
+        <p id="surla-build-last-project-check">
+          Last project check {saved.builder.last_check_passed ? "passed" : "did not pass"}{" · "}
+          <time dateTime={saved.builder.last_check_at}>{localBuildTime(saved.builder.last_check_at)}</time>
+        </p>
+      ) : null}
+    </li>
     <li><TestWriterFacts build={saved} findingTexts={findingTexts} loading={findingsLoading}
       error={findingsError} disabled={disabled || starting} onRead={onReadFindings} /></li>
   </ul> : null;
@@ -697,6 +710,8 @@ function BuildDetails({ card, build, children }: { card: ChangeCardResult; build
             <p>Revision note: {card.revision_note}</p>
           ) : null}
           <p>Build started: <time dateTime={build.started_at}>{build.started_at}</time></p>
+          {build.builder.head_commit !== undefined ? <p>Branch tip <code>{build.builder.head_commit}</code></p> : null}
+          {build.builder.last_check_passed !== undefined ? <p>The last project check covered the builder’s working files at that time.</p> : null}
           {build.required_tests.length > 0 ? <dl id="surla-build-test-hooks">
             {build.required_tests.map((test) => <React.Fragment key={test.scenario}>
               <dt>Scenario <code>{test.scenario}</code></dt><dd>Hook <code>{test.hook}</code></dd>
