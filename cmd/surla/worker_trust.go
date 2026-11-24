@@ -893,8 +893,10 @@ func locateCodexProjectEntries(doc []byte) (map[string]codexProjectLocation, boo
 	return projects, projectsInline, nil
 }
 
-// mergeClaudeProjectTrust ensures projects[folder].hasTrustDialogAccepted is
-// true in Claude Code's .claude.json, preserving exact numbers and other keys.
+// mergeClaudeProjectTrust sets projects[folder].hasTrustDialogAccepted to
+// true in Claude Code's .claude.json for each folder whose entry has no such
+// key, preserving exact numbers and other keys. A value the file already
+// holds is kept, false included: that client then asks the user itself.
 func mergeClaudeProjectTrust(
 	ctx context.Context, lockDir, path string, protectedRoots, folders []string,
 ) error {
@@ -922,13 +924,10 @@ func mergeClaudeProjectTrust(
 				}
 			}
 			if rawTrusted, hasTrusted := entry["hasTrustDialogAccepted"]; hasTrusted {
-				trusted, ok := rawTrusted.(bool)
-				if !ok {
+				if _, ok := rawTrusted.(bool); !ok {
 					return nil, false, fmt.Errorf("%s: projects[%q].hasTrustDialogAccepted must be a boolean", path, folder)
 				}
-				if trusted {
-					continue
-				}
+				continue
 			}
 			entry["hasTrustDialogAccepted"] = true
 			projects[folder] = entry

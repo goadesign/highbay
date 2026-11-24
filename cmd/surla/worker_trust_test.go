@@ -58,8 +58,12 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 		"[mcp_servers.surla]\ncommand = \"/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\n\n" +
 		"[mcp_servers.github]\ncommand = \"npx\"\nargs = [\"github-mcp\"]\n"
 	writeTestFile(t, filepath.Join(codexHome, "config.toml"), initialCodex)
+	// The tests copy's entry already answers the trust question with no; it
+	// is kept, while the project folder's missing answer is filled in.
 	writeTestFile(t, filepath.Join(claudeDir, ".claude.json"),
-		`{"numStartups":12345678901234567890,"projects":{"/other":{"hasTrustDialogAccepted":false}}}`)
+		`{"numStartups":12345678901234567890,"projects":{"/other":{"hasTrustDialogAccepted":false},`+
+			fmt.Sprintf("%q", testsDir)+`:{"hasTrustDialogAccepted":false,"allowedTools":[]},`+
+			fmt.Sprintf("%q", repo)+`:{"allowedTools":["Bash(git status)"]}}}`)
 	initialClaudeSettings := `{"permissions":{"allow":["Bash(git status)"],"deny":["Bash(rm -rf *)"]}}`
 	writeTestFile(t, filepath.Join(claudeDir, "settings.json"), initialClaudeSettings)
 	writeTestFile(t, filepath.Join(geminiHome, ".gemini", "trustedFolders.json"),
@@ -108,7 +112,8 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 	claudeRoot := readTestJSON(t, filepath.Join(claudeDir, ".claude.json"))
 	claudeProjects := claudeRoot["projects"].(map[string]any)
 	assert.Equal(t, true, claudeProjects[repo].(map[string]any)["hasTrustDialogAccepted"])
-	assert.Equal(t, true, claudeProjects[testsDir].(map[string]any)["hasTrustDialogAccepted"])
+	assert.Equal(t, []any{"Bash(git status)"}, claudeProjects[repo].(map[string]any)["allowedTools"])
+	assert.Equal(t, false, claudeProjects[testsDir].(map[string]any)["hasTrustDialogAccepted"], "an existing answer is kept")
 	assert.Equal(t, false, claudeProjects["/other"].(map[string]any)["hasTrustDialogAccepted"])
 	claudeSettingsRaw, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
 	require.NoError(t, err)
