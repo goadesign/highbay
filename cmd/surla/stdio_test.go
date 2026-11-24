@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mcpruntime "goa.design/goa-ai/runtime/mcp"
+	"goa.design/goa/v3/jsonrpc"
 
 	"github.com/goadesign/surla/internal/abspath"
 	"github.com/goadesign/surla/internal/controlplane"
@@ -392,6 +393,14 @@ func stdioCall(id int, name string) string {
 		`","io.modelcontextprotocol/clientCapabilities":{}}}}`
 }
 
+// stdioRead is a resources/read frame for uri with the 2026-07-28 protocol
+// version in _meta, as current clients send it.
+func stdioRead(id int, uri string) string {
+	return `{"jsonrpc":"2.0","id":` + strconv.Itoa(id) + `,"method":"resources/read","params":{"uri":"` + uri +
+		`","_meta":{"io.modelcontextprotocol/protocolVersion":"` + mcpruntime.ProtocolVersion +
+		`","io.modelcontextprotocol/clientCapabilities":{}}}}`
+}
+
 func TestStdioBindsToARealProjectServer(t *testing.T) {
 	isolateServeWorkspace(t)
 	workspace, err := abspath.Eval(t.TempDir())
@@ -412,6 +421,12 @@ func TestStdioBindsToARealProjectServer(t *testing.T) {
 	require.Nil(t, reply.Error, string(reply.Result))
 	first := guide.currentRelay()
 	require.NotNil(t, first)
+
+	// The playbook resource is read under the same protocol version, which
+	// requires the resource's URI in the name header.
+	reply = runStdioFrames(t, guide, stdioRead(5, "surla://golden-path"))["5"]
+	require.Nil(t, reply.Error, string(reply.Result))
+	assert.Contains(t, string(reply.Result), "# Golden Path")
 
 	// A rotated credential is refused once, then the guide binds again.
 	var guideHandle string
@@ -453,6 +468,42 @@ func TestStdioBindsToARealProjectServer(t *testing.T) {
 	require.NotNil(t, reply.Error)
 	assert.Contains(t, reply.Error.Message, "this project has no registered test_writer")
 	assert.Nil(t, worker.currentRelay())
+}
+
+func TestStdioRequestHeadersNameTheFrameTarget(t *testing.T) {
+	modern := `"_meta":{"io.modelcontextprotocol/protocolVersion":"` + mcpruntime.ProtocolVersion + `"}`
+	tests := []struct {
+		// name describes the frame.
+		name string
+		// method and params form the frame the client sent.
+		method, params string
+		// wantVersion is the protocol version header.
+		wantVersion string
+		// wantName is the Mcp-Name header values, nil when the header is absent.
+		wantName []string
+	}{
+		{"tool call", "tools/call", `{"name":"get_change",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"get_change"}},
+		{"resource read", "resources/read", `{"uri":"surla://golden-path",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"surla://golden-path"}},
+		{"prompt", "prompts/get", `{"name":"p",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"p"}},
+		{"task", "tasks/get", `{"taskId":"t-1",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"t-1"}},
+		{"encoded name", "resources/read", `{"uri":"surla://é",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"=?base64?c3VybGE6Ly/DqQ==?="}},
+		{"no target", "tools/list", `{"name":"ignored",` + modern + `}`, mcpruntime.ProtocolVersion, nil},
+		{"legacy frame", "resources/read", `{"uri":"surla://golden-path"}`, mcpruntime.LegacyProtocolVersion, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := []byte(`{"jsonrpc":"2.0","id":1,"method":"` + tt.method + `","params":` + tt.params + `}`)
+			var raw jsonrpc.RawRequest
+			require.NoError(t, raw.UnmarshalJSON(payload))
+			req, err := newStdioMCPRequest(t.Context(), "http://127.0.0.1:1/mcp", payload, &raw)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantVersion, req.Header.Get("MCP-Protocol-Version"))
+			assert.Equal(t, tt.wantName, req.Header.Values("Mcp-Name"))
+			if tt.wantVersion == mcpruntime.ProtocolVersion {
+				assert.Equal(t, tt.method, req.Header.Get("Mcp-Method"))
+			}
+		})
+	}
 }
 
 func TestStdioRetriesOnlyRequestsTheServerNeverRan(t *testing.T) {
