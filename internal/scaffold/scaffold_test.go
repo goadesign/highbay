@@ -314,8 +314,9 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	assert.Equal(t, []string{"starts_and_listens"}, scenarioNames(evalDesign))
 	acceptance := read("eval/acceptance/acceptance.go")
 	assert.Contains(t, acceptance, "func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err error)")
-	assert.Contains(t, acceptance, `Args:     []string{"-listen", "127.0.0.1:0"},`,
+	assert.Contains(t, acceptance, `Args:     []string{"-listen", loopback.String() + ":0"},`,
 		"the scenario starts the program with -listen alone and lets it choose the port")
+	assert.Contains(t, acceptance, `var loopback = netip.MustParseAddr("127.0.0.1")`)
 	assert.Contains(t, main, `fmt.Println("listening on", ln.Addr())`, "the program reports the address it bound, which the scenario dials")
 	assert.Less(t, strings.Index(main, "net.Listen("), strings.Index(main, `fmt.Println("listening on"`), "only after binding it")
 	for _, refuses := range []string{

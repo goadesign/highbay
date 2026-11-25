@@ -117,22 +117,29 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 			}
 			runSuite(scenarios)
 			if !tc.example {
-				// The blank project's one scenario must fail for a program
-				// that exits before it binds an address. It dials only the
-				// address the program itself reports, so another program's
-				// listener can never make it pass.
-				quits := filepath.Join(t.TempDir(), "main.go")
-				require.NoError(t, os.WriteFile(quits, []byte("package main\n\nfunc main() {}\n"), 0o600))
-				build(filepath.Dir(quits), "quits", quits)
-				out, _ := exec.CommandContext(t.Context(), filepath.Join(bin, name+"-evals"),
-					"--artifact", name+"="+filepath.Join(bin, "quits")).Output()
-				var report eval.Report
-				require.NoError(t, json.Unmarshal(out, &report), string(out))
-				assert.False(t, report.Passed)
-				require.Len(t, report.Scenarios, 1)
-				require.NotNil(t, report.Scenarios[0].Result)
-				for _, c := range report.Scenarios[0].Result.Checks {
-					assert.False(t, c.Passed, "%s passed for a program that never listened", c.Name)
+				// The blank project's one scenario dials only a port on
+				// 127.0.0.1 that the program itself reports, so another
+				// program's listener can never make it pass. It must fail
+				// for a program that exits before it binds an address, and
+				// for one that reports an address on another host, which the
+				// scenario refuses without dialing it.
+				for stem, source := range map[string]string{
+					"quits":     "package main\n\nfunc main() {}\n",
+					"elsewhere": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc main() {\n\tfmt.Println(\"listening on 192.0.2.1:80\")\n\ttime.Sleep(time.Minute)\n}\n",
+				} {
+					file := filepath.Join(t.TempDir(), "main.go")
+					require.NoError(t, os.WriteFile(file, []byte(source), 0o600))
+					build(filepath.Dir(file), stem, file)
+					out, _ := exec.CommandContext(t.Context(), filepath.Join(bin, name+"-evals"),
+						"--artifact", name+"="+filepath.Join(bin, stem)).Output()
+					var report eval.Report
+					require.NoError(t, json.Unmarshal(out, &report), "%s: %s", stem, out)
+					assert.False(t, report.Passed, stem)
+					require.Len(t, report.Scenarios, 1, stem)
+					require.NotNil(t, report.Scenarios[0].Result, stem)
+					for _, c := range report.Scenarios[0].Result.Checks {
+						assert.False(t, c.Passed, "%s passed for the program %s", c.Name, stem)
+					}
 				}
 			}
 

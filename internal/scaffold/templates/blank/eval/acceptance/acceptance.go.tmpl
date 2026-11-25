@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -57,7 +58,7 @@ func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err erro
 		return res, errors.Join(fmt.Errorf("create state directory: %w", err), os.RemoveAll(work))
 	}
 	proc, err := candidate.Exec(ctx, h.binary, candidate.Spec{
-		Args:     []string{"-listen", "127.0.0.1:0"},
+		Args:     []string{"-listen", loopback.String() + ":0"},
 		StateDir: state,
 		LogFile:  filepath.Join(work, "[[.Name]].log"),
 	})
@@ -114,9 +115,15 @@ func check(name string, passed bool, format string, args ...any) eval.Check {
 // address (see cmd/[[.Name]]/main.go).
 var listeningLine = regexp.MustCompile(`(?m)^listening on (\S+)$`)
 
+// loopback is the only address StartsAndListens asks the [[.Name]] to bind
+// and the only one it dials.
+var loopback = netip.MustParseAddr("127.0.0.1")
+
 // boundAddress waits up to 30 seconds for the [[.Name]] to print the address
 // it bound and returns it. It stops early when the process exits, which is
-// how a program that cannot bind fails this scenario.
+// how a program that cannot bind fails this scenario. The scenario asked for
+// 127.0.0.1, so any other report is refused before anything is dialed: a
+// program's output never sends the scenario to another host.
 func boundAddress(ctx context.Context, proc *candidate.Process) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -126,7 +133,11 @@ func boundAddress(ctx context.Context, proc *candidate.Process) (string, error) 
 			return "", err
 		}
 		if m := listeningLine.FindStringSubmatch(out); m != nil {
-			return m[1], nil
+			reported, err := netip.ParseAddrPort(m[1])
+			if err != nil || reported.Addr() != loopback || reported.Port() == 0 {
+				return "", fmt.Errorf("it reported %q, which is not a port on %s", m[1], loopback)
+			}
+			return reported.String(), nil
 		}
 		select {
 		case <-proc.Done():
