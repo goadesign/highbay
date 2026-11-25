@@ -3,7 +3,7 @@
 package dsl
 
 import (
-	"github.com/goadesign/surla/story/expr"
+	"github.com/goadesign/highbay/story/expr"
 	"goa.design/goa/v3/eval"
 )
 

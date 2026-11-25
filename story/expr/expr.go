@@ -1,5 +1,5 @@
 // Package expr defines domain Stories evaluated by Goa's DSL engine. It has
-// no dependency on an architecture, a test generator, or the Surla runtime.
+// no dependency on an architecture, a test generator, or the Highbay runtime.
 package expr
 
 import (
@@ -109,7 +109,7 @@ func (*RootExpr) DependsOn() []eval.Root { return nil }
 
 // Packages identifies the syntax and expression packages for diagnostics.
 func (*RootExpr) Packages() []string {
-	return []string{"github.com/goadesign/surla/story/dsl", "github.com/goadesign/surla/story/expr"}
+	return []string{"github.com/goadesign/highbay/story/dsl", "github.com/goadesign/highbay/story/expr"}
 }
 
 // WalkSets exposes parents before children in every Goa evaluation phase.

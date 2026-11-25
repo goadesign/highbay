@@ -10,8 +10,8 @@ import (
 	"goa.design/goa/v3/eval"
 	goaexpr "goa.design/goa/v3/expr"
 
-	. "github.com/goadesign/surla/story/dsl"
-	"github.com/goadesign/surla/story/expr"
+	. "github.com/goadesign/highbay/story/dsl"
+	"github.com/goadesign/highbay/story/expr"
 )
 
 func TestStoryFinishedAndUnfinishedFlows(t *testing.T) {
