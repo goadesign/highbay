@@ -109,6 +109,22 @@ tool saves, not only reading the text it prints.
   instead. After every click, look again at about two and ten seconds, and
   report what changed: the page, which window is in front, and which pane
   has the keyboard.
+- **Read every word as yourself.** You know what you asked for and what
+  Surla has shown you, nothing else. Before you answer or confirm anything
+  on the page, read all of it: every heading, sentence, question, option and
+  example. Stop at each thing that did not come from your own request: a
+  product, sample or feature you never mentioned; a file name or path; a
+  command-line flag, endpoint or tool name; a term that belongs to Surla's
+  or a framework's insides. Quote it, say what you guess it means, and say
+  whether you could answer or agree without guessing. Do not look it up, and
+  do not wave it through: "obviously" is not an answer to a question about
+  something you never asked for. Having met a term in the README does not
+  make it yours, because the page is talking to you about your product.
+- **Never paraphrase the page.** Save the complete text of every proposal
+  under `{{PARTICIPANT}}/work/agent-logs/` and name the file in your report.
+  Quote word for word each passage you react to, and each question with all
+  of its options before you answer it. Mark anything in your own words as
+  yours.
 
 ## How to work
 
@@ -147,6 +163,11 @@ DID:
 SCREEN:
 - <time> <agent pane | page | Herdr window>: <its heading and status line
   word for word, or what the frame shows> (<frame file>)
+PAGE TEXT:
+- <file holding the complete text of each proposal you read>
+- "<each passage you did not recognize from your own request, word for
+  word>": <what you guess it means; whether you could answer without
+  guessing>
 EXPECTED VS. GOT: <where the result differed from what you expected>
 THINKING: <what you believe is going on, what you are unsure of>
 NEXT: <what you plan to do next and why>

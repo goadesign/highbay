@@ -22,6 +22,12 @@ happening, and they lose patience quickly. So the study keeps a timed record
 of those screens from the first second, and the participant waits the way
 that person waits: by looking.
 
+That person also knows only what they asked for. They have never seen
+Surla's starter sample, its generated files, or the frameworks underneath.
+So the study saves the words Surla shows them exactly as shown, and judges
+each sentence by whether someone who knows only their own request could
+understand it and answer it.
+
 Two subagents take part:
 
 - **The participant** plays a developer who has never used Surla. It may read
@@ -261,6 +267,7 @@ word for word, Herdr's `space`, `tab`, `focused_pane`, `overlays` and
 | When the agent's first Surla call returns | The Herdr window and status at about 2 and 10 seconds: is Surla's companion among `overlays`, and what does it show? |
 | When the tab appears | The page at about 2, 5 and 10 seconds |
 | While an agent or Surla is working: project setup (`init_project`), the stretch between setup and the first proposal (`propose_change`), builds, tests, verification | The page's text every 15 seconds; a frame each time its heading or status changes, and at least one a minute. The Herdr window and status once a minute, and when `overlays` or `errors` change |
+| Each proposal, revised proposal or other text the user must read before deciding | The page's complete text, saved word for word as a text file beside the frames, with every section, question, option and example expanded, and a frame of each part |
 | Each human decision on the page | The page just before and just after |
 | Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, the Herdr window and status, and the application in front |
 
@@ -277,6 +284,10 @@ not explain it from the source.
 - A click after which nothing a user can see changed within 10 seconds: the
   same page, the same application in front, the same focused pane.
 - Error text on the page, in an overlay, or in the companion.
+- Text the user must read, answer or confirm that names something the
+  participant never asked for and Surla never explained: the starter sample
+  or its features, a file path, a command-line flag, a framework term. Quote
+  it from the saved page text.
 - No visible change and no explanation for two minutes while an agent is
   working.
 
@@ -335,7 +346,8 @@ Each round trip works like this:
    screen state that would make a person doubt or stop.
 2. Append the report to the transcript and send it unchanged to the tester,
    together with the elapsed time since the previous report, the rows added
-   to `screen-log.md` since then, and the paths of the frames they name.
+   to `screen-log.md` since then, and the paths of the frames and page-text
+   files they name.
 3. The tester replies with up to three questions, an optional hint, an
    optional `CHANGE_REQUEST`, an optional `SCREEN_TASK`, and a decision:
    `continue`, `stop_for_bug`, or `end_session`.
@@ -488,7 +500,8 @@ of `references/report-template.md` and ask it to write `report.md`.
 Before handing the report over, check it against the transcripts:
 
 - Every finding points to a step that happened.
-- Quotes are exact.
+- Quotes are exact. A quote of page text matches the saved page text; a
+  finding that rests on a paraphrase of it goes back to the tester.
 - Every finding about a screen names its frames and their times, and the
   frames show what the finding says.
 - The counts of hints, errors, and milestones match the transcripts.

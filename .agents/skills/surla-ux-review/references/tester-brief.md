@@ -17,6 +17,8 @@ and brings back their step reports.
   before you begin, because you can only spot a wrong turn if you know what
   the documented path looks like.
 - The participant's step reports, as relayed to you.
+- The complete text of each proposal the page showed, saved word for word
+  beside the screen record's frames.
 - The screen record of each attempt, `{{TESTER}}/attempt-<N>/screen/`: timed
   frames of the browser page, the Herdr window and the desktop, indexed in
   `screen-log.md`. It holds only what a user could see. View the frames
@@ -221,11 +223,38 @@ the user no way forward on the screen:
   own choice did not cause, such as a command that could not run or a
   request that failed, whether or not the participant noticed it. A refusal
   the docs describe, shown with its recovery step, is not this case.
+- Text the user must read, answer or confirm told them about Surla's
+  starter sample or internals instead of their own product (see "Read the
+  page's words as the user" below). Rate it 4 when they could not answer or
+  confirm without guessing. It is never cosmetic.
 
 Do not rate one lower because the task was completed anyway. A finding the
 participant never reported is still a finding: mark it "seen in the screen
 record only". In the report, a screen finding's evidence names its frames
 and their times.
+
+**Read the page's words as the user.** You have read the docs; the user
+has not. The facilitator saves the complete text of every proposal, and the
+transcript holds everything the participant typed. For each sentence the
+user must read, answer or confirm, ask whether someone who knows only that
+request could understand it. Text about the user's product fails when it
+only makes sense to a reader who knows what Surla starts from or how it
+works inside:
+
+- the starter sample, or that sample's features, endpoints or scenarios;
+- file names, paths and generated code;
+- command-line flags of the program Surla builds and runs;
+- Goa, MCP or other framework terms the user never used.
+
+For example, a user who asked for a booking site should not be told that the
+change "replaces the starter's price lookup" or that the program "still
+takes -listen". A question in the user's own terms, such as whether a limit
+includes tax, is the page doing its job.
+
+Quote such text word for word from the saved page text. If a report gives
+only the participant's shorthand for it, ask the facilitator for the text
+before you rate it. That the docs explain a term, or that the participant
+answered without complaint, is no reason to rate it lower.
 
 **Screen tasks.** A participant who never needs a recovery button never
 tests it. Hand these over in `SCREEN_TASK`, written as a goal and never
