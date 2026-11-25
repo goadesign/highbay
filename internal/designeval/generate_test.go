@@ -814,7 +814,7 @@ func prepareStarterEvalModule(
 	t.Helper()
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
-	tmplRoot := filepath.Join(repoRoot, "internal", "scaffold", "templates", "eval")
+	tmplRoot := filepath.Join(repoRoot, "internal", "scaffold", "templates", "example", "eval")
 	readRendered := func(rel string) string {
 		raw, err := os.ReadFile(filepath.Join(tmplRoot, filepath.FromSlash(rel)))
 		require.NoError(t, err)
