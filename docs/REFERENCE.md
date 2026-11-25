@@ -575,11 +575,22 @@ surla verify \
   -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
 ```
 
-To verify your merged branch against the exact tests Surla accepted for a build
-(even if your branch also holds other changes to `eval/`), keep
-`-candidate-commit "$(git rev-parse HEAD)"` for the merged branch and pass the
-accepted `<tests_commit>` and `<request_revision>` shown in **Approve** (or
-**Build**) as `-suite-commit <tests_commit> -request-revision <request_revision>`.
+To verify your merged branch in a separate run against the tests of a build
+(even if your branch also holds later edits to `eval/`), open **Verify the
+merged branch from the terminal** on **Approve** or **Build** after merging:
+- When a matching merge receipt is loaded, the template binds
+  `-candidate-commit` to that resulting merge SHA; otherwise check out the
+  merged branch and run from its repository root so
+  `-candidate-commit "$(git rev-parse --verify HEAD)"` checks its current
+  commit.
+- Replace `SERVICE` with your service name and adjust `-candidate-module` or
+  `-suite-module` if your service or test module lives outside the default
+  directories. When the project uses stored verification settings instead of
+  written tests, run `surla verification show` to fill in the candidate and
+  evaluator flags (including one `-binary` flag per candidate binary).
+- When crafting the command manually, read the full `<request_revision>` and
+  `<tests_commit>` from **Verified inputs and digests** on **Approve** (or the
+  accepted tests commit and build revision details in **Build**).
 
 | Flag | Meaning |
 | --- | --- |
@@ -739,8 +750,10 @@ all act for that owner.
 | [`get_build`](#get_build) | ✓ | ✓ | ✓ | ✓ | | MCP tool and HTTP |
 | [`get_test_findings`](#get_test_findings) | ✓ | | | | | HTTP |
 | [`list_builder_assignments`](#list_builder_assignments-and-get_builder_assignment) | | | ✓ | | | MCP tool and HTTP |
+| [`wait_for_builder_assignment`](#list_builder_assignments-and-get_builder_assignment) | | | ✓ | | | MCP tool and HTTP |
 | [`get_builder_assignment`](#list_builder_assignments-and-get_builder_assignment) | | | ✓ | | | MCP tool and HTTP |
 | [`list_test_writer_assignments`](#list_test_writer_assignments-and-get_test_writer_assignment) | | | | ✓ | | MCP tool and HTTP |
+| [`wait_for_test_writer_assignment`](#list_test_writer_assignments-and-get_test_writer_assignment) | | | | ✓ | | MCP tool and HTTP |
 | [`get_test_writer_assignment`](#list_test_writer_assignments-and-get_test_writer_assignment) | | | | ✓ | | MCP tool and HTTP |
 | [`report_tests_finished`](#report_tests_finished) | | | | ✓ | | MCP tool and HTTP |
 | [`start_live_target`](#start_live_target) | | | ✓ | | | MCP tool and HTTP |
@@ -827,21 +840,28 @@ its named refusals. The types and every field's description are in
 #### `list_changes`
 
 `GET /changes`. **Input:** none. **Output:** `ChangeList` (`changes`,
-`version`, `approval_available`).
+`version`, `approval_available`, `initializing_phase?`).
 
 Lists the project's Change Cards, most recently saved first (ties by
-`change_id`). Each item has `change_id`, `summary`, `status`
+`change_id`). While [`init_project`](#init_project) is actively creating a
+starter project, `initializing_phase` reports the current setup phase so an open
+views page can display live progress on the welcome card, and the read skips
+workspace promotion and Story-evaluation checks so it answers without waiting
+for `init_project` to release the workspace; `initializing_phase` is omitted
+otherwise. Each item has `change_id`, `summary`, `status`
 (`needs_confirmation` or `confirmed`), the `request_revision` in force,
 `proposed_revision` while a proposed revision waits, `saved_at`, and
 `latest_verification`, absent when no run was started. `approval_available` is
-`false` when the server runs no verification, even with a promotion target, the
+`false` while `initializing_phase` is present, and `false` when the server runs
+no verification, even with a promotion target, the
 release check that stored promotion settings configure. It is also `false`
 when resolving that target fails: the list still answers, and the error is
 recorded on the read's span
 (`surla.controlplane.list_changes`, or `surla.controlplane.wait_for_changes`
-on each of its polls). A server started by `surla` always runs verification,
-with or without promotion settings, so there it is `true`.
-`version` changes whenever a listed value changes, and also when a build, the
+on each of its polls). Outside initialization, a server started by `surla`
+always runs verification, with or without promotion settings, so there it is
+`true` unless resolving stored promotion settings fails.
+`version` changes whenever a listed value or `initializing_phase` changes, and also when a build, the
 team, the Story evaluation or the live target changes. A card, build or run
 that cannot be read fails the call instead of being left out.
 
@@ -918,7 +938,7 @@ sends `analysis`:
 | Field | Content |
 | --- | --- |
 | `summary` | The change in plain words. |
-| `ambiguities` | The questions only the user can answer, each a `question` with at least two distinct `options`; empty when nothing is open. |
+| `ambiguities` | The questions only the user can answer, each a `question` with at least two distinct `options` and optional `draft_option` (the exact string in `options` that the evaluated draft design, Story, examples and preserved behaviors already implement when the choice changes them; omitted when every option fits the current draft); empty when nothing is open. |
 | `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer. Verification runs the scenarios of the selected suite, the tests Surla accepted for the build or, with stored [verification settings](#surla-verification-and-surla-promotion), the operator's evaluator; the label does not select how or whether one runs. |
 | `preserved_behaviors` | The behaviors the change must keep, possibly none. |
 | `ui_composition` *(optional)* | An illustration of the decision for the views page (see [MCP resources](#mcp-resources)). It is never checked, never part of `request_revision`, and is dropped when the user changes the answers or examples. |
@@ -937,7 +957,7 @@ design.
 | --- | --- |
 | `conflict` (`409`) | `change_id` already has a card. |
 | `drafted_before_drop` (`409`) | The user dropped a build after `story_refresh_op_id` was evaluated; call `refresh_story` to remake and evaluate the draft from the project folder, then propose again. |
-| `unprocessable` (`422`) | `change_id` or `prompt` is blank; the analysis breaks a rule that spans fields (message starting `invalid analysis:`, such as a question that repeats an option); `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation (the message names `refresh_story`); or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted. |
+| `unprocessable` (`422`) | `change_id` or `prompt` is blank; the analysis breaks a rule that spans fields (message starting `invalid analysis:`, such as a question that repeats an option or names a `draft_option` that is not one of its `options`); `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation (the message names `refresh_story`); or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted. |
 
 Surla cannot judge whether an analysis is complete or right; the user does
 that when confirming.
@@ -1004,15 +1024,17 @@ revision named by `request_revision`. `answers` maps every open question's
 the proposed revision the agreed one, records the user in `confirmed_by`, and
 carries over no approval. Changed answers or examples give the card another
 `request_revision` and clear its approval; a submission that changes nothing
-keeps both and returns the approval as [`get_change`](#get_change) does. A
-decision no option expresses goes to the guide, which records it
-with `revise_change`.
+keeps both and returns the approval as [`get_change`](#get_change) does. When an
+ambiguity declares `draft_option`, confirming an option that differs from
+`draft_option` is refused with `unprocessable`: that choice requires the guide
+to update the draft design, Story, examples or preserved behaviors with
+`revise_change` first, as does a decision no option expresses.
 
 | Refusal | When |
 | --- | --- |
 | `not_found` (`404`) | No card has this `change_id`. |
 | `conflict` (`409`) | A stale `request_revision`, or refining the agreed revision while a proposed revision waits (the message names **Adopt** and **Decline**). |
-| `unprocessable` (`422`) | One message naming every missing answer, every answer that is not an option, and every unknown question `id`. |
+| `unprocessable` (`422`) | One message naming every missing answer, every answer that is not an option or differs from `draft_option`, and every unknown question `id`. |
 
 #### `decline_revision`
 
@@ -1983,7 +2005,7 @@ returns the same required fact in its `ChangeBuild` result.
 | `taking` | How the open build stands with the project folder's branch: `building`, `passed` (with `run_id`, `candidate_commit`, `candidate_branch` `surla/build-<n>`, `tests`—`evaluator` or `written_tests` with `commit` and `branch` `surla/tests-<n>`—and `base_in_branch`), `merged`, or `dropped` (with `kept_branches`). |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
 | `required_tests` | Required for every caller: one `RequiredTest` per finished flow in the saved build Story, in declaration order (`story`, `flow_key`, `scenario`, `hook`); empty when none. Later agreement edits do not replace this list. It names requirements, not a mapping from findings to tests or proof of evaluator coverage. |
-| `builder.read` | Whether the builder read its assignment. |
+| `builder` | `read` (whether the builder read its assignment), plus optional `branch` (`surla/build-<n>`), `head_commit` (in `get_build` while `taking` is `building`: the commit `surla/build-<n>` points at once it differs from the build's base; omitted in other states—a passed build records its verified `candidate_commit` in `taking`), `last_check_passed` and `last_check_at` (outcome and completion time of the latest completed `check_project` for this build on the builder's working folder, committed or not; independent of `head_commit`). |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
 
 `required_tests` also appears in other responses carrying `StartedBuild`,
@@ -2019,10 +2041,15 @@ usable build.
 
 ### `list_builder_assignments` and `get_builder_assignment`
 
-`GET /assignments/builder` and `GET /assignments/builder/{change_id}`.
+`GET /assignments/builder`, `GET /assignment-updates/builder?since_version=<version>`
+(`wait_for_builder_assignment`) and `GET /assignments/builder/{change_id}`.
 **Output:** `BuilderAssignmentList` (the open build's assignment while that
 build is open, not dropped, and needs the builder—until a verification of it
-passes with current inputs; empty otherwise) or one `BuilderAssignment`
+passes with current inputs; empty otherwise), `BuilderAssignmentWait`
+(`assignments` and canonical `version`, returning immediately when
+`since_version` is omitted or differs, or after up to 30 seconds of server-side
+waiting so workers without Chorus never busy-poll; traced without saving to
+`traces.jsonl`), or one `BuilderAssignment`
 (`change_id`, `request_revision`, `in_force`, `working_folder`, `gowork_off`,
 `read`, `written_tests`).
 
@@ -2041,10 +2068,17 @@ change, and with `no_build` (`409`, when the open build was dropped),
 
 ### `list_test_writer_assignments` and `get_test_writer_assignment`
 
-`GET /assignments/test-writer` and `GET /assignments/test-writer/{change_id}`.
+`GET /assignments/test-writer`, `GET /assignment-updates/test-writer?since_version=<version>`
+(`wait_for_test_writer_assignment`) and `GET /assignments/test-writer/{change_id}`.
 **Output:** the list (the open build's assignment while that build is open, not
 dropped, uses a test writer, and its tests are not yet `accepted`; empty
-otherwise), or one `TestWriterAssignment`:
+otherwise), `TestWriterAssignmentWait` (`assignments` and canonical `version`,
+waiting up to 30 seconds when `since_version` matches and omitted from
+`traces.jsonl`; after `report_tests_finished`, inspect both the first call
+without `since_version` and subsequent waits, and as soon as the assignment is
+absent or `progress.tests` is no longer `reported`—including when a fast check
+finished before the first wait—call `get_test_writer_assignment` for the
+verdict or `no_build` refusal), or one `TestWriterAssignment`:
 
 | Field | Meaning |
 | --- | --- |
@@ -2160,9 +2194,10 @@ the project. A missing supported agent produces an installation/retry step.
 ### `get_team`
 
 `GET /team`. The user's cached team snapshot contains `team`, `herdr_mode`,
-`roles`, `saved_choices` and `dismissed_notices`. Herdr mode is `attached`
+`chorus_status?`, `roles`, `saved_choices` and `dismissed_notices`. Herdr mode is `attached`
 with a guide pane attached to the project, `available` when Herdr can host
-workers, or `unavailable` when workers run in the background. Roles are in
+workers (a guide registered without a linked Herdr app tab keeps `state:
+"unknown"`, shown on the page as **Coding agent registered · No Herdr pane linked** rather than `not_started`), or `unavailable` when workers run in the background. `chorus_status` is `connected` after the latest read of the team's Chorus view succeeded, `unavailable` after that read failed or when the team's space has no Chorus connection, `not_used` without Herdr, and omitted before a team space exists or before the first Chorus view read settles it. Roles are in
 guide, builder, test writer order and empty before registration. The read
 starts no subprocesses and marks no assignments read.
 
@@ -2171,7 +2206,7 @@ starts no subprocesses and marks no assignments read.
 | `role` | `guide`, `builder` or `test_writer` |
 | `handle` | The role's registered Chorus handle. |
 | `state` | `not_started`, `ended`, `starting`, `needs_you`, `working`, `waiting`, `error` or `unknown` |
-| `attention` | Why a role needs the user: `none`, `permission`, `question`, `auth`, `silent` (a running agent that reported nothing for 60 seconds), `assignment` (a role `waiting` with an unread assignment for 90 seconds; see **Reminders** below) or `unknown`. `silent` and `assignment` change only what is shown. |
+| `attention` | Why a role needs the user: `none`, `permission`, `question`, `auth`, `silent` (a running agent that reported nothing for 60 seconds, such as waiting at a startup or folder-trust prompt), `assignment` (a role `waiting` with an unread assignment for 90 seconds when Chorus is connected, or 15 seconds when Chorus is unavailable; see **Reminders** below) or `unknown`. `silent` and `assignment` change only what is shown. |
 | `watcher` | `held` when Chorus reports the agent's watcher, `gone` after 90 seconds of known absence, or `unknown` |
 | `assignment` | `unread` (the role has work on the open build and owes an assignment read), `nothing_owed` (the role has work and owes no read; the guide always reads `nothing_owed`, shown on the page as `No assignments`), `no_work` (the open build needs nothing from that role: no build is open, the open build was dropped, the test writer's tests are `accepted`, or a verification of the builder's build passed with current inputs) or `unknown` |
 
@@ -2443,14 +2478,20 @@ it does after a restart, the page keeps everything typed visible and
 copyable and explains how to ask your coding agent to reopen the page. Leaving with unsaved edits asks the
 browser to confirm, including for unadopted proposal answers and Model-form edits.
 
-**Every view.** Open **Inspect** to reach Team, Story, Live target,
-Architecture, or Diagnostics. The label names the current inspection, and
+**Every view.** The journey bar names **Describe** (or **Changes**), **Agree**,
+**Architecture**, **Build**, **Check** and **Approve**; open **Inspect** to
+reach **Story**, **Team**, **Live target** or **Diagnostics**. The label names the current inspection, and
 Escape closes the disclosure and returns focus to it. On an empty project with
 a connected coding agent and no outstanding issue, the frame leaves room for
-the welcome card. When a confirmed agreement is open, the frame previews at
+the welcome card (showing live `initializing_phase` status while `init_project`
+runs). When a confirmed agreement is open, the frame previews at
 most two lines of its summary. **Read full summary** expands **Agreement
 details** in Agree and focuses the saved summary while retaining unsaved edits.
 That preview remains available if you open another view while editing the card.
+While a proposed revision waits on a confirmed card, **Needs you** names
+adopting or declining the proposal across **Agree** and **Build**, and clicking
+**Build agreed revision** asks for confirmation before building the older
+agreement.
 
 Each role that needs your help has a notice, for example
 `Builder needs you: permission`, and a **Show builder pane** action when
@@ -2467,7 +2508,7 @@ holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Describe / Changes** | The welcome card directs you to your coding agent. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
+| **Describe / Changes** | The welcome card directs you to your coding agent (showing **Preparing your project** with the current `initializing_phase` while [`init_project`](#init_project) runs). The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
 | **Team** | Each registered role has a state, watcher, and any worker assignment. The project coding agent may be attached in its own session outside Herdr. **Show coding agent pane** appears for an attached Herdr pane; eligible workers have their own **Show … pane** actions. **Start workers** requests missing workers and reports the outcome and time. **Refresh team** reads the cached facts. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow. A finished flow is marked **will be tested end to end**. Other flows are marked **draft: not tested** with the reasons. Below it, see the current Story evaluation ([`get_story_refresh`](#get_story_refresh)) and how it differs from the change's Story. A draft joins the change when your coding agent proposes it and you confirm the new revision. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
@@ -2581,7 +2622,15 @@ merges into the checked-out local branch through [`merge_change`](#merge_change)
 Pending, failed or stale owner reads withhold the action. Git refusals keep the
 approval and show recovery, including any restoration result. A successful
 dated merge receipt names the actual destination branch and short resulting
-commit; **Merge receipt** discloses the full commit and timestamp.
+commit; **Merge receipt** discloses the full commit and timestamp. Once the
+build is `merged`, **Verify the merged branch from the terminal** discloses a
+separate [`surla verify`](#surla-verify) template: on **Approve** (when the
+displayed run matches the recorded approval of the current build), it binds
+that approval's `suite_commit` and any matching merge receipt's resulting
+commit (otherwise checking `"$(git rev-parse --verify HEAD)"` on the checked-out
+merged branch); on **Build**, a merged build discloses the same template using
+the matched approval's `suite_commit`, the build's currently accepted tests
+commit (labeled as such), or a placeholder when no suite commit is known.
 
 Only while that same live approval is freshly read, the secondary
 **Manual merge instructions** name `git merge <candidate_commit>`
@@ -2624,7 +2673,9 @@ and exchanging the link or using a browser session still requires
 ## Operation diagnostics
 
 The server records safe summaries of the operations callers make, with no
-collector to set up. On the views page, open **Traces**; agents use
+collector to set up. On the views page, open **Inspect → Diagnostics** (showing
+each span's caller role and safe failure summaries such as container-check
+timeouts or engine errors); agents use
 [`list_traces`](#list_traces).
 
 **What is saved.** Every call by the guide, the builder or the test writer,
@@ -2632,7 +2683,8 @@ every operation that changes something, and the user's reads sent with `POST`
 (`preview_architecture`, `diff`, `read_check_output`). The user's `GET` reads,
 which the page repeats, are saved only when they fail with an error status or
 a panic; refused reads, such as `forbidden` or `not_found`, are expected
-answers and are not saved. `wait_for_changes` is never saved. Each HTTP or
+answers and are not saved. `wait_for_changes`, `wait_for_builder_assignment`
+and `wait_for_test_writer_assignment` are never saved. Each HTTP or
 MCP call has a `surla.request.<operation>` span; a refusal is recorded
 without error status, and an unexpected fault records an error. Calls refused
 before authentication or decoding, verification processes, the check helper
