@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -517,13 +519,21 @@ func TestStdioRequestHeadersNameTheFrameTarget(t *testing.T) {
 }
 
 // TestStdioForwardsProgressAheadOfTheResponse relays a call whose client
-// asked for progress to a server that answers with an event stream: the
-// keep-alive comment is dropped, each notification reaches the client at once
-// and in order, and the response follows. A call without a progress token
-// asks for plain JSON, and a stream that ends without a response is an error.
+// asked for progress to a server that answers with an event stream. The
+// server sends its response only after the client has read the first
+// notification from the relay's output, so the test proves each notification
+// is passed on as it arrives. The keep-alive comment is dropped and the
+// response follows the notifications. A call without a progress token asks
+// for plain JSON. A stream that ends without a response, or whose response
+// is cut off before its blank line, is an error.
 func TestStdioForwardsProgressAheadOfTheResponse(t *testing.T) {
+	const (
+		first  = `{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p","progress":0,"total":8,"message":"Resolving the service's Go modules"}}`
+		second = `{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p","progress":1,"total":8,"message":"Generating the service's code"}}`
+	)
 	var accepts []string
 	var mu sync.Mutex
+	seen := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		accepts = append(accepts, r.Header.Get("Accept"))
@@ -536,19 +546,33 @@ func TestStdioForwardsProgressAheadOfTheResponse(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		events := []string{
-			":\n\n",
-			"event: message\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":\"p\",\"progress\":0,\"total\":8,\"message\":\"Resolving the service's Go modules\"}}\n\n",
-			"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\n" +
-				"data: \"params\":{\"progressToken\":\"p\",\"progress\":1,\"total\":8,\"message\":\"Generating the service's code\"}}\r\n\r\n",
-		}
-		if !bytes.Contains(body, []byte(`"lost"`)) {
-			events = append(events, "data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"streamed\":true}}\n\n")
-		}
-		for _, event := range events {
-			_, err = io.WriteString(w, event)
+		write := func(event string) {
+			_, err := io.WriteString(w, event)
 			assert.NoError(t, err)
 			w.(http.Flusher).Flush()
+		}
+		write(":\n\n")
+		write("event: message\ndata: " + first + "\n\n")
+		switch {
+		case bytes.Contains(body, []byte(`"lost"`)):
+		case bytes.Contains(body, []byte(`"cut_off"`)):
+			write("data: {\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"streamed\":true}}\n")
+		default:
+			// The response waits until the client has the first notification.
+			select {
+			case <-seen:
+			case <-time.After(10 * time.Second):
+				assert.Fail(t, "the first notification did not reach the client before the response")
+			}
+			// One event may spread its data over lines; a line break between
+			// two members is JSON whitespace.
+			half := strings.Index(second, `"params"`)
+			write("data: " + second[:half] + "\ndata: " + second[half:] + "\r\n\r\n")
+			write("data: not a message\n\n")
+			write("data: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"streamed\":true}}\n\n")
+			// The relay has its response; a connection that then stays open
+			// until the client leaves, or fails, changes nothing for the call.
+			<-r.Context().Done()
 		}
 	}))
 	defer server.Close()
@@ -563,26 +587,56 @@ func TestStdioForwardsProgressAheadOfTheResponse(t *testing.T) {
 		return strings.Split(strings.TrimSpace(out.String()), "\n")
 	}
 
-	lines := serve(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"init_project","arguments":{},"_meta":{"progressToken":"p"}}}`)
-	require.Len(t, lines, 3)
-	assert.JSONEq(t, `{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p","progress":0,"total":8,"message":"Resolving the service's Go modules"}}`, lines[0])
-	assert.JSONEq(t, `{"jsonrpc":"2.0","method":"notifications/progress","params":{"progressToken":"p","progress":1,"total":8,"message":"Generating the service's code"}}`, lines[1])
-	assert.JSONEq(t, `{"jsonrpc":"2.0","id":1,"result":{"streamed":true}}`, lines[2])
+	// The client reads the relay's output line by line while the call runs.
+	clientRead, relayWrite := io.Pipe()
+	lines := make(chan string, 8)
+	go func() {
+		scanner := bufio.NewScanner(clientRead)
+		for scanner.Scan() {
+			lines <- scanner.Text()
+		}
+		close(lines)
+	}()
+	done := make(chan error, 1)
+	go func() {
+		frame := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"init_project","arguments":{},"_meta":{"progressToken":"p"}}}`
+		err := serveStdioLoop(context.Background(), strings.NewReader(frame+"\n"), relayWrite, session.dispatch)
+		done <- errors.Join(err, relayWrite.Close())
+	}()
+	select {
+	case line := <-lines:
+		assert.JSONEq(t, first, line)
+	case <-time.After(10 * time.Second):
+		t.Fatal("no notification reached the client while the call ran")
+	}
+	close(seen)
+	require.NoError(t, <-done)
+	var rest []string
+	for line := range lines {
+		rest = append(rest, line)
+	}
+	require.Len(t, rest, 2)
+	assert.JSONEq(t, second, rest[0])
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":1,"result":{"streamed":true}}`, rest[1])
 
-	lines = serve(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_changes","arguments":{},"_meta":{"progressToken":null}}}`)
-	require.Len(t, lines, 1)
-	assert.JSONEq(t, `{"jsonrpc":"2.0","id":2,"result":{"plain":true}}`, lines[0])
+	got := serve(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_changes","arguments":{},"_meta":{"progressToken":null}}}`)
+	require.Len(t, got, 1)
+	assert.JSONEq(t, `{"jsonrpc":"2.0","id":2,"result":{"plain":true}}`, got[0])
 
-	lines = serve(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"lost","arguments":{},"_meta":{"progressToken":"p"}}}`)
-	require.Len(t, lines, 3, "the notifications arrived before the stream ended")
-	var failed stdioReply
-	require.NoError(t, json.Unmarshal([]byte(lines[2]), &failed))
-	require.NotNil(t, failed.Error)
-	assert.Contains(t, failed.Error.Message, "event stream ended without a response")
+	for id, name := range map[int]string{3: "lost", 4: "cut_off"} {
+		got = serve(`{"jsonrpc":"2.0","id":` + strconv.Itoa(id) + `,"method":"tools/call","params":{"name":"` + name + `","arguments":{},"_meta":{"progressToken":"p"}}}`)
+		require.Len(t, got, 2, "%s: the notification arrived before the stream ended", name)
+		var failed stdioReply
+		require.NoError(t, json.Unmarshal([]byte(got[1]), &failed))
+		require.NotNil(t, failed.Error, name)
+		assert.Contains(t, failed.Error.Message, "event stream ended without a response", name)
+	}
 
 	mu.Lock()
 	defer mu.Unlock()
-	assert.Equal(t, []string{"application/json, text/event-stream", "application/json", "application/json, text/event-stream"}, accepts)
+	assert.Equal(t, "application/json, text/event-stream", accepts[0])
+	assert.Equal(t, "application/json", accepts[1])
+	assert.Len(t, accepts, 4)
 }
 
 func TestStdioRetriesOnlyRequestsTheServerNeverRan(t *testing.T) {

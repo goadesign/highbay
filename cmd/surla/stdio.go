@@ -549,9 +549,13 @@ func stdioAsksProgress(raw *jsonrpc.RawRequest) bool {
 // readStdioEventStream reads a server-sent event stream whose events each
 // hold one JSON-RPC message in their data. It passes every message without
 // an ID, a notification, to notify and returns the one message with an ID,
-// the response. Comment lines, which the server sends to keep a long call
-// alive, and other fields are skipped. A stream that ends without a response
-// is an error: the call's outcome is unknown.
+// the response; data that is no JSON object is skipped. Comment lines, which the server sends to keep a long call
+// alive, and other fields are skipped. Only an event ended by its blank line
+// counts: data cut off by the end of the stream is dropped, as the server's
+// own reader drops it. The response ends the read at once, without waiting
+// for the stream to close, so a connection that fails afterwards cannot
+// discard it. A stream that ends without a complete response is an error:
+// the call's outcome is unknown.
 func readStdioEventStream(stream io.Reader, notify func([]byte)) ([]byte, error) {
 	reader := bufio.NewReader(stream)
 	var data, response []byte
@@ -565,33 +569,36 @@ func readStdioEventStream(stream io.Reader, notify func([]byte)) ([]byte, error)
 			// ID is present on a response and absent on a notification.
 			ID json.RawMessage `json:"id"`
 		}
-		if json.Unmarshal(message, &envelope) == nil && len(envelope.ID) == 0 {
+		switch {
+		case json.Unmarshal(message, &envelope) != nil:
+			// Not a JSON-RPC message: neither forwarded nor a response.
+		case len(envelope.ID) == 0:
 			notify(message)
-			return
+		default:
+			response = message
 		}
-		response = message
 	}
 	for {
 		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			// The stream ended: a line without its newline and an event
+			// without its blank line were both cut off, and are dropped.
+			if !errors.Is(err, io.EOF) {
+				return nil, err
+			}
+			return nil, errors.New("the server's event stream ended without a response")
+		}
 		line = bytes.TrimRight(line, "\r\n")
 		switch {
 		case len(line) == 0:
-			flush()
+			if flush(); response != nil {
+				return response, nil
+			}
 		case bytes.HasPrefix(line, []byte("data:")):
 			if len(data) > 0 {
 				data = append(data, '\n')
 			}
 			data = append(data, bytes.TrimPrefix(bytes.TrimPrefix(line, []byte("data:")), []byte(" "))...)
-		}
-		if err != nil {
-			flush()
-			if !errors.Is(err, io.EOF) {
-				return nil, err
-			}
-			if response == nil {
-				return nil, errors.New("the server's event stream ended without a response")
-			}
-			return response, nil
 		}
 	}
 }
