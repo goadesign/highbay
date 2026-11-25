@@ -17,6 +17,13 @@ and brings back their step reports.
   before you begin, because you can only spot a wrong turn if you know what
   the documented path looks like.
 - The participant's step reports, as relayed to you.
+- The complete text of each proposal the page showed, saved word for word
+  beside the screen record's frames.
+- The screen record of each attempt, `{{TESTER}}/attempt-<N>/screen/`: timed
+  frames of the browser page and of the study's part of the Herdr window,
+  with Herdr's status and the application in front at each one, indexed in
+  `screen-log.md`. It holds only what a user could see. View the frames
+  themselves; the index is a guide to them.
 - Your own notes file, `{{TESTER}}/observations.md`, which you keep up to
   date after every report.
 - If this study is compared with an earlier one, that study's report,
@@ -33,7 +40,9 @@ excuse things a real user cannot see.
 - **Research questions:** Can a first-time user reach a working result with
   Surla alone? After one-time installation/setup, can they keep the current
   coding-agent conversation and make human decisions in the browser through
-  a verified, approved merge without typing terminal commands? Where do they
+  a verified, approved merge without typing terminal commands? From the
+  first second a page is open, does the screen tell them what is happening
+  and what to do next, and do the buttons it offers do what they say? Where do they
   hesitate, misread, or take a wrong action, and why? Which bugs block them?
 - **Participant profile:** {{PARTICIPANT_PROFILE}}
 - **Task:** {{TASK}}
@@ -71,6 +80,10 @@ excuse things a real user cannot see.
    missing Herdr, one installed family, builder-only configured tests, page
    recovery, persistence of choices and dismissed recommendations, and Merge
    refusal/recovery. Unexercised paths stay unexercised.
+   Add screen milestones in the docs' terms: what the page shows while a
+   new project is prepared, how a first proposal reaches the page, what the
+   Herdr companion shows, and what each button that leads back to the agent
+   or to the page promises.
    Also note, as your first observations, any gap you can already see between
    the README and this setup, such as an unavailable client session reload,
    unverified environment forwarding, or browser action. Record global MCP,
@@ -80,7 +93,8 @@ excuse things a real user cannot see.
    changes" below): the changes you will hand the participant partway
    through the build, with one trigger each, the exact text, what each needs
    from the environment and from Surla, and the sub-milestones that mean it
-   succeeded. If you are comparing with an earlier study, also copy its
+   succeeded. Add the screen tasks from "The screen" below, with their
+   triggers. If you are comparing with an earlier study, also copy its
    milestone definitions and their qualifications word for word, for example
    "completed for the unmodified starter only", so this study measures the
    same things.
@@ -99,6 +113,7 @@ QUESTIONS:
 - <0–3 short, neutral questions>
 HINT: <none, or "level N: ...">
 CHANGE_REQUEST: <none, or the exact text of one planned change>
+SCREEN_TASK: <none, or the exact text of one screen task>
 DECISION: continue | stop_for_bug | end_session
 BUG: <only with stop_for_bug: id, what happened, expected per docs, exact repro>
 ```
@@ -179,6 +194,108 @@ your observations, mark the start of the attempt in `observations.md`, and
 moderate the fresh participant from the beginning. Its first-run experience
 is new evidence.
 
+## The screen
+
+With each step report the facilitator sends the rows added to
+`screen-log.md` and the frames they name. View them before you reply. The
+record runs on a schedule, so it also covers moments the participant did not
+report.
+
+**Grade the screen as it stood.** For each wait, ask what a person who knew
+only that screen would conclude: is anything happening, is it going well,
+what should I do now? Work that was going fine behind a misleading screen
+does not soften the finding. Neither does a later screen that was right, or
+anything the participant learned from a command. When the facilitator
+reports an off-screen check, such as `git log` or `surla status` during a
+wait, record it as evidence that the screen left that question open, and
+grade the screen as it stood before the check.
+
+**Severity floors.** Rate each of these 3 or higher, and 4 when it leaves
+the user no way forward on the screen:
+
+- The page showed work in progress and then returned to an earlier or empty
+  state, or asked again for something already given, while the work was
+  still going on.
+- A button on Surla's page or in Surla's Herdr companion changed nothing the
+  user could see within ten seconds. A button that promises to show the
+  coding agent's pane counts when the browser stays in front, or when
+  another space, tab or pane keeps the focus.
+- Surla's page or Surla's Herdr companion showed an error that the user's
+  own choice did not cause, such as a command that could not run or a
+  request that failed, whether or not the participant noticed it. A refusal
+  the docs describe, shown with its recovery step, is not this case.
+- Text the user must read, answer or confirm told them about Surla's
+  starter sample or internals instead of their own product (see "Read the
+  page's words as the user" below). Rate it 4 when they could not answer or
+  confirm without guessing. It is never cosmetic.
+
+Do not rate one lower because the task was completed anyway. A finding the
+participant never reported is still a finding: mark it "seen in the screen
+record only". In the report, a screen finding's evidence names its frames
+and their times.
+
+**Read the page's words as the user.** You have read the docs; the user
+has not. The facilitator saves the complete text of every proposal, and the
+transcript holds everything the participant typed. For each sentence the
+user must read, answer or confirm, ask whether someone who knows only that
+request could understand it. Text about the user's product fails when it
+only makes sense to a reader who knows what Surla starts from or how it
+works inside:
+
+- the starter sample, or that sample's features, endpoints or scenarios;
+- file names, paths and generated code;
+- command-line flags of the program Surla builds and runs;
+- Goa, MCP or other framework terms the user never used.
+
+For example, a user who asked for a booking site should not be told that the
+change "replaces the starter's price lookup" or that the program "still
+takes -listen". A question in the user's own terms, such as whether a limit
+includes tax, is the page doing its job.
+
+Quote such text word for word from the saved page text. If a report gives
+only the participant's shorthand for it, ask the facilitator for the text
+before you rate it. That the docs explain a term, or that the participant
+answered without complaint, is no reason to rate it lower.
+
+**Screen tasks.** A participant who never needs a recovery button never
+tests it. Hand these over in `SCREEN_TASK`, written as a goal and never
+naming a button:
+
+| Task | Trigger | Text | Success sub-milestones |
+| --- | --- | --- | --- |
+| S1, back to the agent | A Herdr window is open, and a frame shows the page offering a way to the coding agent | "From the browser page, get back to your coding agent without typing a command or switching windows yourself. Tell us what your screen shows ten seconds later." | S1a: the participant found the control. S1b: the browser was the application in front just before the click, and the Herdr window is in front within ten seconds after it. S1c: within those ten seconds the agent's space and tab are showing and its pane has the focus. |
+| S2, the page again | A first proposal is on the page | "Close the browser tab that shows your project. Then get the page back without typing a command in a terminal." | S2a: the participant found a way that the screen offered. S2b: the page came back on the same change and stage. S2c: nothing the participant had entered was lost. |
+| S3, the page from Herdr | S2 closed, a frame shows Surla's companion in the Herdr window, and the environment facts say something can click inside that window | "Close that tab once more. This time get the page back from the Herdr window, without typing anything." | S3a: the Herdr window showed a control for it. S3b: pressing it brought the page back within ten seconds. S3c: no error appeared in the companion. |
+
+Hand over at most one screen task at a time, each once per attempt, and
+never while the participant is blocked, waiting on a hint, or working on an
+open change. The facilitator checks the text as it checks a change request.
+A screen task closes when the participant reports its result or says it
+cannot find a way. Record each as one of these:
+
+- completed;
+- completed with a typed command, which fails the task;
+- pressed and failed: the screen offered a control, the participant pressed
+  it, and a sub-milestone did not follow. Name that sub-milestone and the
+  rows just before and after the click;
+- not offered by the screen;
+- not exercised, with the reason: no Herdr window, nothing can click inside
+  the Herdr window, Surla's own tab could not be closed or observed, or the
+  trigger was never reached.
+
+Judge S1b, S1c and S3b from the rows and frames around the click, not from
+the participant's account alone. A sub-milestone is met only by a change the
+click caused: the row just before the click must show a different state from
+the one the sub-milestone asks for. If Herdr was already in front, or the
+agent's pane already had the focus, record that sub-milestone as not
+exercised: already in that state. If the browser the participant clicks in
+cannot be in front, S1b is not exercised. For S2 and S3, record which tab or
+window was closed, and judge S2b and S3b from the row that shows Surla's
+new tab observed, not from a cue such as the browser coming to the front,
+and not from a second window the facilitator opened after it. If only the
+study's second window could be closed, or the new tab could not be
+observed, S2 and S3 are not exercised.
+
 ## Mid-build changes
 
 Real work changes direction. Partway through, you hand the participant
@@ -213,7 +330,8 @@ report:
 - Hand over at most one change at a time. A change that becomes ready while
   another is open goes on the first report after that one closes, if its
   trigger still holds then. Two changes ready at once go in plan order.
-- Never hand one over while the participant is blocked or waiting on a hint.
+- Never hand one over while the participant is blocked, waiting on a hint,
+  or working on a screen task.
 - Each change goes at most once per attempt, word for word, in
   `CHANGE_REQUEST`. A new attempt starts with nothing handed over and its own
   first-pass results.
@@ -252,6 +370,7 @@ for C2, and the suite commit and scenario names for C3.
 ## After the session
 
 Send debrief questions through the facilitator: overall ease, the hardest
-moment and why, what they would change first, and anything they expected
+moment and why, the moment the screen left them least sure that anything was
+happening, what they would change first, and anything they expected
 Surla to do that it did not. When the facilitator sends you the report
 template, write the report to `{{TESTER}}/report.md` from your observations.
