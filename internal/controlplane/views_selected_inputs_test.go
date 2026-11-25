@@ -442,6 +442,9 @@ expect(preserved(), "successful recovery replaced the saved report or draft");
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/confirm").length === 1, "recovery submitted approval or resubmitted the draft");
 page.$("#surla-nav-cp1").click();
 expect(page.$('textarea[data-field="expected_outcome"]').value === "Keep this draft while the manual read recovers", "returning to Agree lost the unsaved draft");
+// Closing a browser tab is a separate task from the navigation click. Let the
+// click's mount microtasks finish before jsdom tears down the document.
+await new Promise((nextTurn) => setImmediate(nextTurn));
 page.close();
 `)
 }
