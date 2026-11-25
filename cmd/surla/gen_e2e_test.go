@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"maps"
@@ -67,6 +68,45 @@ func TestGenMatchesGoaGenByteForByte(t *testing.T) {
 	}
 }
 
+// TestSurlaInitBlankProjectCommitsAndRegeneratesUnchanged runs the default
+// start a user follows from a terminal: surla init without -example creates
+// the blank project, the commands it prints commit every file the project
+// has, and surla gen on each module then changes no byte. It needs the
+// network, and costs one real project and two generations; no cheaper layer
+// runs the printed commands against what the real generator wrote.
+func TestSurlaInitBlankProjectCommitsAndRegeneratesUnchanged(t *testing.T) {
+	isolateLocalWork(t)
+	workspace := t.TempDir()
+	dir := filepath.Join(workspace, "shop")
+	var printed strings.Builder
+	require.NoError(t, runInit([]string{
+		"-dir", dir, "-module", "example.com/shop", "-surla-version", starterSurlaVersion,
+	}, &printed))
+	assert.Contains(t, printed.String(), "Created the shop service as a blank project")
+	commands := printedFirstCommit(t, printed.String())
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	shell := exec.CommandContext(ctx, "/bin/sh", "-c", strings.Join(commands[:len(commands)-1], " && "))
+	shell.Dir = workspace
+	shell.Env = testGitEnv()
+	out, err := shell.CombinedOutput()
+	require.NoError(t, err, "the printed commands %q: %s", commands, out)
+	assert.Empty(t, runTestGit(t, dir, "status", "--porcelain", "--untracked-files=all"),
+		"the printed commands commit every file the blank project has")
+
+	created := files(t, dir, ".")
+	assert.NotContains(t, created, quickstartGuide, "the blank design declares no agent, so goa-ai writes no guide")
+	assert.NotContains(t, created, "internal/service/service.go", "nothing of the worked example is written by default")
+	assert.Contains(t, created["eval/gen/evals/shop_acceptance/suite.go"], "StartsAndListens(context.Context) (eval.Result, error)",
+		"the blank project's suite has the one test that the program starts")
+	for _, module := range []string{dir, filepath.Join(dir, "eval")} {
+		var out bytes.Buffer
+		require.NoError(t, runGen([]string{"-dir", module}, &out, io.Discard))
+		assert.Contains(t, out.String(), "added: 0\nchanged: 0\nremoved: 0\n", module)
+	}
+	assert.Equal(t, created, files(t, dir, "."), "regenerating an untouched blank project changes no byte")
+}
+
 // TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart creates a
 // starter through one running server's authenticated MCP endpoint, checks
 // that the server adopts its default child directory and surla gen in either
@@ -113,8 +153,11 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	client := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
 	shopModule := "example.com/shop"
+	// The journey below needs the worked example: its helper agent, its
+	// live copy and its descriptions. TestSurlaInitBlankProjectCommitsAndRegeneratesUnchanged
+	// owns the default, blank project.
 	args, err := gensurla.EncodeInitProjectPayload(&gensurla.InitProjectPayload{
-		ModulePath: &shopModule,
+		ModulePath: &shopModule, WorkedExample: true,
 	})
 	require.NoError(t, err)
 	call := &genmcpsurla.ToolsCallPayload{Name: "init_project", Arguments: args}
@@ -158,12 +201,11 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	assert.Contains(t, *complete.Content[0].Text, "already initialized at "+dir)
 	evalDir := filepath.Join(dir, "eval")
 	created := files(t, dir, ".")
-	require.NotContains(t, created, quickstartGuide, "the blank design declares no agent, so goa-ai writes no guide")
+	require.Contains(t, created, quickstartGuide, "the product design declares an agent, so goa-ai writes its guide")
 	assert.Contains(t, created["gen/shop/service.go"], "// $ surla gen", "surla init generates with the same generator")
 	require.Contains(t, created, "eval/design/story_tests.go", "the starter's test module holds its Story table")
-	assert.Contains(t, created["eval/gen/evals/shop_acceptance/suite.go"], "StartsAndListens(context.Context) (eval.Result, error)",
-		"init_project creates the blank project by default, whose suite has the one test that the program starts")
-	assert.NotContains(t, created, "internal/service/service.go", "nothing of the worked example is written by default")
+	assert.Contains(t, created["eval/gen/evals/shop_acceptance/suite.go"], "PricesCookie(context.Context) (eval.Result, error)",
+		"init_project with worked_example creates the example, whose suite requires the test of its Story's finished flow")
 
 	for _, module := range []string{dir, evalDir} {
 		var out bytes.Buffer
@@ -198,7 +240,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	state, err := fixtureProjectState(workspace)
 	require.NoError(t, err)
 	// init_project's real published child and its descendants find this same project record.
-	for _, folder := range []string{dir, filepath.Join(dir, "internal")} {
+	for _, folder := range []string{dir, filepath.Join(dir, "internal")} { // the worked example has internal/
 		found, err := project.Discover(filepath.Dir(state.Dir), folder)
 		require.NoError(t, err)
 		assert.Equal(t, state.Record.ID, found.Record.ID)
