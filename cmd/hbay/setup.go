@@ -1191,7 +1191,7 @@ func herdrShortcutMatches(chord string) bool {
 	}
 	parts := strings.Split(strokes[0], "-")
 	key := parts[len(parts)-1]
-	if key != "s" && key != "S" {
+	if key != "h" && key != "H" {
 		return false
 	}
 	held := make(map[string]bool)
@@ -1205,7 +1205,7 @@ func herdrShortcutMatches(chord string) bool {
 		}
 		held[modifier] = true
 	}
-	if key == "S" {
+	if key == "H" {
 		held["shift"] = true
 	}
 	return len(held) == 3 && held["cmd"] && held["alt"] && held["shift"]

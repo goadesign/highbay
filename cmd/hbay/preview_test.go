@@ -30,8 +30,8 @@ func TestWritePreviewResultKeepsJSONOnStdout(t *testing.T) {
 		},
 		{
 			name:       "name with a newline",
-			systemName: "orders\nhighbay: forged",
-			wantStderr: "hbay: \"orders\\nhighbay: forged\": 1 container(s), 0 boundary edge(s), 0 agent policy(s), 1 tool contract(s)\n",
+			systemName: "orders\nhbay: forged",
+			wantStderr: "hbay: \"orders\\nhbay: forged\": 1 container(s), 0 boundary edge(s), 0 agent policy(s), 1 tool contract(s)\n",
 		},
 	}
 	for _, tc := range cases {

@@ -329,7 +329,7 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	assert.Contains(t, readme, "`starts_and_listens`", "the README names the one scenario")
 	assert.Contains(t, readme, "-suite-command ./gen/cmd/bakery-evals")
 	first := between(t, readme, "## Next steps", "For each change:")
-	assertInOrder(t, first, "git commit -m", "\nhighbay\n```", "views page")
+	assertInOrder(t, first, "git commit -m", "\nhbay\n```", "views page")
 	for _, f := range []string{design, read("design/model.go"), read("design/story.go"), main, evalDesign, acceptance, readme} {
 		for _, example := range []string{"price", "Price", "helper", "catalog", "cookie", "model-gateway", "override_prompt"} {
 			assert.NotContains(t, f, example, "the blank project holds nothing of the worked example")
@@ -539,7 +539,7 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	// hbay, which opens the views page; the operator's hbay verify comes
 	// after that, not as a first step.
 	first := between(t, readme, "## Next steps", "For each change:")
-	assertInOrder(t, first, "git commit -m", "\nhighbay\n```", "views page")
+	assertInOrder(t, first, "git commit -m", "\nhbay\n```", "views page")
 	assert.NotContains(t, first, "hbay verify", "hbay verify is an operator tool listed after the change steps")
 	// Each change is proposed by the guide and confirmed by the user on the
 	// views page, then regenerated, built and tested uncommitted with

@@ -495,7 +495,7 @@ func TestStdioRequestHeadersNameTheFrameTarget(t *testing.T) {
 		{"resource read", "resources/read", `{"uri":"highbay://golden-path",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"highbay://golden-path"}},
 		{"prompt", "prompts/get", `{"name":"p",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"p"}},
 		{"task", "tasks/get", `{"taskId":"t-1",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"t-1"}},
-		{"encoded name", "resources/read", `{"uri":"highbay://é",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"=?base64?c3VybGE6Ly/DqQ==?="}},
+		{"encoded name", "resources/read", `{"uri":"highbay://é",` + modern + `}`, mcpruntime.ProtocolVersion, []string{"=?base64?aGlnaGJheTovL8Op?="}},
 		{"field in another case", "resources/read", `{"URI":"highbay://golden-path","_META":{"io.modelcontextprotocol/protocolVersion":"` +
 			mcpruntime.ProtocolVersion + `"}}`, mcpruntime.ProtocolVersion, []string{"highbay://golden-path"}},
 		{"target not a string", "resources/read", `{"uri":7,` + modern + `}`, mcpruntime.ProtocolVersion, nil},

@@ -438,12 +438,12 @@ func TestProjectStartShowsEndedServerOutput(t *testing.T) {
 	}{
 		{
 			name:   "final error",
-			output: "hbay: serving on http://127.0.0.1:1\nhighbay: decode verification settings: unexpected end of JSON input;" + remedy + "\n\n   \n",
+			output: "hbay: serving on http://127.0.0.1:1\nhbay: decode verification settings: unexpected end of JSON input;" + remedy + "\n\n   \n",
 			want:   stopped + "  hbay: serving on http://127.0.0.1:1\n  hbay: decode verification settings: unexpected end of JSON input;" + remedy,
 		},
 		{
 			name:   "escape sequences and control characters",
-			output: "\x1b[1;31mhighbay:\x1b[0m bad\tsettings\r\n\x1b]0;title\x07\a\x00\x7f\u009b\u202eok\xff\x1b(B\n",
+			output: "\x1b[1;31mhbay:\x1b[0m bad\tsettings\r\n\x1b]0;title\x07\a\x00\x7f\u009b\u202eok\xff\x1b(B\n",
 			want:   stopped + "  hbay: bad settings\n  ok",
 		},
 		{
@@ -459,7 +459,7 @@ func TestProjectStartShowsEndedServerOutput(t *testing.T) {
 		{
 			name:   "one long line keeps its end",
 			output: strings.Repeat("é", 3000) + remedy,
-			want:   stopped + "  …" + strings.Repeat("é", 2030) + remedy,
+			want:   stopped + "  …" + strings.Repeat("é", 2031) + remedy,
 		},
 		{
 			name:      "unreadable output",
@@ -561,7 +561,7 @@ func TestReadProjectTerminalArguments(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "text", reply: `{"complete":true,"how":"history","text":"hbay: first\nhighbay: second"}`, want: "hbay: first\nhighbay: second"},
+		{name: "text", reply: `{"complete":true,"how":"history","text":"hbay: first\nhbay: second"}`, want: "hbay: first\nhbay: second"},
 		{name: "failure", reply: "", exit: 3, wantErr: "read Herdr terminal t7: exit status 3"},
 		{name: "not JSON", reply: "not JSON", wantErr: "decode Herdr terminal t7 output"},
 	} {

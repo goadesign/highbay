@@ -421,7 +421,7 @@ func TestSetupHerdrShortcut(t *testing.T) {
 			want:   "{\"terminal\": {\"ctrl-c\": \"terminal.copy\"},\"global\": {\"cmd-alt-shift-h\": \"mod.open:highbay\"}}",
 			output: "Added Herdr shortcut",
 		},
-		{name: "keeps a conflicting binding", keys: `{"terminal": {"super-option-S": "terminal.split"}}`, output: `is taken by "terminal.split" in "terminal"`},
+		{name: "keeps a conflicting binding", keys: `{"terminal": {"super-option-H": "terminal.split"}}`, output: `is taken by "terminal.split" in "terminal"`},
 		{name: "keeps a sequence starting with the key", keys: `{"global": {"cmd-alt-shift-h g": "app.help"}}`, output: `is taken by "app.help"`},
 		{name: "already opens the companion", keys: `{"global": {"cmd-alt-shift-h": {"command": "mod.open", "args": {"name": "highbay"}}}}`, output: "already opens the Highbay companion"},
 		{name: "another key is free", keys: `{"global": {"cmd-alt-s": "app.help", "cmd-alt-shift-c": "mod.open:chorus-launcher"}}`, want: `{"global": {"cmd-alt-s": "app.help", "cmd-alt-shift-c": "mod.open:chorus-launcher","cmd-alt-shift-h": "mod.open:highbay"}}`, output: "Added"},
