@@ -127,18 +127,25 @@ from the folder name unless you gave one, and puts open product questions on
 the Change Card rather than asking a checklist in chat.
 
 In Herdr, when the client's terminal identity or process lineage matches its
-live pane in the project folder, Surla can adopt your coding agent's existing
-local pane and space if their project and team labels are compatible. You keep
-the conversation already open. Without Herdr, the server runs in the background; the same MCP tools
-and browser decisions remain available. Bare `surla` remains an operator
-entrypoint that opens the page without starting agents or a team launcher.
+live pane inside a Herdr app tab in the project folder, Surla can adopt your
+coding agent's existing local pane and space if their project and team labels
+are compatible. You keep the conversation already open. When no Herdr pane is
+linked, your coding agent still works through Surla's MCP server and appears on
+**Team** as **Coding agent registered · No Herdr pane linked**; open a project
+tab in Herdr with compatible ownership and run `/surla` there when you want
+Surla to link that pane. Without
+Herdr, the server runs in the background; the same MCP tools and browser
+decisions remain available. Bare `surla` remains an operator entrypoint that
+opens the page without starting agents or a team launcher.
 
 Your coding agent calls [`open_views`](REFERENCE.md#open_views) to open a fresh
-session in your default browser. Ask it to open the page again after a reload
-or close. The Herdr companion (`Cmd+Alt+Shift+S` on macOS) also offers **Open
-Surla Window**, alongside the current stage, role attention and pane focus
-buttons. Setup installs the companion as a floating window; it does not change
-Herdr's workspace layout.
+session in your default browser. While [`init_project`](REFERENCE.md#init_project)
+runs in an empty folder, the welcome card shows the current initialization phase
+live. Ask your coding agent to open the page again after a reload or close (the
+signed-out view also offers a one-click copyable prompt). The Herdr companion
+(`Cmd+Alt+Shift+S` on macOS) offers **Open Surla Window**, alongside the current
+stage, role attention and pane focus buttons. Setup installs the companion as a
+floating window; it does not change Herdr's workspace layout.
 
 For terminal operation and browser automation, `surla --print-link` prints
 the one-use URL and expiry as JSON, and `surla status --json` reads the
@@ -147,9 +154,9 @@ with unsaved input, save or discard your edits and then choose **Open link**.
 The two-minute expiry starts when the link is issued. See
 [startup and recovery](REFERENCE.md#surla-serve).
 
-The frame names the journey Describe → Agree → Build → Check → Approve.
-Team, Story, Live target, Architecture and Diagnostics remain available as
-project references. Agreed, Needs you and Next keep the current context and
+The frame names the journey Describe → Agree → Architecture → Build → Check →
+Approve. **Inspect** opens Story, Team, Live target and Diagnostics.
+Agreed, Needs you and Next keep the current context and
 decision visible; on a phone, Next moves to the bottom of the viewport.
 The frame previews at most two lines of the agreed summary. **Read full
 summary** opens Agree at the complete saved summary, keeping unsaved edits.
@@ -216,10 +223,15 @@ manager approves it."
    Card in the project's private state folder, where it waits for you. The
    card appears in the Describe view by itself.
 3. **You answer and confirm.** In Agree you read the card,
-   answer each question and press **Confirm Intent & Lock Examples**. The
-   server marks the card `confirmed`, records you as the one who confirmed
-   it, and computes its `request_revision`. That revision is the **agreed
-   revision**.
+   answer each question and press **Confirm Intent & Lock Examples**. When an
+   open question changes the draft design, Story, examples or preserved
+   behaviors, the guide sets `draft_option` to the choice the current draft
+   implements (**Matches current draft**). Selecting another option keeps your
+   choice in view, withholds confirmation so you never lock a self-contradictory
+   agreement, and offers a one-click request for your coding agent to revise the
+   card first. Once every selected answer fits the draft, confirming marks the
+   card `confirmed`, records you as the one who confirmed it, and computes its
+   `request_revision`. That revision is the **agreed revision**.
 
 A card for the refund request holds, for example:
 
@@ -239,10 +251,16 @@ Questions only you can answer
 
 `deterministic` means code can check the outcome directly; `model_judged`
 means checking it needs judgment. This is a label saved with the example, for
-you and the test writer. Verification runs the scenarios of the selected test
-suite, not the card's examples: the tests Surla accepted for the build or,
-when verification settings are stored, the operator's evaluator. The label
-does not choose how a scenario is run or whether it runs. Surla cannot tell whether the analysis is
+you and the test writer, not an automatic per-example model judge. Starter and
+written-test verification suites run their scenarios against a scripted model by
+default (no model API key needed), not the card's examples directly, while a
+stored custom [verification evaluator](REFERENCE.md#surla-verification-and-surla-promotion)
+can use configured model provider credentials: the label
+does not select how or whether a scenario runs, and configuring a **Live
+target** model lets the builder try prompt wording live rather than
+automatically judging `model_judged` examples. Check scenario coverage in
+**Build** to see which examples the test writer's scenarios cover. Surla cannot
+tell whether the analysis is
 complete or correct. You decide that when you confirm the card.
 
 The guide can revise the change at any time with `revise_change`. A revision
@@ -399,8 +417,9 @@ writer leaves that file as it is, and regenerating the
 module keeps the required tests. After changing the module's design, the
 test writer reports to have it generated again or runs
 `surla gen -dir eval` in its working copy first. It checks
-its work with `go build ./...` in `eval/`, which fails naming any required
-method not yet written.
+its work with `GOWORK=off go build ./...` in `eval/`, which fails naming any required
+method not yet written, and does not compile or start the candidate service
+binary itself—Surla's verification builds and runs the candidate.
 Then it calls `report_tests_finished`, including which agreed answers and
 examples each scenario is stated to cover and an explanation; an empty
 statement list means **Not stated**. The report returns at once with the
@@ -711,18 +730,25 @@ in the pane.
 
 While the builder or the test writer has work on the open build and has an
 assignment it has not read, the server sends that agent one fixed Chorus direct
-message asking it to read its assignments; nothing is typed into its pane. An
-agent that stays idle with that unread assignment for 90 seconds needs you too,
-for example "Builder needs you: idle with an unread assignment. Show its pane
-and tell it to read its assignments and to keep its Chorus watcher running."
+message asking it to read its assignments; nothing is typed into its pane. When
+Chorus is unavailable, workers wait on Surla's `wait_for_builder_assignment` and
+`wait_for_test_writer_assignment` tools instead of busy-polling, **Team** states
+that Chorus cannot be reached for the team, and an idle worker with an unread
+assignment raises **Needs you** after 15 seconds (90 seconds when Chorus is
+connected) with a copyable nudge.
 
-The Team view shows each role's pane state (Not started, Starting, Working,
-Waiting, Needs you, Ended, Error or Status unknown), whether its Chorus
-watcher is held, and its assignment status (No assignments for the guide, and
-Assignment unread, No unread assignment, No work now—when the open build needs
-nothing from that role—or Assignment status unknown for a worker role).
+The Team view shows each role's pane state (**Coding agent registered · No
+Herdr pane linked** when the guide registered without a Herdr app tab, or Not
+started, Starting, Working, Waiting, Needs you, Ended,
+Error or Status unknown), whether its Chorus watcher is held, and its assignment
+status (No assignments for the guide, and Assignment unread, No unread
+assignment, No work now—when the open build needs nothing from that role—or
+Assignment status unknown for a worker role). **Build** also shows the builder's
+branch, live branch tip while building (and saved verified commit once passed),
+and latest `check_project` outcome.
 **Start workers** starts missing workers that still have work on the open
-build. Facts the server cannot observe stay unknown. See
+build, pre-populating missing user-scoped folder trust while honoring explicit
+untrusted folder rules. Facts the server cannot observe stay unknown. See
 [team supervision](REFERENCE.md#team-supervision).
 
 ## Going back

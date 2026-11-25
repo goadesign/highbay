@@ -25,16 +25,9 @@ service design and the business logic. [Goa](https://github.com/goadesign/goa)
 and [Goa-AI](https://github.com/goadesign/goa-ai) generate the transports,
 schemas, validation, durable workflows and tool guardrails from that design at
 **0 LLM tokens**. One agent writes the code; a different agent writes the
-tests; Surla itself judges those tests and runs them against the code, which
-it builds and runs as ordinary processes on your machine, with your file and
-network access. You agree what is built, approve the result, and merge the
-approved commits into your local branch in your browser. The project server
-reuses compiled Go packages for Story refreshes, starter initialization, test-report checks,
-live starts and verification runs.
-Each operation still builds its outputs and runs its checks; a cache hit is never a
-passed check. The cache is a trusted compiler input that programs running as
-you can change; see
-[project storage and cache trust](docs/REFERENCE.md#project-state-folder).
+tests; Surla itself judges those tests and runs them against the code. You agree
+what is built, approve the result, and merge the approved commits into your
+local branch in your browser.
 
 ## One change from start to finish
 
@@ -54,14 +47,18 @@ Here is how that change reaches your branch:
 
 1. **Start in your agent.** Invoke `/surla` (or `$surla`) in the project
    folder and describe what you want. The first Surla tool call attaches
-   this session as the guide and starts the server when needed. In Herdr,
-   when the client's terminal identity or process lineage matches its live
-   pane in the project folder, Surla can adopt your existing pane and space if
-   they can belong to this project.
+   this session as the guide and starts the server when needed. In Herdr, when
+   Surla can identify your coding agent's live pane in the project folder and
+   its project and team ownership are compatible, Surla can link that pane and
+   space; when no Herdr pane is linked, your coding agent still registers with
+   the project (**Coding agent registered · No Herdr pane linked**).
 2. **Open the page.** Your coding agent calls `open_views` to open the project's
-   browser page in your default browser. If you close or reload it, ask your
-   coding agent to open it again, or click **Open Surla Window** in the Herdr
-   companion (`Cmd+Alt+Shift+S` on macOS).
+   browser page in your default browser. In an empty folder, first-time Go
+   module setup takes a couple of minutes while the welcome card shows the
+   current initialization phase. If you close or reload the tab, ask your coding agent
+   to open Surla views again, click **Open Surla Window** in the Herdr
+   companion (`Cmd+Alt+Shift+S` on macOS), or run `surla --print-link` for
+   headless or automated browsers.
 3. **Describe.** Your coding agent writes the Story, a description of your
    system's flows in Go, and proposes a Change Card: the saved request,
    questions, examples and behavior to preserve. It appears on the page by
@@ -69,41 +66,61 @@ Here is how that change reaches your branch:
    For the refund rule, the card might ask “Does $50 mean the item subtotal, or the total with
    tax and shipping?” and “Does exactly $50.00 get instant credit?”
 4. **Agree.** On the page, answer the questions, check the examples and
-   confirm. No agent can confirm for you. If your coding agent later revises the
-   change, its proposed revision waits beside the agreed revision until you
-   adopt or decline it; the agreed revision stays in force until then.
-5. **Review the architecture.** Open **Architecture** on the page to inspect
-   the agreed revision's saved design. If it needs a change, ask your coding
-   agent to revise the change, then review and adopt its proposal before
-   building.
+   confirm. When an option requires changing the draft design, Story or
+   examples (unlike the option marked **Matches current draft**), the page
+   keeps your choice and gives you a one-click request for your coding agent to
+   revise the card before confirming. Starter and written-test verification
+   suites run against a **scripted model** by default with **no model API key
+   needed** (stored custom evaluators can use configured provider credentials).
+   **Check: Deterministic** and **Check: Model-judged** are saved authoring
+   labels for you and the test writer rather than an automatic per-example
+   judge—check scenario coverage in **Build** to see how each example is
+   tested—while **Live target** uses a configured model provider key or gateway
+   so the builder can try prompt wording live. If your coding agent later
+   revises a confirmed change, its proposed revision waits beside the agreed
+   revision until you adopt or decline it.
+5. **Review the architecture.** Open **Architecture** in the journey bar on the
+   page to inspect the agreed revision's saved design (**Inspect** opens
+   **Story**, **Team**, **Live target** and **Diagnostics**). If it needs a
+   change, ask your coding agent to revise the change, then review and adopt its
+   proposal before building.
 6. **Build.** Choose agents, models and permissions inline in **Build**,
    then press **Build this change**. Surla remembers your choices for this
-   project. Defaults prefer different coding-agent families for the worker
-   roles; one installed family can fill both. Workers run in Herdr panes
-   where available or in background processes. Background workers need a
-   supported agent and your explicit permission to run without interactive
-   permission prompts. The builder and test writer work in separate Git working copies, `.surla-build` and
-   `.surla-tests`. Surla gives the test writer one required test per finished
-   Story flow, plus the confirmed answers, examples and preserved behaviors.
-7. **Tests.** The test writer writes those tests and reports. Surla does not
-   take its word for it: it writes the required tests into the copy again,
-   checks that nothing changed outside the test module (the project's `eval/`
-   folder), and builds and lists the test program. Problems go
+   project and pre-populates missing user-scoped folder trust for the project
+   and worker copies (while honoring any explicit untrusted folder rule).
+   Defaults prefer different coding-agent families for the worker roles; one
+   installed family can fill both. The builder and test writer work in separate
+   Git working copies, `.surla-build` and `.surla-tests`. Surla gives the test
+   writer one required test per finished Story flow, plus the confirmed answers,
+   examples and preserved behaviors.
+
+   | Worker mode | When Surla uses it | What it needs |
+   | --- | --- | --- |
+   | **Herdr panes** | Surla finds both Herdr commands (`herdr-core` and `herdr-app`) | Herdr creates side-by-side worker panes; Chorus (`chorus up`) coordinates them and is required at initial Herdr worker startup. If Chorus becomes unreachable or cannot join a swarm afterwards, already-running workers keep waiting through Surla's assignment-wait tools and the page offers copyable nudges. |
+   | **Background workers** | Surla cannot find both Herdr commands | No Herdr or Chorus needed. Requires a supported coding-agent CLI with non-interactive execution, **Skip permission prompts (YOLO)** enabled per role when the client offers it (otherwise configured client permissions), and **I agree to run these workers in the background.** |
+
+7. **Tests.** The test writer writes those tests in `eval/`, checks that
+   `eval/` compiles (`GOWORK=off go build ./...`), and reports without running
+   the application itself. Surla does not take its word for it: it writes the
+   required tests into the copy again, checks that nothing changed outside
+   `eval/`, and builds and lists the test program. Problems go
    back to the test writer as findings. Build shows them beside the saved
    required tests; Next names the test writer’s next step.
    When the tests pass the check, Surla accepts them at one commit on
    `surla/tests-<n>`. Build shows which agreed answers and examples the test
    writer says each scenario covers. Surla validates those references but does
    not judge the statements; anything without one says **Not stated**.
-8. **Code and verify.** Meanwhile the builder writes the code, builds and
-   tests it, and commits. If the application calls a model, the builder can
-   try prompt wording after Surla accepts the tests, using a *live target*:
-   a running copy of the application
-   that the server starts from a commit. The builder then asks Surla to
-   verify its commit. Surla builds that commit and runs the
-   tests accepted for that exact revision against it. It refuses to verify
-   until those tests are accepted. The result appears in the page's **Check**
-   view.
+8. **Code and verify.** Meanwhile the builder writes the code, runs isolated
+   container checks, and commits on its build branch, with the branch, live
+   branch tip while building (and saved verified commit once passed), and check
+   status shown in **Build**. If the application calls a
+   model and you exported a provider key or attached a model gateway, the
+   builder can try prompt wording after Surla accepts the tests on a *live
+   target*: a running copy of the application that the server starts from a
+   commit. The builder then asks Surla to verify its commit. Surla builds that
+   commit and runs the tests accepted for that exact revision against it; it
+   refuses to verify until those tests are accepted. The result appears in the
+   page's **Check** view.
 9. **Approve and merge.** Open the run in **Approve** to review its recorded
    Story flows, test outcomes, excluded drafts and unknown coverage. When the
    server says approval is available, Next offers **Approve this result**.
@@ -116,8 +133,10 @@ Here is how that change reaches your branch:
    See [`merge_change`](docs/REFERENCE.md#merge_change) for the Git checks and
    recovery contract. Once your branch holds the verified
    work, the build shows **Merged** and Surla stops that build's workers.
-   Verification covered the commits in the passed run. To test the resulting
-   branch commit, see [`surla verify`](docs/REFERENCE.md#surla-verify).
+   Verification covered the commits in the passed run before the merge;
+   **Verify the merged branch from the terminal** discloses a pre-filled
+   [`surla verify`](docs/REFERENCE.md#surla-verify) template when you want to
+   verify the merged commit or checked-out branch separately.
    Approval needs no settings. A project that stores
    [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
    (a release folder and the names of its binaries) gets one more check at
@@ -155,7 +174,9 @@ assignments. Earlier reports do not establish that the new build passed.
 Two limits hold. All agents run as you on one machine, so they are separated
 by job, not walled off from each other. Surla runs the code the agents write
 (the design at each refresh, the builder's programs and the test writer's
-test program) as ordinary processes with your file and network access. The
+test program) as ordinary processes with your file and network access, reusing
+compiled Go packages across operations without treating a cache hit as a passed
+check; see [project storage and cache trust](docs/REFERENCE.md#project-state-folder). The
 page states the second limit next to **Build this change**. Each verification
 run records where its tests came from. For the test writer's tests, the
 **Check** view shows with the run, and the agents read in its result, the
@@ -391,10 +412,10 @@ See [`start_live_target`](docs/REFERENCE.md#start_live_target),
 ### 5. Your decisions on one page
 
 The page lists the project's changes and shows each one's Story, questions,
-build, team, verification runs and approval, and updates itself without
-losing what you typed. The frame names Describe, Agree, Build, Check and
-Approve. The approval decision appears in Next. The **Diagnostics** drawer
-shows safe summaries of what the agents and the server did. See the
+architecture, build, team, verification runs and approval, and updates itself without
+losing what you typed. The frame names Describe, Agree, Architecture, Build, Check and
+Approve, with Story, Team, Live target and Diagnostics under **Inspect**. The approval decision appears in Next. The **Diagnostics** drawer
+shows safe summaries of what the agents and the server did, naming each caller's role. See the
 [views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
 
 > **Why the name "Surla"?** Named after **Tambdi Surla** in Goa, home to the
