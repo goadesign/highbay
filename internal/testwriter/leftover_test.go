@@ -13,13 +13,13 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // leftoverStage is the name of a staging folder a publication that died left
 // in a test module.
-const leftoverStage = ".surla-gen-earlier"
+const leftoverStage = ".highbay-gen-earlier"
 
 // TestPublishClearsWhatAnInterruptedPublishLeft publishes into a module that
 // holds an entry with a staging folder's name. A staging folder left by a

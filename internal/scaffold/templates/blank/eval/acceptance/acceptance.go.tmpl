@@ -18,8 +18,8 @@ import (
 	"goa.design/goa-ai/eval"
 	"goa.design/goa-ai/runtime/agent/model"
 
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // Hooks implements the generated [[.Name]]_acceptance scenario hooks.
@@ -28,7 +28,7 @@ type Hooks struct {
 	binary candidate.Artifact
 }
 
-// Name is the binary name surla verify binds the [[.Name]] as (-binary [[.Name]]=...).
+// Name is the binary name hbay verify binds the [[.Name]] as (-binary [[.Name]]=...).
 const Name = "[[.Name]]"
 
 // errNoPrompt is what Live and LiveThroughGateway return while the [[.Name]]

@@ -16,12 +16,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -75,7 +75,7 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 		assert.Equal(t, refundStory("Agreed flow"), stories)
 		return nil
 	}
-	f.start = func(ctx context.Context) (*gensurla.ProjectTeam, error) {
+	f.start = func(ctx context.Context) (*genhighbay.ProjectTeam, error) {
 		events = append(events, "start")
 		select {
 		case cp.workingCopyTurn <- struct{}{}:
@@ -83,18 +83,18 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 		default:
 			t.Error("window work retained the copy turn")
 		}
-		_, err := cp.GetBuild(ctx, &gensurla.GetBuildPayload{ChangeID: "chg"})
+		_, err := cp.GetBuild(ctx, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 		assert.NoError(t, err, "window work retains neither the card lock nor the phase deadline")
 		_, bounded := ctx.Deadline()
 		assert.False(t, bounded, "StartAgents receives its own server-owned lifetime")
-		return &gensurla.ProjectTeam{Team: "team", Space: "space", Roles: []*gensurla.ProjectTeamRole{}, HerdrMode: "attached", Step: "Read the fixture assignments."}, nil
+		return &genhighbay.ProjectTeam{Team: "team", Space: "space", Roles: []*genhighbay.ProjectTeamRole{}, HerdrMode: "attached", Step: "Read the fixture assignments."}, nil
 	}
-	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"open", "register", "start"}, events)
 	assert.Equal(t, 1, result.Build.RequiredTestCount)
-	assert.Equal(t, gensurla.TeamKindReady, result.Team.Kind())
-	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assert.Equal(t, genhighbay.TeamKindReady, result.Team.Kind())
+	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"open", "register", "start", "open", "prepare"}, events)
 	assert.Equal(t, record.designSource, assignment.DesignSource)
@@ -116,14 +116,14 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 					return errors.New("private setup failure")
 				}
 				if scenario == "reported during generation" {
-					_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+					_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 					require.NoError(t, err)
 				}
 				return &testwriter.AuthorError{Finding: testwriter.Finding{Kind: testwriter.FindingGeneration, Message: "The test design does not compile."}}
 			}
-			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
-			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err, "a preparation failure on the marking read never refuses the read")
 			saved := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
 			assert.Equal(t, assignment.Progress, saved.TestWriter)
@@ -143,7 +143,7 @@ func TestStartBuildKeepsPostSaveOutcomes(t *testing.T) {
 				assert.NotContains(t, failure.Reason, "Code generation failed", "no generator failed")
 				assert.Equal(t, "Build this change again on the views page.", failure.Step)
 			case "reported during generation":
-				assert.Equal(t, gensurla.TestsKindReported, saved.TestWriter.Tests.Kind())
+				assert.Equal(t, genhighbay.TestsKindReported, saved.TestWriter.Tests.Kind())
 				assert.Equal(t, 1, saved.TestWriter.Report)
 			}
 		})
@@ -169,23 +169,23 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 	}{
 		{
 			name: "the generated folder cannot be written",
-			prepareErr: fmt.Errorf("%w: create staging directory: mkdirat /Users/someone/shop/.surla-tests/eval/.surla-gen-abc: no space left on device",
+			prepareErr: fmt.Errorf("%w: create staging directory: mkdirat /Users/someone/shop/.highbay-tests/eval/.highbay-gen-abc: no space left on device",
 				testwriter.ErrWriteGenerated),
 			wantReason: []string{"could not write them into the test writer's working copy", "create staging directory", "no space left on device"},
 			notReason:  []string{"Code generation failed", "/Users/someone"},
 			wantStep:   stepWriteCopy + ", then build this change again on the views page.",
 		},
 		{
-			name: "the dependencies cannot be downloaded where Surla runs",
+			name: "the dependencies cannot be downloaded where Highbay runs",
 			prepareErr: fmt.Errorf("%w, and its go.mod and go.sum are those of the project's commit %s, so the cause is not in the test writer's changes",
 				testwriter.ErrDependencies, strings.Repeat("b", 40)),
-			wantReason: []string{"could not prepare the required tests", "dependencies could not be downloaded where Surla runs", "commit " + strings.Repeat("b", 40)},
+			wantReason: []string{"could not prepare the required tests", "dependencies could not be downloaded where Highbay runs", "commit " + strings.Repeat("b", 40)},
 			notReason:  []string{"Code generation failed"},
 			wantStep:   stepDependencies + ", then build this change again on the views page.",
 		},
 		{
 			name:       "the generator fails before it reaches the module",
-			prepareErr: fmt.Errorf("%w: create design evaluator workspace: mkdir /private/var/surla: permission denied", testwriter.ErrGeneration),
+			prepareErr: fmt.Errorf("%w: create design evaluator workspace: mkdir /private/var/highbay: permission denied", testwriter.ErrGeneration),
 			wantReason: []string{"Code generation failed while starting the design compiler."},
 			notReason:  []string{"/private/var"},
 			wantStep:   buildAgain,
@@ -209,9 +209,9 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
 			copy.prepare = func(context.Context, []designeval.StorySummary) error { return tc.prepareErr }
 
-			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
-			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err, "a failed preparation never refuses the marking read")
 			failure, ok := assignment.Progress.Tests.AsCouldNotRun()
 			require.True(t, ok)
@@ -224,7 +224,7 @@ func TestAPreparationThatCouldNotRunSaysWhatFailed(t *testing.T) {
 			assert.LessOrEqual(t, utf8.RuneCountInString(failure.Reason), maxCheckReason)
 			assert.Equal(t, tc.wantStep, failure.Step)
 			assert.True(t, boundedText(failure.Step, maxCheckStep), "the step fits the contract")
-			span := waitForSpan(t, exporter, "surla.controlplane.get_test_writer_assignment")
+			span := waitForSpan(t, exporter, "highbay.controlplane.get_test_writer_assignment")
 			assert.Equal(t, codes.Error, span.Status.Code, "the failure is an error on the read's span")
 			require.NotEmpty(t, span.Events)
 			var recorded string
@@ -265,7 +265,7 @@ func TestStartBuildRefusalsReachTheHTTPConsumer(t *testing.T) {
 				cp.buildIdentityCheck = func(context.Context, string) error { return testwriter.ErrIdentityMissing }
 				step = "configure Git's name and address, then try again"
 			case "copy_folder_in_use":
-				openErr = fmt.Errorf("the project's %s entry is not Surla's working copy (%s is not a folder): move it out of the project, then try again: %w",
+				openErr = fmt.Errorf("the project's %s entry is not Highbay's working copy (%s is not a folder): move it out of the project, then try again: %w",
 					testwriter.Folder, shquote.Quote(filepath.Join(workspace, testwriter.Folder)), testwriter.ErrFolderInUse)
 				step = "move it out of the project, then try again"
 			case "tests_branch_in_use":
@@ -311,7 +311,7 @@ func TestStartBuildOwnerPrecedesTheTurn(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := buildableChange(t, cp, "chg")
 	cp.workingCopyTurn <- struct{}{}
-	_, err := cp.StartBuild(asCaller("bob@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("bob@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "forbidden")
 	<-cp.workingCopyTurn
 	assertNoBuildSaved(t, cp, "chg")
@@ -340,27 +340,27 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	cp.buildIdentityCheck = func(context.Context, string) error {
 		return testwriter.ErrIdentityMissing
 	}
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "git_identity_missing")
 	assertNoBuildSaved(t, cp, "chg")
 	cp.buildIdentityCheck = func(context.Context, string) error { return nil }
 
 	cp.builderCopyTurn <- struct{}{}
-	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "working_copy_busy")
 	assert.ErrorContains(t, err, "builder is reading its assignment")
 	assertNoBuildSaved(t, cp, "chg")
 	<-cp.builderCopyTurn
 
 	cp.workingCopyTurn <- struct{}{}
-	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "working_copy_busy")
 	assert.NotContains(t, err.Error(), "test check")
 	assertNoBuildSaved(t, cp, "chg")
 	<-cp.workingCopyTurn
-	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.TestsKindNotUsed, result.Build.TestWriter.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindNotUsed, result.Build.TestWriter.Tests.Kind())
 	assert.Equal(t, []string{"register", "start"}, f.calls)
 }
 
@@ -370,18 +370,18 @@ func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
-		kind gensurla.TeamKind
+		kind genhighbay.TeamKind
 	}{
-		{"busy", gensurla.MakeWindowBusy(errors.New("fixture busy")), gensurla.TeamKindWindowBusy},
-		{"ambiguous", fmt.Errorf("fixture: %w", &TeamSpaceConflict{Count: 2}), gensurla.TeamKindAmbiguousSpace},
-		{"unavailable", gensurla.MakeTeamUnavailable(errors.New("fixture unavailable")), gensurla.TeamKindUnavailable},
-		{"unavailable herdr", gensurla.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: "herdr"}), gensurla.TeamKindUnavailable},
+		{"busy", genhighbay.MakeWindowBusy(errors.New("fixture busy")), genhighbay.TeamKindWindowBusy},
+		{"ambiguous", fmt.Errorf("fixture: %w", &TeamSpaceConflict{Count: 2}), genhighbay.TeamKindAmbiguousSpace},
+		{"unavailable", genhighbay.MakeTeamUnavailable(errors.New("fixture unavailable")), genhighbay.TeamKindUnavailable},
+		{"unavailable herdr", genhighbay.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: "herdr"}), genhighbay.TeamKindUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) { return nil, tc.err }}
+			f := &teamServiceFixture{start: func(context.Context) (*genhighbay.ProjectTeam, error) { return nil, tc.err }}
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: "alice@example.com", Service: f}})
 			card := buildableChange(t, cp, "chg")
-			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			assert.Equal(t, tc.kind, result.Team.Kind())
 			if ambiguous, ok := result.Team.AsAmbiguousSpace(); ok {
@@ -422,19 +422,19 @@ func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 				}
 			}}
 			cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
-			started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
-			assert.Equal(t, gensurla.TeamKindReady, started.Team.Kind())
+			assert.Equal(t, genhighbay.TeamKindReady, started.Team.Kind())
 
 			request, disconnect := context.WithCancel(asCaller("alice@example.com", CallerTestWriter))
 			defer disconnect()
 			type outcome struct {
-				result *gensurla.TestWriterAssignment
+				result *genhighbay.TestWriterAssignment
 				err    error
 			}
 			finished := make(chan outcome, 1)
 			go func() {
-				result, err := cp.GetTestWriterAssignment(request, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+				result, err := cp.GetTestWriterAssignment(request, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				finished <- outcome{result: result, err: err}
 			}()
 			var accepted context.Context
@@ -454,12 +454,12 @@ func TestStartBuildOwnsItsAcceptedLifetime(t *testing.T) {
 			case got := <-finished:
 				require.NoError(t, got.err)
 				if stopServer {
-					assert.Equal(t, gensurla.TestsKindCouldNotRun, got.result.Progress.Tests.Kind())
+					assert.Equal(t, genhighbay.TestsKindCouldNotRun, got.result.Progress.Tests.Kind())
 					reopened := newBuildControlPlane(t, Options{CardsDir: cards})
 					persisted := mustStartedBuild(t, reopened, asCaller("alice@example.com", CallerUser), "chg")
 					assert.Equal(t, got.result.Progress, persisted.TestWriter)
 				} else {
-					assert.Equal(t, gensurla.TestsKindAssigned, got.result.Progress.Tests.Kind())
+					assert.Equal(t, genhighbay.TestsKindAssigned, got.result.Progress.Tests.Kind())
 				}
 			case <-time.After(3 * time.Second):
 				t.Fatal("accepted read did not drain")
@@ -493,14 +493,14 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 					}
 					return nil
 				}
-				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 				require.NoError(t, err)
 				assert.Equal(t, []string{"register", "start"}, cp.team.Service.(*teamServiceFixture).calls)
-				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				require.NoError(t, err)
-				want := gensurla.TestsKindCouldNotRun
+				want := genhighbay.TestsKindCouldNotRun
 				if elapsed < defaultBuildStartTimeout {
-					want = gensurla.TestsKindAssigned
+					want = genhighbay.TestsKindAssigned
 				}
 				assert.Equal(t, want, assignment.Progress.Tests.Kind())
 				if failure, ok := assignment.Progress.Tests.AsCouldNotRun(); ok {
@@ -518,7 +518,7 @@ func TestStartBuildDeadlineBoundaries(t *testing.T) {
 		return ended, cancel
 	}
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "unavailable")
 	assertNoBuildSaved(t, cp, "chg")
 }

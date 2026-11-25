@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/highbay/internal/controlplane"
 )
 
 type (

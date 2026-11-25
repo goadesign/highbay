@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -123,7 +123,7 @@ const (
 
 // RefreshStory reads the guide draft and provenance together, then starts
 // or reuses the owner's evaluation without holding the draft lock.
-func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefreshResult, error) {
+func (c *ControlPlane) RefreshStory(ctx context.Context) (*genhighbay.StoryRefreshResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -142,13 +142,13 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 	c.workspaceMu.RLock()
 	if c.serverCtx.Err() != nil {
 		c.workspaceMu.RUnlock()
-		return nil, gensurla.MakeUnavailable(errors.New(
+		return nil, genhighbay.MakeUnavailable(errors.New(
 			"the control plane is shutting down and is no longer starting Story refresh operations",
 		))
 	}
 	if c.activeWorkspaceDir != wsDir || c.boundWorkspaceDev != wsDev || c.boundWorkspaceIno != wsIno {
 		c.workspaceMu.RUnlock()
-		return nil, gensurla.MakeUnprocessable(errors.New(
+		return nil, genhighbay.MakeUnprocessable(errors.New(
 			"bound workspace changed while reading the module snapshot; call refresh_story again",
 		))
 	}
@@ -222,7 +222,7 @@ func (c *ControlPlane) RefreshStory(ctx context.Context) (*gensurla.StoryRefresh
 
 // GetStoryRefresh returns the owner's current in-memory Story refresh
 // operation for the bound workspace, or state "none" when none has run.
-func (c *ControlPlane) GetStoryRefresh(ctx context.Context) (*gensurla.StoryRefreshResult, error) {
+func (c *ControlPlane) GetStoryRefresh(ctx context.Context) (*genhighbay.StoryRefreshResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -330,7 +330,7 @@ func (c *ControlPlane) adoptStoryRefresh(
 ) (refreshedSnapshot, error) {
 	opID := strings.TrimSpace(rawOpID)
 	if opID == "" {
-		return refreshedSnapshot{}, gensurla.MakeUnprocessable(errors.New(
+		return refreshedSnapshot{}, genhighbay.MakeUnprocessable(errors.New(
 			"story_refresh_op_id must name a succeeded refresh_story operation; call refresh_story and pass its op_id",
 		))
 	}
@@ -348,13 +348,13 @@ func (c *ControlPlane) adoptStoryRefresh(
 	op := c.storyRefreshes[key]
 	if c.activeWorkspaceDir != wsDir || c.boundWorkspaceDev != wsDev ||
 		c.boundWorkspaceIno != wsIno || op == nil || op.id != opID {
-		return refreshedSnapshot{}, gensurla.MakeUnprocessable(fmt.Errorf(
+		return refreshedSnapshot{}, genhighbay.MakeUnprocessable(fmt.Errorf(
 			"story_refresh_op_id %q is not the current Story refresh operation for this project and workspace; call refresh_story and pass the latest succeeded op_id",
 			opID,
 		))
 	}
 	if op.state != storyRefreshStateSucceeded {
-		return refreshedSnapshot{}, gensurla.MakeUnprocessable(fmt.Errorf(
+		return refreshedSnapshot{}, genhighbay.MakeUnprocessable(fmt.Errorf(
 			"story_refresh_op_id %q has state %q, not succeeded; wait for get_story_refresh to report succeeded or call refresh_story again",
 			opID, op.state,
 		))
@@ -381,9 +381,9 @@ func (c *ControlPlane) requireRefreshForModule() error {
 		return nil
 	}
 	if statErr != nil {
-		return gensurla.MakeUnprocessable(statErr)
+		return genhighbay.MakeUnprocessable(statErr)
 	}
-	return gensurla.MakeUnprocessable(errors.New(
+	return genhighbay.MakeUnprocessable(errors.New(
 		"story_refresh_op_id is required for a Go module; call refresh_story, wait for succeeded, and pass its op_id",
 	))
 }
@@ -420,11 +420,11 @@ func (c *ControlPlane) recordRefreshedSnapshot(
 		}
 		var refusal *goa.ServiceError
 		if errors.As(err, &refusal) {
-			span.SetAttributes(attribute.String("surla.public_summary",
+			span.SetAttributes(attribute.String("highbay.public_summary",
 				"The selected Story refresh cannot be saved; call refresh_story and retry with its succeeded op_id."))
 			return
 		}
-		span.SetAttributes(attribute.String("surla.public_summary", "Could not record the evaluated design snapshot."))
+		span.SetAttributes(attribute.String("highbay.public_summary", "Could not record the evaluated design snapshot."))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "record evaluated design snapshot")
 	}()
@@ -433,16 +433,16 @@ func (c *ControlPlane) recordRefreshedSnapshot(
 		return err
 	}
 	if !exists {
-		return gensurla.MakeUnprocessable(errors.New("Story refresh provenance is missing; call refresh_story again"))
+		return genhighbay.MakeUnprocessable(errors.New("Story refresh provenance is missing; call refresh_story again"))
 	}
 	if snapshot.madeFrom.Start.Write < current.Start.Write && current.Start.Dropped != nil {
-		return gensurla.MakeDraftedBeforeDrop(fmt.Errorf(
+		return genhighbay.MakeDraftedBeforeDrop(fmt.Errorf(
 			"the user dropped change %q after that Story refresh; call refresh_story to remake and evaluate the draft",
 			current.Start.Dropped.ChangeID,
 		))
 	}
 	if snapshot.madeFrom.Start.Write != current.Start.Write {
-		return gensurla.MakeUnprocessable(errors.New("Story refresh provenance no longer matches the draft start; call refresh_story again"))
+		return genhighbay.MakeUnprocessable(errors.New("Story refresh provenance no longer matches the draft start; call refresh_story again"))
 	}
 	design, err := decodeDesignSource(snapshot.designSource)
 	if err != nil {
@@ -542,25 +542,25 @@ func (c *ControlPlane) storyRefreshDeadline(ctx context.Context) (context.Contex
 }
 
 // storyRefreshResultFromOp projects op (or nil when no refresh has run) into a
-// fresh gensurla.StoryRefreshResult. ControlPlane.storyRefreshMu must be held.
-func storyRefreshResultFromOp(op *storyRefreshOp, folder string) *gensurla.StoryRefreshResult {
+// fresh genhighbay.StoryRefreshResult. ControlPlane.storyRefreshMu must be held.
+func storyRefreshResultFromOp(op *storyRefreshOp, folder string) *genhighbay.StoryRefreshResult {
 	folder = filepath.Join(folder, draftFolderName)
 	if op == nil {
-		return &gensurla.StoryRefreshResult{
+		return &genhighbay.StoryRefreshResult{
 			State:       storyRefreshStateNone,
 			DraftFolder: folder,
-			Stories:     []*gensurla.StorySummaryItem{},
+			Stories:     []*genhighbay.StorySummaryItem{},
 			Message:     "No Story refresh has run for this workspace yet; call refresh_story to evaluate the draft design.",
 		}
 	}
 	id := op.id
 	digest := op.snapshotDigest
-	res := &gensurla.StoryRefreshResult{
+	res := &genhighbay.StoryRefreshResult{
 		OpID:           &id,
 		DraftFolder:    folder,
 		State:          op.state,
 		SnapshotDigest: &digest,
-		Stories:        []*gensurla.StorySummaryItem{},
+		Stories:        []*genhighbay.StorySummaryItem{},
 	}
 	switch op.state {
 	case storyRefreshStateRunning:
@@ -590,7 +590,7 @@ func storyRefreshResultFromOp(op *storyRefreshOp, folder string) *gensurla.Story
 		)
 	}
 	if op.dropNote {
-		res.Message += fmt.Sprintf(" Surla made this draft again from the project folder when the user dropped change %s; edits made before then are gone.", op.madeFrom.Start.Dropped.ChangeID)
+		res.Message += fmt.Sprintf(" Highbay made this draft again from the project folder when the user dropped change %s; edits made before then are gone.", op.madeFrom.Start.Dropped.ChangeID)
 	}
 	return res
 }
@@ -684,7 +684,7 @@ func cloneStoryQuestions(questions []designeval.StoryQuestion) []designeval.Stor
 
 // storySummaryItemsOrNil returns storySummaryItems(stories) when stories is
 // non-empty, or nil so ChangeCardResult omits stories when none were adopted.
-func storySummaryItemsOrNil(stories []designeval.StorySummary) []*gensurla.StorySummaryItem {
+func storySummaryItemsOrNil(stories []designeval.StorySummary) []*genhighbay.StorySummaryItem {
 	if len(stories) == 0 {
 		return nil
 	}
@@ -693,7 +693,7 @@ func storySummaryItemsOrNil(stories []designeval.StorySummary) []*gensurla.Story
 
 // canonicalStorySummariesFromItems converts generated transport Story items
 // into canonical designeval.StorySummary values, normalizing empty slices to nil.
-func canonicalStorySummariesFromItems(items []*gensurla.StorySummaryItem) []designeval.StorySummary {
+func canonicalStorySummariesFromItems(items []*genhighbay.StorySummaryItem) []designeval.StorySummary {
 	if len(items) == 0 {
 		return nil
 	}
@@ -774,7 +774,7 @@ func canonicalStorySummariesFromItems(items []*gensurla.StorySummaryItem) []desi
 
 // canonicalStoryQuestionsFromItems converts generated transport Story question
 // items into canonical designeval.StoryQuestion values.
-func canonicalStoryQuestionsFromItems(items []*gensurla.StoryQuestionItem) []designeval.StoryQuestion {
+func canonicalStoryQuestionsFromItems(items []*genhighbay.StoryQuestionItem) []designeval.StoryQuestion {
 	if len(items) == 0 {
 		return nil
 	}
@@ -809,22 +809,22 @@ func derefString(s *string) string {
 }
 
 // storySummaryItems converts canonical Story summaries into generated transport items.
-func storySummaryItems(stories []designeval.StorySummary) []*gensurla.StorySummaryItem {
-	out := make([]*gensurla.StorySummaryItem, len(stories))
+func storySummaryItems(stories []designeval.StorySummary) []*genhighbay.StorySummaryItem {
+	out := make([]*genhighbay.StorySummaryItem, len(stories))
 	for i, s := range stories {
-		actors := make([]*gensurla.StoryActorItem, len(s.Actors))
+		actors := make([]*genhighbay.StoryActorItem, len(s.Actors))
 		for j, a := range s.Actors {
-			actors[j] = &gensurla.StoryActorItem{
+			actors[j] = &genhighbay.StoryActorItem{
 				Key:         a.Key,
 				Title:       a.Title,
 				Description: optionalString(a.Description),
 			}
 		}
-		flows := make([]*gensurla.StoryFlowItem, len(s.Flows))
+		flows := make([]*genhighbay.StoryFlowItem, len(s.Flows))
 		for j, f := range s.Flows {
-			steps := make([]*gensurla.StoryStepItem, len(f.Steps))
+			steps := make([]*genhighbay.StoryStepItem, len(f.Steps))
 			for k, st := range f.Steps {
-				steps[k] = &gensurla.StoryStepItem{
+				steps[k] = &genhighbay.StoryStepItem{
 					Key:         st.Key,
 					ActorKey:    st.ActorKey,
 					Summary:     st.Summary,
@@ -833,7 +833,7 @@ func storySummaryItems(stories []designeval.StorySummary) []*gensurla.StorySumma
 					Questions:   storyQuestionItems(st.Questions),
 				}
 			}
-			flows[j] = &gensurla.StoryFlowItem{
+			flows[j] = &genhighbay.StoryFlowItem{
 				Key:         f.Key,
 				Title:       f.Title,
 				Description: optionalString(f.Description),
@@ -842,7 +842,7 @@ func storySummaryItems(stories []designeval.StorySummary) []*gensurla.StorySumma
 				Questions:   storyQuestionItems(f.Questions),
 			}
 		}
-		out[i] = &gensurla.StorySummaryItem{
+		out[i] = &genhighbay.StorySummaryItem{
 			Name:        s.Name,
 			Description: optionalString(s.Description),
 			Actors:      actors,
@@ -853,14 +853,14 @@ func storySummaryItems(stories []designeval.StorySummary) []*gensurla.StorySumma
 }
 
 // storyQuestionItems converts canonical Story questions into generated transport items.
-func storyQuestionItems(questions []designeval.StoryQuestion) []*gensurla.StoryQuestionItem {
-	out := make([]*gensurla.StoryQuestionItem, len(questions))
+func storyQuestionItems(questions []designeval.StoryQuestion) []*genhighbay.StoryQuestionItem {
+	out := make([]*genhighbay.StoryQuestionItem, len(questions))
 	for i, q := range questions {
 		options := slices.Clone(q.Options)
 		if options == nil {
 			options = []string{}
 		}
-		out[i] = &gensurla.StoryQuestionItem{
+		out[i] = &genhighbay.StoryQuestionItem{
 			Key:         q.Key,
 			Prompt:      q.Prompt,
 			Description: optionalString(q.Description),

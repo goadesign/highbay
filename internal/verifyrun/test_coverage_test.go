@@ -10,18 +10,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 // TestCoverageSnapshotPersistence distinguishes old absence from recorded
 // empty statements and rejects malformed or foreign stored references.
 func TestCoverageSnapshotPersistence(t *testing.T) {
 	record := &TestCoverageSnapshot{Report: 2,
-		Answers: []*gensurla.ConfirmedAnswer{{ID: "tax", Question: "Is tax included?", Answer: "No"}},
-		Examples: []*gensurla.ExampleItem{{ID: "check_01", Scenario: "Refund at the limit",
+		Answers: []*genhighbay.ConfirmedAnswer{{ID: "tax", Question: "Is tax included?", Answer: "No"}},
+		Examples: []*genhighbay.ExampleItem{{ID: "check_01", Scenario: "Refund at the limit",
 			InputSummary: "$50 before tax", ExpectedOutcome: "Refund", VerificationKind: "deterministic"}},
-		CoverageStatements: []*gensurla.TestCoverageStatement{},
+		CoverageStatements: []*genhighbay.TestCoverageStatement{},
 	}
 	context := StoryContext{State: StoryRecorded, BuildNumber: 1, BuildStartedAt: time.Now().UTC(), TestCoverage: record}
 	recordRaw, err := json.Marshal(record)

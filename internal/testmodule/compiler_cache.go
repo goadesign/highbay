@@ -14,12 +14,12 @@ import (
 // instead. Runtime libraries do not read this test-only environment contract.
 func CompilerCache(t testing.TB) string {
 	t.Helper()
-	cache := os.Getenv("SURLA_TEST_BUILD_CACHE")
+	cache := os.Getenv("HIGHBAY_TEST_BUILD_CACHE")
 	if cache == "" {
 		return t.TempDir()
 	}
 	if !filepath.IsAbs(cache) {
-		t.Fatalf("SURLA_TEST_BUILD_CACHE must be absolute: %q", cache)
+		t.Fatalf("HIGHBAY_TEST_BUILD_CACHE must be absolute: %q", cache)
 	}
 	return cache
 }

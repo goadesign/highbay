@@ -11,7 +11,7 @@
 //
 // The test starts a headless browser with a throwaway profile inside its own
 // temporary directory, never the user's browser, profile, windows or tabs
-// (real_browser_test.go). Set SURLA_TEST_BROWSER to the browser's executable
+// (real_browser_test.go). Set HIGHBAY_TEST_BROWSER to the browser's executable
 // when it is not installed in a well-known location. It drives the browser
 // with browser_harness.cjs, which needs Node 22 or newer for its built-in
 // WebSocket client; with an older Node the test skips.
@@ -40,9 +40,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 type (
@@ -379,10 +379,10 @@ type (
 	// phoneBuildService serves immutable presentation facts through the generated
 	// HTTP boundary. The real service owns cards, credentials and Team state.
 	phoneBuildService struct {
-		gensurla.Service
+		genhighbay.Service
 		// builds and findings are populated before the browser starts reading.
-		builds   map[string]*gensurla.ChangeBuild
-		findings *gensurla.TestFindings
+		builds   map[string]*genhighbay.ChangeBuild
+		findings *genhighbay.TestFindings
 	}
 
 	// phoneFacts records real layout and keyboard observations, not worker execution.
@@ -491,7 +491,7 @@ func checkViewsSessionInBrowser(t *testing.T) {
 	// immutable refresh snapshot. One evaluation can supply all three cards.
 	storyOp := evaluateStory(t, origin, guide)
 	target := proposeChange(t, origin, guide, "chg-refunds", storyOp)
-	confirmBody, err := gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
+	confirmBody, err := genhighbay.EncodeConfirmIntentPayload(&genhighbay.ConfirmIntentPayload{
 		ChangeID: target.ChangeID, RequestRevision: target.RequestRevision, Answers: map[string]string{}, Examples: target.Examples,
 	})
 	require.NoError(t, err)
@@ -505,7 +505,7 @@ func checkViewsSessionInBrowser(t *testing.T) {
 	started := time.Now()
 	browser := startBrowser(t, executable, t.TempDir())
 	listening := time.Now()
-	capture := os.Getenv("SURLA_TEST_LINK_CAPTURE_DIR")
+	capture := os.Getenv("HIGHBAY_TEST_LINK_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
@@ -684,7 +684,7 @@ func checkViewsSessionInBrowser(t *testing.T) {
 	t.Run("g a reload ends the session", func(t *testing.T) {
 		assert.False(t, facts.Reload.SignedOutTimedOut, "the reloaded page did not say how to open it")
 		assert.Contains(t, facts.Reload.SignedOutText,
-			"Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.",
+			"Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.",
 			"the reloaded page's recovery routes")
 		assert.Equal(t, origin+"/views", facts.Reload.Href, "the reloaded page's address")
 		assert.Len(t, requestsTo(facts.Reload.PageRequests, http.MethodGet, "/views"), 1, "the reload did not load the page again")
@@ -753,7 +753,7 @@ func checkOnboardingInBrowser(t *testing.T) {
 	skipWithoutNodeWebSocket(t, node)
 	harness, err := filepath.Abs("../../ui/checkpoint/testing/browser_harness.cjs")
 	require.NoError(t, err)
-	capture := os.Getenv("SURLA_TEST_LINK_CAPTURE_DIR")
+	capture := os.Getenv("HIGHBAY_TEST_LINK_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
@@ -766,12 +766,12 @@ func checkOnboardingInBrowser(t *testing.T) {
 		`refund = PolicySimulatorRow("Order just below the limit", "$48 subtotal plus $4 tax", ["Approve automatically", "Send to a manager"], 1)`,
 		`rationale = AmbiguityChoiceCard(1, "Including tax can send otherwise identical refunds to different approval paths.")`,
 	}, "\n")
-	payload, err := gensurla.EncodeProposeChangePayload(&gensurla.ProposeChangePayload{
+	payload, err := genhighbay.EncodeProposeChangePayload(&genhighbay.ProposeChangePayload{
 		ChangeID: "refund-rules",
 		Prompt:   "Require manager review for refunds above fifty dollars.",
-		Analysis: &gensurla.CP1Analysis{
+		Analysis: &genhighbay.CP1Analysis{
 			Summary: "Route larger refunds to a manager and leave smaller refunds on the automatic path.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{
 				{
 					Question: "Does the manager-review threshold include tax?",
 					Options: []string{
@@ -784,7 +784,7 @@ func checkOnboardingInBrowser(t *testing.T) {
 					Options:  []string{"Approve the refund automatically.", "Send the refund to a manager for review."},
 				},
 			},
-			Examples: []*gensurla.CP1AnalysisExample{{
+			Examples: []*genhighbay.CP1AnalysisExample{{
 				Scenario: "Refund a smaller order", InputSummary: "A customer requests a refund for a $48 order with $4 tax.",
 				ExpectedOutcome:  "The order follows the chosen threshold. The requester sees whether the refund was approved or needs review.",
 				VerificationKind: "deterministic",
@@ -818,13 +818,13 @@ func (o *phoneTeamOwner) Supervise(ctx context.Context, _ controlplane.Assignmen
 
 // ListAgentOptions keeps layout fixtures independent of discovery processes and
 // supplies complete installed metadata through the existing team boundary.
-func (o *phoneTeamOwner) ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+func (o *phoneTeamOwner) ListAgentOptions(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 	return browserWorkerOptions().Agents, nil
 }
 
 // ReadTeam supplies assigned-worker facts only for the phone fixture, whose
 // build is served by phoneBuildService rather than the live card-store owner.
-func (o *phoneTeamOwner) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
+func (o *phoneTeamOwner) ReadTeam(ctx context.Context) (*genhighbay.TeamSnapshot, error) {
 	snapshot, err := o.Server.ReadTeam(ctx)
 	if err != nil || !o.workersAssigned {
 		return snapshot, err
@@ -840,8 +840,8 @@ func (o *phoneTeamOwner) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, 
 // GetBuild returns a recorded layout state, retaining the real reader for any
 // change outside this fixture.
 func (s *phoneBuildService) GetBuild(
-	ctx context.Context, p *gensurla.GetBuildPayload,
-) (*gensurla.ChangeBuild, error) {
+	ctx context.Context, p *genhighbay.GetBuildPayload,
+) (*genhighbay.ChangeBuild, error) {
 	if build, ok := s.builds[p.ChangeID]; ok {
 		return build, nil
 	}
@@ -850,8 +850,8 @@ func (s *phoneBuildService) GetBuild(
 
 // GetTestFindings binds long finding text to the fixture's exact verdict.
 func (s *phoneBuildService) GetTestFindings(
-	ctx context.Context, p *gensurla.GetTestFindingsPayload,
-) (*gensurla.TestFindings, error) {
+	ctx context.Context, p *genhighbay.GetTestFindingsPayload,
+) (*genhighbay.TestFindings, error) {
 	if p.ChangeID == s.findings.ChangeID {
 		return s.findings, nil
 	}
@@ -878,7 +878,7 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 		Team:         &controlplane.TeamBinding{Owner: vp.state.Record.Owner, Service: &phoneTeamOwner{Server: server, workersAssigned: true}},
 	})
 	require.NoError(t, err)
-	service := &phoneBuildService{Service: cp, builds: make(map[string]*gensurla.ChangeBuild)}
+	service := &phoneBuildService{Service: cp, builds: make(map[string]*genhighbay.ChangeBuild)}
 	application := http.NewServeMux()
 	application.Handle("GET /views", controlplane.ViewsPage())
 	application.Handle("/", controlplane.NewHTTPHandler(service, server.Authenticate))
@@ -925,31 +925,31 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	for _, id := range []string{"phone-build", "phone-findings"} {
 		card := proposeChange(t, vp.state.Origin(), guide, id, "")
 		user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: vp.state.Record.Owner, CallerID: "phone-user", Kind: controlplane.CallerUser})
-		confirmed, err := vp.cp.Load().ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		confirmed, err := vp.cp.Load().ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 			ChangeID: id, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 		})
 		require.NoError(t, err)
-		tests := gensurla.NewTestsCouldNotRun(&gensurla.TestsCouldNotRun{
+		tests := genhighbay.NewTestsCouldNotRun(&genhighbay.TestsCouldNotRun{
 			Reason: longReason, CheckedAt: at,
 			Step: strings.Repeat("Review the recorded project configuration before retrying. ", 7),
 		})
 		if id == "phone-findings" {
-			tests = gensurla.NewTestsNeedsChanges(&gensurla.TestsNeedChanges{
+			tests = genhighbay.NewTestsNeedsChanges(&genhighbay.TestsNeedChanges{
 				FindingCount: len(findingTexts), CheckedAt: at,
 			})
-			service.findings = &gensurla.TestFindings{
+			service.findings = &genhighbay.TestFindings{
 				ChangeID: id, RequestRevision: confirmed.RequestRevision,
 				StartedAt: at, CheckedAt: at, Report: 3, Findings: findingTexts,
 			}
 		}
-		service.builds[id] = &gensurla.ChangeBuild{
+		service.builds[id] = &genhighbay.ChangeBuild{
 			ChangeID: id,
-			Build: gensurla.NewBuildStarted(&gensurla.StartedBuild{
+			Build: genhighbay.NewBuildStarted(&genhighbay.StartedBuild{
 				RequestRevision: confirmed.RequestRevision, StartedAt: at, InForce: true,
-				RequiredTests: []*gensurla.RequiredTest{},
-				Builder:       &gensurla.BuilderProgress{Read: true},
-				TestWriter:    &gensurla.TestWriterProgress{Read: true, Report: 3, Tests: tests},
-				Taking:        gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}),
+				RequiredTests: []*genhighbay.RequiredTest{},
+				Builder:       &genhighbay.BuilderProgress{Read: true},
+				TestWriter:    &genhighbay.TestWriterProgress{Read: true, Report: 3, Tests: tests},
+				Taking:        genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{}),
 			}),
 		}
 	}
@@ -971,19 +971,19 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 			assert.True(t, view.WrappedLongText, "long text did not wrap")
 			assert.ElementsMatch(t, []string{"guide", "builder", "test_writer"}, view.AttentionRoles)
 			for _, role := range []string{"guide", "builder", "test_writer"} {
-				assert.Contains(t, view.Controls, "surla-team-attention-show-pane-"+role)
-				assert.Contains(t, view.KeyboardControls, "surla-team-attention-show-pane-"+role)
+				assert.Contains(t, view.Controls, "highbay-team-attention-show-pane-"+role)
+				assert.Contains(t, view.KeyboardControls, "highbay-team-attention-show-pane-"+role)
 			}
 		})
 	}
 	assert.ElementsMatch(t, []string{"needs_you", "needs_you", "needs_you"}, facts.Phone.Team.RoleStates)
 	assert.Contains(t, facts.Phone.Team.LongText, strings.Repeat("x", 21))
-	for _, id := range []string{"surla-team-start", "surla-team-refresh", "surla-team-show-guide", "surla-team-show-builder", "surla-team-show-test_writer"} {
+	for _, id := range []string{"highbay-team-start", "highbay-team-refresh", "highbay-team-show-guide", "highbay-team-show-builder", "highbay-team-show-test_writer"} {
 		assert.Contains(t, facts.Phone.Team.Controls, id)
 		assert.Contains(t, facts.Phone.Team.KeyboardControls, id)
 	}
 	assert.Contains(t, facts.Phone.Build.LongText, longReason)
-	for _, id := range []string{"surla-build-view-team", "surla-build-again"} {
+	for _, id := range []string{"highbay-build-view-team", "highbay-build-again"} {
 		assert.Contains(t, facts.Phone.Build.Controls, id)
 		assert.Contains(t, facts.Phone.Build.KeyboardControls, id)
 	}
@@ -1000,7 +1000,7 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	assert.True(t, facts.Phone.FindingsWrapped, "each long finding must wrap")
 	assert.True(t, facts.Phone.FindingsDisclosureOpened, "Enter did not open the findings disclosure")
 	assert.Contains(t, facts.Phone.Findings.KeyboardControls, "SUMMARY:4 findings")
-	for _, id := range []string{"surla-build-view-team", "surla-build-again"} {
+	for _, id := range []string{"highbay-build-view-team", "highbay-build-again"} {
 		assert.Contains(t, facts.Phone.Findings.Controls, id)
 		assert.Contains(t, facts.Phone.Findings.KeyboardControls, id)
 	}
@@ -1027,7 +1027,7 @@ func skipWithoutNodeWebSocket(t *testing.T, node string) {
 // proposeChange saves change id through the guide's credential, as the
 // guide agent does, and returns the saved card. A non-empty storyOp adopts
 // that succeeded Story evaluation into the change.
-func proposeChange(t *testing.T, origin, credential, id, storyOp string) *gensurla.ChangeCardResult {
+func proposeChange(t *testing.T, origin, credential, id, storyOp string) *genhighbay.ChangeCardResult {
 	t.Helper()
 	payload := map[string]any{
 		"change_id": id,
@@ -1057,13 +1057,13 @@ func proposeChange(t *testing.T, origin, credential, id, storyOp string) *gensur
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusOK, resp.StatusCode, "proposing %s: %s", id, answer)
-	card, err := gensurla.DecodeChangeCardResult(answer)
+	card, err := genhighbay.DecodeChangeCardResult(answer)
 	require.NoError(t, err)
 	return card
 }
 
 // readChange reads change id's saved card with the guide's credential.
-func readChange(t *testing.T, origin, credential, id string) *gensurla.ChangeCardResult {
+func readChange(t *testing.T, origin, credential, id string) *genhighbay.ChangeCardResult {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, origin+"/changes/"+url.PathEscape(id), nil)
 	require.NoError(t, err)
@@ -1075,7 +1075,7 @@ func readChange(t *testing.T, origin, credential, id string) *gensurla.ChangeCar
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, http.StatusOK, resp.StatusCode, "reading %s: %s", id, answer)
-	card, err := gensurla.DecodeChangeCardResult(answer)
+	card, err := genhighbay.DecodeChangeCardResult(answer)
 	require.NoError(t, err)
 	return card
 }
@@ -1092,7 +1092,7 @@ func longStoryWorkspace(t *testing.T) string {
 	}
 	design := `package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Order Refunds", func() {
 	Actor("customer", "Customer")
@@ -1106,8 +1106,8 @@ var _ = Story("Order Refunds", func() {
 `
 	return storyWorkspace(t, testmodule.Tidy(t, map[string]string{
 		"go.mod": "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-			"\tgithub.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85\n" +
-			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n)\n",
+			"\tgithub.com/goadesign/highbay/story v0.0.0-20261125223710-b7bf4a7f4fa5\n" +
+			"\tgoa.design/goa/v3 " + testmodule.HighbayVersion(t, "goa.design/goa/v3") + "\n)\n",
 		"design/design.go": design,
 	}))
 }

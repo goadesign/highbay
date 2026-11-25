@@ -19,9 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 type (
@@ -109,7 +109,7 @@ func requirePageTools(t *testing.T) string {
 }
 
 // startPageServer serves svc behind the page session for one test.
-func startPageServer(t *testing.T, svc gensurla.Service) *pageServer {
+func startPageServer(t *testing.T, svc genhighbay.Service) *pageServer {
 	t.Helper()
 	ps := &pageServer{t: t, usedLinks: map[string]bool{}, gates: map[string]*pageGate{}, replies: map[string][]pageReply{}, actions: map[string]func(){}}
 	mux := http.NewServeMux()
@@ -268,7 +268,7 @@ func (ps *pageServer) exchange(w http.ResponseWriter, r *http.Request) {
 	ps.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	if !ok {
-		serviceErr := gensurla.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with surla"))
+		serviceErr := genhighbay.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with hbay"))
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), serviceErr)); err != nil {
 			ps.t.Logf("write exchange refusal: %v", err)
@@ -382,7 +382,7 @@ type (
 		// server answers.
 		mu sync.Mutex
 		// runs holds each run's current snapshot by run_id.
-		runs map[string]*gensurla.VerificationStatusResult
+		runs map[string]*genhighbay.VerificationStatusResult
 		// lists holds each change's run_ids, newest first.
 		lists map[string][]string
 	}
@@ -405,11 +405,11 @@ type (
 
 // newPageVerifications wraps cp with an empty run fixture set.
 func newPageVerifications(cp *ControlPlane) *pageVerifications {
-	return &pageVerifications{ControlPlane: cp, runs: map[string]*gensurla.VerificationStatusResult{}, lists: map[string][]string{}}
+	return &pageVerifications{ControlPlane: cp, runs: map[string]*genhighbay.VerificationStatusResult{}, lists: map[string][]string{}}
 }
 
 // set stores each run's snapshot, replacing an earlier one with its run_id.
-func (s *pageVerifications) set(runs ...*gensurla.VerificationStatusResult) {
+func (s *pageVerifications) set(runs ...*genhighbay.VerificationStatusResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, run := range runs {
@@ -427,13 +427,13 @@ func (s *pageVerifications) list(changeID string, runIDs ...string) {
 // GetVerification returns the run's current fixture snapshot.
 func (s *pageVerifications) GetVerification(
 	_ context.Context,
-	p *gensurla.GetVerificationPayload,
-) (*gensurla.VerificationStatusResult, error) {
+	p *genhighbay.GetVerificationPayload,
+) (*genhighbay.VerificationStatusResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run, ok := s.runs[p.RunID]
 	if !ok {
-		return nil, gensurla.MakeNotFound(errors.New("unknown run_id"))
+		return nil, genhighbay.MakeNotFound(errors.New("unknown run_id"))
 	}
 	return run, nil
 }
@@ -442,10 +442,10 @@ func (s *pageVerifications) GetVerification(
 // Fixture runs have no recorded Story; admission still uses the real control
 // plane's approval owner and the full saved report rather than inputs_current.
 func (s *pageVerifications) ReviewVerification(
-	ctx context.Context, p *gensurla.GetVerificationPayload,
-) (*gensurla.VerificationReviewResult, error) {
+	ctx context.Context, p *genhighbay.GetVerificationPayload,
+) (*genhighbay.VerificationReviewResult, error) {
 	if _, unavailable := s.verifier.(noVerification); unavailable {
-		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return nil, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
 	run, err := s.GetVerification(ctx, p)
 	if err != nil {
@@ -486,28 +486,28 @@ func (s *pageVerifications) ReviewVerification(
 			return nil, err
 		}
 	}
-	return &gensurla.VerificationReviewResult{
+	return &genhighbay.VerificationReviewResult{
 		RunID: run.RunID, ChangeID: run.ChangeID, RequestRevision: run.RequestRevision,
 		CandidateCommit: run.CandidateCommit, SuiteCommit: run.SuiteCommit,
 		AcceptedAt: run.AcceptedAt, InputsCurrent: run.InputsCurrent,
 		CandidateBinariesDir: run.CandidateBinariesDir, TestSource: run.TestSource, State: run.State,
-		Review: &gensurla.VerificationReview{Approval: approval,
-			StoryContext: gensurla.NewStoryContextNotRecorded(&gensurla.RunStoryNotRecorded{})},
+		Review: &genhighbay.VerificationReview{Approval: approval,
+			StoryContext: genhighbay.NewStoryContextNotRecorded(&genhighbay.RunStoryNotRecorded{})},
 	}, nil
 }
 
 // ListVerifications returns the change's fixture runs, newest first.
 func (s *pageVerifications) ListVerifications(
 	_ context.Context,
-	p *gensurla.ListVerificationsPayload,
-) (*gensurla.VerificationListResult, error) {
+	p *genhighbay.ListVerificationsPayload,
+) (*genhighbay.VerificationListResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	runs := make([]*gensurla.VerificationStatusResult, 0, len(s.lists[p.ChangeID]))
+	runs := make([]*genhighbay.VerificationStatusResult, 0, len(s.lists[p.ChangeID]))
 	for _, id := range s.lists[p.ChangeID] {
 		runs = append(runs, s.runs[id])
 	}
-	return &gensurla.VerificationListResult{ChangeID: p.ChangeID, Runs: runs}, nil
+	return &genhighbay.VerificationListResult{ChangeID: p.ChangeID, Runs: runs}, nil
 }
 
 // LoadReport returns the report the test made.
@@ -543,18 +543,18 @@ func (p *pageTarget) update(change func(*pageTarget)) {
 
 // passedRun returns a completed, passed run of card whose report digest is
 // digest, as a builder's verification would report it.
-func passedRun(card *gensurla.ChangeCardResult, runID, commit, digest string) *gensurla.VerificationStatusResult {
-	return &gensurla.VerificationStatusResult{
+func passedRun(card *genhighbay.ChangeCardResult, runID, commit, digest string) *genhighbay.VerificationStatusResult {
+	return &genhighbay.VerificationStatusResult{
 		RunID: runID, ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		CandidateCommit: commit, SuiteCommit: strings.Repeat("2", 40), AcceptedAt: "2026-10-31T12:34:56.123Z",
-		TestSource: gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
-		State: gensurla.NewStateCompleted(&gensurla.VerificationCompleted{
+		TestSource: genhighbay.NewTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
+		State: genhighbay.NewStateCompleted(&genhighbay.VerificationCompleted{
 			SuiteID: "orders_acceptance", Environment: "sim",
-			Report: &gensurla.BuilderVerificationReport{
+			Report: &genhighbay.BuilderVerificationReport{
 				ReportDigest: digest, Passed: true,
-				Counts: &gensurla.VerificationCounts{Required: 2, Passed: 2},
-				Scenarios: []*gensurla.VerificationScenario{
-					{ID: "a", Outcome: "passed", Checks: []*gensurla.VerificationCheck{{Name: "check", Passed: true}}},
+				Counts: &genhighbay.VerificationCounts{Required: 2, Passed: 2},
+				Scenarios: []*genhighbay.VerificationScenario{
+					{ID: "a", Outcome: "passed", Checks: []*genhighbay.VerificationCheck{{Name: "check", Passed: true}}},
 					{ID: "holdout-1", Outcome: "passed"},
 				},
 			},

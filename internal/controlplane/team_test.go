@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	genclient "github.com/goadesign/surla/gen/http/surla/client"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -28,22 +28,22 @@ import (
 // teamServiceFixture models the narrow owner without any outside effect.
 type teamServiceFixture struct {
 	mu        sync.Mutex
-	snapshot  gensurla.TeamSnapshot
+	snapshot  genhighbay.TeamSnapshot
 	calls     []string
 	bound     AssignmentReader
 	supervise func(context.Context, AssignmentReader) error
 	// Action hooks return owner refusals without a window or external process.
 	show     func(context.Context, string) error
 	register func(context.Context, BuildFolders) error
-	start    func(context.Context) (*gensurla.ProjectTeam, error)
-	options  func(context.Context) ([]*gensurla.InstalledAgentOption, error)
+	start    func(context.Context) (*genhighbay.ProjectTeam, error)
+	options  func(context.Context) ([]*genhighbay.InstalledAgentOption, error)
 	dismiss  func(context.Context, string) error
 	// choices captures the last selection crossing the CP-to-team owner boundary.
-	choices map[string]*gensurla.RoleAgentChoice
+	choices map[string]*genhighbay.RoleAgentChoice
 }
 
 // ReadTeam returns a copied snapshot and records a read, never an assignment mutation.
-func (f *teamServiceFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, error) {
+func (f *teamServiceFixture) ReadTeam(context.Context) (*genhighbay.TeamSnapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "read")
@@ -55,10 +55,10 @@ func (f *teamServiceFixture) ReadTeam(context.Context) (*gensurla.TeamSnapshot, 
 		copy.Team = "fixture-team"
 	}
 	if copy.Roles == nil {
-		copy.Roles = []*gensurla.TeamRoleState{}
+		copy.Roles = []*genhighbay.TeamRoleState{}
 	}
 	if copy.SavedChoices == nil {
-		copy.SavedChoices = map[string]*gensurla.RoleAgentChoice{}
+		copy.SavedChoices = map[string]*genhighbay.RoleAgentChoice{}
 	}
 	if copy.DismissedNotices == nil {
 		copy.DismissedNotices = []string{}
@@ -79,7 +79,7 @@ func (f *teamServiceFixture) ShowPane(ctx context.Context, role string) error {
 }
 
 // StartAgents records the authorized action without starting any process.
-func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string]*gensurla.RoleAgentChoice) (*gensurla.ProjectTeam, error) {
+func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string]*genhighbay.RoleAgentChoice) (*genhighbay.ProjectTeam, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, "start")
 	f.choices = choices
@@ -88,11 +88,11 @@ func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string
 	if start != nil {
 		return start(ctx)
 	}
-	return &gensurla.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture agents have started.", Roles: []*gensurla.ProjectTeamRole{}}, nil
+	return &genhighbay.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture agents have started.", Roles: []*genhighbay.ProjectTeamRole{}}, nil
 }
 
 // ListAgentOptions returns an installed-client fixture without executable discovery.
-func (f *teamServiceFixture) ListAgentOptions(ctx context.Context) ([]*gensurla.InstalledAgentOption, error) {
+func (f *teamServiceFixture) ListAgentOptions(ctx context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 	f.mu.Lock()
 	options := f.options
 	f.mu.Unlock()
@@ -103,8 +103,8 @@ func (f *teamServiceFixture) ListAgentOptions(ctx context.Context) ([]*gensurla.
 }
 
 // fixtureAgentOptions provides deterministic metadata; no executable is launched.
-func fixtureAgentOptions() []*gensurla.InstalledAgentOption {
-	return []*gensurla.InstalledAgentOption{
+func fixtureAgentOptions() []*genhighbay.InstalledAgentOption {
+	return []*genhighbay.InstalledAgentOption{
 		{Client: "codex", Program: "/fixture/codex", Title: "Codex", Models: []string{"codex-default"},
 			Efforts: []string{"low", "high"}, ModelSupported: true, ThinkingSupported: true,
 			YoloSupported: true, HeadlessSupported: true},
@@ -167,7 +167,7 @@ func (f *teamServiceFixture) Supervise(ctx context.Context, read AssignmentReade
 // testTeamBinding supplies an independent team with no roles assigned yet.
 func testTeamBinding() *TeamBinding {
 	return &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{
-		snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "test-team", Roles: []*gensurla.TeamRoleState{}},
+		snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "test-team", Roles: []*genhighbay.TeamRoleState{}},
 	}}
 }
 
@@ -204,7 +204,7 @@ func TestTeamAgentOptionsReturnsBuildRoles(t *testing.T) {
 func TestTeamUserTransport(t *testing.T) {
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerTestWriter, CallerManagement} {
 		t.Run(string(kind), func(t *testing.T) {
-			f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{}}}
+			f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*genhighbay.TeamRoleState{}}}
 			cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
 			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) { return Principal{ID: "owner", Kind: kind}, nil })
 			for _, route := range []struct{ method, path, body string }{{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", `{}`}, {"GET", "/team/agent-options", ""}, {"POST", "/team/notices/dismiss", `{"notice":"outside_herdr"}`}} {
@@ -235,13 +235,13 @@ func TestTeamUserTransport(t *testing.T) {
 			name: "window_busy", path: "/team/pane", body: `{"role":"builder"}`,
 			call: "show:builder", status: http.StatusConflict,
 			owner: &teamServiceFixture{show: func(context.Context, string) error {
-				return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
+				return genhighbay.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
 			}},
 		},
 		{
 			name: "team_unavailable", path: "/team/agents", body: `{}`, call: "start", status: http.StatusServiceUnavailable,
-			owner: &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) {
-				return nil, gensurla.MakeTeamUnavailable(errors.New("open the Herdr app, then try again"))
+			owner: &teamServiceFixture{start: func(context.Context) (*genhighbay.ProjectTeam, error) {
+				return nil, genhighbay.MakeTeamUnavailable(errors.New("open the Herdr app, then try again"))
 			}},
 		},
 	} {
@@ -265,7 +265,7 @@ func TestTeamUserTransport(t *testing.T) {
 // TestTeamUserStartConflictTransport maps the owner's numeric conflict into the
 // ordinary user error with one actionable suffix, never peer-authored text.
 func TestTeamUserStartConflictTransport(t *testing.T) {
-	f := &teamServiceFixture{start: func(context.Context) (*gensurla.ProjectTeam, error) {
+	f := &teamServiceFixture{start: func(context.Context) (*genhighbay.ProjectTeam, error) {
 		return nil, fmt.Errorf("private peer output: %w", &TeamSpaceConflict{Count: 2})
 	}}
 	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
@@ -337,7 +337,7 @@ func TestTeamUserResourceOwner(t *testing.T) {
 // TestTeamVersionBelongsToResourceOwner keeps other owners' change-list waits
 // independent of the bound team's activity and never reads that team for them.
 func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{}}}
+	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*genhighbay.TeamRoleState{}}}
 	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "alice", Service: f}})
 	cp.changesWait = time.Millisecond
 	alice, bob := asCaller("alice", CallerUser), asCaller("bob", CallerUser)
@@ -347,17 +347,17 @@ func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"read"}, f.calls)
 	f.mu.Lock()
-	f.snapshot.Roles = []*gensurla.TeamRoleState{{Role: "builder", Handle: "builder", State: "waiting", Attention: "none", Watcher: "gone", Assignment: "unread"}}
+	f.snapshot.Roles = []*genhighbay.TeamRoleState{{Role: "builder", Handle: "builder", State: "waiting", Attention: "none", Watcher: "gone", Assignment: "unread"}}
 	f.calls = nil
 	f.mu.Unlock()
-	bobWait, err := cp.WaitForChanges(bob, &gensurla.WaitForChangesPayload{Since: b.Version})
+	bobWait, err := cp.WaitForChanges(bob, &genhighbay.WaitForChangesPayload{Since: b.Version})
 	require.NoError(t, err)
 	assert.Equal(t, b.Version, bobWait.Version)
 	bobList, err := cp.ListChanges(bob)
 	require.NoError(t, err)
 	assert.Equal(t, b.Version, bobList.Version)
 	assert.Empty(t, f.calls, "other owners never read the bound team's state")
-	aliceWait, err := cp.WaitForChanges(alice, &gensurla.WaitForChangesPayload{Since: a.Version})
+	aliceWait, err := cp.WaitForChanges(alice, &genhighbay.WaitForChangesPayload{Since: a.Version})
 	require.NoError(t, err)
 	assert.NotEqual(t, a.Version, aliceWait.Version)
 }
@@ -370,7 +370,7 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 		Team: &TeamBinding{Owner: "alice@example.com", Service: f}}
 	cp := newBuildControlPlane(t, opts)
 	card := buildableChange(t, cp, "alice@example.com")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -404,7 +404,7 @@ func TestTeamAssignmentGenerations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first, stale)
 	makeBuildFixtureBuilderCopy(t, cp)
-	_, err = cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "alice@example.com"})
+	_, err = cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &genhighbay.GetBuilderAssignmentPayload{ChangeID: "alice@example.com"})
 	require.NoError(t, err)
 	owed, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
@@ -436,17 +436,17 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 			cp := newBuildControlPlane(t, opts)
 			card := buildableChange(t, cp, "chg")
 			user := asCaller("alice@example.com", CallerUser)
-			started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			started, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
-			read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+			read, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			build, ok := read.Build.AsStarted()
 			require.True(t, ok)
 			assert.Equal(t, started.Build, build)
-			wantTests := gensurla.TestsKindAssigned
+			wantTests := genhighbay.TestsKindAssigned
 			wantRoles := []string{"builder", "test_writer"}
 			if stored {
-				wantTests = gensurla.TestsKindNotUsed
+				wantTests = genhighbay.TestsKindNotUsed
 				wantRoles = []string{"builder"}
 			}
 			assert.Equal(t, wantTests, build.TestWriter.Tests.Kind())
@@ -465,7 +465,7 @@ func TestTeamAssignmentGenerationsMatchBuildWork(t *testing.T) {
 			assert.False(t, saved[0].file.Builder.Read)
 			assert.False(t, saved[0].file.TestWriter.Read, "unused is derived, never a fabricated read")
 			makeBuildFixtureBuilderCopy(t, cp)
-			_, err = cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+			_, err = cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			remaining, err := cp.assignmentGenerations(t.Context())
 			require.NoError(t, err)
@@ -558,13 +558,13 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	f := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*gensurla.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
+	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*genhighbay.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
 	cp := newControlPlane(t, Options{TracerProvider: provider, Team: &TeamBinding{Owner: "owner", Service: f}})
 	cp.changesWait = time.Millisecond
 	user := asCaller("owner", CallerUser)
 	list, err := cp.ListChanges(user)
 	require.NoError(t, err)
-	endpoints := gensurla.NewEndpoints(cp)
+	endpoints := genhighbay.NewEndpoints(cp)
 	applyOperationPolicy(endpoints, cp.tracer("test"))
 	for _, field := range []string{"state", "attention", "watcher", "assignment"} {
 		f.mu.Lock()
@@ -580,11 +580,11 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 		case "assignment":
 			next.Assignment = "unread"
 		}
-		f.snapshot.Roles = []*gensurla.TeamRoleState{&next}
+		f.snapshot.Roles = []*genhighbay.TeamRoleState{&next}
 		f.mu.Unlock()
-		result, err := endpoints.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: list.Version})
+		result, err := endpoints.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: list.Version})
 		require.NoError(t, err)
-		assert.NotEqual(t, list.Version, result.(*gensurla.ChangeListVersion).Version)
+		assert.NotEqual(t, list.Version, result.(*genhighbay.ChangeListVersion).Version)
 		list, err = cp.ListChanges(user)
 		require.NoError(t, err)
 	}
@@ -598,7 +598,7 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 		names = append(names, span.Name)
 	}
 	assert.Contains(t, names, waitForChangesSpan)
-	assert.Contains(t, names, "surla.request.wait_for_changes")
+	assert.Contains(t, names, "highbay.request.wait_for_changes")
 }
 
 // TestTeamBindAssignmentsBeforeSupervise proves that controlplane.New binds
@@ -681,7 +681,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	// 2. Starting a build gives both roles work; dropping it clears both and
 	// refuses single reads with not_found.
 	dropCard := buildableChange(t, cp, "dropped-chg")
-	droppedStart, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+	droppedStart, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{
 		ChangeID: dropCard.ChangeID, RequestRevision: dropCard.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -694,7 +694,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	assert.False(t, active.Dropped)
 	require.Len(t, active.Unread, 2)
 
-	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{
+	_, err = cp.DropBuild(user, &genhighbay.DropBuildPayload{
 		ChangeID: dropCard.ChangeID, StartedAt: droppedStart.Build.StartedAt,
 	})
 	require.NoError(t, err)
@@ -711,9 +711,9 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	wList, err = cp.ListTestWriterAssignments(writer)
 	require.NoError(t, err)
 	assert.Empty(t, wList.Assignments)
-	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: dropCard.ChangeID})
+	_, err = cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: dropCard.ChangeID})
 	assertRefused(t, err, "no_build")
-	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: dropCard.ChangeID})
+	_, err = cp.GetTestWriterAssignment(writer, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: dropCard.ChangeID})
 	assertRefused(t, err, "no_build")
 
 	// 3. Start a new build after the drop and check every test-writer state:
@@ -727,7 +727,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	meta.madeFrom.Start = provenance.Start
 	meta.madeFrom.Entries = nil
 	saveMetadataRecord(t, cp, meta)
-	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+	started, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -737,7 +737,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 
 	// Reading the test writer's assignment clears Unread for test_writer while
 	// keeping TestWriterHasWork and ListTestWriterAssignments non-empty.
-	_, err = cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetTestWriterAssignment(writer, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	afterWriterRead, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
@@ -804,7 +804,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 			} else {
 				assert.Empty(t, listed.Assignments)
 			}
-			full, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			full, err := cp.GetTestWriterAssignment(writer, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err, "single read by change_id stays readable in %s", tc.name)
 			assert.Equal(t, "chg", full.ChangeID)
 		})
@@ -814,13 +814,13 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	// check that reading leaves the builder with work until a verification run
 	// of the open build passes.
 	acceptTests(t, cp, "chg", suiteCommit)
-	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	builderTree := productionBuildGit(t, cp.activeWorkspaceDir, "write-tree")
 	commit = productionBuildGit(
 		t, cp.activeWorkspaceDir, "commit-tree", "--no-gpg-sign", builderTree, "-p", suiteCommit, "-m", "Builder candidate",
 	)
-	productionBuildGit(t, cp.activeWorkspaceDir, "update-ref", "refs/heads/surla/build-2", commit)
+	productionBuildGit(t, cp.activeWorkspaceDir, "update-ref", "refs/heads/highbay/build-2", commit)
 	afterBuilderRead, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	assert.True(t, afterBuilderRead.BuilderHasWork)
@@ -905,14 +905,14 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	bList, err = cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)
 	assert.Empty(t, bList.Assignments)
-	bFull, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	bFull, err := cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err, "GetBuilderAssignment by change_id stays readable after a passed run")
 	assert.Equal(t, "chg", bFull.ChangeID)
 	assert.Equal(t, card.RequestRevision, bFull.RequestRevision)
 	assert.True(t, bFull.Read)
 
 	// Approval changes nothing with or without promotion settings.
-	_, err = cp.ApproveMerge(user, &gensurla.ApproveMergePayload{
+	_, err = cp.ApproveMerge(user, &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: commit, ReportDigest: passBefore.Digest,
 	})
 	require.NoError(t, err)
@@ -1012,7 +1012,7 @@ func TestWhoHasWorkAndAssignmentLists(t *testing.T) {
 	bList, err = configured.ListBuilderAssignments(builder)
 	require.NoError(t, err)
 	require.Len(t, bList.Assignments, 1)
-	assert.Equal(t, gensurla.WrittenTestsKindNotUsed, bList.Assignments[0].WrittenTests.Kind())
+	assert.Equal(t, genhighbay.WrittenTestsKindNotUsed, bList.Assignments[0].WrittenTests.Kind())
 	wList, err = configured.ListTestWriterAssignments(writer)
 	require.NoError(t, err)
 	assert.Empty(t, wList.Assignments)

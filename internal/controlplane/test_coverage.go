@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"slices"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // cloneCoverageStatements transfers mutable request arrays to the report owner.
 // Empty and historical absent statements have the same public value, [].
-func cloneCoverageStatements(in []*gensurla.TestCoverageStatement) []*gensurla.TestCoverageStatement {
-	out := make([]*gensurla.TestCoverageStatement, len(in))
+func cloneCoverageStatements(in []*genhighbay.TestCoverageStatement) []*genhighbay.TestCoverageStatement {
+	out := make([]*genhighbay.TestCoverageStatement, len(in))
 	for i, statement := range in {
 		copy := *statement
 		copy.QuestionIds = slices.Clone(statement.QuestionIds)
@@ -24,9 +24,9 @@ func cloneCoverageStatements(in []*gensurla.TestCoverageStatement) []*gensurla.T
 }
 
 // acceptedCoverageStatements never presents reported or refused rows as accepted.
-func acceptedCoverageStatements(held heldBuild) []*gensurla.TestCoverageStatement {
+func acceptedCoverageStatements(held heldBuild) []*genhighbay.TestCoverageStatement {
 	if held.storedEvaluator || held.file.TestWriter.State != testsAccepted {
-		return []*gensurla.TestCoverageStatement{}
+		return []*genhighbay.TestCoverageStatement{}
 	}
 	return cloneCoverageStatements(held.file.TestWriter.CoverageStatements)
 }
@@ -35,7 +35,7 @@ func acceptedCoverageStatements(held heldBuild) []*gensurla.TestCoverageStatemen
 // read, followed by membership checks against that same stored build's basis.
 func validateStoredCoverage(saved buildFile) error {
 	for _, statement := range saved.TestWriter.CoverageStatements {
-		if _, err := gensurla.EncodeTestCoverageStatement(statement); err != nil {
+		if _, err := genhighbay.EncodeTestCoverageStatement(statement); err != nil {
 			return fmt.Errorf("stored coverage statement: %w", err)
 		}
 	}
@@ -43,12 +43,12 @@ func validateStoredCoverage(saved buildFile) error {
 		return nil
 	}
 	for _, answer := range saved.Answers {
-		if _, err := gensurla.EncodeConfirmedAnswer(answer); err != nil {
+		if _, err := genhighbay.EncodeConfirmedAnswer(answer); err != nil {
 			return fmt.Errorf("stored coverage answer: %w", err)
 		}
 	}
 	for _, example := range saved.Examples {
-		if _, err := gensurla.EncodeExampleItem(example); err != nil {
+		if _, err := genhighbay.EncodeExampleItem(example); err != nil {
 			return fmt.Errorf("stored coverage example: %w", err)
 		}
 	}
@@ -58,7 +58,7 @@ func validateStoredCoverage(saved buildFile) error {
 // coverageScenarioFindings joins statements only to IDs from the checked tree.
 // Extra declared public scenarios are valid; no second listing is performed.
 func coverageScenarioFindings(
-	statements []*gensurla.TestCoverageStatement, declared []string,
+	statements []*genhighbay.TestCoverageStatement, declared []string,
 ) []testwriter.Finding {
 	var findings []testwriter.Finding
 	for _, statement := range statements {

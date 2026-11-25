@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/goadesign/surla/internal/renameat"
+	"github.com/goadesign/highbay/internal/renameat"
 )
 
 // Result records what Publish wrote and the file changes it could observe.
@@ -67,7 +67,7 @@ func Publish(
 	}
 	if leftovers := leftoverStages(root); len(leftovers) > 0 {
 		result.Warnings = append(result.Warnings, fmt.Sprintf(
-			"%s holds staging directories from earlier runs, which Surla leaves alone: %s",
+			"%s holds staging directories from earlier runs, which Highbay leaves alone: %s",
 			root.Name(), strings.Join(leftovers, ", ")))
 	}
 	stage, err := newStage(root)

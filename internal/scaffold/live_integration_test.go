@@ -27,14 +27,14 @@ import (
 	"goa.design/goa-ai/runtime/agent/model"
 	"google.golang.org/grpc"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/project"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/project"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 // echoSystem is a model provider that answers every request with the system
@@ -52,9 +52,9 @@ type echoStream struct {
 // methods are unreachable because the team owner stops on that refusal.
 type starterWindowHost struct{ project.TeamHost }
 
-// published is the Surla version the starter's go.mod pins; it exists on the
+// published is the Highbay version the starter's go.mod pins; it exists on the
 // module proxy. It matches the internal tests' fixture of the same name.
-const published = testmodule.PublishedSurlaVersion
+const published = testmodule.PublishedHighbayVersion
 
 // TestStarterLiveTargetAppliesADraftToTheNextModelRequest creates and commits
 // one real starter, then clones that immutable seed for two independent
@@ -72,12 +72,12 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	buildCache := testmodule.CompilerCache(t)
 	generator, err := designeval.NewEvaluatorWithCache(t.TempDir(), buildCache)
 	require.NoError(t, err)
-	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published, Example: true}, scaffold.RunCommand, generator)
+	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published, Example: true}, scaffold.RunCommand, generator)
 	require.NoError(t, err)
 	commit := commitAll(t, seed)
 
-	surlaBin := filepath.Join(t.TempDir(), "surla")
-	build := exec.CommandContext(t.Context(), "go", "build", "-o", surlaBin, "./cmd/surla")
+	hbayBin := filepath.Join(t.TempDir(), "hbay")
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", hbayBin, "./cmd/hbay")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
 	require.NoError(t, err, string(out))
@@ -110,11 +110,11 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 						SuiteRepo: dir, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: "./gen/cmd/" + name + "-evals",
 						ReportDir: t.TempDir(),
 					},
-					Command: []string{surlaBin},
+					Command: []string{hbayBin},
 					Timeout: 15 * time.Minute,
 				},
 				Live: &controlplane.LiveConfig{
-					Command:      []string{surlaBin},
+					Command:      []string{hbayBin},
 					Env:          os.Environ(),
 					StartTimeout: 10 * time.Minute,
 				},
@@ -125,25 +125,25 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 			builder := starterCaller(t, controlplane.CallerBuilder)
 			guide := starterCaller(t, controlplane.CallerGuide)
 			// Live targets plan through the scripted gateway the user chose.
-			_, err = cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
+			_, err = cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &gatewayAddr})
 			require.NoError(t, err)
 			card := confirmCard(t, cp, guide, user, tc.changeID)
 			const text = "You answer questions about item prices. [drafted]"
 			if tc.live {
 				// Stored-evaluator live targets need neither a build nor
 				// accepted test-writer tests. Keep this start before Build.
-				started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: card.ChangeID, CandidateCommit: commit})
+				started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{ChangeID: card.ChangeID, CandidateCommit: commit})
 				require.NoError(t, err)
 				before := askLive(t, started.URL)
 				assert.True(t, strings.HasPrefix(before, "SYSTEM="), before)
 				promptID := name + ".helper.system"
-				drafted, err := cp.DraftOverride(builder, &gensurla.DraftOverridePayload{
+				drafted, err := cp.DraftOverride(builder, &genhighbay.DraftOverridePayload{
 					TargetKind: controlplane.TargetKindPromptTemplate, PromptID: &promptID, NewContent: text,
 				})
 				require.NoError(t, err)
 				assert.True(t, drafted.AppliedInStore)
 				assert.Equal(t, "SYSTEM="+text, askLive(t, started.URL), "the next model request carries the drafted text")
-				afterDraft, err := cp.GetChange(builder, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+				afterDraft, err := cp.GetChange(builder, &genhighbay.GetChangePayload{ChangeID: card.ChangeID})
 				require.NoError(t, err)
 				assert.Equal(t, card.RequestRevision, afterDraft.RequestRevision, "a runtime draft never changes the card")
 				assert.Equal(t, controlplane.StatusConfirmed, afterDraft.Status)
@@ -152,14 +152,14 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 			// CP4 requires an open build and an assignment read even when
 			// the operator supplies the evaluator. The builder authors its
 			// candidate only in the working copy returned by that read.
-			started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+			started, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, card.RequestRevision, started.Build.RequestRevision)
-			assert.Equal(t, gensurla.TeamKindUnavailable, started.Team.Kind(), "this host launches no agents")
-			assert.Equal(t, gensurla.TestsKindNotUsed, started.Build.TestWriter.Tests.Kind())
-			assignment, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+			assert.Equal(t, genhighbay.TeamKindUnavailable, started.Team.Kind(), "this host launches no agents")
+			assert.Equal(t, genhighbay.TestsKindNotUsed, started.Build.TestWriter.Tests.Kind())
+			assignment, err := cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			require.True(t, assignment.Read)
 			require.True(t, assignment.InForce)
@@ -171,7 +171,7 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 			require.NotEqual(t, commit, c2, "the candidate contains this build's own work")
 			assert.Equal(t, commit, starterGit(t, dir, "rev-parse", "HEAD"), "the builder never commits in the project folder")
 			if tc.live {
-				restarted, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: card.ChangeID, CandidateCommit: c2})
+				restarted, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{ChangeID: card.ChangeID, CandidateCommit: c2})
 				require.NoError(t, err, "starting C2 replaces the C1 target")
 				assert.Equal(t, "SYSTEM="+text, askLive(t, restarted.URL), "C2 carries the committed text without any draft")
 				stopped, err := cp.StopLiveTarget(builder)
@@ -183,11 +183,11 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	}
 }
 
-// keepRun copies a failed run's directory to $SURLA_TEST_KEEP_RUNS, when it
+// keepRun copies a failed run's directory to $HIGHBAY_TEST_KEEP_RUNS, when it
 // is set, so its evidence outlives the test's temporary directories.
 func keepRun(t *testing.T, runsDir, runID string) {
 	t.Helper()
-	dest := os.Getenv("SURLA_TEST_KEEP_RUNS")
+	dest := os.Getenv("HIGHBAY_TEST_KEEP_RUNS")
 	if dest == "" {
 		return
 	}
@@ -229,7 +229,7 @@ func buildLogs(t *testing.T, runsDir, runID string) string {
 // with a fixed analysis, and has the user confirm its current revision.
 func confirmCard(
 	t *testing.T, cp *controlplane.ControlPlane, guide, user context.Context, changeID string,
-) *gensurla.ChangeCardResult {
+) *genhighbay.ChangeCardResult {
 	t.Helper()
 	draft, err := cp.UpdateDraft(guide)
 	require.NoError(t, err)
@@ -247,13 +247,13 @@ func confirmCard(
 	require.Equal(t, "succeeded", refresh.State, "Story evaluation failed: %v", refresh.Diagnostic)
 	require.NotNil(t, refresh.OpID)
 	require.Equal(t, opID, *refresh.OpID)
-	card, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: changeID, StoryRefreshOpID: &opID,
 		Prompt: "Answer price questions in a friendlier tone.",
-		Analysis: &gensurla.CP1Analysis{
+		Analysis: &genhighbay.CP1Analysis{
 			Summary:     "Answer price questions in a friendlier tone.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1AnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1AnalysisExample{{
 				Scenario: "Tea price", InputSummary: "How much is tea?",
 				ExpectedOutcome: "Answers $3.50", VerificationKind: "deterministic",
 			}},
@@ -261,7 +261,7 @@ func confirmCard(
 		},
 	})
 	require.NoError(t, err)
-	card, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	card, err = cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 	})
 	require.NoError(t, err)
@@ -292,8 +292,8 @@ func starterTeam(t *testing.T, dir string) *project.Server {
 		Connect: func(context.Context) (project.TeamConnection, error) {
 			return project.TeamConnection{}, nil
 		},
-		DiscoverAgents: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
-			return []*gensurla.InstalledAgentOption{}, nil
+		DiscoverAgents: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
+			return []*genhighbay.InstalledAgentOption{}, nil
 		},
 	})
 	require.NoError(t, err)
@@ -335,14 +335,14 @@ func starterGit(t *testing.T, dir string, args ...string) string {
 // assertVerified runs verify_change for commit on card and waits, within a
 // phase deadline, until the run completes. It fails at once on a run that
 // ends without a report or a report that does not pass.
-func assertVerified(t *testing.T, cp *controlplane.ControlPlane, ctx context.Context, runsDir string, card *gensurla.ChangeCardResult, commit, why string) {
+func assertVerified(t *testing.T, cp *controlplane.ControlPlane, ctx context.Context, runsDir string, card *genhighbay.ChangeCardResult, commit, why string) {
 	t.Helper()
-	run, err := cp.VerifyChange(ctx, &gensurla.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: commit})
+	run, err := cp.VerifyChange(ctx, &genhighbay.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: commit})
 	require.NoError(t, err)
 	phase, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
 	for {
-		status, err := cp.GetVerification(ctx, &gensurla.GetVerificationPayload{RunID: run.RunID})
+		status, err := cp.GetVerification(ctx, &genhighbay.GetVerificationPayload{RunID: run.RunID})
 		require.NoError(t, err)
 		require.Equal(t, card.RequestRevision, status.RequestRevision)
 		require.Equal(t, commit, status.CandidateCommit)

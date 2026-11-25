@@ -1,10 +1,10 @@
-module github.com/goadesign/surla
+module github.com/goadesign/highbay
 
 go 1.27.3
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.84.0
-	github.com/goadesign/surla/story v0.0.0-20261111183703-4568fcf5bb85
+	github.com/goadesign/highbay/story v0.0.0-20261125223710-b7bf4a7f4fa5
 	github.com/google/uuid v1.6.0
 	github.com/openai/openai-go/v3 v3.91.0
 	github.com/pelletier/go-toml/v2 v2.4.3

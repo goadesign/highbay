@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 // TestStoryFixtureNeedsCachedModules makes missing module bytes fail at setup
@@ -86,7 +86,7 @@ func succeededStoryInput(t *testing.T) map[string]string {
 	require.NoError(t, err)
 	require.Len(t, module.Require, 2, "fixture input incomplete: retain the Story and Goa profile")
 	for _, dependency := range module.Require {
-		require.Equal(t, testmodule.SurlaVersion(t, dependency.Mod.Path), dependency.Mod.Version,
+		require.Equal(t, testmodule.HighbayVersion(t, dependency.Mod.Path), dependency.Mod.Version,
 			"fixture input incomplete: update the prepared Story profile after changing root requirements")
 	}
 	seed, err := os.ReadFile(filepath.Join("testdata", "story-fixture", "go.sum"))
@@ -95,7 +95,7 @@ func succeededStoryInput(t *testing.T) map[string]string {
 		"go.mod": string(profile),
 		"design/design.go": `package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Order Refunds", func() {
 	Actor("customer", "Customer")

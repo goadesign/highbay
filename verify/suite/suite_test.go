@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa-ai/eval"
 
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 func TestRunFollowsTheSuiteCommandContract(t *testing.T) {

@@ -3,7 +3,7 @@
 // prompts HTTP server
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package server
 
@@ -11,7 +11,7 @@ import (
 	"context"
 	"net/http"
 
-	prompts "github.com/goadesign/surla/examples/orders/gen/prompts"
+	prompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

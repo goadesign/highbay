@@ -8,8 +8,8 @@
 // only records which environment the commerce and payments endpoints belong
 // to; the endpoints themselves come from --commerce-url and --payments-url.
 //
-// When SURLA_LIVE_TARGET_KEY is set, the prompts service's override_prompt
-// accepts that key: Surla sets it when it starts this process as a live copy
+// When HIGHBAY_LIVE_TARGET_KEY is set, the prompts service's override_prompt
+// accepts that key: Highbay sets it when it starts this process as a live copy
 // for start_live_target, and its draft_override then changes the refund
 // agent's prompt text in this process only. Without it, override_prompt
 // rejects every call.
@@ -29,19 +29,19 @@ import (
 	"syscall"
 	"time"
 
-	gencommerce "github.com/goadesign/surla/examples/orders/gen/commerce"
-	gencommerceclient "github.com/goadesign/surla/examples/orders/gen/http/commerce/client"
-	genordersserver "github.com/goadesign/surla/examples/orders/gen/http/orders/server"
-	genpromptsserver "github.com/goadesign/surla/examples/orders/gen/http/prompts/server"
-	genorders "github.com/goadesign/surla/examples/orders/gen/orders"
-	genrefund "github.com/goadesign/surla/examples/orders/gen/orders/agents/refund"
-	genrefundorders "github.com/goadesign/surla/examples/orders/gen/orders/agents/refund/orders"
-	genprompts "github.com/goadesign/surla/examples/orders/gen/prompts"
-	"github.com/goadesign/surla/examples/orders/internal/assistant"
-	"github.com/goadesign/surla/examples/orders/internal/orders"
-	"github.com/goadesign/surla/examples/orders/internal/refundflow"
-	"github.com/goadesign/surla/examples/orders/internal/runstore"
-	"github.com/goadesign/surla/examples/orders/internal/scriptedmodel"
+	gencommerce "github.com/goadesign/highbay/examples/orders/gen/commerce"
+	gencommerceclient "github.com/goadesign/highbay/examples/orders/gen/http/commerce/client"
+	genordersserver "github.com/goadesign/highbay/examples/orders/gen/http/orders/server"
+	genpromptsserver "github.com/goadesign/highbay/examples/orders/gen/http/prompts/server"
+	genorders "github.com/goadesign/highbay/examples/orders/gen/orders"
+	genrefund "github.com/goadesign/highbay/examples/orders/gen/orders/agents/refund"
+	genrefundorders "github.com/goadesign/highbay/examples/orders/gen/orders/agents/refund/orders"
+	genprompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
+	"github.com/goadesign/highbay/examples/orders/internal/assistant"
+	"github.com/goadesign/highbay/examples/orders/internal/orders"
+	"github.com/goadesign/highbay/examples/orders/internal/refundflow"
+	"github.com/goadesign/highbay/examples/orders/internal/runstore"
+	"github.com/goadesign/highbay/examples/orders/internal/scriptedmodel"
 	"go.temporal.io/sdk/client"
 	"goa.design/goa-ai/features/model/anthropic"
 	"goa.design/goa-ai/features/model/gateway"
@@ -82,7 +82,7 @@ type config struct {
 	// signingKey verifies bearer tokens.
 	signingKey []byte
 	// liveKey is the key the prompts service's override_prompt requires,
-	// read from SURLA_LIVE_TARGET_KEY; empty rejects every override.
+	// read from HIGHBAY_LIVE_TARGET_KEY; empty rejects every override.
 	liveKey string
 }
 
@@ -91,9 +91,9 @@ const (
 	modelID = "default"
 	// runtimeDatabase is the runtime store's file name inside --state-dir.
 	runtimeDatabase = "orders-runtime.db"
-	// liveKeyEnv names the environment variable holding the live key Surla
+	// liveKeyEnv names the environment variable holding the live key Highbay
 	// passes to a live copy it starts.
-	liveKeyEnv = "SURLA_LIVE_TARGET_KEY"
+	liveKeyEnv = "HIGHBAY_LIVE_TARGET_KEY"
 )
 
 func main() {
@@ -198,7 +198,7 @@ func parseConfig() (config, error) {
 	flag.StringVar(&cfg.commerceURL, "commerce-url", "", "base URL of the commerce system")
 	flag.StringVar(&cfg.temporalAddr, "temporal", "localhost:7233", "Temporal frontend address")
 	flag.StringVar(&cfg.refundQueue, "refund-queue", "orders.refunds", "task queue of the refund worker")
-	flag.StringVar(&cfg.stateDir, "state-dir", ".surla/state", "directory of the durable runtime store ("+runtimeDatabase+")")
+	flag.StringVar(&cfg.stateDir, "state-dir", ".highbay/state", "directory of the durable runtime store ("+runtimeDatabase+")")
 	flag.StringVar(&cfg.modelProvider, "model-provider", "anthropic", `refund agent model: "anthropic", "gateway", or "scripted" for the zero-key demo`)
 	flag.StringVar(&cfg.modelGateway, "model-gateway", "", "gRPC address of the goa-ai model gateway (with --model-provider=gateway)")
 	flag.StringVar(&cfg.model, "model", "claude-sonnet-5-5", "Anthropic model used by the refund agent")

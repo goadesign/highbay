@@ -22,11 +22,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/goadesign/surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/procgroup"
+	"github.com/goadesign/highbay/verify/candidate"
 	"goa.design/goa/v3/codegen"
 	"golang.org/x/mod/modfile"
 )
@@ -41,14 +41,14 @@ type (
 		// and domain, Model, and agent-policy declaration records under scoped names.
 		Declarations map[string]string `json:"declarations"`
 		// Containers lists the C4 containers derived from evaluated Services, Agents, Toolsets, and Model containers.
-		Containers []*gensurla.C4ContainerItem `json:"containers"`
+		Containers []*genhighbay.C4ContainerItem `json:"containers"`
 		// Edges lists the validated directed contract edges between C4 containers.
-		Edges []*gensurla.C4EdgeItem `json:"edges"`
+		Edges []*genhighbay.C4EdgeItem `json:"edges"`
 		// AgentPolicies lists the evaluated Goa-AI RunPolicy settings per agent.
-		AgentPolicies []*gensurla.AgentPolicyItem `json:"agent_policies"`
+		AgentPolicies []*genhighbay.AgentPolicyItem `json:"agent_policies"`
 		// Tools lists the public tools selected by each agent, with compiled input
 		// choices; it does not claim which binding the application installs.
-		Tools []*gensurla.ToolContractItem `json:"tools"`
+		Tools []*genhighbay.ToolContractItem `json:"tools"`
 		// Stories lists the domain Stories declared by the design, in declaration order.
 		Stories []StorySummary `json:"stories,omitempty"`
 	}
@@ -147,7 +147,7 @@ type (
 	harnessProgram func(loaded map[string]bool) map[string]string
 
 	// Evaluator evaluates design snapshots for one owner, such as a
-	// ControlPlane or one `surla preview` or `surla diff` command. Its
+	// ControlPlane or one `hbay preview` or `hbay diff` command. Its
 	// evaluations share one private build workspace for compiler scratch. By
 	// default the package cache lives there too; NewEvaluatorWithCache instead
 	// selects retained storage supplied by the owner. The first admitted call
@@ -300,7 +300,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, files map[string]string) (Resu
 
 // Generate returns every path and its bytes that `goa gen` writes for the
 // design in a module snapshot, including gen/goa.json, with each generated
-// file's header naming "$ surla gen". It compiles and runs a generation
+// file's header naming "$ hbay gen". It compiles and runs a generation
 // program as Evaluate does, with the target module's own
 // dependency versions, and calls Goa's generator.CompleteSources, which fails
 // when a generated file would be changed after it is written, such as a gRPC
@@ -335,7 +335,7 @@ func (e *Evaluator) Close() error {
 // Summary returns a one-line count of what r declares, such as
 // `"orders": 3 container(s), 2 boundary edge(s), 1 agent policy(s), 4 tool contract(s)`.
 // The system name is Go-quoted, so the line stays a single line whatever the
-// design names its system. `surla preview` prints it to stderr, and
+// design names its system. `hbay preview` prints it to stderr, and
 // preview_architecture returns it as its banner.
 func (r Result) Summary() string {
 	return fmt.Sprintf(
@@ -378,7 +378,7 @@ func generate(
 		},
 		func(stateDir string) []string {
 			// One literal argument, which Goa copies into generated headers.
-			return []string{"-sources", filepath.Join(stateDir, "sources.json"), "--cmd=$ surla gen"}
+			return []string{"-sources", filepath.Join(stateDir, "sources.json"), "--cmd=$ hbay gen"}
 		},
 		func(stateDir string) error {
 			var err error
@@ -392,8 +392,8 @@ func generate(
 	// can lack the function whatever its version string.
 	if build := (*buildError)(nil); errors.As(err, &build) {
 		return nil, fmt.Errorf("%w\nIf that output shows that generator.CompleteSources is undefined, the "+
-			"goa.design/goa/v3 this module builds with (%s) lacks it; surla gen needs %s or later. Update the "+
-			"module's goa.design/goa/v3 requirement, or its replace directive, and go.sum, then run surla gen again",
+			"goa.design/goa/v3 this module builds with (%s) lacks it; hbay gen needs %s or later. Update the "+
+			"module's goa.design/goa/v3 requirement, or its replace directive, and go.sum, then run hbay gen again",
 			err, describe(goa), completeSourcesGoa)
 	}
 	return out, err
@@ -565,7 +565,7 @@ func runProgram(
 	}
 
 	phase = "preparing the temporary compiler files"
-	tmpDir, err := os.MkdirTemp(filepath.Dir(workDir), "surla-designeval-*")
+	tmpDir, err := os.MkdirTemp(filepath.Dir(workDir), "highbay-designeval-*")
 	if err != nil {
 		return listedModule{}, fmt.Errorf("create temp dir: %w", err)
 	}
@@ -694,12 +694,12 @@ func resolveToolchainEnv(ctx context.Context) (toolchainEnv, error) {
 	return toolchainEnv{goroot: goroot, modCache: strings.TrimSpace(lines[1])}, nil
 }
 
-// evaluatorGoMod returns the go.mod Surla was built from (surla.GoMod), which
+// evaluatorGoMod returns the go.mod Highbay was built from (highbay.GoMod), which
 // supplies the generator versions a target that does not require them is
 // evaluated with. It is compiled into the binary, so the result is the same
-// whatever directory surla runs in.
+// whatever directory hbay runs in.
 func evaluatorGoMod() (*modfile.File, error) {
-	mod, err := modfile.Parse("go.mod", []byte(surla.GoMod()), nil)
+	mod, err := modfile.Parse("go.mod", []byte(highbay.GoMod()), nil)
 	if err != nil {
 		return nil, fmt.Errorf("parse evaluator go.mod: %w", err)
 	}
@@ -774,7 +774,7 @@ func (e *Evaluator) admit() (string, error) {
 				return "", fmt.Errorf("create design evaluator parent: %w", err)
 			}
 		}
-		dir, err := os.MkdirTemp(e.tempParentDir, "surla-designeval-work-*")
+		dir, err := os.MkdirTemp(e.tempParentDir, "highbay-designeval-work-*")
 		if err != nil {
 			return "", fmt.Errorf("create design evaluator workspace: %w", err)
 		}

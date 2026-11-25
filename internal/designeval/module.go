@@ -43,7 +43,7 @@ type (
 
 const (
 	// harnessModulePath is the evaluator program's module path.
-	harnessModulePath = "surla.local/designeval"
+	harnessModulePath = "highbay.local/designeval"
 	// targetPseudoVersion is the version the harness requires the staged
 	// target at; a replace directive points it at the staged copy.
 	targetPseudoVersion = "v0.0.0-00010101000000-000000000000"
@@ -54,7 +54,7 @@ const (
 	// harnessStoryModule is the portable Story DSL module. The harness imports
 	// and requires it only when the target's design packages load it, using
 	// the exact version the target selects.
-	harnessStoryModule = "github.com/goadesign/surla/story"
+	harnessStoryModule = "github.com/goadesign/highbay/story"
 )
 
 // prepareHarnessModule makes buildDir a module that builds the evaluator
@@ -319,7 +319,7 @@ func tail(logPath string) string {
 // why: a design file imports the Story language while the target's go.mod
 // does not require its module, so Go cannot resolve that import. The step it
 // carries names the Story version the evaluator's own go.mod (evalMod)
-// requires, the language this Surla is built and tested with. It decides from
+// requires, the language this Highbay is built and tested with. It decides from
 // files and target alone, because the module command's output, which holds
 // Go's own hint, is withheld from callers. Any other failure is returned
 // unchanged, including one whose target already requires the Story module at

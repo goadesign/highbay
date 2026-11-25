@@ -16,7 +16,7 @@ import (
 
 // TestProjectTestSourceHasThreeAnswers binds control planes as the project
 // server does, with and without stored verification settings, to workspaces
-// with and without the layout `surla init` makes, including layouts an agent
+// with and without the layout `hbay init` makes, including layouts an agent
 // could fake with links or special files, and checks each answer.
 func TestProjectTestSourceHasThreeAnswers(t *testing.T) {
 	goMod := "module example.com/shop\n\ngo 1.26\n"

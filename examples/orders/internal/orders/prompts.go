@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 
-	genprompts "github.com/goadesign/surla/examples/orders/gen/prompts"
+	genprompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
 	"goa.design/goa/v3/security"
 )
 
 type (
 	// PromptService implements the generated prompts service: the operation
-	// Surla's draft_override calls on a live copy of this platform that Surla
-	// built and started. Only a caller holding the live key Surla passed to
+	// Highbay's draft_override calls on a live copy of this platform that Highbay
+	// built and started. Only a caller holding the live key Highbay passed to
 	// this process may change a prompt.
 	PromptService struct {
 		// prompts changes the refund agent's prompts.
@@ -43,9 +43,9 @@ var (
 	ErrInvalidPrompt = errors.New("invalid prompt template")
 )
 
-// NewPromptService returns the prompts service. liveKey is the key Surla
+// NewPromptService returns the prompts service. liveKey is the key Highbay
 // minted for this process when it started it as a live copy; when it is
-// empty, as for a process Surla did not start, every override is rejected.
+// empty, as for a process Highbay did not start, every override is rejected.
 func NewPromptService(prompts Prompts, liveKey string) *PromptService {
 	return &PromptService{prompts: prompts, liveKey: liveKey}
 }

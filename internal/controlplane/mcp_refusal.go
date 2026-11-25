@@ -3,7 +3,7 @@
 package controlplane
 
 import (
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -13,9 +13,9 @@ import (
 // non-nil, as required by the adapter hook. Every other failure stays intact.
 func mapMCPRefusal(err error) error {
 	switch refusal := requestErrorOwner(err).(type) {
-	case *gensurla.CopyOffBranch:
+	case *genhighbay.CopyOffBranch:
 		return &goa.ServiceError{Name: refusal.Name, Message: refusal.Name + ": " + refusal.Message}
-	case *gensurla.OpenBuildRefusal:
+	case *genhighbay.OpenBuildRefusal:
 		return &goa.ServiceError{Name: refusal.Name, Message: refusal.Name + ": " + refusal.Message}
 	default:
 		return err

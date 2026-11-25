@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	genmcp "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcp "github.com/goadesign/highbay/gen/mcp_highbay"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
@@ -27,7 +27,7 @@ const (
 	// assignments and reports them finished.
 	CallerTestWriter CallerKind = "test_writer"
 	// CallerManagement manages the server and credentials and hands over the
-	// model provider request settings of the shell running surla, never
+	// model provider request settings of the shell running hbay, never
 	// application decisions.
 	CallerManagement CallerKind = "management"
 )
@@ -84,7 +84,7 @@ func OperationAllowed(kind CallerKind, operation string) bool {
 // authorizeOperation refuses before the operation touches domain state.
 func authorizeOperation(name string, next goa.Endpoint, recorder trace.Tracer) goa.Endpoint {
 	return func(ctx context.Context, req any) (result any, err error) {
-		ctx, span := recorder.Start(ctx, "surla.request."+name)
+		ctx, span := recorder.Start(ctx, "highbay.request."+name)
 		defer span.End()
 		defer func() {
 			if err != nil && !expectedRequestRefusal(err) {
@@ -95,14 +95,14 @@ func authorizeOperation(name string, next goa.Endpoint, recorder trace.Tracer) g
 
 		principal, ok := PrincipalFromContext(ctx)
 		if !ok || !OperationAllowed(principal.Kind, name) {
-			return nil, gensurla.MakeForbidden(fmt.Errorf("caller may not call %s", name))
+			return nil, genhighbay.MakeForbidden(fmt.Errorf("caller may not call %s", name))
 		}
 		return next(ctx, req)
 	}
 }
 
 // applyOperationPolicy wraps the one endpoint set supplied to both generated transports.
-func applyOperationPolicy(e *gensurla.Endpoints, recorder trace.Tracer) {
+func applyOperationPolicy(e *genhighbay.Endpoints, recorder trace.Tracer) {
 	wrap := func(name string, next goa.Endpoint) goa.Endpoint { return authorizeOperation(name, next, recorder) }
 	e.GoldenPath = wrap("golden_path", e.GoldenPath)
 	e.ProposeChange = wrap("propose_change", e.ProposeChange)
@@ -201,7 +201,7 @@ func expectedRequestRefusal(err error) bool {
 	switch failure := requestErrorOwner(err).(type) {
 	case *goa.ServiceError:
 		return !failure.Fault
-	case *gensurla.CopyOffBranch, *gensurla.OpenBuildRefusal:
+	case *genhighbay.CopyOffBranch, *genhighbay.OpenBuildRefusal:
 		return true
 	default:
 		return false

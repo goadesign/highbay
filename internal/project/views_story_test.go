@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/goadesign/surla/internal/controlplane"
+	"github.com/goadesign/highbay/internal/controlplane"
 )
 
 // storyRefreshWait follows the control plane's five-minute Story refresh
@@ -45,9 +45,9 @@ func TestViewsPageShowsTheGuidesStoryEvaluation(t *testing.T) {
 		"origin": vp.state.Origin(), "link": link, "guide": guide, "release": release,
 	}, `
   const page = await openPage(origin, { link: input.link });
-  await until(() => page.$("#surla-change-list-empty"), "the page did not open the empty project");
-  page.$("#surla-nav-story").click();
-  await until(() => page.$("#surla-story-draft") && page.$("#surla-story-draft").dataset.state === "none", "the Story stage did not show that no evaluation has run");
+  await until(() => page.$("#highbay-change-list-empty"), "the page did not open the empty project");
+  page.$("#highbay-nav-story").click();
+  await until(() => page.$("#highbay-story-draft") && page.$("#highbay-story-draft").dataset.state === "none", "the Story stage did not show that no evaluation has run");
 
   const session = page.sent("GET", "/changes")[0].headers.Authorization;
   const byUser = await fetch(origin + "/workspace/story/refresh", { method: "POST", headers: { Authorization: session, "Sec-Fetch-Site": "same-origin", Origin: origin } });
@@ -55,14 +55,14 @@ func TestViewsPageShowsTheGuidesStoryEvaluation(t *testing.T) {
 
   const started = await api(origin, "POST", "/workspace/story/refresh", undefined, input.guide);
   expect(started.status === 200 && started.body.state === "running", "the guide could not start an evaluation: " + JSON.stringify(started));
-  await until(() => page.$("#surla-story-draft").dataset.state === "running", "the user's page did not show the guide's running evaluation without a reload", 15000);
-  expect(page.text("#surla-story-draft-running").includes(started.body.snapshot_digest), "the page shows another evaluation than the guide's");
+  await until(() => page.$("#highbay-story-draft").dataset.state === "running", "the user's page did not show the guide's running evaluation without a reload", 15000);
+  expect(page.text("#highbay-story-draft-running").includes(started.body.snapshot_digest), "the page shows another evaluation than the guide's");
 
   fs.writeFileSync(input.release, "");
-  await until(() => page.$("#surla-story-draft").dataset.state === "failed", "the user's page did not show the failed evaluation without a reload", 20000);
+  await until(() => page.$("#highbay-story-draft").dataset.state === "failed", "the user's page did not show the failed evaluation without a reload", 20000);
   const read = await api(origin, "GET", "/workspace/story/refresh", undefined, input.guide);
   expect(read.body.state === "failed" && read.body.op_id === started.body.op_id, "the guide reads another evaluation: " + JSON.stringify(read.body));
-  expect(page.text("#surla-story-draft-diagnostic") === read.body.diagnostic, "the page does not show the server's diagnostic: " + page.text("#surla-story-draft-diagnostic"));
+  expect(page.text("#highbay-story-draft-diagnostic") === read.body.diagnostic, "the page does not show the server's diagnostic: " + page.text("#highbay-story-draft-diagnostic"));
 
   const history = async () => {
     const out = await api(origin, "GET", "/traces?status=all&limit=100", undefined, input.guide);
@@ -74,15 +74,15 @@ func TestViewsPageShowsTheGuidesStoryEvaluation(t *testing.T) {
   await until(() => page.sent("GET", "/change-updates").length >= waits + 2, "the idle page stopped waiting", 20000);
   const after = await history();
   const added = after.slice(0, after.length - before.length).map((span) => span.name).sort();
-  expect(JSON.stringify(added) === JSON.stringify(["surla.controlplane.list_traces", "surla.request.list_traces"]), "an idle page added diagnostics: " + JSON.stringify(added));
+  expect(JSON.stringify(added) === JSON.stringify(["highbay.controlplane.list_traces", "highbay.request.list_traces"]), "an idle page added diagnostics: " + JSON.stringify(added));
 
   page.close();
   await control(origin, "restart");
   const fresh = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
   const again = await openPage(origin, { link: fresh });
-  await until(() => again.$("#surla-change-list-empty"), "the page did not open after the restart");
-  again.$("#surla-nav-story").click();
-  await until(() => again.$("#surla-story-draft") && again.$("#surla-story-draft").dataset.state === "none", "after a restart the Story stage did not show that no evaluation has run");
+  await until(() => again.$("#highbay-change-list-empty"), "the page did not open after the restart");
+  again.$("#highbay-nav-story").click();
+  await until(() => again.$("#highbay-story-draft") && again.$("#highbay-story-draft").dataset.state === "none", "after a restart the Story stage did not show that no evaluation has run");
   again.close();
 `)
 }
@@ -108,13 +108,13 @@ func TestViewsPageShowsTheGuidesSucceededStory(t *testing.T) {
 		"refreshWaitMs": storyRefreshWait.Milliseconds(),
 	}, `
   const page = await openPage(origin, { link: input.link });
-  await until(() => page.$("#surla-change-list-empty"), "the page did not open the empty project");
-  page.$("#surla-nav-story").click();
-  await until(() => page.$("#surla-story-draft") && page.$("#surla-story-draft").dataset.state === "none", "the Story stage did not open");
+  await until(() => page.$("#highbay-change-list-empty"), "the page did not open the empty project");
+  page.$("#highbay-nav-story").click();
+  await until(() => page.$("#highbay-story-draft") && page.$("#highbay-story-draft").dataset.state === "none", "the Story stage did not open");
   const started = await api(origin, "POST", "/workspace/story/refresh", undefined, input.guide);
   expect(started.status === 200 && started.body.state === "running", "the guide could not start an evaluation: " + JSON.stringify(started));
   try {
-  await until(() => page.$("#surla-story-draft").dataset.state === "running", "the user's page did not show the running evaluation without a reload", 15000);
+  await until(() => page.$("#highbay-story-draft").dataset.state === "running", "the user's page did not show the running evaluation without a reload", 15000);
   } catch (err) {
     let current;
     try {
@@ -122,18 +122,18 @@ func TestViewsPageShowsTheGuidesSucceededStory(t *testing.T) {
     } catch (readErr) {
       current = { readError: String(readErr) };
     }
-    const draft = page.$("#surla-story-draft");
+    const draft = page.$("#highbay-story-draft");
     throw new Error(String(err) + "; refresh read: " + JSON.stringify(current) + "; last draft state: " + draft?.dataset.state + "; draft: " + draft?.textContent);
   }
   try {
-    await until(() => ["succeeded", "failed"].includes(page.$("#surla-story-draft")?.dataset.state), "the evaluation did not finish", input.refreshWaitMs);
+    await until(() => ["succeeded", "failed"].includes(page.$("#highbay-story-draft")?.dataset.state), "the evaluation did not finish", input.refreshWaitMs);
   } catch (err) {
-    const draft = page.$("#surla-story-draft");
+    const draft = page.$("#highbay-story-draft");
     throw new Error(String(err) + "; last draft state: " + draft?.dataset.state + "; draft: " + draft?.textContent);
   }
-  expect(page.$("#surla-story-draft").dataset.state === "succeeded", "the evaluation did not succeed: " + page.text("#surla-story-draft"));
-  const flows = page.$$("#surla-story-draft .surla-story-flow");
-  expect(JSON.stringify(flows.map((f) => [f.dataset.flowKey, f.querySelector(".surla-story-mark").textContent])) === JSON.stringify([["instant-refund", "will be tested end to end"], ["high-value-refund", "draft: not tested"]]), "the guide's Story is not drawn: " + page.text("#surla-story-draft"));
+  expect(page.$("#highbay-story-draft").dataset.state === "succeeded", "the evaluation did not succeed: " + page.text("#highbay-story-draft"));
+  const flows = page.$$("#highbay-story-draft .highbay-story-flow");
+  expect(JSON.stringify(flows.map((f) => [f.dataset.flowKey, f.querySelector(".highbay-story-mark").textContent])) === JSON.stringify([["instant-refund", "will be tested end to end"], ["high-value-refund", "draft: not tested"]]), "the guide's Story is not drawn: " + page.text("#highbay-story-draft"));
   page.close();
 `, storyRefreshWait+time.Minute)
 	for name, want := range files {

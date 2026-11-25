@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // TestVerificationBinariesVisibility preserves agent reads without resolving
@@ -38,7 +38,7 @@ func TestVerificationBinariesVisibility(t *testing.T) {
 			cp, card, runsDir, runID := binariesReadFixture(t)
 			if tc.kind == CallerTestWriter {
 				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
-					&gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+					&genhighbay.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 				require.NoError(t, err, "the test writer must hold an actual assignment")
 			}
 			calls := 0
@@ -100,7 +100,7 @@ func TestVerificationBinariesUseRecordedWorkDirectory(t *testing.T) {
 		return &promotionTargetStub{}, nil
 	}
 	user := asCaller("alice@example.com", CallerUser)
-	listed, err := cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+	listed, err := cp.ListVerifications(user, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls, "a list resolves promotion once, rather than once per run")
 	require.Len(t, listed.Runs, 2)
@@ -108,7 +108,7 @@ func TestVerificationBinariesUseRecordedWorkDirectory(t *testing.T) {
 	for _, run := range listed.Runs {
 		require.NotNil(t, run.CandidateBinariesDir)
 		assert.Equal(t, want[run.RunID], *run.CandidateBinariesDir)
-		got, err := cp.GetVerification(user, &gensurla.GetVerificationPayload{RunID: run.RunID})
+		got, err := cp.GetVerification(user, &genhighbay.GetVerificationPayload{RunID: run.RunID})
 		require.NoError(t, err)
 		assert.Equal(t, run, got)
 	}
@@ -121,7 +121,7 @@ func TestVerificationBinariesUseRecordedWorkDirectory(t *testing.T) {
 
 	// A new server can read retained runs even without the original Change Card.
 	restarted := newControlPlane(t, Options{RunsDir: runsDir, PromotionTarget: &promotionTargetStub{}})
-	got, err := restarted.GetVerification(user, &gensurla.GetVerificationPayload{RunID: older})
+	got, err := restarted.GetVerification(user, &genhighbay.GetVerificationPayload{RunID: older})
 	require.NoError(t, err)
 	require.NotNil(t, got.CandidateBinariesDir)
 	assert.Equal(t, want[older], *got.CandidateBinariesDir)
@@ -160,9 +160,9 @@ func TestVerificationBinariesAbsentBeforeCompletion(t *testing.T) {
 				require.Len(t, runs, 1)
 				assert.Nil(t, runs[0].CandidateBinariesDir)
 				if state == "running" {
-					assert.Equal(t, gensurla.StateKindRunning, runs[0].State.Kind())
+					assert.Equal(t, genhighbay.StateKindRunning, runs[0].State.Kind())
 				} else {
-					assert.Equal(t, gensurla.StateKindNotCompleted, runs[0].State.Kind())
+					assert.Equal(t, genhighbay.StateKindNotCompleted, runs[0].State.Kind())
 				}
 			}
 			assert.Zero(t, calls)
@@ -279,7 +279,7 @@ func TestVerificationBinariesResolveOutsideControlPlaneLock(t *testing.T) {
 
 // binariesReadFixture saves a completed run without candidate execution and
 // leaves promotion resolution unbound until a test selects its behavior.
-func binariesReadFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult, string, string) {
+func binariesReadFixture(t *testing.T) (*ControlPlane, *genhighbay.ChangeCardResult, string, string) {
 	t.Helper()
 	runsDir := t.TempDir()
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
@@ -300,17 +300,17 @@ func readBinariesRuns(
 	ctx context.Context,
 	changeID, runID string,
 	list bool,
-) ([]*gensurla.VerificationStatusResult, error) {
+) ([]*genhighbay.VerificationStatusResult, error) {
 	if list {
-		result, err := cp.ListVerifications(ctx, &gensurla.ListVerificationsPayload{ChangeID: changeID})
+		result, err := cp.ListVerifications(ctx, &genhighbay.ListVerificationsPayload{ChangeID: changeID})
 		if err != nil {
 			return nil, err
 		}
 		return result.Runs, nil
 	}
-	result, err := cp.GetVerification(ctx, &gensurla.GetVerificationPayload{RunID: runID})
+	result, err := cp.GetVerification(ctx, &genhighbay.GetVerificationPayload{RunID: runID})
 	if err != nil {
 		return nil, err
 	}
-	return []*gensurla.VerificationStatusResult{result}, nil
+	return []*genhighbay.VerificationStatusResult{result}, nil
 }

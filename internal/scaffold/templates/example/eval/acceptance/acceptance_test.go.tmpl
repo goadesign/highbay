@@ -18,7 +18,7 @@ func must(t *testing.T, err error, what string) {
 }
 
 func TestTheCandidateEnvironmentHoldsOnlyTheLiveKey(t *testing.T) {
-	if got := liveEnv("k"); !slices.Equal(got, []string{"SURLA_LIVE_TARGET_KEY=k"}) {
+	if got := liveEnv("k"); !slices.Equal(got, []string{"HIGHBAY_LIVE_TARGET_KEY=k"}) {
 		t.Errorf("the [[.Name]]'s environment is %q; provider keys must never reach it", got)
 	}
 	if got := liveEnv(""); got != nil {

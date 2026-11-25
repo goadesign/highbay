@@ -1,7 +1,7 @@
 swagger: "2.0"
 info:
     title: Orders reference platform
-    description: Refund assistant used as Surla's reference target under test.
+    description: Refund assistant used as Highbay's reference target under test.
     version: 0.0.1
 host: localhost:80
 consumes:
@@ -1407,6 +1407,6 @@ securityDefinitions:
         in: header
     live_key_header_X-Live-Target-Key:
         type: apiKey
-        description: Key Surla minted for this process and passed to it at start.
+        description: Key Highbay minted for this process and passed to it at start.
         name: X-Live-Target-Key
         in: header

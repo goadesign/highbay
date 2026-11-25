@@ -1,5 +1,5 @@
 // Package shadcn provides accessible, composable shadcn/ui React components
-// tailored for the Surla Architecture Workspace.
+// tailored for the Highbay Architecture Workspace.
 
 import React from "react";
 
@@ -69,7 +69,7 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 // Badge renders a compact pill label for status, verification kind, or active policy outcomes.
 export function Badge({ variant = "default", className = "", children, ...rest }: BadgeProps) {
   const variantCls = variant === "default" ? "" : "shadcn-badge-" + variant;
-  const cls = ["shadcn-badge", "surla-badge", variantCls, className].filter(Boolean).join(" ");
+  const cls = ["shadcn-badge", "highbay-badge", variantCls, className].filter(Boolean).join(" ");
   return (
     <span className={cls} {...rest}>
       {children}
@@ -85,8 +85,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 // Button renders an accessible action button or toggle pill.
 export function Button({ variant = "default", className = "", type = "button", children, ...rest }: ButtonProps) {
   const variantCls =
-    variant === "pill" ? "surla-pill" : variant === "default" ? "surla-btn"
-      : "surla-btn shadcn-btn-" + variant + " surla-btn-" + variant;
+    variant === "pill" ? "highbay-pill" : variant === "default" ? "highbay-btn"
+      : "highbay-btn shadcn-btn-" + variant + " highbay-btn-" + variant;
   const cls = ["shadcn-btn", variantCls, className].filter(Boolean).join(" ");
   return (
     <button type={type} className={cls} {...rest}>
@@ -163,7 +163,7 @@ export interface AlertProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Alert({ variant = "default", className = "", children, ...rest }: AlertProps) {
   const variantCls =
     variant === "destructive"
-      ? "shadcn-alert-destructive surla-error"
+      ? "shadcn-alert-destructive highbay-error"
       : variant === "warning"
       ? "shadcn-alert-warning"
       : "";
@@ -183,7 +183,7 @@ export interface ResponsiveTableProps extends React.TableHTMLAttributes<HTMLTabl
 // ResponsiveTable wraps a semantic HTML table in a keyboard-scrollable container-query region.
 export function ResponsiveTable({ ariaLabel, children, ...rest }: ResponsiveTableProps) {
   return (
-    <div className="surla-table-wrap" role="region" aria-label={ariaLabel} tabIndex={0}>
+    <div className="highbay-table-wrap" role="region" aria-label={ariaLabel} tabIndex={0}>
       <table className="shadcn-table" role="table" {...rest}>
         {children}
       </table>

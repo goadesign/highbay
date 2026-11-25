@@ -48,8 +48,8 @@ function consumer(extraTyped = false) {
   let build;
   for (const methods of Object.values(openApi.paths)) {
     for (const operation of Object.values(methods)) {
-      if (operation.operationId === "surla#start_build") start = operation;
-      if (operation.operationId === "surla#get_build") build = operation;
+      if (operation.operationId === "highbay#start_build") start = operation;
+      if (operation.operationId === "highbay#get_build") build = operation;
     }
   }
   assert.ok(start && build, "the page's build operations must be declared");
@@ -65,7 +65,7 @@ function consumer(extraTyped = false) {
   // C1 introduces drop_build. Keep this generator unit fixture usable before
   // and after its real Goa contract is generated.
   openApi.paths["/changes/{change_id}/build/drop"] = {
-    post: { ...build, operationId: "surla#drop_build" },
+    post: { ...build, operationId: "highbay#drop_build" },
   };
   return generatedConsumer(openApi);
 }

@@ -2,7 +2,7 @@
 // scenario and drives it through its public API.
 //
 // The evaluator never imports or directly executes candidate code. It starts
-// the candidate's digest-pinned binaries only through Surla's
+// the candidate's digest-pinned binaries only through Highbay's
 // verify/candidate.Exec, which gives each an explicit environment and a
 // private state directory. They run as ordinary processes of the user, in the
 // evaluator's process group. The harness points the
@@ -29,9 +29,9 @@ import (
 	"strconv"
 	"time"
 
-	genordersclient "github.com/goadesign/surla/examples/orders-eval/gen/http/orders/client"
-	genorders "github.com/goadesign/surla/examples/orders-eval/gen/orders"
-	"github.com/goadesign/surla/verify/candidate"
+	genordersclient "github.com/goadesign/highbay/examples/orders-eval/gen/http/orders/client"
+	genorders "github.com/goadesign/highbay/examples/orders-eval/gen/orders"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/golang-jwt/jwt/v5"
 	goahttp "goa.design/goa/v3/http"
 )
@@ -106,7 +106,7 @@ const maxExcerptBytes = 16 << 10
 
 // liveKeyEnv names the variable a live copy's orders API reads its live key
 // from; only the prompts service's override_prompt accepts it.
-const liveKeyEnv = "SURLA_LIVE_TARGET_KEY"
+const liveKeyEnv = "HIGHBAY_LIVE_TARGET_KEY"
 
 // NewEnv returns an environment for the pinned candidate binaries with a fresh
 // test identity issuer key.
@@ -145,12 +145,12 @@ func (e *Env) Start(ctx context.Context, depsURL string) (*Platform, error) {
 }
 
 // StartLive starts the platform the way Start does for a live copy that
-// Surla's start_live_target runs: liveKey is added to the orders API's
-// environment, and nothing else, so Surla's draft_override can change its
+// Highbay's start_live_target runs: liveKey is added to the orders API's
+// environment, and nothing else, so Highbay's draft_override can change its
 // prompts. The model is still the evaluator's scripted model.
 func (e *Env) StartLive(ctx context.Context, depsURL, liveKey string) (*Platform, error) {
 	if liveKey == "" {
-		return nil, errors.New("a live copy needs the key Surla minted for it")
+		return nil, errors.New("a live copy needs the key Highbay minted for it")
 	}
 	return e.start(ctx, depsURL, liveKey)
 }

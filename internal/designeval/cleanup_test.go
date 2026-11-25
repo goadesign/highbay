@@ -72,7 +72,7 @@ func TestRunInGroupReportsTheCommandsOwnResult(t *testing.T) {
 // them, and returns both paths.
 func tempWithReadOnlyStore(t *testing.T) (tmpDir, storeDir string) {
 	t.Helper()
-	tmpDir = filepath.Join(t.TempDir(), "surla-designeval-test")
+	tmpDir = filepath.Join(t.TempDir(), "highbay-designeval-test")
 	storeDir = filepath.Join(tmpDir, "store")
 	pinned := filepath.Join(storeDir, "abc")
 	require.NoError(t, os.MkdirAll(pinned, 0o750))

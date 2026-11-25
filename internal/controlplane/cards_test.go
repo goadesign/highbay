@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -22,7 +22,7 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	dir := t.TempDir()
 	cfg := verificationConfig(t)
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	analysis := refundAnalysis("Refunds up to $50 are instant.", &gensurla.CP1AnalysisAmbiguity{
+	analysis := refundAnalysis("Refunds up to $50 are instant.", &genhighbay.CP1AnalysisAmbiguity{
 		Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"},
 	})
 
@@ -32,7 +32,7 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	proposed := saveProposedCardFixture(t, first, "alice@example.com", "chg", "Refunds up to $50 are instant.", analysis)
 	proposed = attachBuildSnapshot(t, first, proposed.ChangeID)
 	require.Equal(t, StatusNeedsConfirmation, proposed.Status)
-	confirmed, err := first.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
+	confirmed, err := first.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
 		Answers:  map[string]string{proposed.Ambiguities[0].ID: "with_tax"},
 		Examples: proposed.Examples,
@@ -41,29 +41,29 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	require.Equal(t, StatusConfirmed, confirmed.Status)
 	saveStoredBuildFixture(t, first, confirmed)
 	candidate := commitBuilderCandidateFixture(t, first, confirmed)
-	beforeClose, err := first.GetBuild(alice, &gensurla.GetBuildPayload{ChangeID: confirmed.ChangeID})
+	beforeClose, err := first.GetBuild(alice, &genhighbay.GetBuildPayload{ChangeID: confirmed.ChangeID})
 	require.NoError(t, err)
 	require.NoError(t, first.Close())
 
 	restarted := newControlPlane(t, opts)
-	got, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	got, err := restarted.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed, got, "the saved card comes back unchanged")
-	afterRestart, err := restarted.GetBuild(alice, &gensurla.GetBuildPayload{ChangeID: confirmed.ChangeID})
+	afterRestart, err := restarted.GetBuild(alice, &genhighbay.GetBuildPayload{ChangeID: confirmed.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, beforeClose, afterRestart, "the owner recovers the same numbered build and assignment read")
 
-	_, err = restarted.GetChange(WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser}), &gensurla.GetChangePayload{ChangeID: "chg"})
+	_, err = restarted.GetChange(WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser}), &genhighbay.GetChangePayload{ChangeID: "chg"})
 	assert.ErrorContains(t, err, "is not the owner", "ownership is saved with the card")
 
-	again, err := restarted.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
+	again, err := restarted.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: confirmed.RequestRevision,
 		Answers: confirmed.Answers, Examples: confirmed.Examples,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed.RequestRevision, again.RequestRevision, "the design source is saved, so the revision is reproduced")
 
-	run, err := restarted.VerifyChange(alice, &gensurla.VerifyChangePayload{
+	run, err := restarted.VerifyChange(alice, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg", RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate,
 	})
 	require.NoError(t, err)
@@ -74,11 +74,11 @@ func TestCardsSurviveANewControlPlane(t *testing.T) {
 	// consumer fixture retains an actual draft snapshot without running Go.
 	saved := loadMetadataRecord(t, restarted, confirmed.ChangeID)
 	opID := seedStoryRefreshForTest(t, restarted, "alice@example.com", storyRefreshStateSucceeded, saved.stories, "")
-	_, err = restarted.ProposeChange(alice, &gensurla.ProposeChangePayload{
+	_, err = restarted.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Again.", Analysis: analysis, StoryRefreshOpID: &opID,
 	})
 	assert.ErrorContains(t, err, "already exists")
-	unchanged, err := restarted.GetChange(alice, &gensurla.GetChangePayload{ChangeID: confirmed.ChangeID})
+	unchanged, err := restarted.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: confirmed.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed, unchanged, "the duplicate proposal does not overwrite the recovered card")
 }
@@ -174,7 +174,7 @@ func TestUnreadableCardsAreErrors(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{})
 			require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(c.content), 0o600))
-			_, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+			_, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 			assert.ErrorContains(t, err, c.want)
 		})
 	}
@@ -207,7 +207,7 @@ func TestRequestsFinishingAfterCloseDoNotWrite(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	approved := make(chan error, 1)
 	go func() {
-		_, err := cp.ApproveMerge(alice, &gensurla.ApproveMergePayload{
+		_, err := cp.ApproveMerge(alice, &genhighbay.ApproveMergePayload{
 			ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: commit, ReportDigest: target.report.Digest,
 		})
 		approved <- err
@@ -245,10 +245,10 @@ func TestProposalsAndRevisionsFinishingAfterCloseDoNotWrite(t *testing.T) {
 	}
 
 	t.Run("propose_change", func(t *testing.T) {
-		cp, hold, dir := open(t, "surla.controlplane.propose_change")
+		cp, hold, dir := open(t, "highbay.controlplane.propose_change")
 		hold.armed.Store(true)
 		done := hold.run(t, func() error {
-			_, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+			_, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 				ChangeID: "late", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant."),
 			})
 			return err
@@ -264,20 +264,20 @@ func TestProposalsAndRevisionsFinishingAfterCloseDoNotWrite(t *testing.T) {
 	})
 
 	t.Run("revise_change", func(t *testing.T) {
-		cp, hold, dir := open(t, "surla.controlplane.revise_change")
+		cp, hold, dir := open(t, "highbay.controlplane.revise_change")
 		card := mustPropose(t, cp, alice, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 		before, err := os.ReadFile(cp.cards.path("chg"))
 		require.NoError(t, err)
 		hold.armed.Store(true)
 		check01 := "check_01"
 		done := hold.run(t, func() error {
-			_, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+			_, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, Prompt: "Refunds up to $60 are instant.",
 				RevisionNote: "Revise the change.",
-				Analysis: &gensurla.CP1RevisionAnalysis{
+				Analysis: &genhighbay.CP1RevisionAnalysis{
 					Summary:     "Refunds up to $60 are instant.",
-					Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-					Examples: []*gensurla.CP1RevisionAnalysisExample{{
+					Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+					Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 						PriorID: &check01, Scenario: "Refund at the limit", InputSummary: "Order total $60.00",
 						ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 					}},
@@ -295,7 +295,7 @@ func TestProposalsAndRevisionsFinishingAfterCloseDoNotWrite(t *testing.T) {
 		after, err := os.ReadFile(next.cards.path("chg"))
 		require.NoError(t, err)
 		assert.Equal(t, string(before), string(after), "and leaves the card in the directory the next control plane holds unchanged")
-		got, err := next.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+		got, err := next.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, card.RequestRevision, got.RequestRevision)
 	})
@@ -312,14 +312,14 @@ func TestAFailedSaveKeepsThePreviousCard(t *testing.T) {
 	require.NoError(t, os.Chmod(dir, 0o500))
 	t.Cleanup(func() { assert.NoError(t, os.Chmod(dir, 0o700)) })
 
-	_, err := cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
-		ChangeID: "chg", RequestRevision: card.RequestRevision, Examples: []*gensurla.ExampleItem{{
+	_, err := cp.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: card.RequestRevision, Examples: []*genhighbay.ExampleItem{{
 			ID: "chg-check-02", Scenario: "Another refund", InputSummary: "Order total $10.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
 	})
 	require.ErrorContains(t, err, "save change card")
-	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	got, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, card, got)
 }
@@ -330,19 +330,19 @@ func TestAFailedSaveKeepsThePreviousCard(t *testing.T) {
 // returned in UnverifiedApproval without mutating the saved card on disk.
 func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	recorded := &gensurla.ApprovalItem{
+	recorded := &genhighbay.ApprovalItem{
 		ApprovedBy: "alice@example.com", ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 5,
 	}
 	expectedApproval := *recorded
-	expectedApproval.TestSource = gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
+	expectedApproval.TestSource = genhighbay.NewApprovalTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{})
 
 	// Without promotion settings, the saved approval is valid as long as the
 	// chosen tests' commit matches.
 	cpNoTarget := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
 	saveStoredCardBuildFixture(t, cpNoTarget, recorded)
-	gotNoTarget, err := cpNoTarget.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	gotNoTarget, err := cpNoTarget.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, &expectedApproval, gotNoTarget.Approval)
 	assert.Nil(t, gotNoTarget.UnverifiedApproval)
@@ -353,13 +353,13 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 	target := &promotionTargetStub{artifactsErr: errors.New("missing release directory")}
 	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t), PromotionTarget: target}))
 	approved := saveStoredCardBuildFixture(t, cp, recorded)
-	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	got, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, got.Approval)
 	require.NotNil(t, got.UnverifiedApproval)
 	assert.Equal(t, &expectedApproval, got.UnverifiedApproval.Approval)
 	assert.Contains(t, got.UnverifiedApproval.Reason, "Check current approval")
-	assert.Contains(t, got.UnverifiedApproval.Reason, "surla promotion remove")
+	assert.Contains(t, got.UnverifiedApproval.Reason, "hbay promotion remove")
 	saved, ok, err := cp.cards.load("chg")
 	require.NoError(t, err)
 	require.True(t, ok)
@@ -381,11 +381,11 @@ func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	reportDigest := strings.Repeat("d", 64)
 	artifactDigest := strings.Repeat("e", 64)
 	confirmedBy := "alice@example.com"
-	base := &gensurla.ChangeCardResult{
+	base := &genhighbay.ChangeCardResult{
 		ChangeID: "chg", Status: StatusConfirmed, Prompt: "Refunds up to $50 are instant.",
-		Summary: "Refunds up to $50 are instant.", Ambiguities: []*gensurla.AmbiguityQuestion{},
+		Summary: "Refunds up to $50 are instant.", Ambiguities: []*genhighbay.AmbiguityQuestion{},
 		Answers: map[string]string{}, PreservedBehaviors: []string{}, ConfirmedBy: &confirmedBy,
-		Examples: []*gensurla.ExampleItem{{
+		Examples: []*genhighbay.ExampleItem{{
 			ID: "chg-check-01", Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
@@ -405,19 +405,19 @@ func TestSavedCardInTodaysUntaggedFormWithApprovalDecodes(t *testing.T) {
 	target := &promotionTargetStub{artifacts: map[string]string{"orders": artifactDigest}}
 	cp := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg, PromotionTarget: target})
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(rawFile), 0o600))
-	got, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	got, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.NotNil(t, got.Approval, "returned while the chooser gives its SuiteCommit")
-	assert.Equal(t, &gensurla.ApprovalItem{
+	assert.Equal(t, &genhighbay.ApprovalItem{
 		ApprovedBy: "alice@example.com", ReportDigest: reportDigest, CandidateCommit: candidateCommit,
 		SuiteID: "orders", SuiteCommit: suiteCommit, Environment: "sim",
 		Artifacts: map[string]string{"orders": artifactDigest}, ScenarioCount: 5,
-		TestSource: gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+		TestSource: genhighbay.NewApprovalTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
 	}, got.Approval)
 
 	// When the chooser gives another commit, the saved approval is hidden.
 	cp.verifier.(storedVerification).cfg.Plan.SuiteCommit = strings.Repeat("9", 40)
-	hidden, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	hidden, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, hidden.Approval)
 	assert.Nil(t, hidden.UnverifiedApproval)
@@ -430,48 +430,48 @@ func TestCurrentSavedCardRoundTripExcludesResponseOnlyApproval(t *testing.T) {
 	confirmedBy := "alice@example.com"
 	cases := []struct {
 		name string
-		card *gensurla.ChangeCardResult
+		card *genhighbay.ChangeCardResult
 	}{
 		{
 			name: "confirmed with approval, ui_composition, and populated collections",
-			card: &gensurla.ChangeCardResult{
+			card: &genhighbay.ChangeCardResult{
 				ChangeID: "chg-full",
 				Status:   StatusConfirmed,
 				Prompt:   "Refunds up to $50 are instant.",
 				Summary:  "Instant refunds up to $50.",
-				Ambiguities: []*gensurla.AmbiguityQuestion{{
+				Ambiguities: []*genhighbay.AmbiguityQuestion{{
 					ID: "chg-full-ambiguity-01", Question: "Include tax?", Options: []string{"yes", "no"},
 				}},
 				Answers: map[string]string{"chg-full-ambiguity-01": "yes"},
-				Examples: []*gensurla.ExampleItem{{
+				Examples: []*genhighbay.ExampleItem{{
 					ID: "chg-full-check-01", Scenario: "Limit", InputSummary: "$50",
 					ExpectedOutcome: "Instant", VerificationKind: "deterministic",
 				}},
 				PreservedBehaviors: []string{"Over $50 requires manager."},
 				ConfirmedBy:        &confirmedBy,
-				UIComposition: &gensurla.UICompositionItem{
+				UIComposition: &genhighbay.UICompositionItem{
 					Program: "root = Stack([])", ComposedForRevision: "rev-placeholder",
 				},
-				Approval: &gensurla.ApprovalItem{
+				Approval: &genhighbay.ApprovalItem{
 					ApprovedBy: "alice@example.com", ReportDigest: strings.Repeat("a", 64),
 					CandidateCommit: strings.Repeat("b", 40), SuiteID: "orders",
 					SuiteCommit: strings.Repeat("c", 40), Environment: "sim",
 					Artifacts: map[string]string{"orders": strings.Repeat("d", 64)}, ScenarioCount: 3,
 				},
-				UnverifiedApproval: &gensurla.UnverifiedApprovalItem{
-					Approval: &gensurla.ApprovalItem{ApprovedBy: "must-not-persist"},
+				UnverifiedApproval: &genhighbay.UnverifiedApprovalItem{
+					Approval: &genhighbay.ApprovalItem{ApprovedBy: "must-not-persist"},
 					Reason:   "response-only field must never be written to disk",
 				},
 			},
 		},
 		{
 			name: "needs_confirmation with nil optional fields and nil/empty collections",
-			card: &gensurla.ChangeCardResult{
+			card: &genhighbay.ChangeCardResult{
 				ChangeID: "chg-minimal",
 				Status:   StatusNeedsConfirmation,
 				Prompt:   "Add audit log.",
 				Summary:  "Write audit log entries.",
-				Examples: []*gensurla.ExampleItem{{
+				Examples: []*genhighbay.ExampleItem{{
 					ID: "chg-minimal-check-01", Scenario: "Audit", InputSummary: "Action",
 					ExpectedOutcome: "Logged", VerificationKind: "deterministic",
 				}},
@@ -510,14 +510,14 @@ func TestCurrentSavedCardRoundTripExcludesResponseOnlyApproval(t *testing.T) {
 
 // saveCard saves a confirmed card "chg" owned by alice, with approval, in
 // cp's store and returns it.
-func saveCard(t *testing.T, cp *ControlPlane, approval *gensurla.ApprovalItem) *gensurla.ChangeCardResult {
+func saveCard(t *testing.T, cp *ControlPlane, approval *genhighbay.ApprovalItem) *genhighbay.ChangeCardResult {
 	t.Helper()
 	confirmedBy := "alice@example.com"
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID: "chg", Status: StatusConfirmed, Prompt: "Refunds up to $50 are instant.",
-		Summary: "Refunds up to $50 are instant.", Ambiguities: []*gensurla.AmbiguityQuestion{},
+		Summary: "Refunds up to $50 are instant.", Ambiguities: []*genhighbay.AmbiguityQuestion{},
 		Answers: map[string]string{}, PreservedBehaviors: []string{}, ConfirmedBy: &confirmedBy,
-		Examples: []*gensurla.ExampleItem{{
+		Examples: []*genhighbay.ExampleItem{{
 			ID: "chg-check-01", Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
@@ -553,18 +553,18 @@ func TestAnUnfinishedSaveIsHarmless(t *testing.T) {
 
 	next := newControlPlane(t, Options{CardsDir: dir, WorkspaceDir: workspace})
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	got, err := next.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	got, err := next.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, card, got, "the saved card is untouched")
 
-	updated, err := next.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
-		ChangeID: "chg", RequestRevision: card.RequestRevision, Examples: []*gensurla.ExampleItem{{
+	updated, err := next.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: card.RequestRevision, Examples: []*genhighbay.ExampleItem{{
 			ID: "chg-check-02", Scenario: "Another refund", InputSummary: "Order total $10.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
 	})
 	require.NoError(t, err)
-	got, err = next.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	got, err = next.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, updated, got, "the next save overwrites the staging file and publishes")
 	assert.NoFileExists(t, filepath.Join(dir, stagingFile), "the rename consumed it")
@@ -579,7 +579,7 @@ func TestAnUnfinishedSaveIsHarmless(t *testing.T) {
 func TestCardsWithInvalidUTF8RoundTrip(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	confirmedBy := "alice\xff"
-	card := &gensurla.ChangeCardResult{ChangeID: "chg", Status: StatusConfirmed, Prompt: "Refunds \xff", ConfirmedBy: &confirmedBy}
+	card := &genhighbay.ChangeCardResult{ChangeID: "chg", Status: StatusConfirmed, Prompt: "Refunds \xff", ConfirmedBy: &confirmedBy}
 	rev, err := computeCanonicalRevision(card, "alice\xff", "design \xff")
 	require.NoError(t, err)
 	card.RequestRevision = rev
@@ -599,7 +599,7 @@ func TestStagingDoesNotFollowLinks(t *testing.T) {
 	require.NoError(t, os.Symlink(victim, filepath.Join(cp.cards.dir, stagingFile)))
 
 	confirmedBy := "alice@example.com"
-	card := &gensurla.ChangeCardResult{ChangeID: "chg", Status: StatusConfirmed, ConfirmedBy: &confirmedBy}
+	card := &genhighbay.ChangeCardResult{ChangeID: "chg", Status: StatusConfirmed, ConfirmedBy: &confirmedBy}
 	err := cp.cards.save(storedChangeCard{card: card, owner: "alice@example.com"})
 	assert.ErrorContains(t, err, "save change card")
 	data, err := os.ReadFile(victim)
@@ -612,7 +612,7 @@ func TestStagingDoesNotFollowLinks(t *testing.T) {
 func TestChangeIDsMustBeValidUTF8(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	_, err := cp.ProposeChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}),
-		&gensurla.ProposeChangePayload{ChangeID: "chg\xff", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant.")})
+		&genhighbay.ProposeChangePayload{ChangeID: "chg\xff", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant.")})
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, `["change_id"]: invalid UTF-8`)
 }
@@ -623,9 +623,9 @@ func TestChangeIDsMustBeValidUTF8(t *testing.T) {
 func TestPrincipalIDsMustBeValidUTF8(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	bad := WithPrincipal(context.Background(), Principal{ID: "alice\xff", CallerID: "alice\xff", Kind: CallerUser})
-	_, err := cp.ProposeChange(bad, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant.")})
+	_, err := cp.ProposeChange(bad, &genhighbay.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: refundAnalysis("Refunds up to $50 are instant.")})
 	assert.ErrorContains(t, err, "authenticated principal is required")
-	_, err = cp.GetChange(bad, &gensurla.GetChangePayload{ChangeID: "chg"})
+	_, err = cp.GetChange(bad, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	assert.ErrorContains(t, err, "authenticated principal is required")
 	_, saved, err := cp.cards.load("chg")
 	require.NoError(t, err)
@@ -637,18 +637,18 @@ func TestPrincipalIDsMustBeValidUTF8(t *testing.T) {
 // removes it on Close, and that it refuses evaluations afterwards.
 func TestCloseRemovesTheEvaluatorWorkspace(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	incomplete := &gensurla.DesignSnapshot{Files: map[string]string{"design/design.go": "package design\n"}}
+	incomplete := &genhighbay.DesignSnapshot{Files: map[string]string{"design/design.go": "package design\n"}}
 
 	cards := t.TempDir()
 	cp := newControlPlane(t, Options{CardsDir: cards})
 	evalParent := filepath.Join(cards, "designeval")
 	assert.Empty(t, workspaces(t, evalParent), "a control plane that never evaluates creates no evaluator workspace")
-	_, err := cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
+	_, err := cp.Diff(alice, &genhighbay.DiffPayload{Old: incomplete, New: incomplete})
 	require.Error(t, err)
 	require.Len(t, workspaces(t, evalParent), 1)
 	require.NoError(t, cp.Close())
 	assert.Empty(t, workspaces(t, evalParent))
-	_, err = cp.Diff(alice, &gensurla.DiffPayload{Old: incomplete, New: incomplete})
+	_, err = cp.Diff(alice, &genhighbay.DiffPayload{Old: incomplete, New: incomplete})
 	require.ErrorContains(t, err, "design evaluator is closed")
 	require.NoError(t, cp.Close(), "closing again repeats the same results")
 }

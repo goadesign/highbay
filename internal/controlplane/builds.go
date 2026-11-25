@@ -17,11 +17,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 type (
@@ -82,14 +82,14 @@ const (
 	// testsNotJudged is the sentence every accepted result of the test
 	// writer's tests carries, the one value the design's TestsAccepted
 	// not_judged allows.
-	testsNotJudged = "Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert."
+	testsNotJudged = "Highbay checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert."
 )
 
 // GetBuild returns the owner's change's usable build, or not_started when no
 // build serves the current test source, and whether it is for the revision in force.
 // It fails for an unknown change (not_found) or another owner's change
 // (forbidden) and changes nothing.
-func (c *ControlPlane) GetBuild(ctx context.Context, p *gensurla.GetBuildPayload) (*gensurla.ChangeBuild, error) {
+func (c *ControlPlane) GetBuild(ctx context.Context, p *genhighbay.GetBuildPayload) (*genhighbay.ChangeBuild, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -118,7 +118,7 @@ func (c *ControlPlane) GetBuild(ctx context.Context, p *gensurla.GetBuildPayload
 // It fails for an unknown change or a change with no build (not_found),
 // another owner's change (forbidden), and a build whose tests do not need
 // changes (conflict), and changes nothing.
-func (c *ControlPlane) GetTestFindings(ctx context.Context, p *gensurla.GetTestFindingsPayload) (*gensurla.TestFindings, error) {
+func (c *ControlPlane) GetTestFindings(ctx context.Context, p *genhighbay.GetTestFindingsPayload) (*genhighbay.TestFindings, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -130,11 +130,11 @@ func (c *ControlPlane) GetTestFindings(ctx context.Context, p *gensurla.GetTestF
 		return nil, err
 	}
 	saved := held.file
-	if state := testWriterProgress(held).Tests.Kind(); state != gensurla.TestsKindNeedsChanges {
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+	if state := testWriterProgress(held).Tests.Kind(); state != genhighbay.TestsKindNeedsChanges {
+		return nil, genhighbay.MakeConflict(fmt.Errorf(
 			"the tests of change %q do not need changes: their state is %s, which get_build shows", p.ChangeID, state))
 	}
-	return &gensurla.TestFindings{
+	return &genhighbay.TestFindings{
 		ChangeID:        saved.ChangeID,
 		RequestRevision: saved.RequestRevision,
 		StartedAt:       saved.StartedAt.UTC().Format(time.RFC3339Nano),
@@ -146,7 +146,7 @@ func (c *ControlPlane) GetTestFindings(ctx context.Context, p *gensurla.GetTestF
 
 // ListBuilderAssignments returns the open build's builder assignment while the
 // builder has work on it, or an empty list otherwise. It records nothing.
-func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.BuilderAssignmentList, error) {
+func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*genhighbay.BuilderAssignmentList, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -167,7 +167,7 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 			active = append(active, held)
 		}
 	}
-	items := make([]*gensurla.BuilderAssignment, len(active))
+	items := make([]*genhighbay.BuilderAssignment, len(active))
 	if len(active) > 0 {
 		work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 		defer cancel()
@@ -183,13 +183,13 @@ func (c *ControlPlane) ListBuilderAssignments(ctx context.Context) (*gensurla.Bu
 			items[i] = builderAssignmentResult(held, folder, goworkOff)
 		}
 	}
-	return &gensurla.BuilderAssignmentList{Assignments: items}, nil
+	return &genhighbay.BuilderAssignmentList{Assignments: items}, nil
 }
 
 // ListTestWriterAssignments returns the open build's test-writer assignment
 // while the test writer has work on it, or an empty list otherwise. It records
 // nothing.
-func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla.TestWriterAssignmentList, error) {
+func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*genhighbay.TestWriterAssignmentList, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -198,13 +198,13 @@ func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla
 	if err != nil {
 		return nil, err
 	}
-	items := make([]*gensurla.TestWriterAssignmentItem, 0, len(builds))
+	items := make([]*genhighbay.TestWriterAssignmentItem, 0, len(builds))
 	for _, held := range builds {
 		if testWriterHasWork(held) {
 			items = append(items, testWriterAssignmentItem(held))
 		}
 	}
-	return &gensurla.TestWriterAssignmentList{Assignments: items}, nil
+	return &genhighbay.TestWriterAssignmentList{Assignments: items}, nil
 }
 
 // changeBuild reads and renders record's usable build without changing it.
@@ -213,12 +213,12 @@ func (c *ControlPlane) ListTestWriterAssignments(ctx context.Context) (*gensurla
 // happen after the card lock is released.
 func (c *ControlPlane) changeBuild(
 	ctx context.Context, record storedChangeCard, saved buildFile, found, draftPredatesDrop bool,
-) (*gensurla.ChangeBuild, error) {
+) (*genhighbay.ChangeBuild, error) {
 	changeID := record.card.ChangeID
 	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
-		return &gensurla.ChangeBuild{
+		return &genhighbay.ChangeBuild{
 			ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
-			Build: gensurla.NewBuildNotStarted(&gensurla.BuildNotStarted{}),
+			Build: genhighbay.NewBuildNotStarted(&genhighbay.BuildNotStarted{}),
 		}, nil
 	}
 	held := heldBuild{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}
@@ -238,9 +238,9 @@ func (c *ControlPlane) changeBuild(
 			build.Builder.HeadCommit = &head
 		}
 	}
-	return &gensurla.ChangeBuild{
+	return &genhighbay.ChangeBuild{
 		ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
-		Build: gensurla.NewBuildStarted(build),
+		Build: genhighbay.NewBuildStarted(build),
 	}, nil
 }
 
@@ -253,12 +253,12 @@ func buildInForce(saved buildFile, record storedChangeCard) bool {
 
 // startedBuild converts a held build into its transport form, rejecting a
 // saved Story whose required tests cannot be named by the generator.
-func startedBuild(held heldBuild, taking gensurla.BuildTaking) (*gensurla.StartedBuild, error) {
+func startedBuild(held heldBuild, taking genhighbay.BuildTaking) (*genhighbay.StartedBuild, error) {
 	required, err := requiredStoryTests(held.file.Stories)
 	if err != nil {
 		return nil, fmt.Errorf("name the required tests of change %q: %w", held.file.ChangeID, err)
 	}
-	return &gensurla.StartedBuild{
+	return &genhighbay.StartedBuild{
 		RequestRevision:    held.file.RequestRevision,
 		StartedAt:          held.file.StartedAt.UTC().Format(time.RFC3339Nano),
 		InForce:            held.inForce,
@@ -275,14 +275,14 @@ func startedBuild(held heldBuild, taking gensurla.BuildTaking) (*gensurla.Starte
 
 // requiredStoryTests shares the generator's mapping across build, assignment
 // and run-review reads, preserving declaration order and excluding drafts.
-func requiredStoryTests(stories []designeval.StorySummary) ([]*gensurla.RequiredTest, error) {
+func requiredStoryTests(stories []designeval.StorySummary) ([]*genhighbay.RequiredTest, error) {
 	scenarios, _, err := designeval.StoryScenarios(stories)
 	if err != nil {
 		return nil, err
 	}
-	required := make([]*gensurla.RequiredTest, len(scenarios))
+	required := make([]*genhighbay.RequiredTest, len(scenarios))
 	for i, scenario := range scenarios {
-		required[i] = &gensurla.RequiredTest{
+		required[i] = &genhighbay.RequiredTest{
 			Story: scenario.Story, FlowKey: scenario.Key,
 			Scenario: scenario.Scenario, Hook: scenario.Hook,
 		}
@@ -292,8 +292,8 @@ func requiredStoryTests(stories []designeval.StorySummary) ([]*gensurla.Required
 
 // builderAssignmentResult converts a held build into the builder's
 // assignment.
-func builderAssignmentResult(held heldBuild, folder string, goworkOff bool) *gensurla.BuilderAssignment {
-	return &gensurla.BuilderAssignment{
+func builderAssignmentResult(held heldBuild, folder string, goworkOff bool) *genhighbay.BuilderAssignment {
+	return &genhighbay.BuilderAssignment{
 		ChangeID:        held.file.ChangeID,
 		RequestRevision: held.file.RequestRevision,
 		InForce:         held.inForce,
@@ -306,8 +306,8 @@ func builderAssignmentResult(held heldBuild, folder string, goworkOff bool) *gen
 
 // testWriterAssignmentItem converts a held build into the test writer's
 // assignment summary.
-func testWriterAssignmentItem(held heldBuild) *gensurla.TestWriterAssignmentItem {
-	return &gensurla.TestWriterAssignmentItem{
+func testWriterAssignmentItem(held heldBuild) *genhighbay.TestWriterAssignmentItem {
+	return &genhighbay.TestWriterAssignmentItem{
 		ChangeID:        held.file.ChangeID,
 		RequestRevision: held.file.RequestRevision,
 		InForce:         held.inForce,
@@ -317,9 +317,9 @@ func testWriterAssignmentItem(held heldBuild) *gensurla.TestWriterAssignmentItem
 
 // builderProgress converts the builder's saved assignment of build number.
 // It leaves head_commit to the reads that look at the repository.
-func builderProgress(saved builderAssignment, number int) *gensurla.BuilderProgress {
+func builderProgress(saved builderAssignment, number int) *genhighbay.BuilderProgress {
 	branch := testwriter.BuilderRole.Branch(number)
-	progress := &gensurla.BuilderProgress{Read: saved.Read, Branch: &branch, LastCheckPassed: saved.LastCheckPassed}
+	progress := &genhighbay.BuilderProgress{Read: saved.Read, Branch: &branch, LastCheckPassed: saved.LastCheckPassed}
 	if saved.LastCheckAt != nil {
 		at := saved.LastCheckAt.UTC().Format(time.RFC3339Nano)
 		progress.LastCheckAt = &at
@@ -352,50 +352,50 @@ func (c *ControlPlane) builderBranchHead(ctx context.Context, saved buildFile) (
 // uses no test writer, so its build reads not_used whatever was saved.
 // decodeBuild accepted only the five saved states below, each with exactly
 // its fields.
-func testWriterProgress(held heldBuild) *gensurla.TestWriterProgress {
+func testWriterProgress(held heldBuild) *genhighbay.TestWriterProgress {
 	saved := held.file.TestWriter
-	var tests gensurla.Tests
+	var tests genhighbay.Tests
 	switch {
 	case held.storedEvaluator:
-		tests = gensurla.NewTestsNotUsed(&gensurla.TestsNotUsed{})
+		tests = genhighbay.NewTestsNotUsed(&genhighbay.TestsNotUsed{})
 	case saved.State == testsAssigned:
-		tests = gensurla.NewTestsAssigned(&gensurla.TestsAssigned{})
+		tests = genhighbay.NewTestsAssigned(&genhighbay.TestsAssigned{})
 	case saved.State == testsReported:
-		tests = gensurla.NewTestsReported(&gensurla.TestsReported{})
+		tests = genhighbay.NewTestsReported(&genhighbay.TestsReported{})
 	case saved.State == testsNeedChanges:
-		tests = gensurla.NewTestsNeedsChanges(&gensurla.TestsNeedChanges{
+		tests = genhighbay.NewTestsNeedsChanges(&genhighbay.TestsNeedChanges{
 			FindingCount: len(saved.Findings),
 			CheckedAt:    verdictTime(saved.CheckedAt),
 		})
 	case saved.State == testsAccepted:
-		tests = gensurla.NewTestsAccepted(acceptedTests(saved))
+		tests = genhighbay.NewTestsAccepted(acceptedTests(saved))
 	case saved.State == testsCouldNotRun:
-		tests = gensurla.NewTestsCouldNotRun(&gensurla.TestsCouldNotRun{
+		tests = genhighbay.NewTestsCouldNotRun(&genhighbay.TestsCouldNotRun{
 			Reason:    saved.Reason,
 			Step:      saved.Step,
 			CheckedAt: verdictTime(saved.CheckedAt),
 		})
 	}
-	return &gensurla.TestWriterProgress{Tests: tests, Read: saved.Read, Report: held.file.ReportNumber}
+	return &genhighbay.TestWriterProgress{Tests: tests, Read: saved.Read, Report: held.file.ReportNumber}
 }
 
 // writtenTests renders, for the builder, where the test writer's tests for
 // held stand: not used, not yet accepted, or accepted at a commit. It reads
 // the same saved state and stored-evaluator answer as testWriterProgress.
-func writtenTests(held heldBuild) gensurla.WrittenTests {
+func writtenTests(held heldBuild) genhighbay.WrittenTests {
 	saved := held.file.TestWriter
 	switch {
 	case held.storedEvaluator:
-		return gensurla.NewWrittenTestsNotUsed(&gensurla.TestsNotUsed{})
+		return genhighbay.NewWrittenTestsNotUsed(&genhighbay.TestsNotUsed{})
 	case saved.State == testsAccepted:
-		return gensurla.NewWrittenTestsAccepted(acceptedTests(saved))
+		return genhighbay.NewWrittenTestsAccepted(acceptedTests(saved))
 	default:
-		return gensurla.NewWrittenTestsNotYetAccepted(&gensurla.TestsNotYetAccepted{})
+		return genhighbay.NewWrittenTestsNotYetAccepted(&genhighbay.TestsNotYetAccepted{})
 	}
 }
 
 // testWriterHasWork reports whether held needs the test writer: only when the
-// build uses Surla's test writer and its tests are not yet accepted.
+// build uses Highbay's test writer and its tests are not yet accepted.
 func testWriterHasWork(held heldBuild) bool {
 	return !held.storedEvaluator &&
 		held.file.Roles == buildRolesBuilderAndTestWriter &&
@@ -403,10 +403,10 @@ func testWriterHasWork(held heldBuild) bool {
 }
 
 // acceptedTests renders the test writer's saved acceptance, which every
-// reader sees the same way, with the sentence saying what Surla did not
+// reader sees the same way, with the sentence saying what Highbay did not
 // judge.
-func acceptedTests(saved testWriterAssignment) *gensurla.TestsAccepted {
-	return &gensurla.TestsAccepted{Commit: saved.Commit, CheckedAt: verdictTime(saved.CheckedAt), NotJudged: testsNotJudged}
+func acceptedTests(saved testWriterAssignment) *genhighbay.TestsAccepted {
+	return &genhighbay.TestsAccepted{Commit: saved.Commit, CheckedAt: verdictTime(saved.CheckedAt), NotJudged: testsNotJudged}
 }
 
 // verdictTime formats a saved verdict time as its transport form.
@@ -417,7 +417,7 @@ func verdictTime(at time.Time) string {
 // recordBuildError records err on span as a failure unless it is a refusal
 // the design declares, and returns err.
 func recordBuildError(span trace.Span, err error, status string) error {
-	var offBranch *gensurla.CopyOffBranch
+	var offBranch *genhighbay.CopyOffBranch
 	if errors.As(err, &offBranch) {
 		return err
 	}
@@ -443,13 +443,13 @@ func (c *ControlPlane) buildableCard(principal Principal, changeID, revision str
 	}
 	agreed := record.agreedRevision()
 	if agreed == "" {
-		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("change_id %q must be confirmed before it is built (status %q)", changeID, record.card.Status))
+		return storedChangeCard{}, genhighbay.MakeConflict(fmt.Errorf("change_id %q must be confirmed before it is built (status %q)", changeID, record.card.Status))
 	}
 	if agreed != revision {
-		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("request_revision %q is not the agreed revision of %q, %q; a proposed revision is built only after the user adopts it", revision, changeID, agreed))
+		return storedChangeCard{}, genhighbay.MakeConflict(fmt.Errorf("request_revision %q is not the agreed revision of %q, %q; a proposed revision is built only after the user adopts it", revision, changeID, agreed))
 	}
 	if record.architecture == nil || record.goMod == "" || record.madeFrom == nil || record.designSource == "" {
-		return storedChangeCard{}, gensurla.MakeConflict(errors.New("The agreed revision records no design, so there is nothing to build from. Ask your coding agent to propose a revision from its draft, adopt it, then build."))
+		return storedChangeCard{}, genhighbay.MakeConflict(errors.New("The agreed revision records no design, so there is nothing to build from. Ask your coding agent to propose a revision from its draft, adopt it, then build."))
 	}
 	return record, nil
 }
@@ -462,10 +462,10 @@ func (c *ControlPlane) ownedCard(principal Principal, changeID string) (storedCh
 		return storedChangeCard{}, err
 	}
 	if !ok {
-		return storedChangeCard{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", changeID))
+		return storedChangeCard{}, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", changeID))
 	}
 	if record.owner != principal.ID {
-		return storedChangeCard{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, changeID))
+		return storedChangeCard{}, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, changeID))
 	}
 	return record, nil
 }
@@ -482,14 +482,14 @@ func (c *ControlPlane) ownedBuild(principal Principal, changeID string) (heldBui
 		return heldBuild{}, err
 	}
 	if !found || saved.ChangeID != changeID || !c.usableBuild(saved) {
-		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("change_id %q has no usable build; start a new build on the views page", changeID))
+		return heldBuild{}, genhighbay.MakeNotFound(fmt.Errorf("change_id %q has no usable build; start a new build on the views page", changeID))
 	}
 	provenance, hasProvenance, err := c.cards.loadMadeFrom()
 	if err != nil {
 		return heldBuild{}, err
 	}
 	if hasProvenance && buildDropped(provenance, saved) {
-		return heldBuild{}, gensurla.MakeNotFound(fmt.Errorf("The user dropped change %s: stop work on it; make no more edits or commits for it. The user starts builds on the views page.", saved.ChangeID))
+		return heldBuild{}, genhighbay.MakeNotFound(fmt.Errorf("The user dropped change %s: stop work on it; make no more edits or commits for it. The user starts builds on the views page.", saved.ChangeID))
 	}
 	return heldBuild{file: saved, record: record, inForce: buildInForce(saved, record), storedEvaluator: c.storedEvaluator()}, nil
 }
@@ -564,12 +564,12 @@ func (c *ControlPlane) builderHasWork(owner string, held heldBuild) (bool, error
 // startedBuild renders current run and branch facts outside the card lock.
 // Branch names identify the numbered build where its commits were verified;
 // later ref changes do not erase a pass or block reads and recovery.
-func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held heldBuild) (*gensurla.StartedBuild, error) {
+func (c *ControlPlane) startedBuild(ctx context.Context, owner string, held heldBuild) (*genhighbay.StartedBuild, error) {
 	return c.startedBuildAt(ctx, owner, held, "")
 }
 
 // startedBuildAt uses the caller's captured project commit when provided.
-func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held heldBuild, project string) (*gensurla.StartedBuild, error) {
+func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held heldBuild, project string) (*genhighbay.StartedBuild, error) {
 	c.mu.RLock()
 	provenance, found, err := c.cards.loadMadeFrom()
 	c.mu.RUnlock()
@@ -592,14 +592,14 @@ func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held he
 		if err != nil {
 			return nil, err
 		}
-		return startedBuild(held, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches}))
+		return startedBuild(held, genhighbay.NewBuildTakingDropped(&genhighbay.BuildDropped{KeptBranches: branches}))
 	}
 	runs, err := c.eligibleBuildRuns(owner, held.file)
 	if err != nil {
 		return nil, err
 	}
 	if len(runs) == 0 {
-		return startedBuild(held, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
+		return startedBuild(held, genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{}))
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
@@ -621,15 +621,15 @@ func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held he
 			return nil, err
 		}
 		if merged {
-			return startedBuild(held, gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{}))
+			return startedBuild(held, genhighbay.NewBuildTakingMerged(&genhighbay.BuildMerged{}))
 		}
 	}
 	run := runs[0]
 	candidateBranch := testwriter.BuilderRole.Branch(held.file.Number)
-	tests := gensurla.NewBuildPassedTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
+	tests := genhighbay.NewBuildPassedTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{})
 	if run.Request.Plan.Tests == verify.TestsWritten {
 		branch := testwriter.TestsRole.Branch(held.file.Number)
-		tests = gensurla.NewBuildPassedTestSourceWrittenTests(&gensurla.BuildPassedTests{
+		tests = genhighbay.NewBuildPassedTestSourceWrittenTests(&genhighbay.BuildPassedTests{
 			Commit: run.Request.Plan.SuiteCommit, Branch: branch,
 		})
 	}
@@ -637,14 +637,14 @@ func (c *ControlPlane) startedBuildAt(ctx context.Context, owner string, held he
 	if err != nil {
 		return nil, err
 	}
-	return startedBuild(held, gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{
+	return startedBuild(held, genhighbay.NewBuildTakingPassed(&genhighbay.BuildPassed{
 		RunID: run.Request.RunID, CandidateCommit: run.Request.Plan.CandidateCommit,
 		CandidateBranch: candidateBranch, Tests: tests, BaseInBranch: baseInBranch,
 	}))
 }
 
 // buildCommitInHistory distinguishes a normal non-ancestor from a failed Git
-// read; callers supply validated commits and Surla-owned branch names or HEAD.
+// read; callers supply validated commits and Highbay-owned branch names or HEAD.
 func buildCommitInHistory(ctx context.Context, repo, commit, tip string) (bool, error) {
 	_, err := runGitRead(ctx, repo, "merge-base", "--is-ancestor", commit, tip)
 	if err == nil {

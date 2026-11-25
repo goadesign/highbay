@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
 )
 
 // agreedOwner owns every change these tests save.
@@ -50,7 +50,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 	proposed := saveProposedCardFixture(t, cp, agreedOwner, "chg", "Refunds up to $50 are instant.",
 		refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
 	proposed = attachBuildSnapshot(t, cp, "chg")
-	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	agreed, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{"chg-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
 	})
@@ -59,7 +59,7 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 	commit := commitBuilderCandidateFixture(t, cp, agreed)
 	report := passingReport(t, agreed.RequestRevision, commit, spec)
 	target.update(func(p *pageTarget) { p.report = report })
-	approved, err := cp.ApproveMerge(agreedUser, &gensurla.ApproveMergePayload{
+	approved, err := cp.ApproveMerge(agreedUser, &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit, ReportDigest: report.Digest,
 	})
 	require.NoError(t, err)
@@ -81,21 +81,21 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 		assert.JSONEq(t, string(before[section]), string(after[section]), "the agreed revision's %s changed on disk", section)
 	}
 
-	read, err := cp.GetChange(agreedBuilder, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err := cp.GetChange(agreedBuilder, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, agreed.RequestRevision, read.RequestRevision, "the agreed revision is read")
 	require.NotNil(t, read.ProposedRevision)
 	assert.Equal(t, proposal.RequestRevision, read.ProposedRevision.RequestRevision, "reading returns the proposal beside it")
 
-	_, err = cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err = cp.PreviewArchitecture(agreedGuide, &genhighbay.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, "design must declare at least one Goa API or Service container", "preview accepted the agreed revision and applied its saved Story-only architecture checks")
 
-	run, err := cp.VerifyChange(agreedBuilder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
+	run, err := cp.VerifyChange(agreedBuilder, &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
 	require.NoError(t, err, "verification of the agreed revision is accepted")
 	assert.Equal(t, agreed.RequestRevision, run.RequestRevision)
 
-	reapproved, err := cp.ApproveMerge(agreedUser, &gensurla.ApproveMergePayload{
+	reapproved, err := cp.ApproveMerge(agreedUser, &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit, ReportDigest: report.Digest,
 	})
 	require.NoError(t, err, "the agreed revision is still approvable")
@@ -103,11 +103,11 @@ func TestARevisionOfAnAgreedChangeWaitsAndTheAgreedRevisionStaysInForce(t *testi
 	require.NotNil(t, reapproved.ProposedRevision, "approving keeps the proposal waiting")
 
 	adoptProposal(t, cp, "chg", proposal)
-	_, err = cp.PreviewArchitecture(agreedGuide, &gensurla.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err = cp.PreviewArchitecture(agreedGuide, &genhighbay.PreviewArchitecturePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	assertServiceError(t, err, "conflict")
-	_, err = cp.VerifyChange(agreedBuilder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
+	_, err = cp.VerifyChange(agreedBuilder, &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit})
 	assertServiceError(t, err, "conflict")
-	_, err = cp.ApproveMerge(agreedUser, &gensurla.ApproveMergePayload{
+	_, err = cp.ApproveMerge(agreedUser, &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: agreed.RequestRevision, CandidateCommit: commit, ReportDigest: report.Digest,
 	})
 	assertServiceError(t, err, "conflict")
@@ -142,17 +142,17 @@ func TestAProposalIsReplacedByTheNextRevisionAndAStaleOneIsRefused(t *testing.T)
 // approval carries over. A missing answer refuses the adoption.
 func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
 	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
-	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
+	saveStoredCardBuildFixture(t, cp, &genhighbay.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
 	})
-	agreed, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	agreed, err := cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	proposal := proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.").ProposedRevision
 
 	saved := savedFile(t, cp, "chg")
-	_, err = cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	_, err = cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposal.RequestRevision, Answers: map[string]string{}, Examples: proposal.Examples,
 	})
 	assertServiceError(t, err, "unprocessable")
@@ -181,17 +181,17 @@ func TestAdoptingMakesTheProposalTheRevisionInForce(t *testing.T) {
 // second decline or one naming the agreed revision is refused.
 func TestDecliningRestoresTheAgreedChangeExactly(t *testing.T) {
 	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: verificationConfig(t)}))
-	saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
+	saveStoredCardBuildFixture(t, cp, &genhighbay.ApprovalItem{
 		ApprovedBy: agreedOwner, ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
 	})
 	before := savedSections(t, cp, "chg")
-	agreed, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	agreed, err := cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	proposal := proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.").ProposedRevision
 
-	declined, err := cp.DeclineRevision(agreedUser, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
+	declined, err := cp.DeclineRevision(agreedUser, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, agreed.RequestRevision, declined.RequestRevision)
 	assert.Nil(t, declined.ProposedRevision)
@@ -203,7 +203,7 @@ func TestDecliningRestoresTheAgreedChangeExactly(t *testing.T) {
 
 	saved := savedFile(t, cp, "chg")
 	for _, rev := range []string{proposal.RequestRevision, agreed.RequestRevision} {
-		_, err = cp.DeclineRevision(agreedUser, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: rev})
+		_, err = cp.DeclineRevision(agreedUser, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: rev})
 		assertServiceError(t, err, "conflict")
 	}
 	assert.Equal(t, saved, savedFile(t, cp, "chg"), "a refused decline changed the file")
@@ -220,8 +220,8 @@ func TestRefiningTheAgreedRevisionWhileAProposalWaitsIsRefused(t *testing.T) {
 	saved := savedFile(t, cp, "chg")
 	refined := *agreed.Examples[0]
 	refined.ExpectedOutcome = "Instant store credit within a minute"
-	_, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
-		ChangeID: "chg", RequestRevision: agreed.RequestRevision, Answers: agreed.Answers, Examples: []*gensurla.ExampleItem{&refined},
+	_, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: agreed.RequestRevision, Answers: agreed.Answers, Examples: []*genhighbay.ExampleItem{&refined},
 	})
 	assertServiceError(t, err, "conflict")
 	assert.ErrorContains(t, err, "Adopt")
@@ -289,7 +289,7 @@ func TestRevisingAChangeNeverConfirmedStillReplacesIt(t *testing.T) {
 func TestTheChangeListNamesAWaitingProposal(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	agreed := agreeChange(t, cp, "chg")
-	list := func() *gensurla.ChangeList {
+	list := func() *genhighbay.ChangeList {
 		out, err := cp.ListChanges(agreedUser)
 		require.NoError(t, err)
 		require.Len(t, out.Changes, 1)
@@ -304,7 +304,7 @@ func TestTheChangeListNamesAWaitingProposal(t *testing.T) {
 	assert.Equal(t, agreed.RequestRevision, waiting.Changes[0].RequestRevision, "the item names the revision in force")
 	assert.Equal(t, StatusConfirmed, waiting.Changes[0].Status)
 	assert.NotEqual(t, before.Version, waiting.Version)
-	_, err := cp.DeclineRevision(agreedUser, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
+	_, err := cp.DeclineRevision(agreedUser, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
 	require.NoError(t, err)
 	declined := list()
 	assert.Nil(t, declined.Changes[0].ProposedRevision)
@@ -359,7 +359,7 @@ func TestACardFileWithAProposalIsCheckedOnLoad(t *testing.T) {
 			want:  "proposed revision of another change",
 		},
 	}
-	_, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	_, err := cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err, "the unaltered file loads")
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -369,7 +369,7 @@ func TestACardFileWithAProposalIsCheckedOnLoad(t *testing.T) {
 			raw, err := json.Marshal(file)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(cp.cards.path("chg"), raw, 0o600))
-			_, err = cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+			_, err = cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 			assert.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -388,9 +388,9 @@ func TestAProposalKeepsItsOwnStoryAndDesignSource(t *testing.T) {
 	cp := newControlPlane(t, Options{WorkspaceDir: ws})
 	agreedOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 	proposeWithStory(t, cp, agreedGuide, "chg", agreedOp)
-	proposed, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	proposed, err := cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
-	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	agreed, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
@@ -425,7 +425,7 @@ func TestAProposalKeepsItsOwnStoryAndDesignSource(t *testing.T) {
 	altered, err := json.Marshal(file)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), altered, 0o600))
-	_, err = cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	_, err = cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	assert.ErrorContains(t, err, "does not match its request_revision", "a proposal whose design source was altered is refused")
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), []byte(valid), 0o600))
 
@@ -509,10 +509,10 @@ func TestDecliningNamesTheProposalTheUserSaw(t *testing.T) {
 	seen := proposeRevision(t, cp, "chg", agreed.RequestRevision, "Refunds up to $60 are instant.").ProposedRevision
 	waiting := proposeRevision(t, cp, "chg", seen.RequestRevision, "Refunds up to $70 are instant.").ProposedRevision
 	saved := savedFile(t, cp, "chg")
-	_, err := cp.DeclineRevision(agreedUser, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: seen.RequestRevision})
+	_, err := cp.DeclineRevision(agreedUser, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: seen.RequestRevision})
 	assertServiceError(t, err, "conflict")
 	assert.Equal(t, saved, savedFile(t, cp, "chg"), "declining a replaced proposal changed the file")
-	declined, err := cp.DeclineRevision(agreedUser, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: waiting.RequestRevision})
+	declined, err := cp.DeclineRevision(agreedUser, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: waiting.RequestRevision})
 	require.NoError(t, err)
 	assert.Nil(t, declined.ProposedRevision)
 }
@@ -525,14 +525,14 @@ func TestAProposalThatIsNotAwaitingConfirmationIsRefusedOnLoad(t *testing.T) {
 	confirmedBy := agreedOwner
 	cases := []struct {
 		name  string
-		alter func(card *gensurla.ChangeCardResult)
+		alter func(card *genhighbay.ChangeCardResult)
 	}{
-		{name: "answered", alter: func(card *gensurla.ChangeCardResult) {
+		{name: "answered", alter: func(card *genhighbay.ChangeCardResult) {
 			card.Answers = map[string]string{"chg-ambiguity-01": "with_tax"}
 		}},
-		{name: "confirmed by someone", alter: func(card *gensurla.ChangeCardResult) { card.ConfirmedBy = &confirmedBy }},
-		{name: "confirmed status alone", alter: func(card *gensurla.ChangeCardResult) { card.Status = StatusConfirmed }},
-		{name: "confirmed with answers and a confirmation", alter: func(card *gensurla.ChangeCardResult) {
+		{name: "confirmed by someone", alter: func(card *genhighbay.ChangeCardResult) { card.ConfirmedBy = &confirmedBy }},
+		{name: "confirmed status alone", alter: func(card *genhighbay.ChangeCardResult) { card.Status = StatusConfirmed }},
+		{name: "confirmed with answers and a confirmation", alter: func(card *genhighbay.ChangeCardResult) {
 			card.Status = StatusConfirmed
 			card.Answers = map[string]string{"chg-ambiguity-01": "with_tax"}
 			card.ConfirmedBy = &confirmedBy
@@ -551,7 +551,7 @@ func TestAProposalThatIsNotAwaitingConfirmationIsRefusedOnLoad(t *testing.T) {
 			proposal.RequestRevision = rev
 			record.proposed = &storedRevision{card: &proposal, designSource: record.proposed.designSource, stories: record.proposed.stories}
 			require.NoError(t, cp.cards.save(record))
-			_, err = cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+			_, err = cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 			assert.ErrorContains(t, err, "not awaiting confirmation")
 		})
 	}
@@ -599,11 +599,11 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	agreedOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 	proposeWithStory(t, cp, agreedGuide, "chg", agreedOp)
 	proposed := attachBuildSnapshot(t, cp, "chg")
-	agreed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	agreed, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
-	propose := func(rev string) *gensurla.ProposedRevisionItem {
+	propose := func(rev string) *genhighbay.ProposedRevisionItem {
 		t.Helper()
 		draftOp := seedStoryRefreshForTest(t, cp, agreedOwner, storyRefreshStateSucceeded, pageStories(), "")
 		payload := revisionPayload("chg", rev, "Refunds up to $60 are instant.", agreed.Examples[0].ID)
@@ -615,13 +615,13 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	}
 	proposal := propose(agreed.RequestRevision)
 
-	_, err = cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
+	_, err = cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
 	assertServiceError(t, err, "conflict")
-	started, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	started, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err, "the agreed revision is built while a proposal waits")
 	assert.Equal(t, agreed.RequestRevision, started.Build.RequestRevision)
 	assert.True(t, started.Build.InForce)
-	tests, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	tests, err := cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, flowKeys(storySummaryItems(sampleAdoptedStories())), flowKeys(tests.Stories), "the build holds the agreed Story, not the proposal's")
 
@@ -629,9 +629,9 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	inForce := func() map[string]bool {
 		t.Helper()
 		build := mustStartedBuild(t, cp, agreedUser, "chg")
-		builder, err := cp.GetBuilderAssignment(agreedBuilder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+		builder, err := cp.GetBuilderAssignment(agreedBuilder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 		require.NoError(t, err)
-		tests, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+		tests, err := cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		return map[string]bool{"build": build.InForce, "builder": builder.InForce, "test writer": tests.InForce}
 	}
@@ -640,7 +640,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 	}
 	assert.Equal(t, all(true), inForce(), "a waiting proposal leaves the build in force")
 
-	_, err = cp.DeclineRevision(agreedUser, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
+	_, err = cp.DeclineRevision(agreedUser, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, all(true), inForce(), "declining leaves the build in force")
 
@@ -656,7 +656,7 @@ func TestBuildsFollowTheAgreedRevision(t *testing.T) {
 // waiting proposal's revision.
 func TestRevisionDescriptionsSayTheAgreedChangeStaysInForce(t *testing.T) {
 	cp := newControlPlane(t, Options{})
-	tools, err := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil).ToolsList(t.Context(), &genmcpadapter.ToolsListPayload{})
+	tools, err := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil).ToolsList(t.Context(), &genmcpadapter.ToolsListPayload{})
 	require.NoError(t, err)
 	descriptions := map[string]string{}
 	for _, tool := range tools.Tools {
@@ -685,10 +685,10 @@ func TestRevisionDescriptionsSayTheAgreedChangeStaysInForce(t *testing.T) {
 // user, returning the confirmed card.
 // agreeChange confirms a legacy stored-card consumer fixture, without claiming
 // the public proposal producer read or evaluated a workspace.
-func agreeChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
+func agreeChange(t *testing.T, cp *ControlPlane, changeID string) *genhighbay.ChangeCardResult {
 	t.Helper()
 	proposed := saveProposedCardFixture(t, cp, agreedOwner, changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion()))
-	confirmed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{changeID + "-ambiguity-01": "with_tax"}, Examples: proposed.Examples,
 	})
@@ -700,9 +700,9 @@ func agreeChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.Chan
 // proposeRevision revises changeID as the guide, naming rev, with summary and
 // one open question, keeping the first example of the revision rev names; it
 // returns the change.
-func proposeRevision(t *testing.T, cp *ControlPlane, changeID, rev, summary string) *gensurla.ChangeCardResult {
+func proposeRevision(t *testing.T, cp *ControlPlane, changeID, rev, summary string) *genhighbay.ChangeCardResult {
 	t.Helper()
-	change, err := cp.GetChange(agreedGuide, &gensurla.GetChangePayload{ChangeID: changeID})
+	change, err := cp.GetChange(agreedGuide, &genhighbay.GetChangePayload{ChangeID: changeID})
 	require.NoError(t, err)
 	examples := change.Examples
 	if change.ProposedRevision != nil && change.ProposedRevision.RequestRevision == rev {
@@ -715,14 +715,14 @@ func proposeRevision(t *testing.T, cp *ControlPlane, changeID, rev, summary stri
 
 // revisionPayload is a revision of changeID naming rev with summary, one open
 // question, and the example kept kept.
-func revisionPayload(changeID, rev, summary, kept string) *gensurla.ReviseChangePayload {
-	return &gensurla.ReviseChangePayload{
+func revisionPayload(changeID, rev, summary, kept string) *genhighbay.ReviseChangePayload {
+	return &genhighbay.ReviseChangePayload{
 		ChangeID: changeID, RequestRevision: rev, Prompt: summary,
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{refundTaxQuestion()},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{refundTaxQuestion()},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &kept, Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -733,9 +733,9 @@ func revisionPayload(changeID, rev, summary, kept string) *gensurla.ReviseChange
 }
 
 // adoptProposal confirms proposal as the user, answering its one question.
-func adoptProposal(t *testing.T, cp *ControlPlane, changeID string, proposal *gensurla.ProposedRevisionItem) *gensurla.ChangeCardResult {
+func adoptProposal(t *testing.T, cp *ControlPlane, changeID string, proposal *genhighbay.ProposedRevisionItem) *genhighbay.ChangeCardResult {
 	t.Helper()
-	adopted, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	adopted, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposal.RequestRevision,
 		Answers: map[string]string{changeID + "-ambiguity-01": "with_tax"}, Examples: proposal.Examples,
 	})
@@ -744,8 +744,8 @@ func adoptProposal(t *testing.T, cp *ControlPlane, changeID string, proposal *ge
 }
 
 // refundTaxQuestion is the open question these tests' changes ask.
-func refundTaxQuestion() *gensurla.CP1AnalysisAmbiguity {
-	return &gensurla.CP1AnalysisAmbiguity{Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"}}
+func refundTaxQuestion() *genhighbay.CP1AnalysisAmbiguity {
+	return &genhighbay.CP1AnalysisAmbiguity{Question: "Does the limit include tax?", Options: []string{"with_tax", "without_tax"}}
 }
 
 // agreedReportSpec is the report specification these tests assemble.
@@ -787,7 +787,7 @@ func loadChange(t *testing.T, cp *ControlPlane, changeID string) storedChangeCar
 }
 
 // flowKeys lists the flow keys of stories in order.
-func flowKeys(stories []*gensurla.StorySummaryItem) []string {
+func flowKeys(stories []*genhighbay.StorySummaryItem) []string {
 	keys := []string{}
 	for _, story := range stories {
 		for _, flow := range story.Flows {

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -298,7 +298,7 @@ func newDraftUpdateFixtureWith(t *testing.T, opts Options, base, initial, draft 
 }
 
 // update calls the real public owner and returns its result without evaluation.
-func (f *draftUpdateFixture) update() *gensurla.DraftUpdateResult {
+func (f *draftUpdateFixture) update() *genhighbay.DraftUpdateResult {
 	f.t.Helper()
 	r, err := f.cp.UpdateDraft(asCaller("alice@example.com", CallerGuide))
 	require.NoError(f.t, err)
@@ -441,7 +441,7 @@ func (f *draftUpdateFixture) stop(after bool) {
 	require.NoError(f.t, err)
 	project, err := readDraftUpdateFiles(f.dir, projectRoot)
 	require.NoError(f.t, err)
-	updates, err := f.cp.planDraftUpdates(f.t.Context(), f.dir, f.head(), list, draft, project, &gensurla.DraftUpdateResult{})
+	updates, err := f.cp.planDraftUpdates(f.t.Context(), f.dir, f.head(), list, draft, project, &genhighbay.DraftUpdateResult{})
 	require.NoError(f.t, err)
 	require.NotEmpty(f.t, updates)
 	u := updates[0]

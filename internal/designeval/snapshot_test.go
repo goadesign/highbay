@@ -6,7 +6,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ var _ = Service("orders", func() {
 func TestValidatePathRejectsPathsOutsideTheModuleContract(t *testing.T) {
 	for _, name := range []string{
 		"", "/etc/passwd", "../x.go", "design/../../x.go", "./design/a.go", "design//a.go", `design\a.go`,
-		"surla_designeval/main.go", "surla_designeval", "sub/go.mod", "sub/go.sum", "design/notes.txt", "design/",
+		"highbay_designeval/main.go", "highbay_designeval", "sub/go.mod", "sub/go.sum", "design/notes.txt", "design/",
 	} {
 		assert.Error(t, validatePath(name), "%q must be rejected", name)
 	}

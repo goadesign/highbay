@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -145,7 +145,7 @@ func TestProposedRevisionMetadataIsCheckedOnLoad(t *testing.T) {
 	next := nextMetadataRevision(t, record, "b")
 	_, err := cp.saveRevision(trace.SpanFromContext(t.Context()),
 		Principal{ID: "alice@example.com", Kind: CallerGuide},
-		&gensurla.ReviseChangePayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision}, next)
+		&genhighbay.ReviseChangePayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision}, next)
 	require.NoError(t, err)
 	raw, err := os.ReadFile(cp.cards.path("chg"))
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestRevisionMetadataSurvivesMechanicalTransitions(t *testing.T) {
 			record.architecture, record.goMod, record.madeFrom = metadataFixture("a")
 			saveMetadataRecord(t, cp, record)
 			if confirmed {
-				_, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+				_, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 					ChangeID: "chg", RequestRevision: card.RequestRevision, Examples: card.Examples,
 					Answers: map[string]string{},
 				})
@@ -223,7 +223,7 @@ func TestRevisionMetadataSurvivesMechanicalTransitions(t *testing.T) {
 			cp.draftMu.Unlock()
 			require.NoError(t, err)
 			selectedOperation := "selected-refresh-operation"
-			payload := &gensurla.ReviseChangePayload{
+			payload := &genhighbay.ReviseChangePayload{
 				ChangeID: "chg", RequestRevision: record.card.RequestRevision, StoryRefreshOpID: &selectedOperation,
 			}
 			_, err = cp.saveRevision(trace.SpanFromContext(t.Context()),
@@ -238,7 +238,7 @@ func TestRevisionMetadataSurvivesMechanicalTransitions(t *testing.T) {
 				return
 			}
 			assert.Equal(t, record.architecture, loaded.architecture, "a proposal preserves the agreed snapshot")
-			_, err = cp.DeclineRevision(user, &gensurla.DeclineRevisionPayload{
+			_, err = cp.DeclineRevision(user, &genhighbay.DeclineRevisionPayload{
 				ChangeID: "chg", RequestRevision: next.card.RequestRevision,
 			})
 			require.NoError(t, err)
@@ -250,7 +250,7 @@ func TestRevisionMetadataSurvivesMechanicalTransitions(t *testing.T) {
 			_, err = cp.saveRevision(trace.SpanFromContext(t.Context()),
 				Principal{ID: "alice@example.com", Kind: CallerGuide}, payload, next)
 			require.NoError(t, err)
-			_, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+			_, err = cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 				ChangeID: "chg", RequestRevision: next.card.RequestRevision, Examples: next.card.Examples,
 				Answers: map[string]string{},
 			})
@@ -305,17 +305,17 @@ func TestReviseWithoutRefreshKeepsTheCompleteSavedSnapshot(t *testing.T) {
 					require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.mod"),
 						[]byte("module example.com/changed\n\ngo 1.27.3\n"), 0o600))
 					prior := original.card.Examples[0]
-					revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
+					revised, err := cp.ReviseChange(guide, &genhighbay.ReviseChangePayload{
 						ChangeID: "chg", RequestRevision: original.card.RequestRevision,
 						Prompt:       "Keep refunds bounded and preserve the agreed snapshot",
 						RevisionNote: "Revise the change.",
-						Analysis: &gensurla.CP1RevisionAnalysis{
+						Analysis: &genhighbay.CP1RevisionAnalysis{
 							Summary: "Keep refunds bounded and preserve the agreed snapshot",
-							Examples: []*gensurla.CP1RevisionAnalysisExample{{
+							Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 								PriorID: &prior.ID, Scenario: prior.Scenario, InputSummary: prior.InputSummary,
 								ExpectedOutcome: prior.ExpectedOutcome, VerificationKind: prior.VerificationKind,
 							}},
-							Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
+							Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
 							PreservedBehaviors: original.card.PreservedBehaviors,
 						},
 					})

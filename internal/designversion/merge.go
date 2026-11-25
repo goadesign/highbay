@@ -1,4 +1,4 @@
-// This file merges a design change made outside Surla into the draft's text
+// This file merges a design change made outside Highbay into the draft's text
 // of one design file, with git merge-file.
 package designversion
 
@@ -50,7 +50,7 @@ const (
 // refuses, such as one holding a NUL byte, and any failure to run git are
 // errors, with merged empty.
 func MergeFile(ctx context.Context, draft, base, project string) (merged string, conflict bool, err error) {
-	dir, err := os.MkdirTemp("", "surla-merge-*")
+	dir, err := os.MkdirTemp("", "highbay-merge-*")
 	if err != nil {
 		return "", false, fmt.Errorf("merge a design file: %w", err)
 	}

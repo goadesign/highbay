@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 )
 
 // agreementViewFacts contains geometry and interaction observations from the
@@ -54,17 +54,17 @@ func TestAgreementSummaryAtDesktopAndPhoneWidths(t *testing.T) {
 		ID: vp.state.Record.Owner, CallerID: "agreement-layout-guide", Kind: controlplane.CallerGuide,
 	})
 	summary := strings.Repeat("Customers request a refund and receive a recorded decision. Managers review requests that exceed the agreed limit. ", 18) + "The original summary remains complete."
-	card, err := vp.cp.Load().ProposeChange(guide, &gensurla.ProposeChangePayload{
+	card, err := vp.cp.Load().ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "agreement-layout", Prompt: "Route refunds to a manager.",
-		Analysis: &gensurla.CP1Analysis{Summary: summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1AnalysisExample{{Scenario: "Refund", InputSummary: "$40",
+		Analysis: &genhighbay.CP1Analysis{Summary: summary,
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1AnalysisExample{{Scenario: "Refund", InputSummary: "$40",
 				ExpectedOutcome: "Approved", VerificationKind: "deterministic"}},
 			PreservedBehaviors: []string{},
 		},
 	})
 	require.NoError(t, err)
-	capture := os.Getenv("SURLA_TEST_AGREEMENT_CAPTURE_DIR")
+	capture := os.Getenv("HIGHBAY_TEST_AGREEMENT_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
@@ -92,7 +92,7 @@ func TestAgreementSummaryAtDesktopAndPhoneWidths(t *testing.T) {
 		assert.True(t, view.DraftPreserved)
 		t.Logf("agreement %s: %+v", view.Name, view)
 	}
-	saved, err := vp.cp.Load().GetChange(guide, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	saved, err := vp.cp.Load().GetChange(guide, &genhighbay.GetChangePayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, summary, saved.Summary)
 	assert.Equal(t, "Approved", saved.Examples[0].ExpectedOutcome,

@@ -1,9 +1,9 @@
-module github.com/goadesign/surla/examples/orders-eval
+module github.com/goadesign/highbay/examples/orders-eval
 
 go 1.27.3
 
 require (
-	github.com/goadesign/surla v0.0.0
+	github.com/goadesign/highbay v0.0.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/stretchr/testify v1.12.1
 	goa.design/goa-ai v0.90.1-0.20261111075239-0114fb9d40d3
@@ -46,4 +46,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/goadesign/surla => ../..
+replace github.com/goadesign/highbay => ../..

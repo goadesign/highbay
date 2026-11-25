@@ -252,10 +252,10 @@ jobs:
         run: |
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
           npm --prefix ui/checkpoint run typecheck </dev/null
-          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design </dev/null
-          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design/targetprompt -o internal/targetprompt </dev/null
-          (cd examples/orders && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/examples/orders/design) </dev/null
-          (cd examples/orders-eval && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/examples/orders-eval/design) </dev/null
+          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design </dev/null
+          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design/targetprompt -o internal/targetprompt </dev/null
+          (cd examples/orders && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/examples/orders/design) </dev/null
+          (cd examples/orders-eval && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/examples/orders-eval/design) </dev/null
           node ui/checkpoint/build.mjs --check </dev/null
           if [ -n "$(git status --porcelain)" ]; then
             echo "Generated files differ from the committed ones:"
@@ -289,7 +289,7 @@ jobs:
         run: docker version
       - name: Run the dependency-repair journey
         run: |
-          go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null \
+          go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/hbay </dev/null \
             | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
       - name: Run the container owner's execution and lifecycle contracts
         # These tagged roots exercise the real engine, not the check helper's
@@ -326,7 +326,7 @@ jobs:
         # A missing browser is setup failure, rather than skipped native proof.
         run: |
           google-chrome --version </dev/null
-          echo "SURLA_TEST_BROWSER=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          echo "HIGHBAY_TEST_BROWSER=$(command -v google-chrome)" >> "$GITHUB_ENV"
       - name: Install the pinned headless Herdr Core
         run: |
           herdr_archive="$RUNNER_TEMP/herdr-core-linux-x86_64.tar.gz"
@@ -352,7 +352,7 @@ jobs:
           command -v hc
           hc --version </dev/null
           go test -race -count=1 -timeout 5m -json -tags herdr \
-            -run '^TestHC$' ./cmd/surla </dev/null \
+            -run '^TestHC$' ./cmd/hbay </dev/null \
               | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
 
 
@@ -380,7 +380,7 @@ jobs:
           - suite: generation
             module: .
             # Ordinary CLI tests belong to full-root; journey owns its tagged root.
-            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|SurlaInitBlankProjectCommitsAndRegeneratesUnchanged|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/surla
+            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|HighbayInitBlankProjectCommitsAndRegeneratesUnchanged|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/hbay
             test_timeout: 60m
             job_timeout: 70
           - suite: journey
@@ -395,7 +395,7 @@ jobs:
             # Its package alarm outlasts the test's own 32-minute wait for one
             # verification run by 8 minutes, so a hung run ends with the
             # test's message when the steps before it took less than that.
-            args: -tags=e2e -run '^TestWholeJourneyThroughTheProjectServer$' ./cmd/surla
+            args: -tags=e2e -run '^TestWholeJourneyThroughTheProjectServer$' ./cmd/hbay
             test_timeout: 40m
             job_timeout: 50
           - suite: starter

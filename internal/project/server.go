@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
-	genproject "github.com/goadesign/surla/gen/project"
-	"github.com/goadesign/surla/internal/controlplane"
+	genprojectserver "github.com/goadesign/highbay/gen/http/project/server"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	goahttp "goa.design/goa/v3/http"
 )
@@ -115,7 +115,7 @@ func (s *Server) RevokeManagement() error {
 func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
 	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || token == "" {
-		return controlplane.Principal{}, errors.New("open the project's views with surla")
+		return controlplane.Principal{}, errors.New("open the project's views with hbay")
 	}
 	owner := s.state.Record.Owner
 	s.mu.Lock()
@@ -150,7 +150,7 @@ func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
 			return controlplane.Principal{ID: owner, CallerID: id, Kind: controlplane.CallerKind(role.Role)}, nil
 		}
 	}
-	return controlplane.Principal{}, errors.New("session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion")
+	return controlplane.Principal{}, errors.New("session or credential is no longer valid; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")
 }
 
 // Handler mounts the generated project contract and guards every page, HTTP, and MCP response.
@@ -174,19 +174,19 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
 			r.Header.Get("Sec-Fetch-Dest") == "document"
 		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
-			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion")
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/project/") {
 			if r.URL.Path == "/project/browser-session" && r.Method == http.MethodPost {
 				if site != "same-origin" {
-					writeAccessError(w, r, http.StatusForbidden, "forbidden", "open the project's views with surla")
+					writeAccessError(w, r, http.StatusForbidden, "forbidden", "open the project's views with hbay")
 					return
 				}
 			} else {
 				principal, err := s.Authenticate(r)
 				if err != nil {
-					writeAccessError(w, r, http.StatusUnauthorized, "unauthorized", "open the project's views with surla")
+					writeAccessError(w, r, http.StatusUnauthorized, "unauthorized", "open the project's views with hbay")
 					return
 				}
 				r = r.WithContext(controlplane.WithPrincipal(r.Context(), principal))
@@ -279,7 +279,7 @@ func (s *Server) OpenViews(ctx context.Context) error {
 	}
 	if err := s.openViews(ctx, link.URL); err != nil {
 		// The command error may contain the link, which grants user authority.
-		return errors.New("the local browser could not open Surla views")
+		return errors.New("the local browser could not open Highbay views")
 	}
 	return nil
 }
@@ -298,7 +298,7 @@ func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBr
 	exists := link != ""
 	if !exists || !s.now().Before(expires) {
 		delete(s.links, link)
-		return nil, genproject.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with surla"))
+		return nil, genproject.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with hbay"))
 	}
 	token, err := randomCredential()
 	if err != nil {
@@ -320,7 +320,7 @@ func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBr
 func managementOnly(ctx context.Context, operation string) error {
 	p, ok := controlplane.PrincipalFromContext(ctx)
 	if !ok || !controlplane.OperationAllowed(p.Kind, operation) {
-		return genproject.MakeForbidden(errors.New("this operation requires the surla command's management credential"))
+		return genproject.MakeForbidden(errors.New("this operation requires the hbay command's management credential"))
 	}
 	return nil
 }
@@ -394,16 +394,16 @@ func (s *Server) registerAgent(handle string, agent agentRecord) (string, error)
 func readBuildIdentity() (build string, err error) {
 	self, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("find the surla executable: %w", err)
+		return "", fmt.Errorf("find the hbay executable: %w", err)
 	}
 	f, err := os.Open(self)
 	if err != nil {
-		return "", fmt.Errorf("read the surla executable: %w", err)
+		return "", fmt.Errorf("read the hbay executable: %w", err)
 	}
 	defer func() { err = errors.Join(err, f.Close()) }()
 	sum := sha256.New()
 	if _, err := io.Copy(sum, f); err != nil {
-		return "", fmt.Errorf("read the surla executable %s: %w", self, err)
+		return "", fmt.Errorf("read the hbay executable %s: %w", self, err)
 	}
 	return hex.EncodeToString(sum.Sum(nil)), nil
 }

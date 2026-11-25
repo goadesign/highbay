@@ -1,11 +1,11 @@
-// Package candidate builds and runs the code Surla's coding agents write.
+// Package candidate builds and runs the code Highbay's coding agents write.
 // Build, BuildTest and BuildModule compile a module offline to a staging path
 // and publish the result as a regular file. Pin copies a binary into a read-only,
 // digest-named store, and Exec, Run and Output start only a pinned binary
 // whose bytes still match its digest, with an explicit environment and its own
 // state directory as working directory, HOME and TMPDIR.
 //
-// These are ordinary processes of the user who runs Surla: they can read and
+// These are ordinary processes of the user who runs Highbay: they can read and
 // write the user's files, use the network and start children; nothing here
 // confines them. The caller decides which process group owns them: Build,
 // BuildTest, BuildModule, Run and Output run the prepared command with the
@@ -28,7 +28,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 	"goa.design/goa-ai/eval"
 )
 
@@ -216,8 +216,8 @@ func (a Artifact) Digest() string {
 
 // Evidence returns the record an evaluator suite attaches to a scenario result
 // to state that the scenario ran this pinned binary. name is the binary's name
-// in the verification plan: the name in `surla verify -binary name=package`,
-// which the suite receives as `--artifact name=path`. surla verify accepts a
+// in the verification plan: the name in `hbay verify -binary name=package`,
+// which the suite receives as `--artifact name=path`. hbay verify accepts a
 // scenario only when its result carries one such record for every bound
 // binary, with the digest the verifier measured. For example, the binary bound
 // as orders with digest 9f2c… yields
@@ -346,7 +346,7 @@ func Build(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) error
 }
 
 // BuildModule compiles a standalone module offline with GOWORK=off, ignoring
-// go.work files both inside the module and elsewhere in SourceDir. Surla's
+// go.work files both inside the module and elsewhere in SourceDir. Highbay's
 // report checker and written-test verification use it so the module's go.mod
 // and go.sum own its dependencies. SourceDir remains the whole checkout, so
 // local replacements can still read sibling modules. Path validation, fixed
@@ -407,7 +407,7 @@ func BuildTest(ctx context.Context, spec BuildSpec, run func(*exec.Cmd) error) (
 	case !errors.Is(err, os.ErrNotExist):
 		return false, fmt.Errorf("inspect test binary path %s: %w", out, err)
 	}
-	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".highbay-stage-*")
 	if err != nil {
 		return false, fmt.Errorf("create test build staging directory: %w", err)
 	}
@@ -598,7 +598,7 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 	srcFile := os.NewFile(uintptr(fd), stagedOut)
 	defer srcFile.Close()
 
-	tmp, err := os.CreateTemp(filepath.Dir(outPath), ".surla-out-*")
+	tmp, err := os.CreateTemp(filepath.Dir(outPath), ".highbay-out-*")
 	if err != nil {
 		return false, fmt.Errorf("create output binary %s: %w", outPath, err)
 	}
@@ -631,7 +631,7 @@ func publishStagedOutputAllowMissing(stagedOut, outPath string, allowMissing boo
 // build owns the shared compile, staging and publication of Build and
 // BuildModule. goWork is the fixed-off or checkout-selected value of its entry.
 func (b resolvedBuild) build(ctx context.Context, goWork string, run func(*exec.Cmd) error) error {
-	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".surla-stage-*")
+	stageDir, err := os.MkdirTemp(b.spec.WorkDir, ".highbay-stage-*")
 	if err != nil {
 		return fmt.Errorf("create build staging directory: %w", err)
 	}
@@ -651,7 +651,7 @@ func (b resolvedBuild) build(ctx context.Context, goWork string, run func(*exec.
 // build log" error when LogFile cannot be opened, or an error when opening
 // LogFile resolves to the same file as spec.Out. The fixed environment keeps
 // the build offline (GOPROXY=off), on the selected toolchain (GOTOOLCHAIN=local),
-// unable to change go.mod (-mod=readonly), with cgo off as Surla's builds have
+// unable to change go.mod (-mod=readonly), with cgo off as Highbay's builds have
 // always had it (turning it on would link C code into binaries that never had
 // it), with the entry-selected workspace or fixed off for BuildModule, and
 // with TMPDIR in WorkDir, GOCACHE in BuildCacheDir and no HOME, so os.UserConfigDir leaves Go
@@ -683,7 +683,7 @@ func (b resolvedBuild) goRun(
 		}
 		return aliasErr
 	}
-	// Surla owns the cache directory's private mode, including recreation
+	// Highbay owns the cache directory's private mode, including recreation
 	// after an idle deletion. Go owns only its entries and maintenance.
 	if err := os.MkdirAll(spec.BuildCacheDir, 0o700); err != nil {
 		cacheErr := fmt.Errorf("create build cache directory: %w", err)

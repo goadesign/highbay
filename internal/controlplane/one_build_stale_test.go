@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 	x := buildableChange(t, cp, "x")
 	y := buildableChange(t, cp, "y")
 	user := asCaller("alice@example.com", CallerUser)
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: x.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "x", RequestRevision: x.RequestRevision})
 	require.NoError(t, err)
 	var old buildFile
 	func() {
@@ -54,15 +54,15 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 		run  func(t *testing.T)
 	}{
 		{name: "builder read", run: func(t *testing.T) {
-			_, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "x"})
+			_, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &genhighbay.GetBuilderAssignmentPayload{ChangeID: "x"})
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "test writer read", run: func(t *testing.T) {
-			_, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "x"})
+			_, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "x"})
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "test report", run: func(t *testing.T) {
-			_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{ChangeID: "x", RequestRevision: x.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+			_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{ChangeID: "x", RequestRevision: x.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 			assertRefused(t, err, "not_found")
 		}},
 		{name: "report still belongs", run: func(t *testing.T) {
@@ -90,9 +90,9 @@ func TestOneBuildLateConsumersPreserveTheNewOpenRecord(t *testing.T) {
 			assert.Equal(t, before, readBuildFile(t, cp, "y"))
 		})
 	}
-	oldRead, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "x"})
+	oldRead, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "x"})
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.BuildKindNotStarted, oldRead.Build.Kind())
+	assert.Equal(t, genhighbay.BuildKindNotStarted, oldRead.Build.Kind())
 	assignments, err := cp.ListBuilderAssignments(asCaller("alice@example.com", CallerBuilder))
 	require.NoError(t, err)
 	require.Len(t, assignments.Assignments, 1)
@@ -106,9 +106,9 @@ func TestOneBuildLeavesLegacyPerChangeFilesUnread(t *testing.T) {
 	card := confirmedChange(t, cp, "old")
 	legacy := filepath.Join(cp.cards.dir, fmt.Sprintf("%x.build.json", sha256.Sum256([]byte("old"))))
 	require.NoError(t, os.WriteFile(legacy, []byte("{"), 0o600))
-	read, err := cp.GetBuild(asCaller("alice@example.com", CallerUser), &gensurla.GetBuildPayload{ChangeID: "old"})
+	read, err := cp.GetBuild(asCaller("alice@example.com", CallerUser), &genhighbay.GetBuildPayload{ChangeID: "old"})
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.BuildKindNotStarted, read.Build.Kind())
+	assert.Equal(t, genhighbay.BuildKindNotStarted, read.Build.Kind())
 	listed, err := cp.ListChanges(asCaller("alice@example.com", CallerGuide))
 	require.NoError(t, err)
 	require.Len(t, listed.Changes, 1)

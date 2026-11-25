@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/designversion"
 	"golang.org/x/sys/unix"
 )
 
@@ -34,15 +34,15 @@ type (
 		Stories      []designeval.StorySummary `json:"stories"`
 		DesignSource string                    `json:"design_source"`
 		// Answers, Examples and PreservedBehaviors are the terms tests must respect.
-		Answers            []*gensurla.ConfirmedAnswer `json:"answers"`
-		Examples           []*gensurla.ExampleItem     `json:"examples"`
-		PreservedBehaviors []string                    `json:"preserved_behaviors"`
+		Answers            []*genhighbay.ConfirmedAnswer `json:"answers"`
+		Examples           []*genhighbay.ExampleItem     `json:"examples"`
+		PreservedBehaviors []string                      `json:"preserved_behaviors"`
 		// Builder and TestWriter retain assignment reads and the current verdict.
 		Builder    builderAssignment    `json:"builder"`
 		TestWriter testWriterAssignment `json:"test_writer"`
 		// ReportNumber distinguishes test reports within this start.
 		ReportNumber int `json:"report_number"`
-		// Number names this build's surla/build-N and surla/tests-N branches.
+		// Number names this build's highbay/build-N and highbay/tests-N branches.
 		Number int `json:"number"`
 		// Base is the project commit from which this build's branches begin.
 		Base string `json:"base"`
@@ -65,7 +65,7 @@ type (
 		Commit string `json:"commit"`
 		// CoverageStatements belong to this report, retained for correction
 		// and exposed to the user as accepted only in the accepted state.
-		CoverageStatements []*gensurla.TestCoverageStatement `json:"coverage_statements,omitempty"`
+		CoverageStatements []*genhighbay.TestCoverageStatement `json:"coverage_statements,omitempty"`
 		// Reason and Step are populated exactly when State is could_not_run.
 		Reason string `json:"reason,omitzero"`
 		Step   string `json:"step,omitzero"`

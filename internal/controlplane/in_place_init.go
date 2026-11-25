@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/renameat"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/renameat"
 )
 
 // workspaceEntry records the identity of one generated entry across a move.
@@ -62,7 +62,7 @@ func (c *ControlPlane) prepareInPlaceRecord(
 		// alias on a case-insensitive volume is treated as a collision.
 		err := unix.Fstatat(workspaceFD, name, &st, unix.AT_SYMLINK_NOFOLLOW)
 		if err == nil {
-			return workspaceFile{}, gensurla.MakeConflict(fmt.Errorf(
+			return workspaceFile{}, genhighbay.MakeConflict(fmt.Errorf(
 				"workspace %s already contains generated entry %q", workspace, name,
 			))
 		}
@@ -279,7 +279,7 @@ func checkInPlaceNames(dirFD int, dir string, preserved []string, manifest []wor
 		if slices.Contains(preserved, name) || slices.ContainsFunc(manifest, func(e workspaceEntry) bool { return e.Name == name }) {
 			continue
 		}
-		return gensurla.MakeConflict(fmt.Errorf("directory %s already contains %q; in-place initialization would conflict", dir, name))
+		return genhighbay.MakeConflict(fmt.Errorf("directory %s already contains %q; in-place initialization would conflict", dir, name))
 	}
 	return nil
 }

@@ -3,7 +3,7 @@
 // prompts service
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design/targetprompt -o
+// $ goa gen github.com/goadesign/highbay/design/targetprompt -o
 // internal/targetprompt
 
 package prompts
@@ -15,9 +15,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Prompt text a live target lets Surla replace. Each call replaces the text of
-// one prompt the target registered, for every caller of that target process,
-// until the process exits.
+// Prompt text a live target lets Highbay replace. Each call replaces the text
+// of one prompt the target registered, for every caller of that target
+// process, until the process exits.
 type Service interface {
 	// Replace the text of a registered prompt. The target renders the template
 	// with the prompt's registered spec before it saves it, so text that does not

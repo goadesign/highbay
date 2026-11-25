@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,7 +87,7 @@ func TestCompareKeepsAnOlderTargetsGoa(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	// Starters created before Surla required goa 35e789e8 pin goa 3e08; their
+	// Starters created before Highbay required goa 35e789e8 pin goa 3e08; their
 	// previews and diffs keep evaluating with that version.
 	old := testmodule.Snapshot(t, testmodule.StarterPreCompleteSourcesGoaVersion, grpcResultDesign)
 	updated := testmodule.Replace(t, old, "design/design.go", `Field(1, "value", String)`, `Field(1, "amount", String)`)

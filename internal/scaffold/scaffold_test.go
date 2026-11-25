@@ -19,13 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/gitenv"
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/gitenv"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
-// published is a Surla version that exists on the module proxy.
-const published = testmodule.PublishedSurlaVersion
+// published is a Highbay version that exists on the module proxy.
+const published = testmodule.PublishedHighbayVersion
 
 func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	for v, want := range map[string]bool{
@@ -45,23 +45,23 @@ func TestValidVersionAcceptsOnlyExactVersions(t *testing.T) {
 	}
 }
 
-func TestSurlaVersionReadsSurlaModuleFromStandaloneAndEmbeddedBuildInfo(t *testing.T) {
-	assert.Equal(t, "", SurlaVersion(nil))
-	assert.Equal(t, published, SurlaVersion(&debug.BuildInfo{
+func TestHighbayVersionReadsHighbayModuleFromStandaloneAndEmbeddedBuildInfo(t *testing.T) {
+	assert.Equal(t, "", HighbayVersion(nil))
+	assert.Equal(t, published, HighbayVersion(&debug.BuildInfo{
 		Main: debug.Module{
-			Path:    surlaModule,
+			Path:    highbayModule,
 			Version: published,
 		},
 	}))
-	assert.Equal(t, "", SurlaVersion(&debug.BuildInfo{
+	assert.Equal(t, "", HighbayVersion(&debug.BuildInfo{
 		Main: debug.Module{
-			Path:    surlaModule,
+			Path:    highbayModule,
 			Version: "(devel)",
 		},
 	}))
 	// Embedded host application counterexample: Main.Version is the host app's
-	// version (v2.4.1), while Surla's version lives in Deps.
-	assert.Equal(t, published, SurlaVersion(&debug.BuildInfo{
+	// version (v2.4.1), while Highbay's version lives in Deps.
+	assert.Equal(t, published, HighbayVersion(&debug.BuildInfo{
 		Main: debug.Module{
 			Path:    "example.com/host-app",
 			Version: "v2.4.1",
@@ -72,37 +72,37 @@ func TestSurlaVersionReadsSurlaModuleFromStandaloneAndEmbeddedBuildInfo(t *testi
 				Version: "v1.0.0",
 			},
 			{
-				Path:    surlaModule,
+				Path:    highbayModule,
 				Version: published,
 			},
 		},
 	}))
-	assert.Equal(t, "", SurlaVersion(&debug.BuildInfo{
+	assert.Equal(t, "", HighbayVersion(&debug.BuildInfo{
 		Main: debug.Module{
 			Path:    "example.com/host-app",
 			Version: "v2.4.1",
 		},
 		Deps: []*debug.Module{
 			{
-				Path:    surlaModule,
+				Path:    highbayModule,
 				Version: published,
 				Replace: &debug.Module{
-					Path: "../surla",
+					Path: "../highbay",
 				},
 			},
 		},
 	}))
-	assert.Equal(t, "v0.2.0", SurlaVersion(&debug.BuildInfo{
+	assert.Equal(t, "v0.2.0", HighbayVersion(&debug.BuildInfo{
 		Main: debug.Module{
 			Path:    "example.com/host-app",
 			Version: "v2.4.1",
 		},
 		Deps: []*debug.Module{
 			{
-				Path:    surlaModule,
+				Path:    highbayModule,
 				Version: "v0.1.0",
 				Replace: &debug.Module{
-					Path:    surlaModule,
+					Path:    highbayModule,
 					Version: "v0.2.0",
 				},
 			},
@@ -136,8 +136,8 @@ func TestLayoutForModulePreservesStarterNames(t *testing.T) {
 	}
 }
 
-func TestNewDataValidatesTheModuleAndReadsSurlasVersions(t *testing.T) {
-	d, err := newData(Options{Module: "example.com/shop", SurlaVersion: published})
+func TestNewDataValidatesTheModuleAndReadsHighbaysVersions(t *testing.T) {
+	d, err := newData(Options{Module: "example.com/shop", HighbayVersion: published})
 	require.NoError(t, err)
 	assert.Equal(t, "shop", d.Name)
 	assert.True(t, strings.HasPrefix(d.GoaVersion, "v3."), d.GoaVersion)
@@ -155,7 +155,7 @@ func TestNewDataValidatesTheModuleAndReadsSurlasVersions(t *testing.T) {
 		{"not a path", published, "-module"},
 		{"example.com/shop", "latest", "not an exact module version"},
 	} {
-		_, err := newData(Options{Module: tc.module, SurlaVersion: tc.version})
+		_, err := newData(Options{Module: tc.module, HighbayVersion: tc.version})
 		assert.ErrorContains(t, err, tc.wantErr, tc.module+" "+tc.version)
 	}
 }
@@ -171,7 +171,7 @@ func TestInitRefusesAnExistingDirectory(t *testing.T) {
 	require.NoError(t, os.Symlink(empty, link))
 	for _, dir := range []string{empty, full, link} {
 		gen := &fakeGenerator{}
-		_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, failRunner(t), gen)
+		_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published}, failRunner(t), gen)
 		require.ErrorContains(t, err, "already exists", dir)
 		assert.ErrorContains(t, err, "-dir "+filepath.Join(dir, "shop"), dir)
 		assert.ErrorContains(t, err, "change to the parent directory and remove an empty directory first", dir)
@@ -200,7 +200,7 @@ func TestInitLeavesNothingWhenAStepFails(t *testing.T) {
 		}
 		return fakeGo(moduleDir, args)
 	}
-	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, run, &fakeGenerator{pkgs: []string{"shop"}})
+	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published}, run, &fakeGenerator{pkgs: []string{"shop"}})
 	var step *StepError
 	require.ErrorAs(t, err, &step)
 	assert.Equal(t, []string{"go", "vet", "./..."}, step.Args)
@@ -226,7 +226,7 @@ func TestInitNeverReplacesADirectoryCreatedMeanwhile(t *testing.T) {
 		}
 		return fakeGo(moduleDir, args)
 	}
-	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, run, &fakeGenerator{pkgs: []string{"shop"}})
+	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published}, run, &fakeGenerator{pkgs: []string{"shop"}})
 	require.ErrorContains(t, err, "move project into")
 	assertOnly(t, parent, "shop")
 	assertOnly(t, dir, "late.txt")
@@ -240,7 +240,7 @@ func TestInitKeepsStagingWhenProcessesMayStillRun(t *testing.T) {
 	}
 	work := t.TempDir()
 	gen := &fakeGenerator{}
-	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: work, Module: "example.com/shop", SurlaVersion: published}, run, gen)
+	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: work, Module: "example.com/shop", HighbayVersion: published}, run, gen)
 	assert.Equal(t, 1, gen.closes)
 	var step *StepError
 	require.ErrorAs(t, err, &step)
@@ -251,7 +251,7 @@ func TestInitKeepsStagingWhenProcessesMayStillRun(t *testing.T) {
 	entries, err := os.ReadDir(work)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
-	assert.True(t, strings.HasPrefix(entries[0].Name(), ".surla-init-"), entries[0].Name())
+	assert.True(t, strings.HasPrefix(entries[0].Name(), ".highbay-init-"), entries[0].Name())
 	assert.DirExists(t, filepath.Dir(step.Log), "logs remain while processes may still write them")
 	assertOnly(t, parent)
 }
@@ -265,7 +265,7 @@ func TestInitStopsAndCleansUpWhenCanceled(t *testing.T) {
 		return RunCommand(ctx, dir, logPath, "sleep", "30")
 	}
 	start := time.Now()
-	_, err := Init(ctx, Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, run, &fakeGenerator{})
+	_, err := Init(ctx, Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published}, run, &fakeGenerator{})
 	require.Error(t, err)
 	assert.Less(t, time.Since(start), 10*time.Second, "the canceled command's process group is stopped")
 	assertOnly(t, parent)
@@ -283,7 +283,7 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	dir := filepath.Join(parent, "bakery")
 	run := func(_ context.Context, dir, _ string, args ...string) error { return fakeGo(dir, args) }
 	gen := &fakeGenerator{pkgs: []string{"bakery"}}
-	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published}, run, gen)
+	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", HighbayVersion: published}, run, gen)
 	require.NoError(t, err)
 	assert.Equal(t, "bakery", name)
 	require.Len(t, gen.inputs, 2, "one generation per module")
@@ -329,7 +329,7 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	assert.Contains(t, readme, "`starts_and_listens`", "the README names the one scenario")
 	assert.Contains(t, readme, "-suite-command ./gen/cmd/bakery-evals")
 	first := between(t, readme, "## Next steps", "For each change:")
-	assertInOrder(t, first, "git commit -m", "\nsurla\n```", "views page")
+	assertInOrder(t, first, "git commit -m", "\nhighbay\n```", "views page")
 	for _, f := range []string{design, read("design/model.go"), read("design/story.go"), main, evalDesign, acceptance, readme} {
 		for _, example := range []string{"price", "Price", "helper", "catalog", "cookie", "model-gateway", "override_prompt"} {
 			assert.NotContains(t, f, example, "the blank project holds nothing of the worked example")
@@ -348,13 +348,13 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	gen := &fakeGenerator{pkgs: []string{"bakery"}, extra: map[string]string{quickstartGuide: "guide\n"}}
-	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published, Example: true}, run, gen)
+	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", HighbayVersion: published, Example: true}, run, gen)
 	require.NoError(t, err)
 	assertOnly(t, tmp)
 	assert.Equal(t, "bakery", name)
 	assert.Equal(t, []string{
 		"go mod tidy", "go mod tidy", "go vet ./...", "go test ./...",
-		"go mod tidy", "go get github.com/goadesign/surla@" + published, "go mod tidy", "go vet ./...", "go test ./...",
+		"go mod tidy", "go get github.com/goadesign/highbay@" + published, "go mod tidy", "go vet ./...", "go test ./...",
 	}, ran, "no command generates code on the host")
 	require.Len(t, gen.inputs, 2, "one generation per module")
 	assert.Equal(t, []string{"design/design.go", "design/model.go", "design/story.go", "go.mod", "go.sum"}, slices.Sorted(maps.Keys(gen.inputs[0])))
@@ -425,7 +425,7 @@ func TestInitImportsThePackageGoaGenerated(t *testing.T) {
 	run := func(_ context.Context, moduleDir, _ string, args ...string) error {
 		return fakeGo(moduleDir, args)
 	}
-	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/errors", SurlaVersion: published, Example: true}, run, &fakeGenerator{pkgs: []string{"errors_"}})
+	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/errors", HighbayVersion: published, Example: true}, run, &fakeGenerator{pkgs: []string{"errors_"}})
 	require.NoError(t, err)
 	assert.Equal(t, "errors", name)
 	main, err := os.ReadFile(filepath.Join(dir, "cmd", "errors", "main.go"))
@@ -458,7 +458,7 @@ func TestInitRequiresExactlyOneGeneratedService(t *testing.T) {
 			run := func(_ context.Context, moduleDir, _ string, args ...string) error {
 				return fakeGo(moduleDir, args)
 			}
-			_, err := Init(t.Context(), Options{Dir: filepath.Join(parent, "shop"), WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, run, &fakeGenerator{pkgs: tc.pkgs})
+			_, err := Init(t.Context(), Options{Dir: filepath.Join(parent, "shop"), WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published}, run, &fakeGenerator{pkgs: tc.pkgs})
 			require.ErrorContains(t, err, tc.wantErr)
 			assertOnly(t, parent)
 		})
@@ -498,7 +498,7 @@ func TestInitLeavesNoProjectWhenGenerationFails(t *testing.T) {
 			run := func(_ context.Context, moduleDir, _ string, args ...string) error {
 				return fakeGo(moduleDir, args)
 			}
-			_, err := Init(ctx, Options{Dir: filepath.Join(parent, "shop"), WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, run, tc.gen)
+			_, err := Init(ctx, Options{Dir: filepath.Join(parent, "shop"), WorkDir: t.TempDir(), Module: "example.com/shop", HighbayVersion: published}, run, tc.gen)
 			require.ErrorContains(t, err, tc.wantErr)
 			assertOnly(t, parent)
 			assert.Equal(t, 1, tc.gen.closes)
@@ -507,7 +507,7 @@ func TestInitLeavesNoProjectWhenGenerationFails(t *testing.T) {
 }
 
 // TestInitReadmeFirstRunSnippetsMatchTheProject verifies the example's declared
-// scenarios, a first run that ends by starting surla, the roles in the
+// scenarios, a first run that ends by starting hbay, the roles in the
 // build-before-commit tool journey, private verification reports, and the
 // ignore file.
 func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
@@ -517,7 +517,7 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	}
 	t.Setenv("TMPDIR", t.TempDir())
 	gen := &fakeGenerator{pkgs: []string{"bakery"}, extra: map[string]string{quickstartGuide: "guide\n"}}
-	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published, Example: true}, run, gen)
+	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", HighbayVersion: published, Example: true}, run, gen)
 	require.NoError(t, err)
 	readmeRaw, err := os.ReadFile(filepath.Join(dir, "README.md"))
 	require.NoError(t, err)
@@ -535,12 +535,12 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	assert.Contains(t, readme, "-report-dir \"$REPORT_DIR\" -builder-view")
 	assert.Contains(t, readme, "while `-builder-view` hides holdout scenario names and checks\nin the completed report JSON and summary line (if a run fails before writing a\nreport, `stderr` prints operator setup/execution failure diagnostics).")
 	assert.Contains(t, readme, "planner.ToolFailureProvider")
-	// A project created with surla init is committed and then started with
-	// surla, which opens the views page; the operator's surla verify comes
+	// A project created with hbay init is committed and then started with
+	// hbay, which opens the views page; the operator's hbay verify comes
 	// after that, not as a first step.
 	first := between(t, readme, "## Next steps", "For each change:")
-	assertInOrder(t, first, "git commit -m", "\nsurla\n```", "views page")
-	assert.NotContains(t, first, "surla verify", "surla verify is an operator tool listed after the change steps")
+	assertInOrder(t, first, "git commit -m", "\nhighbay\n```", "views page")
+	assert.NotContains(t, first, "hbay verify", "hbay verify is an operator tool listed after the change steps")
 	// Each change is proposed by the guide and confirmed by the user on the
 	// views page, then regenerated, built and tested uncommitted with
 	// check_project, committed, and verified by the builder, in that order;
@@ -548,11 +548,11 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	// browser session may call confirm_intent, so the README never tells a
 	// reader to call it.
 	steps := between(t, readme, "For each change:", "## Change checkpoints")
-	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits on its own branch,", "`verify_change`", "operator tools", "surla verify")
+	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits on its own branch,", "`verify_change`", "operator tools", "hbay verify")
 	assert.NotContains(t, readme, "`confirm_intent`")
 	draft := between(t, readme, "To try prompt wording on a running", "the confirmed Change Card")
 	assertInOrder(t, draft, "builder calls `start_live_target`", "the builder writes", "`check_project`", "commits,", "`verify_change`")
-	cli := between(t, readme, "`surla verify` checks a commit.", "## Change checkpoints")
+	cli := between(t, readme, "`hbay verify` checks a commit.", "## Change checkpoints")
 	assertInOrder(t, cli, "The builder", "`check_project`", "before it commits")
 
 	candDesign, err := os.ReadFile(filepath.Join(dir, "design", "design.go"))
@@ -567,11 +567,11 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	assert.Contains(t, readme, "The guide writes only in the draft folder returned by `update_draft` or")
 	assert.Contains(t, readme, "The card saves that evaluated design\nand Story, not later project-folder edits.")
 	assert.Contains(t, readme, "The builder reads its new assignment before working in its own project")
-	assert.Contains(t, readme, "Surla commits the tests it accepts.")
+	assert.Contains(t, readme, "Highbay commits the tests it accepts.")
 	assert.Contains(t, readme, "`story_refresh_op_id`")
 	assert.Contains(t, readme, "`request_revision`")
 
-	// Surla keeps project state outside the project, so the starter ignores
+	// Highbay keeps project state outside the project, so the starter ignores
 	// only its own build and report output.
 	ignore, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	require.NoError(t, err)
@@ -652,7 +652,7 @@ func TestPrepareCommitsInitialScaffoldAndStripsRedirectingGitEnv(t *testing.T) {
 	gen := &fakeGenerator{pkgs: []string{"shop"}, extra: map[string]string{quickstartGuide: "guide\n"}}
 	name, stagePath, commit, err := Prepare(
 		t.Context(),
-		Options{Dir: dir, WorkDir: work, Module: "example.com/shop", SurlaVersion: published},
+		Options{Dir: dir, WorkDir: work, Module: "example.com/shop", HighbayVersion: published},
 		run,
 		gen,
 	)
@@ -666,7 +666,7 @@ func TestPrepareCommitsInitialScaffoldAndStripsRedirectingGitEnv(t *testing.T) {
 	repoPrefix := gitPrefix + " --git-dir=.git --work-tree=."
 	assert.Equal(t, []string{
 		"go mod tidy", "go mod tidy", "go vet ./...", "go test ./...",
-		"go mod tidy", "go get github.com/goadesign/surla@" + published, "go mod tidy", "go vet ./...", "go test ./...",
+		"go mod tidy", "go get github.com/goadesign/highbay@" + published, "go mod tidy", "go vet ./...", "go test ./...",
 		gitPrefix + " init --template=",
 		repoPrefix + " add -A",
 		repoPrefix + " commit --no-verify -m Initial scaffold",
@@ -712,7 +712,7 @@ func TestPrepareFailsClosedWhenGitIdentityIsMissing(t *testing.T) {
 	gen := &fakeGenerator{pkgs: []string{"shop"}}
 	_, _, _, err := Prepare(
 		t.Context(),
-		Options{Dir: dir, WorkDir: work, Module: "example.com/shop", SurlaVersion: published},
+		Options{Dir: dir, WorkDir: work, Module: "example.com/shop", HighbayVersion: published},
 		run,
 		gen,
 	)
@@ -835,7 +835,7 @@ func fakeGo(dir string, args []string) error {
 	return nil
 }
 
-// fakeGenerator stands in for Surla's generator.
+// fakeGenerator stands in for Highbay's generator.
 type fakeGenerator struct {
 	// pkgs are the service packages each Generate returns a service.go for.
 	pkgs []string

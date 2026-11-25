@@ -1,7 +1,7 @@
 // This file keeps the Story module in this repository and the published
-// version Surla requires the same, so new starters, which copy that version,
-// get the Story language this Surla evaluates.
-package surla
+// version Highbay requires the same, so new starters, which copy that version,
+// get the Story language this Highbay evaluates.
+package highbay
 
 import (
 	"bytes"
@@ -19,11 +19,11 @@ import (
 )
 
 // storyModule is the portable Story module, kept in story/.
-const storyModule = "github.com/goadesign/surla/story"
+const storyModule = "github.com/goadesign/highbay/story"
 
 // TestStoryRequirementMatchesTheStoryFolder fails when the Story language in
-// story/ differs from the Story module version Surla's go.mod requires:
-// Surla's Story reader is compiled against that version, and every new
+// story/ differs from the Story module version Highbay's go.mod requires:
+// Highbay's Story reader is compiled against that version, and every new
 // starter requires it. It compares what the Go command compiles (Go sources
 // and the module files). Markdown documents (files ending in .md) are left
 // out, because a document cannot change the language and should not force a
@@ -40,7 +40,7 @@ func TestStoryRequirementMatchesTheStoryFolder(t *testing.T) {
 			version = r.Mod.Version
 		}
 	}
-	require.NotEmpty(t, version, "Surla's go.mod must require %s: the design evaluator's Story reader imports it", storyModule)
+	require.NotEmpty(t, version, "Highbay's go.mod must require %s: the design evaluator's Story reader imports it", storyModule)
 
 	download := exec.Command("go", "mod", "download", "-json", storyModule+"@"+version)
 	download.Env = append(os.Environ(), "GOWORK=off")
@@ -77,7 +77,7 @@ func TestStoryRequirementMatchesTheStoryFolder(t *testing.T) {
 		}
 	}
 	slices.Sort(differ)
-	assert.Empty(t, differ, "story/ differs from %s@%s, the version Surla's go.mod requires and new "+
+	assert.Empty(t, differ, "story/ differs from %s@%s, the version Highbay's go.mod requires and new "+
 		"starters copy. Push the Story change, then raise the requirement to the pushed commit: "+
 		"go get %s@<commit> && go mod tidy", storyModule, version, storyModule)
 }

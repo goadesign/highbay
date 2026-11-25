@@ -29,8 +29,8 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 type (
@@ -168,9 +168,9 @@ func TestNewSkipsAnOperationWhoseHelperStillHoldsItsLock(t *testing.T) {
 	t.Setenv("DOCKER_HOST", daemon.hostURI)
 	cards := filepath.Join(realTempDir(t), "cards")
 	id := strings.Repeat("cd", 16)
-	name := "surla-check-" + id + "-0"
+	name := "highbay-check-" + id + "-0"
 	opDir := filepath.Join(cards, "check-work", id)
-	daemon.addRunning(name, "surla.check="+id)
+	daemon.addRunning(name, "highbay.check="+id)
 	writeTree(t, opDir, map[string]string{
 		"src/go.mod": "module example.com/shop\n",
 		outputFile:   "out\n",
@@ -288,11 +288,11 @@ func TestUnansweredCreateKeepsItsPendingRecord(t *testing.T) {
 	assert.Contains(t, err.Error(), "may still appear")
 	opDir := onlyOperationDir(t, cards)
 	id := filepath.Base(opDir)
-	name := "surla-check-" + id + "-0"
+	name := "highbay-check-" + id + "-0"
 	pending := []ownedContainer{{Name: name, State: stateCreationPending}}
 	assert.Equal(t, pending, readOwnerRecord(t, opDir).Containers)
 	assert.ElementsMatch(t, []string{outputFile, outputMetaFile, ownerFile}, dirEntryNames(t, opDir), "the unused scratch is reclaimed")
-	page, err := cp.ReadCheckOutput(authCtx, &gensurla.ReadCheckOutputPayload{OpID: id})
+	page, err := cp.ReadCheckOutput(authCtx, &genhighbay.ReadCheckOutputPayload{OpID: id})
 	require.NoError(t, err)
 	assert.Contains(t, page.Text, "==> modules: .")
 	assert.Zero(t, daemon.removeCount(name), "nothing is removed before a listing shows it")
@@ -300,7 +300,7 @@ func TestUnansweredCreateKeepsItsPendingRecord(t *testing.T) {
 	require.NoError(t, cp.Close(), "an entry no listing shows is kept without a recovery failure")
 	assert.Equal(t, pending, readOwnerRecord(t, opDir).Containers)
 
-	daemon.addCreated(name, "surla.check="+id)
+	daemon.addCreated(name, "highbay.check="+id)
 	cp = openCheckCP(t, cards, newShopModule(t, nil))
 	defer func() { assert.NoError(t, cp.Close()) }()
 	assert.Equal(t, 1, daemon.removeCount(name))
@@ -335,13 +335,13 @@ func TestRecoveryAfterACrashInEachWindow(t *testing.T) {
 			t.Setenv("DOCKER_HOST", daemon.hostURI)
 			cards := filepath.Join(realTempDir(t), "cards")
 			id := strings.Repeat("ab", 16)
-			name := "surla-check-" + id + "-0"
+			name := "highbay-check-" + id + "-0"
 			opDir := filepath.Join(cards, "check-work", id)
 			switch tc.engine {
 			case "created":
-				daemon.addCreated(name, "surla.check="+id)
+				daemon.addCreated(name, "highbay.check="+id)
 			case "running":
-				daemon.addRunning(name, "surla.check="+id)
+				daemon.addRunning(name, "highbay.check="+id)
 			}
 			writeTree(t, opDir, map[string]string{
 				"src/go.mod":   "module example.com/shop\n",
@@ -405,7 +405,7 @@ func TestOwnerRecordIsWrittenBeforeEachStep(t *testing.T) {
 				}
 				var recorded []string
 				for _, c := range owner.Containers {
-					recorded = append(recorded, strings.TrimPrefix(c.Name, "surla-check-"+id+"-")+"="+string(c.State))
+					recorded = append(recorded, strings.TrimPrefix(c.Name, "highbay-check-"+id+"-")+"="+string(c.State))
 				}
 				mu.Lock()
 				seen = append(seen, verb+" "+strings.Join(recorded, ","))
@@ -421,7 +421,7 @@ func TestOwnerRecordIsWrittenBeforeEachStep(t *testing.T) {
 			if failCreate {
 				require.Error(t, err)
 				assert.Equal(t, []string{"create 0=creation_pending"}, seen)
-				assert.Equal(t, []ownedContainer{{Name: "surla-check-" + filepath.Base(opDir) + "-0", State: stateCreationPending}}, readOwnerRecord(t, opDir).Containers)
+				assert.Equal(t, []ownedContainer{{Name: "highbay-check-" + filepath.Base(opDir) + "-0", State: stateCreationPending}}, readOwnerRecord(t, opDir).Containers)
 				return
 			}
 			require.NoError(t, err)
@@ -442,7 +442,7 @@ func TestOwnerRecordIsWrittenBeforeEachStep(t *testing.T) {
 func TestConfirmRemovedNeedsAListingThatShowsItGone(t *testing.T) {
 	dockerBin := installFakeDocker(t)
 	const id = "op1"
-	name := "surla-check-op1-0"
+	name := "highbay-check-op1-0"
 	cases := []struct {
 		name        string
 		state       containerState
@@ -466,7 +466,7 @@ func TestConfirmRemovedNeedsAListingThatShowsItGone(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			daemon := newFakeDockerDaemon(t)
 			if tc.exists {
-				daemon.addRunning(name, "surla.check="+id)
+				daemon.addRunning(name, "highbay.check="+id)
 			}
 			daemon.setFailRemove(name, tc.failRemove)
 			daemon.setFailList(tc.failList)
@@ -508,7 +508,7 @@ func TestCheckHelperSpansJoinTheServerTrace(t *testing.T) {
 
 	var serve trace.SpanContext
 	for _, s := range exporter.GetSpans() {
-		if s.Name == "surla.controlplane.check_project" {
+		if s.Name == "highbay.controlplane.check_project" {
 			serve = s.SpanContext
 		}
 	}
@@ -518,23 +518,23 @@ func TestCheckHelperSpansJoinTheServerTrace(t *testing.T) {
 	for _, s := range spans {
 		byName[s.Name] = append(byName[s.Name], s)
 	}
-	require.Len(t, byName["surla.check.helper"], 1)
-	root := byName["surla.check.helper"][0]
+	require.Len(t, byName["highbay.check.helper"], 1)
+	root := byName["highbay.check.helper"][0]
 	assert.Equal(t, serve.TraceID().String(), root.TraceID)
 	assert.Equal(t, serve.SpanID().String(), root.ParentSpanID)
-	require.Len(t, byName["surla.check.container"], 2, "download and test")
+	require.Len(t, byName["highbay.check.container"], 2, "download and test")
 	containers := map[string]bool{}
-	for _, c := range byName["surla.check.container"] {
+	for _, c := range byName["highbay.check.container"] {
 		assert.Equal(t, root.SpanID, c.ParentSpanID)
 		containers[c.SpanID] = true
 	}
-	for _, phase := range []string{"surla.check.container.create", "surla.check.container.run", "surla.check.container.remove"} {
+	for _, phase := range []string{"highbay.check.container.create", "highbay.check.container.run", "highbay.check.container.remove"} {
 		require.Len(t, byName[phase], 2, phase)
 		for _, s := range byName[phase] {
 			assert.True(t, containers[s.ParentSpanID], "%s is a child of its container span", phase)
 		}
 	}
-	for _, s := range byName["surla.check.container.remove"] {
+	for _, s := range byName["highbay.check.container.remove"] {
 		assert.Contains(t, s.Events, "container_removed")
 	}
 }
@@ -609,7 +609,7 @@ func runKillCase(t *testing.T, self string, tc killCase) {
 	// The output reads back by its op_id without any server running: the
 	// reader only opens the operation's files.
 	reader := &ControlPlane{checkWorkDir: filepath.Join(cards, "check-work")}
-	page, err := reader.ReadCheckOutput(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}), &gensurla.ReadCheckOutputPayload{OpID: filepath.Base(opDir)})
+	page, err := reader.ReadCheckOutput(WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser}), &genhighbay.ReadCheckOutputPayload{OpID: filepath.Base(opDir)})
 	require.NoError(t, err, "the helper finished the output")
 	assert.Contains(t, page.Text, "==> modules: .")
 	if raw, err := os.ReadFile(filepath.Join(opDir, ownerFile)); err == nil {
@@ -774,7 +774,7 @@ func runTestCheckHelper() int {
 }
 
 // checkHost is TestMain's check-host role: a server on cardsDir bound to
-// workspace, as surla serve is, that runs tool once. Tests kill it while the
+// workspace, as hbay serve is, that runs tool once. Tests kill it while the
 // operation runs.
 func checkHost(cardsDir, workspace, tool string) int {
 	self, err := os.Executable()

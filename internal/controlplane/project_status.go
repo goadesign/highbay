@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // ProjectStatus supplies the management service with the current project's

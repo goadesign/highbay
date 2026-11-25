@@ -15,7 +15,7 @@ func agentWorkflowMethods() {
 			Attribute("message", String, "Safe handoff result without a URL or credential.")
 			Required("opened", "message")
 		})
-		Tool("open_views", "Open Surla's views page for the user to agree, build, check and approve changes. The browser session stays private; no link is returned.")
+		Tool("open_views", "Open Highbay's views page for the user to agree, build, check and approve changes. The browser session stays private; no link is returned.")
 		HTTP(func() { POST("/views/open"); Response(StatusOK) })
 	})
 	Method("merge_change", func() {

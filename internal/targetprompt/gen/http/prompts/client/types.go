@@ -3,7 +3,7 @@
 // prompts HTTP client types
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design/targetprompt -o
+// $ goa gen github.com/goadesign/highbay/design/targetprompt -o
 // internal/targetprompt
 
 package client
@@ -11,7 +11,7 @@ package client
 import (
 	"unicode/utf8"
 
-	prompts "github.com/goadesign/surla/internal/targetprompt/gen/prompts"
+	prompts "github.com/goadesign/highbay/internal/targetprompt/gen/prompts"
 	goa "goa.design/goa/v3/pkg"
 )
 

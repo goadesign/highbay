@@ -128,7 +128,7 @@ function attentionReason(role: TeamRoleState, hasPane: boolean, chorusStatus: Te
   const reason = attentionLabels[role.attention];
   if (role.attention !== "assignment" || !hasPane) return reason;
   return reason + (chorusStatus === "unavailable"
-    ? " Show its pane and ask it to read and wait for assignments through Surla."
+    ? " Show its pane and ask it to read and wait for assignments through Highbay."
     : " Show its pane and tell it to read its assignments and to keep its Chorus watcher running.");
 }
 
@@ -156,12 +156,12 @@ export function TeamStageView({
     !snapshot.roles.some((role) => role.state === "needs_you");
 
   return (
-    <Card id="surla-team-stage" className="surla-card" role="region" aria-labelledby="surla-team-title">
-      <div className="surla-region-header">
-        <h2 id="surla-team-title" tabIndex={-1}>Project team</h2>
-        <div className="surla-field-row">
+    <Card id="highbay-team-stage" className="highbay-card" role="region" aria-labelledby="highbay-team-title">
+      <div className="highbay-region-header">
+        <h2 id="highbay-team-title" tabIndex={-1}>Project team</h2>
+        <div className="highbay-field-row">
           {canStartWorkers || starting ? <Button
-            id="surla-team-start"
+            id="highbay-team-start"
             variant={needsStart ? "primary" : "default"}
             disabled={disabled || starting || !agentsReady}
             aria-busy={starting}
@@ -170,7 +170,7 @@ export function TeamStageView({
             {starting ? "Starting workers…" : "Start workers"}
           </Button> : null}
           <Button
-            id="surla-team-refresh"
+            id="highbay-team-refresh"
             variant={error !== null ? "primary" : "default"}
             disabled={disabled || loading}
             onClick={onRefresh}
@@ -180,31 +180,31 @@ export function TeamStageView({
         </div>
       </div>
       {error !== null ? (
-        <Alert id="surla-team-read-error" variant="destructive" role="alert">
+        <Alert id="highbay-team-read-error" variant="destructive" role="alert">
           {error.readFailed ? <strong>Could not read the project team. </strong> : null}
           {error.message}
         </Alert>
       ) : null}
       {loading ? (
-        <p id="surla-team-loading">{snapshot === null ? "Reading the project team…" : "Updating team…"}</p>
+        <p id="highbay-team-loading">{snapshot === null ? "Reading the project team…" : "Updating team…"}</p>
       ) : null}
       {agentPicker}
       {canStartWorkers ? <p>Workers already running keep their current sessions. These choices apply when a worker starts.</p> : null}
       {snapshot === null ? (
         !loading && error === null ? <p>The project team has not been read.</p> : null
       ) : (
-        <div id="surla-team-facts" aria-busy={loading} data-stale={error !== null}>
-          {error !== null ? <p id="surla-team-stale">Last-read team facts; they could not be refreshed.</p> : null}
-          <p id="surla-team-name">Team: <strong>{snapshot.team}</strong></p>
+        <div id="highbay-team-facts" aria-busy={loading} data-stale={error !== null}>
+          {error !== null ? <p id="highbay-team-stale">Last-read team facts; they could not be refreshed.</p> : null}
+          <p id="highbay-team-name">Team: <strong>{snapshot.team}</strong></p>
           {snapshot.roles.length === 0 ? (
-            <p id="surla-team-empty">No agents are registered.</p>
+            <p id="highbay-team-empty">No agents are registered.</p>
           ) : (
-            <ul id="surla-team-roles" className="surla-trace-list">
+            <ul id="highbay-team-roles" className="highbay-trace-list">
               {snapshot.roles.map((role) => {
                 const hasPane = roleHasPane(role.role, snapshot.herdr_mode);
                 const guidePaneUnlinked = role.role === "guide" && !hasPane && role.state === "unknown";
-                return <li key={role.role} id={"surla-team-role-" + role.role} data-state={role.state}>
-                  <div className="surla-trace-heading">
+                return <li key={role.role} id={"highbay-team-role-" + role.role} data-state={role.state}>
+                  <div className="highbay-trace-heading">
                     <strong>{roleLabels[role.role]}</strong>
                     <Badge
                       variant={
@@ -219,7 +219,7 @@ export function TeamStageView({
                   </div>
                   {guidePaneUnlinked && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
                   <p>{role.role === "guide" ? "No assignments" : assignmentLabels[role.assignment]}</p>
-                  {hasPane ? <div className="surla-field-row">
+                  {hasPane ? <div className="highbay-field-row">
                     <PaneButton
                       role={role}
                       showing={showing}
@@ -229,9 +229,9 @@ export function TeamStageView({
                       global={false}
                     />
                   </div> : null}
-                  <details className="surla-details">
+                  <details className="highbay-details">
                     <summary>{roleLabels[role.role]} details</summary>
-                    {guidePaneUnlinked ? <p>To link a pane, open a project tab in Herdr and run <code>/surla</code> there.</p> : null}
+                    {guidePaneUnlinked ? <p>To link a pane, open a project tab in Herdr and run <code>/highbay</code> there.</p> : null}
                     <p>Registered handle: <code>{role.handle}</code></p>
                   </details>
                 </li>;
@@ -241,13 +241,13 @@ export function TeamStageView({
         </div>
       )}
       {startReceipt !== null ? (
-        <p id="surla-team-start-receipt">
+        <p id="highbay-team-start-receipt">
           This start (begun <time dateTime={startReceipt.at}>{startReceipt.at}</time>) returned:{" "}
           «{startReceipt.result.step}»
         </p>
       ) : null}
       {actionError !== null ? (
-        <Alert id="surla-team-action-error" variant="destructive" tabIndex={-1}>{actionError}</Alert>
+        <Alert id="highbay-team-action-error" variant="destructive" tabIndex={-1}>{actionError}</Alert>
       ) : null}
     </Card>
   );
@@ -268,16 +268,16 @@ export function GlobalTeamAttention({
   const chorusStatus = snapshot?.chorus_status;
   const chorusUnavailable = chorusStatus === "unavailable";
   return (
-    <div id="surla-team-attention" role="status" aria-live="polite">
-      {chorusUnavailable ? <p id="surla-team-chorus-status">
-        {lastRead ? "Last read: " : ""}Chorus can’t be reached for this team. Running workers can wait for assignments through Surla.
+    <div id="highbay-team-attention" role="status" aria-live="polite">
+      {chorusUnavailable ? <p id="highbay-team-chorus-status">
+        {lastRead ? "Last read: " : ""}Chorus can’t be reached for this team. Running workers can wait for assignments through Highbay.
       </p> : null}
       {roles.map((role) => {
         const hasPane = roleHasPane(role.role, snapshot?.herdr_mode);
         const canNudge = !lastRead && chorusStatus !== "not_used" && role.role !== "guide" && role.attention === "assignment" &&
           (chorusUnavailable || role.watcher === "gone");
-        return <div key={role.role} className="surla-field-row" id={"surla-team-attention-" + role.role}>
-          <span className="surla-live-wrap">
+        return <div key={role.role} className="highbay-field-row" id={"highbay-team-attention-" + role.role}>
+          <span className="highbay-live-wrap">
             {lastRead ? "Last read: " : ""}
             {teamAttentionText(role, hasPane, chorusStatus)}
           </span>
@@ -298,15 +298,15 @@ export function GlobalTeamAttention({
 }
 
 // workerAssignmentPrompt gives the operator the role's read and wait path.
-// A Chorus outage uses Surla's wait tool instead of a Chorus reminder.
+// A Chorus outage uses Highbay's wait tool instead of a Chorus reminder.
 function workerAssignmentPrompt(role: Role, chorusUnavailable: boolean) {
   if (!chorusUnavailable) {
-    return "Read your current Surla assignments and continue your work. Keep your project’s Chorus watcher running while waiting.";
+    return "Read your current Highbay assignments and continue your work. Keep your project’s Chorus watcher running while waiting.";
   }
   const [waitTool, listTool] = role === "test_writer"
     ? ["wait_for_test_writer_assignment", "list_test_writer_assignments"]
     : ["wait_for_builder_assignment", "list_builder_assignments"];
-  return "Read your current Surla assignments and continue your work. Use " + waitTool +
+  return "Read your current Highbay assignments and continue your work. Use " + waitTool +
     " when waiting for changes. Pass its version as since_version on the next wait." +
     " If the wait tool is unavailable, use " + listTool + " about every 30 seconds while waiting.";
 }
@@ -361,7 +361,7 @@ function PaneButton({
   return (
     <span ref={attachControl}>
       <Button
-        id={(global ? "surla-team-attention-show-pane-" : "surla-team-show-") + role.role}
+        id={(global ? "highbay-team-attention-show-pane-" : "highbay-team-show-") + role.role}
         variant={role.state === "needs_you" ? "primary" : "default"}
         disabled={disabled || pending}
         aria-busy={pending}

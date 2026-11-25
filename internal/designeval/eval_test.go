@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 // ordersDSL declares the orders API and its get_order method, the design
@@ -49,12 +49,12 @@ var _ = Service("orders", func() {
 // TestEvaluateRunsTheDesignWithItsOwnEnvironmentAndBuildsJSONSchemas evaluates
 // a design whose init panics when it sees a variable set in this test's own
 // environment: the evaluation succeeds, because the design program gets only
-// the environment Surla gives it, and the method's payload schema is built.
+// the environment Highbay gives it, and the method's payload schema is built.
 func TestEvaluateRunsTheDesignWithItsOwnEnvironmentAndBuildsJSONSchemas(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	t.Setenv("SURLA_DESIGNEVAL_TEST_SECRET", "must not reach the design")
+	t.Setenv("HIGHBAY_DESIGNEVAL_TEST_SECRET", "must not reach the design")
 	design := `package custom_pkg
 
 import (
@@ -63,7 +63,7 @@ import (
 )
 
 func init() {
-	if os.Getenv("SURLA_DESIGNEVAL_TEST_SECRET") != "" {
+	if os.Getenv("HIGHBAY_DESIGNEVAL_TEST_SECRET") != "" {
 		panic("the design program inherited the evaluator's environment")
 	}
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/shquote"
+	"github.com/goadesign/highbay/internal/shquote"
 )
 
 // TestWithinLimitIsInclusiveAtTheDeadline places a step's return just below,
@@ -84,7 +84,7 @@ func TestWithoutAbsolutePathsKeepsURLsImportsAndRelativePaths(t *testing.T) {
 		in, want string
 	}{
 		{in: "see https://example.com/a/b and http://127.0.0.1:8080/x", want: "see https://example.com/a/b and http://127.0.0.1:8080/x"},
-		{in: "import github.com/goadesign/surla/verify/suite", want: "import github.com/goadesign/surla/verify/suite"},
+		{in: "import github.com/goadesign/highbay/verify/suite", want: "import github.com/goadesign/highbay/verify/suite"},
 		{in: "build ./gen/cmd/shop-evals and gen/evals/x/suite.go", want: "build ./gen/cmd/shop-evals and gen/evals/x/suite.go"},
 		{in: "open /Users/someone/project/x.h: operation not permitted", want: "open <absolute path>: operation not permitted"},
 		{in: "/private/var/folders/x/main.go:12:3: undefined: Missing", want: "<absolute path>:12:3: undefined: Missing"},
@@ -270,8 +270,8 @@ func TestCheckStopsWhenTheHistoryIsReplaced(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1)
 		assert.Equal(t, FindingWorkingCopy, v.Findings[0].Kind)
-		assert.Contains(t, v.Findings[0].Message, "Your working copy (.surla-tests) is on branch 'side-work'.")
-		assert.Contains(t, v.Findings[0].Message, "Put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+		assert.Contains(t, v.Findings[0].Message, "Your working copy (.highbay-tests) is on branch 'side-work'.")
+		assert.Contains(t, v.Findings[0].Message, "Put your test files on highbay/tests-1, uncommitted (Highbay commits what it accepts), and report again.")
 	})
 
 	t.Run("copy has a merge in progress", func(t *testing.T) {
@@ -282,8 +282,8 @@ func TestCheckStopsWhenTheHistoryIsReplaced(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1)
 		assert.Equal(t, FindingWorkingCopy, v.Findings[0].Kind)
-		assert.Contains(t, v.Findings[0].Message, "Your working copy (.surla-tests) is on branch surla/tests-1 with a git merge in progress.")
-		assert.Contains(t, v.Findings[0].Message, "A merge is in progress in your working copy: abort it, then put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+		assert.Contains(t, v.Findings[0].Message, "Your working copy (.highbay-tests) is on branch highbay/tests-1 with a git merge in progress.")
+		assert.Contains(t, v.Findings[0].Message, "A merge is in progress in your working copy: abort it, then put your test files on highbay/tests-1, uncommitted (Highbay commits what it accepts), and report again.")
 		assert.NotContains(t, v.Findings[0].Message, "Finish")
 	})
 }

@@ -8,8 +8,8 @@ import (
 	"slices"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -55,7 +55,7 @@ type (
 		ReadWatchers(context.Context, string, string, []TeamRole) (TeamWatcherView, error)
 	}
 	// TeamReminder is one fixed Chorus direct message chosen by code. Team is the
-	// saved team (the Chorus swarm), From is Surla's own handle in it, To is the
+	// saved team (the Chorus swarm), From is Highbay's own handle in it, To is the
 	// registered role handle without its leading "@", and Text asks only for a read.
 	TeamReminder struct{ Team, From, To, Text string }
 	// TeamSender hands one reminder to the local Chorus server. It returns nil when
@@ -71,7 +71,7 @@ type (
 	// roleObservation is the small published snapshot with ownership identity.
 	roleObservation struct {
 		handle, space, endpoint string
-		public                  gensurla.TeamRoleState
+		public                  genhighbay.TeamRoleState
 	}
 	// chorusObservation is the published answer to whether Chorus serves the
 	// team in space at endpoint: connected, unavailable, or empty when no
@@ -105,7 +105,7 @@ type (
 		listedSince time.Time
 		// idleUnreadSince is when the role began waiting with an unread assignment.
 		idleUnreadSince time.Time
-		public          gensurla.TeamRoleState
+		public          genhighbay.TeamRoleState
 	}
 	// teamSupervisor is private to one blocking Supervise call and owns all latches.
 	teamSupervisor struct {
@@ -133,7 +133,7 @@ const (
 	// Missing all three invalidates every role until new snapshots establish the stream.
 	teamStreamStallBound = 3 * 15 * time.Second
 	// teamJoinSettle lets a role that has just joined Chorus act on its first
-	// message, which already asks for the read, before Surla reminds it.
+	// message, which already asks for the read, before Highbay reminds it.
 	teamJoinSettle = 60 * time.Second
 	// teamIdleUnreadBound is how long a role may wait with an unread assignment
 	// before the user is asked to prompt it; it reuses the watcher grace, so a
@@ -374,10 +374,10 @@ func (o *teamSupervisor) publish(ctx context.Context, now time.Time, periodic bo
 	for _, role := range o.roles {
 		value := role.idleUnread(role.value(now, allReady, o.server.team.dependencies.Shell), now)
 		if value != role.public {
-			teamStateSpan(ctx, "surla.team.changed", value, "", "observed").End()
+			teamStateSpan(ctx, "highbay.team.changed", value, "", "observed").End()
 		}
 		if periodic {
-			teamStateSpan(ctx, "surla.team.observed", value, "", "observed").End()
+			teamStateSpan(ctx, "highbay.team.observed", value, "", "observed").End()
 		}
 		role.public = value
 		observed[role.role.Role] = roleObservation{handle: role.role.Handle, space: o.selection.Space, endpoint: o.selection.connection.Endpoint, public: value}
@@ -427,8 +427,8 @@ func (o *teamSupervisor) expireStream(now time.Time) bool {
 }
 
 // value keeps terminal availability, watcher availability and assignment availability independent.
-func (role *supervisedRole) value(now time.Time, allReady bool, shell string) gensurla.TeamRoleState {
-	value := gensurla.TeamRoleState{Role: role.role.Role, Handle: role.role.Handle, State: "unknown", Attention: "none", Watcher: "unknown", Assignment: "unknown"}
+func (role *supervisedRole) value(now time.Time, allReady bool, shell string) genhighbay.TeamRoleState {
+	value := genhighbay.TeamRoleState{Role: role.role.Role, Handle: role.role.Handle, State: "unknown", Attention: "none", Watcher: "unknown", Assignment: "unknown"}
 	if role.assignmentKnown {
 		switch {
 		case !role.hasWork:
@@ -518,7 +518,7 @@ func (role *supervisedRole) value(now time.Time, allReady bool, shell string) ge
 // step. The bound is shorter while Chorus is not known to work, since no
 // reminder reaches the role then. Working, reading or any unknown terminal
 // or assignment fact restarts the clock.
-func (role *supervisedRole) idleUnread(value gensurla.TeamRoleState, now time.Time) gensurla.TeamRoleState {
+func (role *supervisedRole) idleUnread(value genhighbay.TeamRoleState, now time.Time) genhighbay.TeamRoleState {
 	if value.State != "waiting" || value.Assignment != "unread" {
 		role.idleUnreadSince = time.Time{}
 		return value
@@ -564,9 +564,9 @@ func (o *teamSupervisor) remind(ctx context.Context, now time.Time) {
 		for generation := range role.owed {
 			role.owed[generation] = true
 		}
-		err := sender.Send(ctx, TeamReminder{Team: o.selection.Team, From: o.server.teamSurlaHandle(), To: role.role.Handle, Text: text})
+		err := sender.Send(ctx, TeamReminder{Team: o.selection.Team, From: o.server.teamHighbayHandle(), To: role.role.Handle, Text: text})
 		if err != nil && ctx.Err() != nil {
-			// The supervisor's context ended, as when the server stops: Surla cut
+			// The supervisor's context ended, as when the server stops: Highbay cut
 			// the post short, so it is no Chorus failure and records no attempt.
 			return
 		}
@@ -574,7 +574,7 @@ func (o *teamSupervisor) remind(ctx context.Context, now time.Time) {
 		if err != nil {
 			outcome = "failed"
 		}
-		span := teamStateSpan(ctx, "surla.team.reminder", role.public, "assignment", outcome)
+		span := teamStateSpan(ctx, "highbay.team.reminder", role.public, "assignment", outcome)
 		if err != nil {
 			var failure TeamSendFailure
 			if errors.As(err, &failure) {
@@ -593,9 +593,9 @@ func (o *teamSupervisor) remind(ctx context.Context, now time.Time) {
 func assignmentReminder(role string) string {
 	switch role {
 	case "builder":
-		return "Surla: you have an unread assignment. Use list_builder_assignments and get_builder_assignment to read it. Surla reads no replies."
+		return "Highbay: you have an unread assignment. Use list_builder_assignments and get_builder_assignment to read it. Highbay reads no replies."
 	case "test_writer":
-		return "Surla: you have an unread assignment. Use list_test_writer_assignments and get_test_writer_assignment to read it. Surla reads no replies."
+		return "Highbay: you have an unread assignment. Use list_test_writer_assignments and get_test_writer_assignment to read it. Highbay reads no replies."
 	default:
 		return ""
 	}
@@ -604,24 +604,24 @@ func assignmentReminder(role string) string {
 // teamStateSpan exports bounded facts through the project tracer, outside the
 // control plane's principal-scoped recorder. The caller ends the span after
 // recording an operation failure, if any, with a fixed bounded error.
-func teamStateSpan(ctx context.Context, name string, value gensurla.TeamRoleState, reason, outcome string) trace.Span {
-	_, span := otel.Tracer("surla/project").Start(ctx, name)
+func teamStateSpan(ctx context.Context, name string, value genhighbay.TeamRoleState, reason, outcome string) trace.Span {
+	_, span := otel.Tracer("highbay/project").Start(ctx, name)
 	span.SetAttributes(attribute.String("team.role", value.Role), attribute.String("team.state", value.State), attribute.String("team.kind", value.Attention), attribute.String("team.watcher", value.Watcher), attribute.String("team.assignment", value.Assignment), attribute.String("team.reason", reason), attribute.String("team.outcome", outcome))
 	return span
 }
 
-// teamSurlaHandle is Surla's own Chorus handle in the team, derived from the
+// teamHighbayHandle is Highbay's own Chorus handle in the team, derived from the
 // project ID as the guide's handle is. No role can take it: role handles start
 // with guide, builder or test_writer.
-func (s *Server) teamSurlaHandle() string {
+func (s *Server) teamHighbayHandle() string {
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
-	return teamName("surla", s.state.Record.ID)
+	return teamName("highbay", s.state.Record.ID)
 }
 
 // teamReaderFailure records a start/stream failure without retaining external command output.
 func teamReaderFailure(ctx context.Context) {
-	_, span := otel.Tracer("surla/project").Start(ctx, "surla.team.reader_failed")
+	_, span := otel.Tracer("highbay/project").Start(ctx, "highbay.team.reader_failed")
 	span.RecordError(errors.New("team observation reader could not continue"))
 	span.SetStatus(codes.Error, "team reader unavailable")
 	span.End()

@@ -56,7 +56,7 @@ type (
 		Problem string `json:"problem"`
 	}
 
-	// projectCommitGate holds one of Surla's reads of the project's commit,
+	// projectCommitGate holds one of Highbay's reads of the project's commit,
 	// which UpdateDraft makes without its draft lock.
 	projectCommitGate struct {
 		// started exists once the held read began.
@@ -68,9 +68,9 @@ type (
 
 const (
 	// updateDraftRequestSpan is the operation policy's span of one call.
-	updateDraftRequestSpan = "surla.request.update_draft"
+	updateDraftRequestSpan = "highbay.request.update_draft"
 	// updateDraftOwnerSpan is UpdateDraft's own span.
-	updateDraftOwnerSpan = "surla.controlplane.update_draft"
+	updateDraftOwnerSpan = "highbay.controlplane.update_draft"
 	// updateGuideToken is the fixture credential of alice's guide.
 	updateGuideToken = "alice-token-guide"
 	// updateBaseDesign is the design the refusal fixtures start from.
@@ -160,7 +160,7 @@ func TestUpdateDraftAnswersConflictWhenItsInputsChange(t *testing.T) {
 }
 
 // TestUpdateDraftRefusesWhatItCannotRead verifies that, once the draft
-// exists, a file of the draft or the project folder that Surla cannot read
+// exists, a file of the draft or the project folder that Highbay cannot read
 // is the declared unprocessable refusal naming it and who corrects it, over
 // HTTP and MCP, without a span error and without changing the draft.
 func TestUpdateDraftRefusesWhatItCannotRead(t *testing.T) {
@@ -172,7 +172,7 @@ func TestUpdateDraftRefusesWhatItCannotRead(t *testing.T) {
 		name string
 		// arrange changes the folders before the call.
 		arrange func(t *testing.T, f *draftUpdateFixture)
-		// during, when set, changes them while Surla reads the project's commit.
+		// during, when set, changes them while Highbay reads the project's commit.
 		during func(f *draftUpdateFixture) error
 		// names lists what the refusal's message holds.
 		names []string
@@ -255,7 +255,7 @@ func TestUpdateDraftRefusesWhatItCannotRead(t *testing.T) {
 }
 
 // TestUpdateDraftFailureNoCallerCanCorrectStaysAFault keeps a failure of
-// Surla's own read of the repository a fault: status 500 and an error on both
+// Highbay's own read of the repository a fault: status 500 and an error on both
 // of the call's spans.
 func TestUpdateDraftFailureNoCallerCanCorrectStaysAFault(t *testing.T) {
 	e := newUpdateDraftEntry(t, updateBaseDesign, updateBaseDesign, updateBaseDesign)
@@ -334,7 +334,7 @@ func TestUpdateDraftCorrectionsNameTheFolderOfTheFileToCorrect(t *testing.T) {
 			f.project(changed)
 			f.stop(true)
 			f.guide(changed + "\nvar Guide = 1\n")
-		}, updateDesignFile, correctInDraft, "Surla stopped while bringing"},
+		}, updateDesignFile, correctInDraft, "Highbay stopped while bringing"},
 		{"interrupted merge that conflicts", changed, func(t *testing.T, f *draftUpdateFixture) {
 			f.project(other)
 			f.stop(false)
@@ -491,7 +491,7 @@ func holdProjectCommitRead(t *testing.T, nth int) *projectCommitGate {
 	return gate
 }
 
-// failProjectCommitRead puts a git first on PATH that fails Surla's next read
+// failProjectCommitRead puts a git first on PATH that fails Highbay's next read
 // of the project's commit as a repository git cannot read does.
 func failProjectCommitRead(t *testing.T) {
 	t.Helper()
@@ -515,7 +515,7 @@ func installProjectCommitGit(t *testing.T, nth int, action string) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
-// change runs during once Surla waits at the gate, then releases the gate.
+// change runs during once Highbay waits at the gate, then releases the gate.
 // The caller makes the gated call, then calls the returned function, which
 // fails the test when the call never reached the gate or during failed.
 func (g *projectCommitGate) change(t *testing.T, during func() error) func() {
@@ -552,7 +552,7 @@ func (g *projectCommitGate) changeWhenHeld(ctx context.Context, during func() er
 // a change made away from the test goroutine.
 func emptyProjectCommit(dir string) error {
 	cmd := exec.Command("git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
-		"commit", "--allow-empty", "-qm", "Commit while Surla prepares the update")
+		"commit", "--allow-empty", "-qm", "Commit while Highbay prepares the update")
 	cmd.Dir = dir
 	cmd.Env = append(cleanGitEnv(), "GIT_CONFIG_GLOBAL="+os.DevNull)
 	if out, err := cmd.CombinedOutput(); err != nil {

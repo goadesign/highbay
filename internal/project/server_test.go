@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	genprojectclient "github.com/goadesign/surla/gen/http/project/client"
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genprojectclient "github.com/goadesign/highbay/gen/http/project/client"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -105,23 +105,23 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 	_, err = exchange.ExchangeBrowserLink(t.Context(), &genproject.ExchangeBrowserLinkPayload{Link: strings.TrimPrefix(u.Fragment, "link=")})
 	assert.Error(t, err)
 	// The same owner can see a guide draft, but caller attribution records the user's session.
-	payload := &gensurla.ProposeChangePayload{ChangeID: "change", Prompt: "Keep refunds bounded", Analysis: &gensurla.CP1Analysis{Summary: "Bound refunds", Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, Examples: []*gensurla.CP1AnalysisExample{{Scenario: "refund", InputSummary: "refund 10", ExpectedOutcome: "refund 10", VerificationKind: "deterministic"}}, PreservedBehaviors: []string{}}}
-	raw, err := gensurla.EncodeProposeChangePayload(payload)
+	payload := &genhighbay.ProposeChangePayload{ChangeID: "change", Prompt: "Keep refunds bounded", Analysis: &genhighbay.CP1Analysis{Summary: "Bound refunds", Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, Examples: []*genhighbay.CP1AnalysisExample{{Scenario: "refund", InputSummary: "refund 10", ExpectedOutcome: "refund 10", VerificationKind: "deterministic"}}, PreservedBehaviors: []string{}}}
+	raw, err := genhighbay.EncodeProposeChangePayload(payload)
 	require.NoError(t, err)
 	response := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/changes/propose", string(raw), string(guideRaw), true)
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	cardRaw, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
 	require.NoError(t, response.Body.Close())
-	card, err := gensurla.DecodeChangeCardResult(cardRaw)
+	card, err := genhighbay.DecodeChangeCardResult(cardRaw)
 	require.NoError(t, err)
 	assert.Equal(t, controlplane.StatusNeedsConfirmation, card.Status)
 	assert.Nil(t, card.ConfirmedBy)
 	read := testRequest(t, api.Client(), http.MethodGet, state.Origin()+"/changes/change", "", session.Session, true)
 	assert.Equal(t, http.StatusOK, read.StatusCode)
 	require.NoError(t, read.Body.Close())
-	confirm := &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
-	confirmRaw, err := gensurla.EncodeConfirmIntentPayload(confirm)
+	confirm := &genhighbay.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
+	confirmRaw, err := genhighbay.EncodeConfirmIntentPayload(confirm)
 	require.NoError(t, err)
 	denied := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/changes/confirm", string(confirmRaw), string(guideRaw), true)
 	assert.Equal(t, http.StatusForbidden, denied.StatusCode)
@@ -134,7 +134,7 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 	confirmedRaw, err := io.ReadAll(accepted.Body)
 	require.NoError(t, err)
 	require.NoError(t, accepted.Body.Close())
-	confirmed, err := gensurla.DecodeChangeCardResult(confirmedRaw)
+	confirmed, err := genhighbay.DecodeChangeCardResult(confirmedRaw)
 	require.NoError(t, err)
 	require.NotNil(t, confirmed.ConfirmedBy)
 	assert.Equal(t, state.Record.Owner, *confirmed.ConfirmedBy)
@@ -214,7 +214,7 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 				"get_team": true, "show_team_pane": true, "start_team_agents": true, "hand_over_model_settings": true,
 				"list_team_agent_options": true, "dismiss_team_notice": true, "merge_change": true,
 			}
-			for _, name := range gensurla.MethodNames {
+			for _, name := range genhighbay.MethodNames {
 				if !httpOrResourceOnly[name] {
 					assert.Equal(t, controlplane.OperationAllowed(tc.role, name), listed[name], name)
 				}
@@ -264,7 +264,7 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 			for i, request := range requests {
 				covered[i] = request.operation
 			}
-			assert.ElementsMatch(t, gensurla.MethodNames, covered, "every operation has a refusal request")
+			assert.ElementsMatch(t, genhighbay.MethodNames, covered, "every operation has a refusal request")
 			for _, request := range requests {
 				if controlplane.OperationAllowed(tc.role, request.operation) {
 					continue
@@ -306,7 +306,7 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 				require.Nil(t, envelope.Error)
 				require.NotNil(t, envelope.Result)
 				assert.False(t, envelope.Result.IsError != nil && *envelope.Result.IsError)
-				saved, err := gensurla.DecodeChangeCardResult(envelope.Result.StructuredContent)
+				saved, err := genhighbay.DecodeChangeCardResult(envelope.Result.StructuredContent)
 				require.NoError(t, err)
 				assert.Equal(t, confirmed.ChangeID, saved.ChangeID)
 				assert.Equal(t, confirmed.RequestRevision, saved.RequestRevision)
@@ -442,7 +442,7 @@ func testRequest(t *testing.T, client *http.Client, method, target, body, token 
 type policyHTTPRequest struct{ operation, method, path, body string }
 
 // policyHTTPRequests covers every generated control-plane route without executing forbidden work.
-func policyHTTPRequests(card *gensurla.ChangeCardResult, propose, confirm string) []policyHTTPRequest {
+func policyHTTPRequests(card *genhighbay.ChangeCardResult, propose, confirm string) []policyHTTPRequest {
 	commit := strings.Repeat("a", 40)
 	revision := card.RequestRevision
 	revise := fmt.Sprintf(`{"change_id":"change","request_revision":%q,"prompt":"Keep refunds bounded","revision_note":"Revise the change.","analysis":{"summary":"Bound refunds","ambiguities":[],"examples":[{"prior_id":"check_01","scenario":"refund","input_summary":"refund 10","expected_outcome":"refund 10","verification_kind":"deterministic"}],"removed_example_ids":[],"preserved_behaviors":[]}}`, revision)

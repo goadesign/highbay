@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,11 +18,11 @@ import (
 // withProposalAnalysis returns p with its analysis decoded from analysisJSON,
 // the wire form a coding agent sends, by the generated propose_change decoder,
 // which applies the same structural validation as the MCP and HTTP transports.
-func withProposalAnalysis(t *testing.T, p *gensurla.ProposeChangePayload, analysisJSON string) *gensurla.ProposeChangePayload {
+func withProposalAnalysis(t *testing.T, p *genhighbay.ProposeChangePayload, analysisJSON string) *genhighbay.ProposeChangePayload {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{"change_id": p.ChangeID, "prompt": p.Prompt, "analysis": json.RawMessage(analysisJSON)})
 	require.NoError(t, err)
-	decoded, err := gensurla.DecodeProposeChangePayload(raw)
+	decoded, err := genhighbay.DecodeProposeChangePayload(raw)
 	require.NoError(t, err)
 	p.Analysis = decoded.Analysis
 	return p
@@ -30,14 +30,14 @@ func withProposalAnalysis(t *testing.T, p *gensurla.ProposeChangePayload, analys
 
 // withRevisionAnalysis returns p with its analysis decoded from analysisJSON
 // by the generated revise_change decoder, as withProposalAnalysis does.
-func withRevisionAnalysis(t *testing.T, p *gensurla.ReviseChangePayload, analysisJSON string) *gensurla.ReviseChangePayload {
+func withRevisionAnalysis(t *testing.T, p *genhighbay.ReviseChangePayload, analysisJSON string) *genhighbay.ReviseChangePayload {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
 		"change_id": p.ChangeID, "request_revision": p.RequestRevision, "prompt": p.Prompt, "revision_note": p.RevisionNote,
 		"analysis": json.RawMessage(analysisJSON),
 	})
 	require.NoError(t, err)
-	decoded, err := gensurla.DecodeReviseChangePayload(raw)
+	decoded, err := genhighbay.DecodeReviseChangePayload(raw)
 	require.NoError(t, err)
 	p.Analysis = decoded.Analysis
 	return p
@@ -60,7 +60,7 @@ func TestProposeChangeAssignsDefaultExampleIDs_Decision2A(t *testing.T) {
 	}`
 	cp := newControlPlane(t, Options{})
 
-	card, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 		ChangeID: "feat-refunds-1",
 		Prompt:   "Instant refunds under $50.",
 	}, proposalJSON))
@@ -100,7 +100,7 @@ func TestReviseChangePreservesSurvivingPriorExamples_Decision1A(t *testing.T) {
 	}`
 	cp := newControlPlane(t, Options{})
 
-	card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+	card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 		ChangeID: "search-feature",
 		Prompt:   "Search products.",
 	}, proposalJSON))
@@ -109,11 +109,11 @@ func TestReviseChangePreservesSurvivingPriorExamples_Decision1A(t *testing.T) {
 	assert.Equal(t, "check_01", card1.Examples[0].ID)
 
 	// Confirm card1 with caller-chosen ID ex-search added.
-	confirmed, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID:        "search-feature",
 		RequestRevision: card1.RequestRevision,
 		Answers:         map[string]string{card1.Ambiguities[0].ID: "yes"},
-		Examples: []*gensurla.ExampleItem{
+		Examples: []*genhighbay.ExampleItem{
 			card1.Examples[0],
 			{
 				ID:               "ex-search",
@@ -130,7 +130,7 @@ func TestReviseChangePreservesSurvivingPriorExamples_Decision1A(t *testing.T) {
 	assert.Equal(t, "ex-search", confirmed.Examples[1].ID)
 
 	// Revise the confirmed card.
-	revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+	revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 		ChangeID:        "search-feature",
 		RequestRevision: confirmed.RequestRevision,
 		Prompt:          "Search products with fast filtering.",
@@ -170,18 +170,18 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 		}`
 		cp := newControlPlane(t, Options{})
 
-		card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+		card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 			ChangeID: "chg-gap",
 			Prompt:   "Feature.",
 		}, proposalJSON))
 		require.NoError(t, err)
 
 		// Confirm with check_01 and custom check_05.
-		card1Conf, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+		card1Conf, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 			ChangeID:        "chg-gap",
 			RequestRevision: card1.RequestRevision,
 			Answers:         map[string]string{},
-			Examples: []*gensurla.ExampleItem{
+			Examples: []*genhighbay.ExampleItem{
 				card1.Examples[0],
 				{
 					ID:               "check_05",
@@ -194,7 +194,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+		revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 			ChangeID:        "chg-gap",
 			RequestRevision: card1Conf.RequestRevision,
 			Prompt:          "Revised feature.",
@@ -231,7 +231,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 		}`
 		cp := newControlPlane(t, Options{})
 
-		card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+		card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 			ChangeID: "chg-retired",
 			Prompt:   "Feature.",
 		}, proposalJSON))
@@ -240,7 +240,7 @@ func TestReviseChangeAllocatesLowestUnusedIDAbsentFromBothTables(t *testing.T) {
 		assert.Equal(t, "check_01", card1.Examples[0].ID)
 		assert.Equal(t, "check_02", card1.Examples[1].ID)
 
-		revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+		revised, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 			ChangeID:        "chg-retired",
 			RequestRevision: card1.RequestRevision,
 			Prompt:          "Revised feature.",
@@ -279,13 +279,13 @@ func TestReviseChangeRejectsOmittedPriorExampleID_Decision1A(t *testing.T) {
 	}`
 	cp := newControlPlane(t, Options{})
 
-	card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+	card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-omission",
 		Prompt:   "Feature.",
 	}, proposalJSON))
 	require.NoError(t, err)
 
-	_, err = cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+	_, err = cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-omission",
 		RequestRevision: card1.RequestRevision,
 		Prompt:          "Revised feature.",
@@ -295,7 +295,7 @@ func TestReviseChangeRejectsOmittedPriorExampleID_Decision1A(t *testing.T) {
 	assert.ErrorContains(t, err, `prior example ID "check_02" is omitted from both examples and removed_example_ids`)
 
 	// Verify saved card remains untouched.
-	saved, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg-omission"})
+	saved, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg-omission"})
 	require.NoError(t, err)
 	assert.Equal(t, card1.RequestRevision, saved.RequestRevision, "saved card revision must remain untouched")
 }
@@ -405,13 +405,13 @@ func TestReviseChangeRejectsInvalidPriorAccounting_Decision1A(t *testing.T) {
 			}`
 			cp := newControlPlane(t, Options{})
 
-			card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+			card1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 				ChangeID: "chg-test",
 				Prompt:   "Feature.",
 			}, proposalJSON))
 			require.NoError(t, err)
 
-			_, err = cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+			_, err = cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 				ChangeID:        "chg-test",
 				RequestRevision: card1.RequestRevision,
 				Prompt:          "Revised feature.",
@@ -420,7 +420,7 @@ func TestReviseChangeRejectsInvalidPriorAccounting_Decision1A(t *testing.T) {
 			assertServiceError(t, err, "unprocessable")
 			assert.ErrorContains(t, err, tc.wantErr)
 
-			saved, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg-test"})
+			saved, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg-test"})
 			require.NoError(t, err)
 			assert.Equal(t, card1.RequestRevision, saved.RequestRevision, "prior card must remain untouched")
 		})
@@ -482,18 +482,18 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 
 	cp := newControlPlane(t, Options{})
 
-	r1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &gensurla.ProposeChangePayload{
+	r1, err := cp.ProposeChange(aliceCtx, withProposalAnalysis(t, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-ws-ids",
 		Prompt:   "Initial feature.",
 	}, proposeR1JSON))
 	require.NoError(t, err)
 
 	// Confirm R1 with whitespace-padded manual IDs " check_01 " and " custom ".
-	confirmedR1, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+	confirmedR1, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: r1.RequestRevision,
 		Answers:         map[string]string{},
-		Examples: []*gensurla.ExampleItem{
+		Examples: []*genhighbay.ExampleItem{
 			{
 				ID:               " check_01 ",
 				Scenario:         "First check",
@@ -516,7 +516,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 	assert.Equal(t, " custom ", confirmedR1.Examples[1].ID)
 
 	// Revise to R2: removes " custom ", keeps " check_01 ", and adds a brand-new row.
-	r2, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+	r2, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: confirmedR1.RequestRevision,
 		Prompt:          "Remove custom and add a new row.",
@@ -529,7 +529,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 	assert.Equal(t, "check_02", r2.Examples[1].ID, "allocator reserves trimmed 'check_01' so new row gets 'check_02'")
 
 	// Confirm R2 with the returned table unchanged: must succeed without a trimmed-ID duplicate error.
-	confirmedR2, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+	confirmedR2, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: r2.RequestRevision,
 		Answers:         map[string]string{},
@@ -539,7 +539,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 	assert.Equal(t, StatusConfirmed, confirmedR2.Status)
 
 	// Revise to R3: removes " check_01 " and adds a new row; "check_01" is still reserved during R3 construction.
-	r3, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+	r3, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: confirmedR2.RequestRevision,
 		Prompt:          "Remove padded check_01 and add a row.",
@@ -552,7 +552,7 @@ func TestReviseChangeWhitespaceManualIDRemovalAndCollision(t *testing.T) {
 	assert.Equal(t, "check_03", r3.Examples[1].ID, "removed ' check_01 ' is reserved during R3 construction")
 
 	// Revise to R4: " check_01 " is no longer in the immediately prior table (R3), so "check_01" is reusable.
-	r4, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &gensurla.ReviseChangePayload{
+	r4, err := cp.ReviseChange(aliceCtx, withRevisionAnalysis(t, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-ws-ids",
 		RequestRevision: r3.RequestRevision,
 		Prompt:          "Add another row in R4.",

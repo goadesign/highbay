@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
 
-	genproject "github.com/goadesign/surla/gen/project"
+	genproject "github.com/goadesign/highbay/gen/project"
 )
 
 // TestRegisteredCredentialFailuresNameTheirRepair breaks a registered role's
@@ -28,8 +28,8 @@ func TestRegisteredCredentialFailuresNameTheirRepair(t *testing.T) {
 		want   string
 	}{
 		{"permissions", func(t *testing.T, path string) { require.NoError(t, os.Chmod(path, 0o644)) }, "because of its permissions or owner; make it a file of this account that only this account can use (chmod 600 %s"},
-		{"damaged", func(t *testing.T, path string) { require.NoError(t, os.WriteFile(path, []byte(garbage), 0o600)) }, "%s is damaged; restore it from a backup of this project's Surla state, then try again"},
-		{"missing", func(t *testing.T, path string) { require.NoError(t, os.Remove(path)) }, "%s is missing; restore it from a backup of this project's Surla state, then try again"},
+		{"damaged", func(t *testing.T, path string) { require.NoError(t, os.WriteFile(path, []byte(garbage), 0o600)) }, "%s is damaged; restore it from a backup of this project's Highbay state, then try again"},
+		{"missing", func(t *testing.T, path string) { require.NoError(t, os.Remove(path)) }, "%s is missing; restore it from a backup of this project's Highbay state, then try again"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := testState(t)
@@ -69,8 +69,8 @@ func TestStateRepairMatchesTheFailure(t *testing.T) {
 		want     string
 		withheld string
 	}{
-		{"refused write", &teamStateFailure{path: record, write: true, err: os.ErrPermission}, "Surla could not write /state/project.json; make sure this account can write the folder /state", "chmod"},
-		{"refused read", &teamStateFailure{path: record, err: os.ErrPermission}, "Surla could not open /state/project.json; make sure this account can read it and open the folders that hold it, starting at /state", "chmod"},
+		{"refused write", &teamStateFailure{path: record, write: true, err: os.ErrPermission}, "Highbay could not write /state/project.json; make sure this account can write the folder /state", "chmod"},
+		{"refused read", &teamStateFailure{path: record, err: os.ErrPermission}, "Highbay could not open /state/project.json; make sure this account can read it and open the folders that hold it, starting at /state", "chmod"},
 		{"not private file", &teamStateFailure{path: record, err: errNotPrivateFile}, "chmod 600 /state/project.json", ""},
 		{"not private folder", &teamStateFailure{path: "/state/agents", dir: true, err: errNotPrivateFolder}, "make it a folder of this account that only this account can use (chmod 700 /state/agents", ""},
 		{"no state file", errors.New("assignment reader failed"), "this project's saved build state could not be read; try again", "chmod"},

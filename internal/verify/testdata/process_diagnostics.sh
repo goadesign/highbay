@@ -87,8 +87,8 @@ suite)
     --describe)
       case "$mode" in
         describe)
-          printf '%s\n' "${SURLA_TEST_SERVER_VALUE-absent} ${ANTHROPIC_API_KEY-absent}"
-          printf '%s\n' "${SURLA_TEST_SERVER_VALUE-absent} ${ANTHROPIC_API_KEY-absent}" >&2
+          printf '%s\n' "${HIGHBAY_TEST_SERVER_VALUE-absent} ${ANTHROPIC_API_KEY-absent}"
+          printf '%s\n' "${HIGHBAY_TEST_SERVER_VALUE-absent} ${ANTHROPIC_API_KEY-absent}" >&2
           exit 7 ;;
         declaration)
           printf '{"id":%s}' 'FAKE_DECLARATION_JSON_521'
@@ -99,7 +99,7 @@ suite)
     *)
       case "$mode" in
         report-*)
-          printf '%s\n' "${SURLA_TEST_SERVER_VALUE-absent} ${ANTHROPIC_API_KEY-absent}" >&2
+          printf '%s\n' "${HIGHBAY_TEST_SERVER_VALUE-absent} ${ANTHROPIC_API_KEY-absent}" >&2
           case "$mode" in
             report-malformed-*) printf '%s' '{"suite_id":"private-diagnostics","started_at":"FAKE_REPORT_JSON_521"}' ;;
             report-missing-*) : ;;

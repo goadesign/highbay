@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestViewsPageVerificationTestSource keeps the accepted-test notice visible
@@ -19,7 +19,7 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 	const suiteCommit = "2222222222222222222222222222222222222222"
 	sources := []struct {
 		name         string
-		source       gensurla.TestSource
+		source       genhighbay.TestSource
 		commitLabel  string
 		bindingLabel string
 		suiteLabel   string
@@ -27,7 +27,7 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 	}{
 		{
 			name: "written_tests",
-			source: gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{
+			source: genhighbay.NewTestSourceWrittenTests(&genhighbay.AgentWrittenTests{
 				Commit: suiteCommit, Notice: writtenTestsNotice,
 			}),
 			commitLabel: "Accepted tests commit", bindingLabel: "Tests' commit", suiteLabel: "Written tests suite",
@@ -35,30 +35,30 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 		},
 		{
 			name:        "evaluator",
-			source:      gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+			source:      genhighbay.NewTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
 			commitLabel: "Evaluator commit", bindingLabel: "Evaluator commit", suiteLabel: "Evaluator suite",
 		},
 	}
 	states := []struct {
 		name    string
-		state   gensurla.State
+		state   genhighbay.State
 		heading string
 	}{
 		{
 			name: "running",
-			state: gensurla.NewStateRunning(&gensurla.VerificationRunning{
+			state: genhighbay.NewStateRunning(&genhighbay.VerificationRunning{
 				StartedAt: "2026-10-31T12:34:56Z",
 			}),
 			heading: "The check is running",
 		},
 		{
 			name: "passed",
-			state: gensurla.NewStateCompleted(&gensurla.VerificationCompleted{
+			state: genhighbay.NewStateCompleted(&genhighbay.VerificationCompleted{
 				SuiteID: "accepted_checks", Environment: "sim",
-				Report: &gensurla.BuilderVerificationReport{
+				Report: &genhighbay.BuilderVerificationReport{
 					ReportDigest: strings.Repeat("3", 64), Passed: true,
-					Counts: &gensurla.VerificationCounts{Required: 1, Passed: 1},
-					Scenarios: []*gensurla.VerificationScenario{
+					Counts: &genhighbay.VerificationCounts{Required: 1, Passed: 1},
+					Scenarios: []*genhighbay.VerificationScenario{
 						{ID: "holdout-1", Outcome: "passed"},
 					},
 				},
@@ -67,7 +67,7 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 		},
 		{
 			name: "not_completed",
-			state: gensurla.NewStateNotCompleted(&gensurla.VerificationNotCompleted{
+			state: genhighbay.NewStateNotCompleted(&genhighbay.VerificationNotCompleted{
 				Kind: "execution_failed", Stage: "suite", Summary: "The checks could not finish.",
 			}),
 			heading: "The check could not finish",
@@ -80,12 +80,12 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 				guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
 				user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
 				proposed := mustPropose(t, cp, guide, "chg-proof-source", "Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
-				card, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+				card, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 					ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 					Answers: map[string]string{}, Examples: proposed.Examples,
 				})
 				require.NoError(t, err)
-				run := &gensurla.VerificationStatusResult{
+				run := &genhighbay.VerificationStatusResult{
 					RunID: "11111111-1111-4111-8111-111111111111", ChangeID: card.ChangeID,
 					RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("1", 40),
 					SuiteCommit: suiteCommit, AcceptedAt: "2026-10-31T12:34:56Z",
@@ -104,34 +104,34 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 					"suiteCommit": suiteCommit,
 				}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor").dataset.changeId === input.change, "the confirmed change did not open");
-page.$("#surla-nav-cp4").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run, "the saved run did not open");
-expect(page.text("#surla-cp4-title") === input.heading, "the run's status changed");
-expect(page.text("#surla-cp4-started").startsWith("Check started ") && !page.text("#surla-cp4-started").includes("finished"), "request acceptance was mislabeled as completion");
-const binding = page.text("#surla-cp4-test-binding").replaceAll("’", "'");
+await until(() => page.$("#highbay-cp1-editor").dataset.changeId === input.change, "the confirmed change did not open");
+page.$("#highbay-nav-cp4").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run, "the saved run did not open");
+expect(page.text("#highbay-cp4-title") === input.heading, "the run's status changed");
+expect(page.text("#highbay-cp4-started").startsWith("Check started ") && !page.text("#highbay-cp4-started").includes("finished"), "request acceptance was mislabeled as completion");
+const binding = page.text("#highbay-cp4-test-binding").replaceAll("’", "'");
 const shortCommit = binding.match(/\b[a-f0-9]{7,40}\b/i)?.[0];
 expect(binding.includes(input.bindingLabel) && shortCommit && shortCommit.length < input.suiteCommit.length && input.suiteCommit.startsWith(shortCommit), "the selected run lacks a source-qualified short suite commit");
 expect(!/\breport \d+\b/i.test(binding), "a run without frozen coverage acquired a test report number");
-const notice = page.$("#surla-cp4-test-source");
+const notice = page.$("#highbay-cp4-test-source");
 if (input.notice) {
   expect(notice && notice.tagName === "P" && !notice.getAttribute("role") && notice.textContent === input.notice, "the server's written-test notice is missing or changed");
   expect(!notice.closest("details") && !notice.hidden, "the source notice is hidden behind a disclosure");
-  expect(!page.text("#surla-cp4-details").includes("Evaluator"), "written tests are labeled as the evaluator");
+  expect(!page.text("#highbay-cp4-details").includes("Evaluator"), "written tests are labeled as the evaluator");
 } else {
-  expect(!notice && !page.text("#surla-cp4-verification").includes("not isolated from the builder"), "the evaluator acquired a written-test notice");
-  expect(!page.text("#surla-cp4-details").includes("Accepted tests"), "the evaluator acquired an accepted-test label");
+  expect(!notice && !page.text("#highbay-cp4-verification").includes("not isolated from the builder"), "the evaluator acquired a written-test notice");
+  expect(!page.text("#highbay-cp4-details").includes("Accepted tests"), "the evaluator acquired an accepted-test label");
 }
-const fields = [...page.$$("#surla-cp4-details dt")];
+const fields = [...page.$$("#highbay-cp4-details dt")];
 const commit = fields.find((field) => field.textContent === input.commitLabel);
 expect(commit && commit.nextElementSibling.textContent === input.suiteCommit, "the source commit label or value is wrong");
 if (input.state === "passed") {
   const suite = fields.find((field) => field.textContent === input.suiteLabel);
   expect(suite && suite.nextElementSibling.textContent === "accepted_checks", "the source suite label or value is wrong");
-  expect(page.text("#surla-cp4-verification").includes("holdout-1"), "the anonymous scenario outcome disappeared");
-  expect(!page.$(".surla-verification-counts"), "a passing report repeated the outcome counts");
+  expect(page.text("#highbay-cp4-verification").includes("holdout-1"), "the anonymous scenario outcome disappeared");
+  expect(!page.$(".highbay-verification-counts"), "a passing report repeated the outcome counts");
 } else if (input.state === "not_completed") {
-  expect(page.text("#surla-cp4-verification").includes("Stopped during: Running the checks."), "the stopped stage misrepresents the checks");
+  expect(page.text("#highbay-cp4-verification").includes("Stopped during: Running the checks."), "the stopped stage misrepresents the checks");
 }
 expect(page.sent("POST", "/changes/" + input.change + "/verifications").length === 0, "reading proof started verification");
 page.close();
@@ -150,11 +150,11 @@ func TestViewsPageEmptyVerificationNamesBuilder(t *testing.T) {
 	ps := startPageServer(t, newPageVerifications(cp))
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-empty-proof", "the change did not open");
-page.$("#surla-nav-cp4").click();
-await until(() => page.$("#surla-cp4-empty"), "the empty proof state did not appear");
-expect(page.text("#surla-cp4-empty").includes("Once the tests are accepted, the builder finishes the code and asks Surla to check it"), "the empty state does not explain who starts checks");
-expect(!page.text("#surla-cp4-empty").includes("verify_change"), "the browser user is directed to the builder-only operation");
+await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-empty-proof", "the change did not open");
+page.$("#highbay-nav-cp4").click();
+await until(() => page.$("#highbay-cp4-empty"), "the empty proof state did not appear");
+expect(page.text("#highbay-cp4-empty").includes("Once the tests are accepted, the builder finishes the code and asks Highbay to check it"), "the empty state does not explain who starts checks");
+expect(!page.text("#highbay-cp4-empty").includes("verify_change"), "the browser user is directed to the builder-only operation");
 page.close();
 `)
 }

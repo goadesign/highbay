@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // TestListChangesCurrentInputsFollowAcceptedWrittenTests exercises real build
@@ -34,7 +34,7 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	writeListedRun(t, runsDir, "alice@example.com", card, runID,
 		time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC), true)
 	setListedRunSource(t, runsDir, runID, verify.TestsWritten)
-	listed := func(want bool) *gensurla.ChangeList {
+	listed := func(want bool) *genhighbay.ChangeList {
 		t.Helper()
 		list, err := cp.ListChanges(user)
 		require.NoError(t, err)
@@ -109,9 +109,9 @@ func TestListChangesCurrentInputsFollowAcceptedWrittenTests(t *testing.T) {
 	start()
 	saveListedTestState(t, cp, card.ChangeID, testsAccepted, commit)
 	listed(true)
-	updated, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	updated, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{},
-		Examples: append(card.Examples, &gensurla.ExampleItem{
+		Examples: append(card.Examples, &genhighbay.ExampleItem{
 			ID: "check_02", Scenario: "Refund over the limit", InputSummary: "Order total $50.01",
 			ExpectedOutcome: "Waits for a manager", VerificationKind: "deterministic",
 		}),
@@ -144,9 +144,9 @@ func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 	require.NotNil(t, initial.Changes[0].LatestVerification)
 	assert.True(t, initial.Changes[0].LatestVerification.InputsCurrent)
 
-	second, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	second, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: first.ChangeID, RequestRevision: first.RequestRevision, Answers: map[string]string{},
-		Examples: append(first.Examples, &gensurla.ExampleItem{
+		Examples: append(first.Examples, &genhighbay.ExampleItem{
 			ID: "check_02", Scenario: "Refund over the limit", InputSummary: "Order total $50.01",
 			ExpectedOutcome: "Waits for a manager", VerificationKind: "deterministic",
 		}),
@@ -169,7 +169,7 @@ func TestListChangesKeepsEarlierRevisionRuns(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, runID, list.Changes[0].LatestVerification.RunID)
 	assert.False(t, list.Changes[0].LatestVerification.InputsCurrent)
-	history, err := cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: first.ChangeID})
+	history, err := cp.ListVerifications(user, &genhighbay.ListVerificationsPayload{ChangeID: first.ChangeID})
 	require.NoError(t, err)
 	require.Len(t, history.Runs, 2)
 	assert.Equal(t, runID, history.Runs[0].RunID)

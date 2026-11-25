@@ -3,7 +3,7 @@
 // project service
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package project
 
@@ -23,9 +23,9 @@ import (
 // Owns one local project's server identity, agent credentials, and one-use
 // browser access. Management credentials last for one listening server and
 // never authorize application decisions; besides this service, they may only
-// hand over the model provider request settings of the shell running surla
-// (the surla service's hand_over_model_settings). This service is not exposed
-// as agent tools.
+// hand over the model provider request settings of the shell running hbay (the
+// highbay service's hand_over_model_settings). This service is not exposed as
+// agent tools.
 type Service interface {
 	// The CLI checks the answering server reports its expected project identity
 	// using the current server-lifetime management credential.
@@ -57,7 +57,7 @@ type Service interface {
 }
 
 // APIName is the name of the API as defined in the design.
-const APIName = "surla"
+const APIName = "highbay"
 
 // APIVersion is the version of the API as defined in the design.
 const APIVersion = "1.0.0"
@@ -130,10 +130,10 @@ type ProjectIdentity struct {
 	Directory string
 	// Immutable operating-system account identity.
 	Owner string
-	// SHA-256 of the surla executable the server started from, read when it
+	// SHA-256 of the hbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and surla stop must still reach them, so it is not required.
+	// field omit it, and hbay stop must still reach them, so it is not required.
 	Build *string
 }
 
@@ -175,7 +175,7 @@ type ProjectTeam struct {
 type ProjectTeamRole struct {
 	// Trusted role.
 	Role string
-	// Stable Chorus handle and Surla actor identity.
+	// Stable Chorus handle and Highbay actor identity.
 	Handle string
 	// The matching live terminal is not reported as an idle shell; missing
 	// foreground information counts as running.
@@ -211,7 +211,7 @@ type TeamUnavailable struct {
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
 	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Surla no longer accepts and is still open), roster_folder
+	// version of Highbay no longer accepts and is still open), roster_folder
 	// (Herdr's launcher roster folder could not be written), project_state (the
 	// project's private record or an agent credential could not be read or
 	// written), or role_folder (a role's working folder could not be read).
@@ -253,10 +253,10 @@ type jsonProjectIdentityTransport struct {
 	Directory *string `json:"directory"`
 	// Immutable operating-system account identity.
 	Owner *string `json:"owner"`
-	// SHA-256 of the surla executable the server started from, read when it
+	// SHA-256 of the hbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and surla stop must still reach them, so it is not required.
+	// field omit it, and hbay stop must still reach them, so it is not required.
 	Build *string `json:"build,omitempty"`
 }
 
@@ -358,7 +358,7 @@ func validatejsonProjectStatusTransport(value *jsonProjectStatusTransport) (err 
 type jsonProjectTeamRoleTransport struct {
 	// Trusted role.
 	Role *string `json:"role"`
-	// Stable Chorus handle and Surla actor identity.
+	// Stable Chorus handle and Highbay actor identity.
 	Handle *string `json:"handle"`
 	// The matching live terminal is not reported as an idle shell; missing
 	// foreground information counts as running.
@@ -534,7 +534,7 @@ type jsonTeamUnavailableTransport struct {
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
 	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Surla no longer accepts and is still open), roster_folder
+	// version of Highbay no longer accepts and is still open), roster_folder
 	// (Herdr's launcher roster folder could not be written), project_state (the
 	// project's private record or an agent credential could not be read or
 	// written), or role_folder (a role's working folder could not be read).
@@ -1332,7 +1332,7 @@ func validateProjectIdentityJSONValue(path string, value any, description string
 		case "build":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 of the surla executable the server started from, read when it started; it tells any two builds apart, including two local builds of one commit. The CLI attaches only to its own build. Servers built before this field omit it, and surla stop must still reach them, so it is not required.",
+				typed[key], "SHA-256 of the hbay executable the server started from, read when it started; it tells any two builds apart, including two local builds of one commit. The CLI attaches only to its own build. Servers built before this field omit it, and hbay stop must still reach them, so it is not required.",
 			); err != nil {
 				return err
 			}
@@ -1706,7 +1706,7 @@ func validateProjectTeamJSONValue3(path string, value any, description string) e
 		case "handle":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Stable Chorus handle and Surla actor identity.",
+				typed[key], "Stable Chorus handle and Highbay actor identity.",
 			); err != nil {
 				return err
 			}
@@ -1774,7 +1774,7 @@ func validateTeamUnavailableJSONValue(path string, value any, description string
 		case "cause":
 			if err := validateProjectIdentityJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Surla no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).",
+				typed[key], "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Highbay no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).",
 			); err != nil {
 				return err
 			}

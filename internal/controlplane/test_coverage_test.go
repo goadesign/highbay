@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // TestReportCoverageValidatesBeforeMutation proves required wire presence and
@@ -25,11 +25,11 @@ import (
 func TestReportCoverageValidatesBeforeMutation(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
-	_, err = cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+	_, err = cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	server := roleServer(t, cp)
 	before := readBuildFile(t, cp, card.ChangeID)
@@ -58,7 +58,7 @@ func TestReportCoverageValidatesBeforeMutation(t *testing.T) {
 // TestCoverageScenarioMembership permits extra listed scenarios and refuses
 // only references absent from the exact program already described by Check.
 func TestCoverageScenarioMembership(t *testing.T) {
-	rows := []*gensurla.TestCoverageStatement{{Scenario: "additional_boundary"}}
+	rows := []*genhighbay.TestCoverageStatement{{Scenario: "additional_boundary"}}
 	assert.Empty(t, coverageScenarioFindings(rows, []string{"required_refund", "additional_boundary"}))
 	findings := coverageScenarioFindings(rows, []string{"required_refund"})
 	require.Len(t, findings, 1)
@@ -72,7 +72,7 @@ func TestCoverageScenarioMembership(t *testing.T) {
 func TestStoredCoverageUsesTheBuiltAgreement(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -88,16 +88,16 @@ func TestStoredCoverageUsesTheBuiltAgreement(t *testing.T) {
 		{name: "null row", edit: func(saved *buildFile) { saved.TestWriter.CoverageStatements[0] = nil }, want: "stored coverage statement"},
 		{name: "empty explanation", edit: func(saved *buildFile) { saved.TestWriter.CoverageStatements[0].Explanation = "" }, want: "stored coverage statement"},
 		{name: "foreign example", edit: func(saved *buildFile) { saved.TestWriter.CoverageStatements[0].ExampleIds[0] = "foreign" }, want: "outside the built agreement"},
-		{name: "invalid answer basis", edit: func(saved *buildFile) { saved.Answers = []*gensurla.ConfirmedAnswer{nil} }, want: "stored coverage answer"},
-		{name: "invalid example basis", edit: func(saved *buildFile) { saved.Examples = []*gensurla.ExampleItem{nil} }, want: "stored coverage example"},
+		{name: "invalid answer basis", edit: func(saved *buildFile) { saved.Answers = []*genhighbay.ConfirmedAnswer{nil} }, want: "stored coverage answer"},
+		{name: "invalid example basis", edit: func(saved *buildFile) { saved.Examples = []*genhighbay.ExampleItem{nil} }, want: "stored coverage example"},
 		{name: "unreported statements", edit: func(saved *buildFile) { saved.ReportNumber, saved.TestWriter.State = 0, testsAssigned }, want: "unreported or builder-only"},
 		{name: "configured evaluator statements", edit: func(saved *buildFile) { saved.Roles = buildRolesBuilderOnly }, want: "unreported or builder-only"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			saved := base
-			saved.TestWriter.CoverageStatements = []*gensurla.TestCoverageStatement{{
-				Scenario: "refund", QuestionIds: []gensurla.TestCoverageReference{},
-				ExampleIds:  []gensurla.TestCoverageReference{gensurla.TestCoverageReference(base.Examples[0].ID)},
+			saved.TestWriter.CoverageStatements = []*genhighbay.TestCoverageStatement{{
+				Scenario: "refund", QuestionIds: []genhighbay.TestCoverageReference{},
+				ExampleIds:  []genhighbay.TestCoverageReference{genhighbay.TestCoverageReference(base.Examples[0].ID)},
 				Explanation: "Checks the refund example.",
 			}}
 			tc.edit(&saved)
@@ -122,28 +122,28 @@ func TestReportedCoverageCorrection(t *testing.T) {
 	cp, revision := newReportFixture(t, Options{}, copy)
 	readBothAssignments(t, cp)
 	basis := mustOpenBuildFile(t, cp)
-	rows := []*gensurla.TestCoverageStatement{{Scenario: "unknown", QuestionIds: []gensurla.TestCoverageReference{},
-		ExampleIds:  []gensurla.TestCoverageReference{gensurla.TestCoverageReference(basis.Examples[0].ID)},
+	rows := []*genhighbay.TestCoverageStatement{{Scenario: "unknown", QuestionIds: []genhighbay.TestCoverageReference{},
+		ExampleIds:  []genhighbay.TestCoverageReference{genhighbay.TestCoverageReference(basis.Examples[0].ID)},
 		Explanation: "Checks the agreed refund example."}}
-	_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
+	_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
 		ChangeID: "chg", RequestRevision: revision, CoverageStatements: rows,
 	})
 	require.NoError(t, err)
-	waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 	assert.Empty(t, copy.recorded())
-	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Contains(t, strings.Join(assignment.Findings, " "), "undeclared scenario")
 	assert.Equal(t, rows, assignment.CoverageStatements)
 	rows[0].Scenario = "extra_refund"
-	_, err = cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
+	_, err = cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
 		ChangeID: "chg", RequestRevision: revision, CoverageStatements: rows,
 	})
 	require.NoError(t, err)
 	rows[0].Explanation = "A caller changed its own input after reporting."
-	build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+	build := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	require.Len(t, build.CoverageStatements, 1)
-	assert.Equal(t, gensurla.TestCoverageReference("extra_refund"), build.CoverageStatements[0].Scenario)
+	assert.Equal(t, genhighbay.TestCoverageReference("extra_refund"), build.CoverageStatements[0].Scenario)
 	assert.Equal(t, "Checks the agreed refund example.", build.CoverageStatements[0].Explanation)
 	assert.Len(t, copy.recorded(), 1)
 }
@@ -155,13 +155,13 @@ func TestWrittenTestSelectionKeepsItsAcceptedCoverage(t *testing.T) {
 	config := verificationConfig(t)
 	cp := newBuildControlPlane(t, verificationSourceOptions(config, false))
 	card := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	saved := mustOpenBuildFile(t, cp)
 	saved.ReportNumber = 1
 	saved.TestWriter = testWriterAssignment{State: testsAccepted, Commit: standInCommit, CheckedAt: time.Now().UTC(),
-		CoverageStatements: []*gensurla.TestCoverageStatement{{Scenario: "refund", QuestionIds: []gensurla.TestCoverageReference{gensurla.TestCoverageReference(saved.Answers[0].ID)},
-			ExampleIds: []gensurla.TestCoverageReference{}, Explanation: "Report one's tax-boundary assertion."}},
+		CoverageStatements: []*genhighbay.TestCoverageStatement{{Scenario: "refund", QuestionIds: []genhighbay.TestCoverageReference{genhighbay.TestCoverageReference(saved.Answers[0].ID)},
+			ExampleIds: []genhighbay.TestCoverageReference{}, Explanation: "Report one's tax-boundary assertion."}},
 	}
 	cp.mu.Lock()
 	err = cp.cards.saveOpenBuild(saved)

@@ -1,7 +1,7 @@
 // Package testwriter prepares, checks and records the work of the test
 // writer, and opens, makes, inspects and joins the linked git working copies
-// of both the builder (.surla-build) and the test writer (.surla-tests).
-// Surla, not the agent, decides whether that work counts. MakeCopy creates a
+// of both the builder (.highbay-build) and the test writer (.highbay-tests).
+// Highbay, not the agent, decides whether that work counts. MakeCopy creates a
 // role's copy on its build branch, OpenCopy opens an existing copy on
 // whatever branch or commit it holds, WorkingCopy.Facts reads its branch,
 // operation and uncommitted paths, WorkingCopy.Join moves it onto a new
@@ -36,9 +36,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 type (
@@ -65,7 +65,7 @@ type (
 
 	// WorkingCopy is a worker's linked git working copy of one project.
 	// Only OpenCopy, InspectCopy and MakeCopy create one, so its folders are
-	// always a working copy Surla created or verified.
+	// always a working copy Highbay created or verified.
 	WorkingCopy struct {
 		// dir is the absolute, symlink-free root of the linked working copy: a
 		// checkout of the whole repository at <project>/<role.Folder>.
@@ -85,12 +85,12 @@ type (
 
 const (
 	// Folder is the test writer's working copy folder name inside the project.
-	// Its ".surla" prefix makes the project's own checks (check_project) skip
+	// Its ".highbay" prefix makes the project's own checks (check_project) skip
 	// it, and the local exclude entry keeps it out of the project's git status.
-	Folder = ".surla-tests"
-	// Branch is the legacy branch name earlier versions of Surla checked out
+	Folder = ".highbay-tests"
+	// Branch is the legacy branch name earlier versions of Highbay checked out
 	// in the test writer's working copy.
-	Branch = "surla/tests"
+	Branch = "highbay/tests"
 )
 
 var (
@@ -104,16 +104,16 @@ var (
 	// ErrNoCommit refuses a project whose repository has no commit to start
 	// the working copy's branch from. Its message is the step to take.
 	ErrNoCommit = errors.New("the project's git repository has no commit yet: commit the project's files, then try again")
-	// ErrFolderInUse refuses a project whose working-copy entry (.surla-build
-	// or .surla-tests) is not the working copy Surla created. Its message is
+	// ErrFolderInUse refuses a project whose working-copy entry (.highbay-build
+	// or .highbay-tests) is not the working copy Highbay created. Its message is
 	// the step to take.
-	ErrFolderInUse = errors.New("the project's " + Folder + " entry is not Surla's working copy: move it out of the project, then try again")
+	ErrFolderInUse = errors.New("the project's " + Folder + " entry is not Highbay's working copy: move it out of the project, then try again")
 	// ErrBranchInUse refuses to create a working copy while another working
 	// copy of the repository holds its build branch: git checks a branch out
 	// in one folder at a time. The error wrapping it names that folder and the
 	// step to take, which touches only that registration; branchInUse states
 	// the step for each case.
-	ErrBranchInUse = errors.New("branch " + Branch + ", which Surla reserves for the test writer's working copy, " +
+	ErrBranchInUse = errors.New("branch " + Branch + ", which Highbay reserves for the test writer's working copy, " +
 		"is held by another working copy")
 )
 
@@ -212,7 +212,7 @@ func InspectCopy(ctx context.Context, projectDir string, role Role,
 // base when branch does not yet exist) when the folder is missing. An existing
 // registered copy is returned on whatever branch or commit it holds without
 // moving it. Before returning or creating a copy it ensures both
-// ".surla-build/" and ".surla-tests/" are in the repository's own
+// ".highbay-build/" and ".highbay-tests/" are in the repository's own
 // info/exclude file, never a tracked file, so the project's git status stays
 // clean.
 //
@@ -252,7 +252,7 @@ func MakeCopy(ctx context.Context, projectDir string, role Role, branch, base st
 	}
 	for _, c := range listed {
 		if same, err := samePath(c.path, dir); c.branch != "refs/heads/"+branch || err == nil && same {
-			// Another branch, or Surla's own copy, whose stale registration
+			// Another branch, or Highbay's own copy, whose stale registration
 			// addCopy drops.
 			continue
 		}
@@ -335,7 +335,7 @@ func resolveProject(ctx context.Context, projectDir string) (string, string, err
 func folderInUse(role Role, detail string) error {
 	return roleError{
 		sentinel: ErrFolderInUse,
-		msg: fmt.Sprintf("the project's %s entry is not Surla's working copy (%s): move it out of the project, then try again",
+		msg: fmt.Sprintf("the project's %s entry is not Highbay's working copy (%s): move it out of the project, then try again",
 			role.Folder, detail),
 	}
 }
@@ -364,7 +364,7 @@ func excludeFolders(ctx context.Context, project string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	entry := "# Surla's working copies.\n" + strings.Join(missing, "\n") + "\n"
+	entry := "# Highbay's working copies.\n" + strings.Join(missing, "\n") + "\n"
 	if len(raw) > 0 && !strings.HasSuffix(string(raw), "\n") {
 		entry = "\n" + entry
 	}
@@ -445,7 +445,7 @@ func registeredCopy(ctx context.Context, project, dir string, role Role) (string
 // character that is not printed is not shown at all: it could make the
 // refusal read as other instructions.
 func branchInUse(c listedCopy, role Role, branch string) error {
-	prefix := fmt.Sprintf("branch %s, which Surla reserves for %s, is held by another working copy",
+	prefix := fmt.Sprintf("branch %s, which Highbay reserves for %s, is held by another working copy",
 		branch, role.copyName())
 	if !printableName(c.path) {
 		return roleError{

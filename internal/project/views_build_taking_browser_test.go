@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,15 +24,15 @@ import (
 // browserTakingService supplies one saved build through its generated owner
 // interface, while the real project server retains auth, cards and sessions.
 type browserTakingService struct {
-	gensurla.Service
+	genhighbay.Service
 	mu    sync.RWMutex
-	build *gensurla.ChangeBuild
+	build *genhighbay.ChangeBuild
 }
 
 // GetBuild returns the single presentation fixture without changing it.
 func (s *browserTakingService) GetBuild(
-	context.Context, *gensurla.GetBuildPayload,
-) (*gensurla.ChangeBuild, error) {
+	context.Context, *genhighbay.GetBuildPayload,
+) (*genhighbay.ChangeBuild, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.build, nil
@@ -67,7 +67,7 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{
 		ID: vp.state.Record.Owner, CallerID: "layout-user", Kind: controlplane.CallerUser,
 	})
-	card, err = vp.cp.Load().ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	card, err = vp.cp.Load().ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		Answers: map[string]string{}, Examples: card.Examples,
 	})
@@ -76,22 +76,22 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	at := time.Now().UTC().Format(time.RFC3339Nano)
 	service := &browserTakingService{
 		Service: vp.cp.Load(),
-		build: &gensurla.ChangeBuild{
+		build: &genhighbay.ChangeBuild{
 			ChangeID: card.ChangeID,
-			Build: gensurla.NewBuildStarted(&gensurla.StartedBuild{
+			Build: genhighbay.NewBuildStarted(&genhighbay.StartedBuild{
 				RequestRevision: card.RequestRevision, StartedAt: at, InForce: true,
-				RequiredTests: []*gensurla.RequiredTest{},
-				Builder:       &gensurla.BuilderProgress{Read: true},
-				TestWriter: &gensurla.TestWriterProgress{Read: true, Report: 1,
-					Tests: gensurla.NewTestsAccepted(&gensurla.TestsAccepted{
+				RequiredTests: []*genhighbay.RequiredTest{},
+				Builder:       &genhighbay.BuilderProgress{Read: true},
+				TestWriter: &genhighbay.TestWriterProgress{Read: true, Report: 1,
+					Tests: genhighbay.NewTestsAccepted(&genhighbay.TestsAccepted{
 						Commit: tests, CheckedAt: at,
-						NotJudged: "Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.",
+						NotJudged: "Highbay checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert.",
 					}),
 				},
-				Taking: gensurla.NewBuildTakingPassed(&gensurla.BuildPassed{
-					RunID: "layout-run", CandidateCommit: candidate, CandidateBranch: "surla/build-7",
-					Tests: gensurla.NewBuildPassedTestSourceWrittenTests(&gensurla.BuildPassedTests{
-						Commit: tests, Branch: "surla/tests-7",
+				Taking: genhighbay.NewBuildTakingPassed(&genhighbay.BuildPassed{
+					RunID: "layout-run", CandidateCommit: candidate, CandidateBranch: "highbay/build-7",
+					Tests: genhighbay.NewBuildPassedTestSourceWrittenTests(&genhighbay.BuildPassedTests{
+						Commit: tests, Branch: "highbay/tests-7",
 					}),
 					BaseInBranch: false,
 				}),
@@ -103,7 +103,7 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 	application.Handle("/", controlplane.NewHTTPHandler(service, server.Authenticate))
 	handler = server.Handler(application)
 	vp.handler.Store(&handler)
-	capture := os.Getenv("SURLA_TEST_TAKING_CAPTURE_DIR")
+	capture := os.Getenv("HIGHBAY_TEST_TAKING_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
@@ -118,20 +118,20 @@ func TestBuildTakingAtDesktopAndPhoneWidth(t *testing.T) {
 		case "passed":
 			fixture.Taking = passed
 		case "building":
-			fixture.Taking = gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})
+			fixture.Taking = genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{})
 		case "dropped", "dropped_stale":
-			fixture.Taking = gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: []string{}})
+			fixture.Taking = genhighbay.NewBuildTakingDropped(&genhighbay.BuildDropped{KeptBranches: []string{}})
 		case "merged", "replay":
 			fixture.InForce = state == "replay"
 			if state == "merged" {
 				fixture.RequestRevision = strings.Repeat("0", 64)
 			}
-			fixture.Taking = gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})
+			fixture.Taking = genhighbay.NewBuildTakingMerged(&genhighbay.BuildMerged{})
 		}
 		service.mu.Lock()
-		service.build = &gensurla.ChangeBuild{
+		service.build = &genhighbay.ChangeBuild{
 			ChangeID: card.ChangeID, DraftedBeforeDrop: state == "dropped_stale",
-			Build: gensurla.NewBuildStarted(&fixture),
+			Build: genhighbay.NewBuildStarted(&fixture),
 		}
 		service.mu.Unlock()
 		link, err := vp.link()

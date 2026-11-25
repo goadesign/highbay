@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestBuildStatesReadTheSameOnBothInterfaces saves each test writer state, or
@@ -81,7 +81,7 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 			cp := newBuildControlPlane(t, opts)
 			srv := roleServer(t, cp)
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit"))
-			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			makeBuildFixtureBuilderCopy(t, cp)
 			editBuildFile(t, cp, "chg", savedTestWriter(tc.saved))
@@ -99,11 +99,11 @@ func TestBuildStatesReadTheSameOnBothInterfaces(t *testing.T) {
 			assert.JSONEq(t, tc.tests, jsonAt(t, result, "build", "test_writer", "tests"), "get_build over MCP")
 			assert.JSONEq(t, report, jsonAt(t, result, "build", "test_writer", "report"))
 			for _, raw := range [][]byte{[]byte(body), result} {
-				read, err := gensurla.DecodeChangeBuild(raw)
+				read, err := genhighbay.DecodeChangeBuild(raw)
 				require.NoError(t, err)
 				started, ok := read.Build.AsStarted()
 				require.True(t, ok)
-				assert.Equal(t, []*gensurla.RequiredTest{{Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"}}, started.RequiredTests)
+				assert.Equal(t, []*genhighbay.RequiredTest{{Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"}}, started.RequiredTests)
 			}
 
 			status, body = httpCall(t, srv.URL, "builder", http.MethodGet, "/assignments/builder/chg", "")
@@ -123,7 +123,7 @@ func TestBuildReadsShowTheSavedReportNumber(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	srv := roleServer(t, cp)
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	editBuildFile(t, cp, "chg", func(f map[string]any) map[string]any {
 		f["test_writer"].(map[string]any)["state"] = testsReported
@@ -158,12 +158,12 @@ func TestBuildReadsShowTheSavedReportNumber(t *testing.T) {
 func TestVerdictTimesAreSavedAndReturnedInUTC(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	editBuildFile(t, cp, "chg", savedTestWriter(map[string]any{
 		"state": "accepted", "commit": strings.Repeat("c", 40), "checked_at": "2026-11-13T10:30:00+01:00",
 	}))
-	full, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	full, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	accepted, ok := full.Progress.Tests.AsAccepted()
 	require.True(t, ok)
@@ -194,7 +194,7 @@ func TestStoredEvaluatorBuildsReadNotUsed(t *testing.T) {
 			without := newBuildControlPlane(t, Options{})
 			for _, cp := range []*ControlPlane{stored, without} {
 				card := buildableChange(t, cp, "chg")
-				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 				require.NoError(t, err)
 				if cp == stored {
 					makeBuildFixtureBuilderCopy(t, cp)
@@ -203,15 +203,15 @@ func TestStoredEvaluatorBuildsReadNotUsed(t *testing.T) {
 			}
 
 			build := mustStartedBuild(t, stored, asCaller("alice@example.com", CallerUser), "chg")
-			assert.Equal(t, gensurla.TestsKindNotUsed, build.TestWriter.Tests.Kind(), "get_build")
-			builder, err := stored.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+			assert.Equal(t, genhighbay.TestsKindNotUsed, build.TestWriter.Tests.Kind(), "get_build")
+			builder, err := stored.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err)
-			assert.Equal(t, gensurla.WrittenTestsKindNotUsed, builder.WrittenTests.Kind(), "get_builder_assignment")
+			assert.Equal(t, genhighbay.WrittenTestsKindNotUsed, builder.WrittenTests.Kind(), "get_builder_assignment")
 			listed, err := stored.ListBuilderAssignments(asCaller("alice@example.com", CallerBuilder))
 			require.NoError(t, err)
 			require.Len(t, listed.Assignments, 1)
-			assert.Equal(t, gensurla.WrittenTestsKindNotUsed, listed.Assignments[0].WrittenTests.Kind(), "list_builder_assignments")
-			full, err := stored.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			assert.Equal(t, genhighbay.WrittenTestsKindNotUsed, listed.Assignments[0].WrittenTests.Kind(), "list_builder_assignments")
+			full, err := stored.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			assert.Nil(t, full)
 			assertRefused(t, err, "not_found")
 			items, err := stored.ListTestWriterAssignments(asCaller("alice@example.com", CallerTestWriter))
@@ -239,15 +239,15 @@ func TestReportAfterAVerdictClearsIt(t *testing.T) {
 		t.Run(fields["state"].(string), func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			card := buildableChange(t, cp, "chg")
-			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			editBuildFile(t, cp, "chg", savedTestWriter(fields))
-			reported, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-				ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+			reported, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
+				ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 			require.NoError(t, err)
-			assert.Equal(t, gensurla.TestsKindReported, reported.Progress.Tests.Kind())
+			assert.Equal(t, genhighbay.TestsKindReported, reported.Progress.Tests.Kind())
 			assert.Equal(t, 2, reported.Progress.Report, "the report after the verdict's is counted")
-			assert.Equal(t, gensurla.TestsKindReported, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind())
+			assert.Equal(t, genhighbay.TestsKindReported, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind())
 			var file map[string]any
 			require.NoError(t, json.Unmarshal(readBuildFile(t, cp, "chg"), &file))
 			saved := file["test_writer"].(map[string]any)
@@ -267,18 +267,18 @@ func TestStartBuildWithAStoredEvaluatorReturnsNotUsed(t *testing.T) {
 	cases := []struct {
 		name  string
 		opts  func(t *testing.T) Options
-		tests gensurla.TestsKind
+		tests genhighbay.TestsKind
 	}{
 		{name: "stored evaluator", opts: func(t *testing.T) Options {
 			return Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}}
-		}, tests: gensurla.TestsKindNotUsed},
-		{name: "no stored evaluator", opts: func(*testing.T) Options { return Options{} }, tests: gensurla.TestsKindAssigned},
+		}, tests: genhighbay.TestsKindNotUsed},
+		{name: "no stored evaluator", opts: func(*testing.T) Options { return Options{} }, tests: genhighbay.TestsKindAssigned},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, tc.opts(t))
 			card := buildableChange(t, cp, "chg")
-			started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			assert.Equal(t, tc.tests, started.Build.TestWriter.Tests.Kind())
 		})

@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/goadesign/surla/internal/gitenv"
+	"github.com/goadesign/highbay/internal/gitenv"
 )
 
 type (
@@ -186,7 +186,7 @@ func commitTree(
 	}
 	if head != checkedTip {
 		return "", &AuthorError{Finding: Finding{Kind: FindingWorkingCopy, Message: fmt.Sprintf(
-			"The tests branch %s moved from checked commit %s to %s before recording. Put your own tests on %s, uncommitted (Surla commits what it accepts), and report again.",
+			"The tests branch %s moved from checked commit %s to %s before recording. Put your own tests on %s, uncommitted (Highbay commits what it accepts), and report again.",
 			ShownBranch(branch), checkedTip, head, ShownBranch(branch))}}
 	}
 	headTree, err := wc.git(ctx, wc.dir, nil, "rev-parse", "--verify", checkedTip+"^{tree}")
@@ -253,7 +253,7 @@ func commitTree(
 		facts.IndexLock = ""
 		return "", &AuthorError{Finding: workingCopyFinding(branch, facts)}
 	}
-	tmp, err := os.MkdirTemp(wc.gitDir, "surla-record-*")
+	tmp, err := os.MkdirTemp(wc.gitDir, "highbay-record-*")
 	if err != nil {
 		return "", err
 	}

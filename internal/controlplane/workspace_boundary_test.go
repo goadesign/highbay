@@ -19,10 +19,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 type (
@@ -62,11 +62,11 @@ func TestBoundControlPlaneDefaultEvaluatorAndGeneratorIgnoreWorkspaceTMPDIRAndCl
 	require.ErrorContains(t, err, "has mode 0755, want 0700")
 
 	cp, err := New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
-		InitStageDir: stageDir,
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		CardsDir:       cardsDir,
+		WorkspaceDir:   wsDir,
+		InitStageDir:   stageDir,
+		HighbayVersion: testHighbayVersion,
 	})
 	require.NoError(t, err)
 
@@ -80,7 +80,7 @@ func TestBoundControlPlaneDefaultEvaluatorAndGeneratorIgnoreWorkspaceTMPDIRAndCl
 	require.NoError(t, err)
 	require.Len(t, entriesAfterEval, 1, "default evaluator must allocate its workDir under <CardsDir>/designeval")
 	evalWorkName := entriesAfterEval[0].Name()
-	assert.True(t, strings.HasPrefix(evalWorkName, "surla-designeval-work-"))
+	assert.True(t, strings.HasPrefix(evalWorkName, "highbay-designeval-work-"))
 
 	initGen, err := cp.makeInitGenerator(evalParent)
 	require.NoError(t, err)
@@ -122,10 +122,10 @@ func TestNewAndInitProjectNormalizeSymlinkBeforeParentPaths(t *testing.T) {
 
 	// 1. CardsDir = alias + "/../cards" resolves to wsDir/cards and is rejected before openCardStore creates it.
 	_, err := New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     alias + "/../cards",
-		WorkspaceDir: wsDir,
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		CardsDir:       alias + "/../cards",
+		WorkspaceDir:   wsDir,
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside the workspace")
 	_, statErr := os.Lstat(filepath.Join(wsDir, "cards"))
@@ -133,29 +133,29 @@ func TestNewAndInitProjectNormalizeSymlinkBeforeParentPaths(t *testing.T) {
 
 	// 2. RunsDir = alias + "/../runs" is rejected at startup.
 	_, err = New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     filepath.Join(root, "cards-ok-1"),
-		WorkspaceDir: wsDir,
-		RunsDir:      alias + "/../runs",
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		CardsDir:       filepath.Join(root, "cards-ok-1"),
+		WorkspaceDir:   wsDir,
+		RunsDir:        alias + "/../runs",
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside the workspace")
 
 	// 3. InitStageDir = alias + "/../stage" is rejected at startup.
 	_, err = New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     filepath.Join(root, "cards-ok-2"),
-		WorkspaceDir: wsDir,
-		InitStageDir: alias + "/../stage",
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		CardsDir:       filepath.Join(root, "cards-ok-2"),
+		WorkspaceDir:   wsDir,
+		InitStageDir:   alias + "/../stage",
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside workspace")
 
 	// 4. Verification.Plan.ReportDir = alias + "/../reports" is rejected at startup.
 	_, err = New(Options{Team: testTeamBinding(), BuildCacheDir: t.TempDir(),
-		CardsDir:     filepath.Join(root, "cards-ok-3"),
-		WorkspaceDir: wsDir,
-		SurlaVersion: testSurlaVersion,
+		CardsDir:       filepath.Join(root, "cards-ok-3"),
+		WorkspaceDir:   wsDir,
+		HighbayVersion: testHighbayVersion,
 		Verification: &VerificationConfig{
 			RunsDir: filepath.Join(root, "runs-ok"),
 			Plan: verify.Plan{
@@ -179,7 +179,7 @@ func TestSyncDirTreeFDFollowedByRemoveOwnedStagingDirAndFailedWALCleanup(t *test
 	evalParent, err := abspath.Eval(stageParent)
 	require.NoError(t, err)
 
-	stageName := ".surla-init-sync-remove"
+	stageName := ".highbay-init-sync-remove"
 	stageDir := filepath.Join(evalParent, stageName)
 	require.NoError(t, os.MkdirAll(filepath.Join(stageDir, "nested", "sub"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(stageDir, "go.mod"), []byte("module example.com/shop\n"), 0o600))
@@ -205,12 +205,12 @@ func TestSyncDirTreeFDFollowedByRemoveOwnedStagingDirAndFailedWALCleanup(t *test
 	initStage := filepath.Join(root, "init-stage")
 	require.NoError(t, os.MkdirAll(wsDir, 0o755))
 	cp, err := New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
-		InitStageDir: initStage,
-		SurlaVersion: testSurlaVersion,
-		InitRunner:   fakeInitRunner,
+		Team:           testTeamBinding(),
+		CardsDir:       cardsDir,
+		WorkspaceDir:   wsDir,
+		InitStageDir:   initStage,
+		HighbayVersion: testHighbayVersion,
+		InitRunner:     fakeInitRunner,
 		NewGenerator: func() scaffold.Generator {
 			return &fakeInitGenerator{pkg: "shop"}
 		},
@@ -224,7 +224,7 @@ func TestSyncDirTreeFDFollowedByRemoveOwnedStagingDirAndFailedWALCleanup(t *test
 
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	shopModule := "example.com/shop"
-	_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+	_, err = cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 		ModulePath: &shopModule,
 	})
 	require.Error(t, err)
@@ -251,12 +251,12 @@ func TestInitProjectEmitsMCPProgress(t *testing.T) {
 	require.NoError(t, os.MkdirAll(reportsDir, 0o700))
 
 	cp, err := New(Options{Team: testTeamBinding(), BuildCacheDir: t.TempDir(),
-		CardsDir:     cardsDir,
-		WorkspaceDir: wsDir,
-		InitStageDir: stageDir,
-		RunsDir:      runsDir,
-		SurlaVersion: testSurlaVersion,
-		InitRunner:   fakeInitRunner,
+		CardsDir:       cardsDir,
+		WorkspaceDir:   wsDir,
+		InitStageDir:   stageDir,
+		RunsDir:        runsDir,
+		HighbayVersion: testHighbayVersion,
+		InitRunner:     fakeInitRunner,
 		NewGenerator: func() scaffold.Generator {
 			return &fakeInitGenerator{pkg: "shop"}
 		},
@@ -394,12 +394,12 @@ func TestNewAndInitProjectPreserveSignificantPathWhitespace(t *testing.T) {
 		require.NoError(t, os.MkdirAll(stageWithSpace, 0o700))
 
 		cp, err := New(Options{Team: testTeamBinding(), BuildCacheDir: t.TempDir(),
-			WorkspaceDir: ws,
-			CardsDir:     cardsWithSpace,
-			RunsDir:      runsWithSpace,
-			InitStageDir: stageWithSpace,
-			SurlaVersion: testSurlaVersion,
-			InitRunner:   fakeInitRunner,
+			WorkspaceDir:   ws,
+			CardsDir:       cardsWithSpace,
+			RunsDir:        runsWithSpace,
+			InitStageDir:   stageWithSpace,
+			HighbayVersion: testHighbayVersion,
+			InitRunner:     fakeInitRunner,
 			NewGenerator: func() scaffold.Generator {
 				return &fakeInitGenerator{pkg: "shop"}
 			},
@@ -426,13 +426,13 @@ func TestNewAndInitProjectPreserveSignificantPathWhitespace(t *testing.T) {
 		alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 		paddedDir := " shop "
 		shopModule := "example.com/shop"
-		_, err = cp.InitProject(alice, &gensurla.InitProjectPayload{
+		_, err = cp.InitProject(alice, &genhighbay.InitProjectPayload{
 			ModulePath: &shopModule,
 			Dir:        &paddedDir,
 		})
 		require.ErrorContains(t, err, "single child directory name")
 
-		initRes, err := cp.InitProject(alice, &gensurla.InitProjectPayload{
+		initRes, err := cp.InitProject(alice, &genhighbay.InitProjectPayload{
 			ModulePath: &shopModule,
 		})
 		require.NoError(t, err)
@@ -458,35 +458,35 @@ func TestNewProtectsMonorepoAndPreservesValidLayouts(t *testing.T) {
 
 	// 1. CardsDir, RunsDir, InitStageDir, or ReportDir inside enclosing monorepo R (outside wsDir) is rejected.
 	_, err := New(Options{
-		Team:         testTeamBinding(),
-		WorkspaceDir: wsDir,
-		CardsDir:     filepath.Join(monorepo, ".surla", "cards"),
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		WorkspaceDir:   wsDir,
+		CardsDir:       filepath.Join(monorepo, ".highbay", "cards"),
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside the workspace")
 
 	_, err = New(Options{
-		Team:         testTeamBinding(),
-		WorkspaceDir: wsDir,
-		CardsDir:     filepath.Join(root, "cards-ok-1"),
-		RunsDir:      filepath.Join(monorepo, ".surla", "runs"),
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		WorkspaceDir:   wsDir,
+		CardsDir:       filepath.Join(root, "cards-ok-1"),
+		RunsDir:        filepath.Join(monorepo, ".highbay", "runs"),
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside the workspace")
 
 	_, err = New(Options{
-		Team:         testTeamBinding(),
-		WorkspaceDir: wsDir,
-		CardsDir:     filepath.Join(root, "cards-ok-2"),
-		InitStageDir: filepath.Join(monorepo, ".surla-stage"),
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		WorkspaceDir:   wsDir,
+		CardsDir:       filepath.Join(root, "cards-ok-2"),
+		InitStageDir:   filepath.Join(monorepo, ".highbay-stage"),
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside workspace")
 
 	_, err = New(Options{Team: testTeamBinding(), BuildCacheDir: t.TempDir(),
-		WorkspaceDir: wsDir,
-		CardsDir:     filepath.Join(root, "cards-ok-3"),
-		SurlaVersion: testSurlaVersion,
+		WorkspaceDir:   wsDir,
+		CardsDir:       filepath.Join(root, "cards-ok-3"),
+		HighbayVersion: testHighbayVersion,
 		Verification: &VerificationConfig{
 			RunsDir: filepath.Join(root, "runs-ok-3"),
 			Plan: verify.Plan{
@@ -502,7 +502,7 @@ func TestNewProtectsMonorepoAndPreservesValidLayouts(t *testing.T) {
 		WorkspaceDir:    wsDir,
 		CardsDir:        filepath.Join(root, "cards-ok-4"),
 		RunsDir:         filepath.Join(root, "runs-ok-4"),
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: filepath.Join(monorepo, "reports"), Timeout: time.Minute},
 	})
 	require.ErrorContains(t, err, "must be outside the workspace")
@@ -513,20 +513,20 @@ func TestNewProtectsMonorepoAndPreservesValidLayouts(t *testing.T) {
 	require.NoError(t, os.MkdirAll(opsProject, 0o755))
 	require.NoError(t, os.Chmod(opsParent, 0o700))
 	cpParent, err := New(Options{
-		Team:         testTeamBinding(),
-		WorkspaceDir: opsProject,
-		CardsDir:     filepath.Join(root, "cards-parent"),
-		InitStageDir: opsParent,
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		WorkspaceDir:   opsProject,
+		CardsDir:       filepath.Join(root, "cards-parent"),
+		InitStageDir:   opsParent,
+		HighbayVersion: testHighbayVersion,
 	})
 	require.NoError(t, err)
 	require.NoError(t, cpParent.Close())
 
 	// 4. Separate verification source repository B (e.g. a read-only bare mirror) remains accepted.
 	cpSeparate, err := New(Options{Team: testTeamBinding(), BuildCacheDir: t.TempDir(),
-		WorkspaceDir: wsDir,
-		CardsDir:     filepath.Join(root, "cards-sep"),
-		SurlaVersion: testSurlaVersion,
+		WorkspaceDir:   wsDir,
+		CardsDir:       filepath.Join(root, "cards-sep"),
+		HighbayVersion: testHighbayVersion,
 		Verification: &VerificationConfig{
 			RunsDir: filepath.Join(candidateB, "runs"),
 			Plan: verify.Plan{
@@ -582,12 +582,12 @@ func TestInitProjectAcceptsAnotherSpellingOfTheWorkspace(t *testing.T) {
 	}
 	runs := filepath.Join(root, "ops", "runs")
 	cp, err := New(Options{Team: testTeamBinding(), BuildCacheDir: t.TempDir(),
-		WorkspaceDir: filepath.Join(root, "WS"),
-		CardsDir:     filepath.Join(root, "ops", "cards"),
-		RunsDir:      runs,
-		InitStageDir: filepath.Join(root, "ops", "stage"),
-		SurlaVersion: testSurlaVersion,
-		InitRunner:   fakeInitRunner,
+		WorkspaceDir:   filepath.Join(root, "WS"),
+		CardsDir:       filepath.Join(root, "ops", "cards"),
+		RunsDir:        runs,
+		InitStageDir:   filepath.Join(root, "ops", "stage"),
+		HighbayVersion: testHighbayVersion,
+		InitRunner:     fakeInitRunner,
 		NewGenerator: func() scaffold.Generator {
 			return &fakeInitGenerator{pkg: "shop"}
 		},
@@ -611,7 +611,7 @@ func TestInitProjectAcceptsAnotherSpellingOfTheWorkspace(t *testing.T) {
 
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	shopModule := "example.com/shop"
-	initRes, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: &shopModule})
+	initRes, err := cp.InitProject(alice, &genhighbay.InitProjectPayload{ModulePath: &shopModule})
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(ws, "shop"), initRes.Dir)
 }

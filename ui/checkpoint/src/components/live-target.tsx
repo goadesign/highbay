@@ -86,14 +86,14 @@ export interface LiveTargetStageProps {
 export function LiveTargetStageView(props: LiveTargetStageProps) {
   return (
     <Card
-      id="surla-live-stage"
-      className="surla-card surla-live-stage"
+      id="highbay-live-stage"
+      className="highbay-card highbay-live-stage"
       role="region"
-      aria-labelledby="surla-live-title"
+      aria-labelledby="highbay-live-title"
       aria-busy={props.targetLoading || props.modelLoading ? "true" : undefined}
     >
-      <div className="surla-region-header">
-        <h2 id="surla-live-title">Live target</h2>
+      <div className="highbay-region-header">
+        <h2 id="highbay-live-title">Live target</h2>
       </div>
       <LiveTargetSection {...props} />
       <ModelSection {...props} />
@@ -192,33 +192,33 @@ function LiveTargetSection({
   }
 
   return (
-    <section id="surla-live-target" data-state={current !== null ? current.state : "unread"} aria-labelledby="surla-live-target-title">
-      <h3 id="surla-live-target-title" ref={headingRef} tabIndex={-1}>
+    <section id="highbay-live-target" data-state={current !== null ? current.state : "unread"} aria-labelledby="highbay-live-target-title">
+      <h3 id="highbay-live-target-title" ref={headingRef} tabIndex={-1}>
         What runs now
       </h3>
-      <p id="surla-live-announcement" className="surla-visually-hidden" role="status">
+      <p id="highbay-live-announcement" className="highbay-visually-hidden" role="status">
         {announcement}
       </p>
       {targetError !== null ? (
-        <Alert id="surla-live-error" variant="destructive" role="alert">
+        <Alert id="highbay-live-error" variant="destructive" role="alert">
           <strong>Could not read the live target. </strong>
-          <span className="surla-live-wrap">{targetError}</span>
-          <div className="surla-field-row">
-            <Button id="surla-live-retry" disabled={targetLoading} onClick={onRetryTarget}>
+          <span className="highbay-live-wrap">{targetError}</span>
+          <div className="highbay-field-row">
+            <Button id="highbay-live-retry" disabled={targetLoading} onClick={onRetryTarget}>
               Read the live target again
             </Button>
           </div>
         </Alert>
       ) : null}
       {current === null ? (
-        targetError === null ? <p role="status">Reading the live target from the Surla server...</p> : null
+        targetError === null ? <p role="status">Reading the live target from the Highbay server...</p> : null
       ) : (
         <LiveTargetBody target={current} />
       )}
       {stoppable !== null && !confirming ? (
-        <div className="surla-field-row" ref={attachStopRow}>
+        <div className="highbay-field-row" ref={attachStopRow}>
           <Button
-            id="surla-live-stop"
+            id="highbay-live-stop"
             disabled={stopping}
             onClick={() => setConfirming(true)}
           >
@@ -228,10 +228,10 @@ function LiveTargetSection({
       ) : null}
       {stoppable !== null && confirming ? (
         <div
-          id="surla-live-stop-confirm"
+          id="highbay-live-stop-confirm"
           ref={confirmRef}
           role="group"
-          aria-labelledby="surla-live-stop-question"
+          aria-labelledby="highbay-live-stop-question"
           tabIndex={-1}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
@@ -241,16 +241,16 @@ function LiveTargetSection({
           }}
         >
           <Alert variant="warning">
-            <p id="surla-live-stop-question" className="surla-live-wrap">
+            <p id="highbay-live-stop-question" className="highbay-live-wrap">
               Stop the live target for commit <code>{stoppable.candidate_commit.slice(0, 7)}</code>? It
               ends now, and every prompt draft applied to it is discarded; only committed text
               survives.
             </p>
-            <div className="surla-field-row">
-              <Button id="surla-live-stop-yes" onClick={stop}>
+            <div className="highbay-field-row">
+              <Button id="highbay-live-stop-yes" onClick={stop}>
                 Stop it
               </Button>
-              <Button id="surla-live-stop-keep" onClick={keep}>
+              <Button id="highbay-live-stop-keep" onClick={keep}>
                 Keep it running
               </Button>
             </div>
@@ -259,11 +259,11 @@ function LiveTargetSection({
       ) : null}
       {stopOutcome !== null ? (
         <Alert
-          id="surla-live-stop-outcome"
+          id="highbay-live-stop-outcome"
           variant={stopOutcome.refused ? "destructive" : "default"}
           role={stopOutcome.refused ? "alert" : "status"}
         >
-          <span className="surla-live-wrap">{stopOutcome.message}</span>
+          <span className="highbay-live-wrap">{stopOutcome.message}</span>
         </Alert>
       ) : null}
     </section>
@@ -275,7 +275,7 @@ function LiveTargetBody({ target }: { target: LiveTargetCase }) {
   switch (target.state) {
     case "none":
       return (
-        <p id="surla-live-none">
+        <p id="highbay-live-none">
           No live target is running. The builder agent starts one from a commit to try prompt
           wording on it.
         </p>
@@ -286,7 +286,7 @@ function LiveTargetBody({ target }: { target: LiveTargetCase }) {
           <p>
             <Badge variant="accent">Starting</Badge>
           </p>
-          <p id="surla-live-starting" className="surla-live-wrap">
+          <p id="highbay-live-starting" className="highbay-live-wrap">
             Building and starting commit <code>{target.candidate_commit}</code> since{" "}
             <Clock iso={target.since} />. It cannot be stopped until the start finishes.
           </p>
@@ -300,11 +300,11 @@ function LiveTargetBody({ target }: { target: LiveTargetCase }) {
           <p>
             <Badge variant="warning">Ended unexpectedly</Badge>
           </p>
-          <p id="surla-live-ended" className="surla-live-wrap">
+          <p id="highbay-live-ended" className="highbay-live-wrap">
             Commit <code>{target.candidate_commit}</code>, started <Clock iso={target.started_at} />;
             {" "}observed ended <Clock iso={target.ended_at} />.
           </p>
-          <p id="surla-live-message" className="surla-live-wrap">
+          <p id="highbay-live-message" className="highbay-live-wrap">
             {target.message}
           </p>
         </>
@@ -315,10 +315,10 @@ function LiveTargetBody({ target }: { target: LiveTargetCase }) {
           <p>
             <Badge variant="warning">Not confirmed stopped</Badge>
           </p>
-          <p className="surla-live-wrap">
+          <p className="highbay-live-wrap">
             Commit <code>{target.candidate_commit}</code>.
           </p>
-          <p id="surla-live-message" className="surla-live-wrap">
+          <p id="highbay-live-message" className="highbay-live-wrap">
             {target.message}
           </p>
         </>
@@ -335,34 +335,34 @@ function RunningBody({ target }: { target: RunningCase }) {
       <p>
         <Badge variant="success">Running</Badge>
       </p>
-      <p id="surla-live-running" className="surla-live-wrap">
+      <p id="highbay-live-running" className="highbay-live-wrap">
         Commit <code>{target.candidate_commit}</code>, running since <Clock iso={target.started_at} /> at{" "}
         {origin !== null ? (
-          <a id="surla-live-address" href={origin} target="_blank" rel="noopener noreferrer">
+          <a id="highbay-live-address" href={origin} target="_blank" rel="noopener noreferrer">
             {target.url}
           </a>
         ) : (
-          <code id="surla-live-address">{target.url}</code>
+          <code id="highbay-live-address">{target.url}</code>
         )}
         .
       </p>
       {target.prompts.length === 0 ? (
-        <p id="surla-live-no-prompts">No prompt has been changed in it yet.</p>
+        <p id="highbay-live-no-prompts">No prompt has been changed in it yet.</p>
       ) : (
         <>
           <h4>Prompts changed in it</h4>
-          <ul id="surla-live-prompts" className="surla-live-prompts">
+          <ul id="highbay-live-prompts" className="highbay-live-prompts">
             {target.prompts.map((prompt) => (
-              <li key={prompt.prompt_id} data-prompt-id={prompt.prompt_id} className="surla-live-wrap">
-                <code className="surla-live-prompt-id">{prompt.prompt_id}</code> uses version{" "}
-                <code className="surla-live-version">{prompt.version}</code>, accepted{" "}
+              <li key={prompt.prompt_id} data-prompt-id={prompt.prompt_id} className="highbay-live-wrap">
+                <code className="highbay-live-prompt-id">{prompt.prompt_id}</code> uses version{" "}
+                <code className="highbay-live-version">{prompt.version}</code>, accepted{" "}
                 <Clock iso={prompt.accepted_at} />.
               </li>
             ))}
           </ul>
         </>
       )}
-      <p id="surla-live-drafts-note">
+      <p id="highbay-live-drafts-note">
         Drafts are not verified. They are discarded when this live target stops, and they survive
         only when their text is committed.
       </p>
@@ -411,14 +411,14 @@ function ModelSection({
   }
 
   return (
-    <section id="surla-model" aria-labelledby="surla-model-title">
-      <h3 id="surla-model-title" tabIndex={-1}>Model connection</h3>
+    <section id="highbay-model" aria-labelledby="highbay-model-title">
+      <h3 id="highbay-model-title" tabIndex={-1}>Model connection</h3>
       {modelError !== null ? (
-        <Alert id="surla-model-error" variant="destructive" role="alert">
+        <Alert id="highbay-model-error" variant="destructive" role="alert">
           <strong>Could not read the model connection. </strong>
-          <span className="surla-live-wrap">{modelError}</span>
-          <div className="surla-field-row">
-            <Button id="surla-model-retry" disabled={modelLoading} onClick={onRetryModel}>
+          <span className="highbay-live-wrap">{modelError}</span>
+          <div className="highbay-field-row">
+            <Button id="highbay-model-retry" disabled={modelLoading} onClick={onRetryModel}>
               Read the model connection again
             </Button>
           </div>
@@ -427,28 +427,28 @@ function ModelSection({
       {model === null ? (
         modelError === null ? <p role="status">Reading the model connection...</p> : null
       ) : (
-        <p id="surla-model-current" data-kind={model.connection.kind} className="surla-live-wrap">
+        <p id="highbay-model-current" data-kind={model.connection.kind} className="highbay-live-wrap">
           {describeConnection(model.connection)}
         </p>
       )}
-      <p id="surla-model-note">
+      <p id="highbay-model-note">
         The program that starts a live target and the service it starts run on this computer as
         ordinary processes, with your access to files and the network. With
         stored verification settings it is your stored evaluator, which gets the chosen provider’s
-        settings. Otherwise it is the test writer’s tests Surla accepted, as in verification, and
-        Surla gives it no provider setting: with a direct provider, Surla serves the chosen model
+        settings. Otherwise it is the test writer’s tests Highbay accepted, as in verification, and
+        Highbay gives it no provider setting: with a direct provider, Highbay serves the chosen model
         to it. Running as you, it can still read keys your other programs hold.
         {" "}The choice applies to live targets started afterwards. A running live target keeps its
         model, and verification is not affected.
       </p>
-      <form id="surla-model-form" key={draftReset} onSubmit={submit}>
+      <form id="highbay-model-form" key={draftReset} onSubmit={submit}>
         <fieldset disabled={applying}>
           <legend>Change the model connection</legend>
-          <div className="surla-field-row" role="radiogroup" aria-label="Kind of model connection">
+          <div className="highbay-field-row" role="radiogroup" aria-label="Kind of model connection">
             <label>
               <input
                 type="radio"
-                name="surla-model-kind"
+                name="highbay-model-kind"
                 value="direct"
                 checked={kind === "direct"}
                 onChange={() => onDraft({ kind: "direct" })}
@@ -458,7 +458,7 @@ function ModelSection({
             <label>
               <input
                 type="radio"
-                name="surla-model-kind"
+                name="highbay-model-kind"
                 value="gateway"
                 checked={kind === "gateway"}
                 onChange={() => onDraft({ kind: "gateway" })}
@@ -466,13 +466,13 @@ function ModelSection({
               A model gateway
             </label>
           </div>
-          <div id="surla-model-direct-fields" className="surla-field-row" hidden={kind !== "direct"}>
-            <label className="surla-field-label">
+          <div id="highbay-model-direct-fields" className="highbay-field-row" hidden={kind !== "direct"}>
+            <label className="highbay-field-label">
               <span>Provider</span>
               <select
-                id="surla-model-provider"
+                id="highbay-model-provider"
                 name="provider"
-                className="surla-input"
+                className="highbay-input"
                 defaultValue={draft.provider}
                 onChange={(event) => onDraft({ provider: event.currentTarget.value === "openai" ? "openai" : "anthropic" })}
               >
@@ -480,38 +480,38 @@ function ModelSection({
                 <option value="openai">openai</option>
               </select>
             </label>
-            <label className="surla-field-label">
+            <label className="highbay-field-label">
               <span>Model name</span>
               <input
-                id="surla-model-name"
+                id="highbay-model-name"
                 name="model_name"
                 type="text"
-                className="surla-input"
+                className="highbay-input"
                 defaultValue={draft.modelName}
                 required={kind === "direct"}
                 onInput={(event) => onDraft({ modelName: event.currentTarget.value })}
               />
             </label>
           </div>
-          <div id="surla-model-gateway-fields" className="surla-field-row" hidden={kind !== "gateway"}>
-            <label className="surla-field-label">
+          <div id="highbay-model-gateway-fields" className="highbay-field-row" hidden={kind !== "gateway"}>
+            <label className="highbay-field-label">
               <span>Gateway address (host:port)</span>
               <input
-                id="surla-model-gateway"
+                id="highbay-model-gateway"
                 name="gateway_addr"
                 type="text"
-                className="surla-input"
+                className="highbay-input"
                 defaultValue={draft.gatewayAddr}
                 required={kind === "gateway"}
                 onInput={(event) => onDraft({ gatewayAddr: event.currentTarget.value })}
               />
             </label>
           </div>
-          <div className="surla-field-row">
-            <Button id="surla-model-apply" type="submit" variant="primary">
+          <div className="highbay-field-row">
+            <Button id="highbay-model-apply" type="submit" variant="primary">
               {applying ? "Applying..." : "Apply"}
             </Button>
-            <Button id="surla-model-discard" disabled={!draftDirty} onClick={onDiscardDraft}>
+            <Button id="highbay-model-discard" disabled={!draftDirty} onClick={onDiscardDraft}>
               Discard model edits
             </Button>
           </div>
@@ -519,11 +519,11 @@ function ModelSection({
       </form>
       {applyOutcome !== null ? (
         <Alert
-          id="surla-model-outcome"
+          id="highbay-model-outcome"
           variant={applyOutcome.refused ? "destructive" : "default"}
           role={applyOutcome.refused ? "alert" : "status"}
         >
-          <span className="surla-live-wrap">{applyOutcome.message}</span>
+          <span className="highbay-live-wrap">{applyOutcome.message}</span>
         </Alert>
       ) : null}
     </section>

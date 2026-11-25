@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/verify"
 	"github.com/stretchr/testify/assert"
 )
 

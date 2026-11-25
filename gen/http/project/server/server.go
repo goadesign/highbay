@@ -3,7 +3,7 @@
 // project HTTP server
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package server
 
@@ -11,7 +11,7 @@ import (
 	"context"
 	"net/http"
 
-	project "github.com/goadesign/surla/gen/project"
+	project "github.com/goadesign/highbay/gen/project"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

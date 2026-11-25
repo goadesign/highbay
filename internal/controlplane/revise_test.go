@@ -19,10 +19,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
-	"github.com/goadesign/surla/internal/designeval"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbaytools "github.com/goadesign/highbay/gen/highbay/toolsets/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // TestReviseChangeOverHTTPAndMCP verifies revise_change over the Go service,
@@ -38,7 +38,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 
 	toolsList, err := adapter.ToolsList(aliceCtx, &genmcpadapter.ToolsListPayload{})
 	require.NoError(t, err)
@@ -55,21 +55,21 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	r1DiskBytes, err := os.ReadFile(cardPath)
 	require.NoError(t, err)
 
-	revision := func(summary string, priorIDs ...string) *gensurla.CP1RevisionAnalysis {
-		examples := make([]*gensurla.CP1RevisionAnalysisExample, 0, len(priorIDs))
+	revision := func(summary string, priorIDs ...string) *genhighbay.CP1RevisionAnalysis {
+		examples := make([]*genhighbay.CP1RevisionAnalysisExample, 0, len(priorIDs))
 		for _, id := range priorIDs {
-			examples = append(examples, &gensurla.CP1RevisionAnalysisExample{
+			examples = append(examples, &genhighbay.CP1RevisionAnalysisExample{
 				PriorID: &id, Scenario: "Refund at the limit", InputSummary: "Order total $100.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			})
 		}
-		return &gensurla.CP1RevisionAnalysis{
-			Summary: summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, Examples: examples,
+		return &genhighbay.CP1RevisionAnalysis{
+			Summary: summary, Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, Examples: examples,
 			RemovedExampleIds: []string{}, PreservedBehaviors: []string{"Cross-tenant order lookups return 404 Not Found."},
 		}
 	}
-	revise := func(ctx context.Context, changeID, rev string, analysis *gensurla.CP1RevisionAnalysis) (*gensurla.ChangeCardResult, error) {
-		return cp.ReviseChange(ctx, &gensurla.ReviseChangePayload{
+	revise := func(ctx context.Context, changeID, rev string, analysis *genhighbay.CP1RevisionAnalysis) (*genhighbay.ChangeCardResult, error) {
+		return cp.ReviseChange(ctx, &genhighbay.ReviseChangePayload{
 			ChangeID: changeID, RequestRevision: rev, Prompt: "Refunds up to $100 are instant.", RevisionNote: "Revise the change.", Analysis: analysis,
 		})
 	}
@@ -82,14 +82,14 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	assertServiceError(t, err, "conflict")
 
 	duplicate := revision("Refunds up to $100 are instant.", "check_01")
-	duplicate.Ambiguities = []*gensurla.CP1AnalysisAmbiguity{{Question: "Does the limit include tax?", Options: []string{"with_tax", "with_tax"}}}
+	duplicate.Ambiguities = []*genhighbay.CP1AnalysisAmbiguity{{Question: "Does the limit include tax?", Options: []string{"with_tax", "with_tax"}}}
 	dropped := revision("Refunds up to $100 are instant.")
-	dropped.Examples = []*gensurla.CP1RevisionAnalysisExample{{
+	dropped.Examples = []*genhighbay.CP1RevisionAnalysisExample{{
 		Scenario: "Refund at the limit", InputSummary: "Order total $100.00", ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 	}}
 	for _, tc := range []struct {
 		name     string
-		analysis *gensurla.CP1RevisionAnalysis
+		analysis *genhighbay.CP1RevisionAnalysis
 		want     string
 	}{
 		{"repeated option", duplicate, `invalid analysis: ambiguity "chg-tx-ambiguity-01" (ambiguities[0]) has duplicate option at options[1]`},
@@ -107,7 +107,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	}
 
 	// The same accounting rule is reported to an MCP caller as a tool error.
-	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &gensurla.ReviseChangePayload{
+	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &genhighbay.ReviseChangePayload{
 		ChangeID: "chg-tx", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.", RevisionNote: "Revise the change.", Analysis: dropped,
 	})})
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	assert.Contains(t, *complete.Content[0].Text, `prior example ID "check_01" is omitted from both examples and removed_example_ids`)
 
 	// HTTP POST /changes/revise succeeds against r1.
-	httpBody := reviseArgs(t, &gensurla.ReviseChangePayload{
+	httpBody := reviseArgs(t, &genhighbay.ReviseChangePayload{
 		ChangeID: "chg-tx", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.",
 		RevisionNote: "Revise the change.",
 		Analysis:     revision("Refunds up to $100 are instant via HTTP.", "check_01"),
@@ -142,7 +142,7 @@ func TestReviseChangeOverHTTPAndMCP(t *testing.T) {
 	assert.Equal(t, "Refunds up to $100 are instant via HTTP.", httpCard.ProposedRevision.Summary)
 
 	// MCP revise_change succeeds against the HTTP proposal and replaces it.
-	res, err = adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &gensurla.ReviseChangePayload{
+	res, err = adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{Name: "revise_change", Arguments: reviseArgs(t, &genhighbay.ReviseChangePayload{
 		ChangeID: "chg-tx", RequestRevision: httpCard.ProposedRevision.RequestRevision, Prompt: "Refunds up to $150 are instant.",
 		RevisionNote: "Revise the change.",
 		Analysis:     revision("Refunds up to $150 are instant via MCP.", "check_01"),
@@ -172,19 +172,19 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 
 	// Revising a confirmed card with a recorded approval proposes a revision
 	// without one, and the approval stays on the confirmed revision.
-	approved := saveStoredCardBuildFixture(t, cp, &gensurla.ApprovalItem{
+	approved := saveStoredCardBuildFixture(t, cp, &genhighbay.ApprovalItem{
 		ApprovedBy: "alice@example.com", ReportDigest: strings.Repeat("d", 64), CandidateCommit: strings.Repeat("c", 40),
 		SuiteID: "orders", SuiteCommit: strings.Repeat("b", 40), Environment: "sim",
 		Artifacts: map[string]string{"orders": strings.Repeat("e", 64)}, ScenarioCount: 1,
 	})
 	kept := approved.Examples[0].ID
-	revised, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+	revised, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 		ChangeID: "chg", RequestRevision: approved.RequestRevision, Prompt: "Refunds up to $60 are instant.",
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     "Refunds up to $60 are instant.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &kept, Scenario: "Refund at the limit", InputSummary: "Order total $60.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -207,8 +207,8 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 	assert.Nil(t, stored.proposed.card.Approval, "the proposed revision carries no approval")
 
 	// R1 -> R2 -> R3, where R3 repeats R1's content exactly.
-	question := func(q string) []*gensurla.CP1AnalysisAmbiguity {
-		return []*gensurla.CP1AnalysisAmbiguity{{Question: q, Options: []string{"item_subtotal", "order_total"}}}
+	question := func(q string) []*genhighbay.CP1AnalysisAmbiguity {
+		return []*genhighbay.CP1AnalysisAmbiguity{{Question: q, Options: []string{"item_subtotal", "order_total"}}}
 	}
 	r1 := saveProposedCardFixture(t, cp, "alice@example.com", "rev", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant.", question("Is the limit the item subtotal or the order total?")[0]))
 	r1 = attachBuildSnapshot(t, cp, "rev")
@@ -216,13 +216,13 @@ func TestReviseChangeSavesARevisionThatOnlyItsContentDetermines(t *testing.T) {
 	check01 := "check_01"
 	program := `root = DecisionWorkspace("Refund limit", [choice])
 choice = AmbiguityChoiceCard(1, "Shipping changes who waits")`
-	r2, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+	r2, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 		ChangeID: "rev", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $50 are instant; shipping is open.",
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     "Refunds up to $50 are instant; whether shipping counts is open.",
 			Ambiguities: question("Does shipping count toward the limit?"),
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &check01, Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -240,13 +240,13 @@ choice = AmbiguityChoiceCard(1, "Shipping changes who waits")`
 	assert.Equal(t, r2.RequestRevision, r2.UIComposition.ComposedForRevision, "the composition is bound to the revision it was sent with")
 	assert.NotEqual(t, r1.RequestRevision, r2.RequestRevision)
 
-	r3, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+	r3, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 		ChangeID: "rev", RequestRevision: r2.RequestRevision, Prompt: r1.Prompt,
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     r1.Summary,
 			Ambiguities: question(r1.Ambiguities[0].Question),
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &check01, Scenario: r1.Examples[0].Scenario, InputSummary: r1.Examples[0].InputSummary,
 				ExpectedOutcome: r1.Examples[0].ExpectedOutcome, VerificationKind: r1.Examples[0].VerificationKind,
 			}},
@@ -273,19 +273,19 @@ func TestReviseChangeConcurrentRevisionsSaveOnlyOne(t *testing.T) {
 	const revisions = 8
 	start := make(chan struct{})
 	results := make([]error, revisions)
-	cards := make([]*gensurla.ChangeCardResult, revisions)
+	cards := make([]*genhighbay.ChangeCardResult, revisions)
 	var wg sync.WaitGroup
 	for i := range revisions {
 		wg.Go(func() {
 			<-start
 			check01 := "check_01"
-			cards[i], results[i] = cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+			cards[i], results[i] = cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 				ChangeID: "chg", RequestRevision: r1.RequestRevision, Prompt: "Refunds up to $100 are instant.",
 				RevisionNote: "Revise the change.",
-				Analysis: &gensurla.CP1RevisionAnalysis{
+				Analysis: &genhighbay.CP1RevisionAnalysis{
 					Summary:     "Refunds up to $100 are instant.",
-					Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-					Examples: []*gensurla.CP1RevisionAnalysisExample{{
+					Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+					Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 						PriorID: &check01, Scenario: "Refund at the limit", InputSummary: "Order total $100.00",
 						ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 					}},
@@ -298,7 +298,7 @@ func TestReviseChangeConcurrentRevisionsSaveOnlyOne(t *testing.T) {
 	close(start)
 	wg.Wait()
 
-	var saved *gensurla.ChangeCardResult
+	var saved *genhighbay.ChangeCardResult
 	for i, err := range results {
 		if err == nil {
 			require.Nil(t, saved, "only one revision of the same request_revision may be saved")
@@ -308,7 +308,7 @@ func TestReviseChangeConcurrentRevisionsSaveOnlyOne(t *testing.T) {
 		assertServiceError(t, err, "conflict")
 	}
 	require.NotNil(t, saved)
-	current, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	current, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, saved.RequestRevision, current.RequestRevision)
 }
@@ -328,17 +328,17 @@ func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.
 	seedCP := newControlPlane(t, Options{WorkspaceDir: wsDir})
 	opID := seedStoryRefreshForTest(t, seedCP, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 	program := "root = DecisionWorkspace(\"Refund limit\", [choice])\nchoice = AmbiguityChoiceCard(1)"
-	proposed, err := seedCP.ProposeChange(alice, &gensurla.ProposeChangePayload{
+	proposed, err := seedCP.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 		ChangeID:         "chg-story-saved",
 		Prompt:           "Refunds up to $50 are instant.",
 		StoryRefreshOpID: &opID,
-		Analysis: &gensurla.CP1Analysis{
+		Analysis: &genhighbay.CP1Analysis{
 			Summary: "Refunds up to $50 are instant; larger refunds wait for a manager.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{
 				Question: "Is the limit the item subtotal or the order total?",
 				Options:  []string{"item_subtotal", "order_total"},
 			}},
-			Examples: []*gensurla.CP1AnalysisExample{{
+			Examples: []*genhighbay.CP1AnalysisExample{{
 				Scenario:         "Refund at the limit",
 				InputSummary:     "Order total $50.00",
 				ExpectedOutcome:  "Instant store credit",
@@ -360,7 +360,7 @@ func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
 	require.NoError(t, os.WriteFile(cp.cards.path("chg-story-saved"), savedBytes, 0o600))
 
-	loaded, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-story-saved"})
+	loaded, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg-story-saved"})
 	require.NoError(t, err)
 	assert.Equal(t, proposed.RequestRevision, loaded.RequestRevision)
 	require.Len(t, loaded.Stories, 1)
@@ -369,7 +369,7 @@ func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.
 	assert.True(t, loaded.Stories[0].Flows[0].Complete)
 	assert.False(t, loaded.Stories[0].Flows[1].Complete)
 
-	confirmed, err := cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{
 		ChangeID:        "chg-story-saved",
 		RequestRevision: proposed.RequestRevision,
 		Answers:         map[string]string{"chg-story-saved-ambiguity-01": "item_subtotal"},
@@ -381,15 +381,15 @@ func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.
 	assert.NotEqual(t, proposed.RequestRevision, confirmed.RequestRevision)
 
 	check01 := "check_01"
-	revised, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+	revised, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-story-saved",
 		RequestRevision: confirmed.RequestRevision,
 		Prompt:          "Refunds up to $60 are instant.",
 		RevisionNote:    "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     "Refunds up to $60 of item subtotal are instant; larger refunds wait for a manager.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID:          &check01,
 				Scenario:         "Refund at the limit",
 				InputSummary:     "Item subtotal $60.00",
@@ -414,7 +414,7 @@ func TestSavedStoriesStayPairedWithTheirSourceAcrossConfirmAndRevise(t *testing.
 	// Modifying any Story field on disk invalidates the saved request_revision.
 	tampered := strings.Replace(string(savedBytes), "Store credit is issued immediately", "Cash refund is issued immediately", 1)
 	require.NoError(t, os.WriteFile(cp.cards.path("chg-story-saved"), []byte(tampered), 0o600))
-	_, err = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-story-saved"})
+	_, err = cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg-story-saved"})
 	assert.ErrorContains(t, err, "does not match its request_revision")
 
 }
@@ -428,12 +428,12 @@ func TestStoryWithActorsAndNoFlowsSurvivesReloadAndIdenticalRevision(t *testing.
 	cardsDir := t.TempDir()
 	stories := sampleAdoptedStories()
 	stories[0].Flows = nil
-	analysis := refundAnalysis("Define the refund participants.", &gensurla.CP1AnalysisAmbiguity{
+	analysis := refundAnalysis("Define the refund participants.", &genhighbay.CP1AnalysisAmbiguity{
 		Question: "Who reviews a refund?", Options: []string{"manager", "support"},
 	})
 	first := newControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: workspace})
 	opID := seedStoryRefreshForTest(t, first, "alice@example.com", storyRefreshStateSucceeded, stories, "")
-	card, err := first.ProposeChange(alice, &gensurla.ProposeChangePayload{
+	card, err := first.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-actor-draft", Prompt: "Define the refund participants.",
 		StoryRefreshOpID: &opID, Analysis: analysis,
 	})
@@ -447,17 +447,17 @@ func TestStoryWithActorsAndNoFlowsSurvivesReloadAndIdenticalRevision(t *testing.
 	// A later workspace edit cannot change the adopted actor-only Story/source pair.
 	writeWorkspaceFiles(t, workspace, validWorkspaceStub("package design // later edit\n"))
 	reopened := newControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: workspace})
-	loaded, err := reopened.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	loaded, err := reopened.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, card, loaded)
 	priorID := loaded.Examples[0].ID
 	example := analysis.Examples[0]
-	revised, err := reopened.ReviseChange(alice, &gensurla.ReviseChangePayload{
+	revised, err := reopened.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: loaded.RequestRevision, Prompt: card.Prompt,
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary: analysis.Summary, Ambiguities: analysis.Ambiguities,
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &priorID, Scenario: example.Scenario, InputSummary: example.InputSummary,
 				ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
 			}},
@@ -506,7 +506,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	opV1 := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, storiesV1, "")
 
 	// HTTP POST /changes/propose adopts opV1.
-	proposeBody := proposeArgs(t, &gensurla.ProposeChangePayload{
+	proposeBody := proposeArgs(t, &genhighbay.ProposeChangePayload{
 		ChangeID:         "chg-http",
 		Prompt:           "Refunds up to $50 are instant.",
 		StoryRefreshOpID: &opV1,
@@ -514,7 +514,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	status, body := postJSON(t, srv.URL+"/changes/propose", "alice-token", string(proposeBody))
 	require.Equal(t, http.StatusOK, status, body)
-	httpProposed, err := gensurlatools.UnmarshalProposeChangeResult([]byte(body))
+	httpProposed, err := genhighbaytools.UnmarshalProposeChangeResult([]byte(body))
 	require.NoError(t, err)
 	require.Len(t, httpProposed.Stories, 1)
 	assert.Equal(t, "Order Refunds", httpProposed.Stories[0].Name)
@@ -533,10 +533,10 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	writeWorkspaceFiles(t, mcpWorkspace, snapshot)
 	cpMCP := newControlPlane(t, Options{WorkspaceDir: mcpWorkspace})
 	opMCPV1 := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, storiesV1, "")
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cpMCP), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cpMCP), nil)
 	res, err := adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{
 		Name: "propose_change",
-		Arguments: proposeArgs(t, &gensurla.ProposeChangePayload{
+		Arguments: proposeArgs(t, &genhighbay.ProposeChangePayload{
 			ChangeID:         "chg-http",
 			Prompt:           "Refunds up to $50 are instant.",
 			StoryRefreshOpID: &opMCPV1,
@@ -547,7 +547,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	complete, ok := res.Outcome.AsComplete()
 	require.True(t, ok)
 	require.False(t, complete.IsError != nil && *complete.IsError, "unexpected MCP error: %+v", complete.Content)
-	mcpProposed, err := gensurlatools.UnmarshalProposeChangeResult(complete.StructuredContent)
+	mcpProposed, err := genhighbaytools.UnmarshalProposeChangeResult(complete.StructuredContent)
 	require.NoError(t, err)
 	assert.Equal(t, httpProposed.RequestRevision, mcpProposed.RequestRevision)
 	assert.Equal(t, httpProposed.Stories, mcpProposed.Stories)
@@ -565,10 +565,10 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	})
 	opV2 := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, storiesV2, "")
 	check01 := "check_01"
-	revAnalysis := &gensurla.CP1RevisionAnalysis{
+	revAnalysis := &genhighbay.CP1RevisionAnalysis{
 		Summary:     "Refunds up to $50 are instant.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-		Examples: []*gensurla.CP1RevisionAnalysisExample{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+		Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 			PriorID:          &check01,
 			Scenario:         "Refund at the limit",
 			InputSummary:     "Order total $50.00",
@@ -582,7 +582,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	// MCP revise_change adopts opV2 on chg-http in cpMCP.
 	res, err = adapter.ToolsCall(aliceCtx, &genmcpadapter.ToolsCallPayload{
 		Name: "revise_change",
-		Arguments: reviseArgs(t, &gensurla.ReviseChangePayload{
+		Arguments: reviseArgs(t, &genhighbay.ReviseChangePayload{
 			ChangeID:         "chg-http",
 			RequestRevision:  mcpProposed.RequestRevision,
 			Prompt:           "Refunds up to $50 are instant.",
@@ -595,7 +595,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	complete, ok = res.Outcome.AsComplete()
 	require.True(t, ok)
 	require.False(t, complete.IsError != nil && *complete.IsError)
-	mcpRevised, err := gensurlatools.UnmarshalReviseChangeResult(complete.StructuredContent)
+	mcpRevised, err := genhighbaytools.UnmarshalReviseChangeResult(complete.StructuredContent)
 	require.NoError(t, err)
 	require.Len(t, mcpRevised.Stories, 1)
 	assert.True(t, mcpRevised.Stories[0].Flows[1].Complete)
@@ -603,7 +603,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 
 	// Revising chg-http in cp without story_refresh_op_id keeps storiesV1, so its
 	// request_revision differs from mcpRevised (which adopted storiesV2).
-	keptV1, err := cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
+	keptV1, err := cp.ReviseChange(aliceCtx, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-http",
 		RequestRevision: httpProposed.RequestRevision,
 		Prompt:          "Refunds up to $50 are instant.",
@@ -617,7 +617,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	// Adopting a succeeded refresh with zero Stories equals adopting none on
 	// both propose_change and revise_change for the same change_id.
 	opZero := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	proposedZero, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+	proposedZero, err := cp.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{
 		ChangeID:         "chg-zero",
 		Prompt:           "Refunds up to $50 are instant.",
 		StoryRefreshOpID: &opZero,
@@ -626,7 +626,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, proposedZero.Stories)
 	opPlainZero := seedStoryRefreshForTest(t, cpMCP, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	proposedPlain, err := cpMCP.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+	proposedPlain, err := cpMCP.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-zero", Prompt: "Refunds up to $50 are instant.",
 		StoryRefreshOpID: &opPlainZero, Analysis: refundAnalysis("Refunds up to $50 are instant."),
 	})
@@ -636,7 +636,7 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(rawZeroBytes), `"stories":null`)
 
-	revisedToZero, err := cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
+	revisedToZero, err := cp.ReviseChange(aliceCtx, &genhighbay.ReviseChangePayload{
 		ChangeID:         "chg-http",
 		RequestRevision:  keptV1.RequestRevision,
 		Prompt:           "Refunds up to $50 are instant.",
@@ -650,12 +650,12 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 	writeWorkspaceFiles(t, plainWorkspace, snapshot)
 	cpPlain := newControlPlane(t, Options{WorkspaceDir: plainWorkspace})
 	plainOp := seedStoryRefreshForTest(t, cpPlain, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	plainHTTP, err := cpPlain.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+	plainHTTP, err := cpPlain.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-http", Prompt: "Refunds up to $50 are instant.", StoryRefreshOpID: &plainOp,
 		Analysis: refundAnalysis("Refunds up to $50 are instant."),
 	})
 	require.NoError(t, err)
-	revisedPlain, err := cpPlain.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
+	revisedPlain, err := cpPlain.ReviseChange(aliceCtx, &genhighbay.ReviseChangePayload{
 		ChangeID:        "chg-http",
 		RequestRevision: plainHTTP.RequestRevision,
 		Prompt:          "Refunds up to $50 are instant.",
@@ -673,10 +673,10 @@ func TestAdoptStoryRefreshOnProposeAndRevise(t *testing.T) {
 func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	check01 := "check_01"
-	revAnalysis := &gensurla.CP1RevisionAnalysis{
+	revAnalysis := &genhighbay.CP1RevisionAnalysis{
 		Summary:     "Refunds up to $60 are instant.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-		Examples: []*gensurla.CP1RevisionAnalysisExample{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+		Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 			PriorID:          &check01,
 			Scenario:         "Refund at the limit",
 			InputSummary:     "Order total $60.00",
@@ -686,7 +686,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		RemovedExampleIds:  []string{},
 		PreservedBehaviors: []string{"Cross-tenant order lookups return 404 Not Found."},
 	}
-	newWS := func(t *testing.T) (string, *ControlPlane, *gensurla.ChangeCardResult) {
+	newWS := func(t *testing.T) (string, *ControlPlane, *genhighbay.ChangeCardResult) {
 		t.Helper()
 		wsDir := t.TempDir()
 		writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
@@ -697,12 +697,12 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 
 	cases := []struct {
 		name  string
-		setup func(t *testing.T) (cp *ControlPlane, opID string, designSrc *string, existingCard *gensurla.ChangeCardResult)
+		setup func(t *testing.T) (cp *ControlPlane, opID string, designSrc *string, existingCard *genhighbay.ChangeCardResult)
 		want  string
 	}{
 		{
 			name: "no prior refresh_story",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				return cp, "story-refresh-1", nil, card
 			},
@@ -710,7 +710,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "blank story_refresh_op_id",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				return cp, "   ", nil, card
 			},
@@ -718,7 +718,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "replaced story_refresh_op_id",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				firstOp := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 				_ = seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
@@ -728,7 +728,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "another principal's story_refresh_op_id",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				bobOp := seedStoryRefreshForTest(t, cp, "bob@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 				return cp, bobOp, nil, card
@@ -737,7 +737,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "running refresh_story operation",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateRunning, nil, "")
 				return cp, opID, nil, card
@@ -746,7 +746,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "failed refresh_story operation",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateFailed, nil, "syntax error")
 				return cp, opID, nil, card
@@ -755,7 +755,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "different workspace bound after refresh_story",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				_, cp, card := newWS(t)
 				opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, sampleAdoptedStories(), "")
 				ws2 := t.TempDir()
@@ -771,7 +771,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 		},
 		{
 			name: "rebound workspace inode at the same path",
-			setup: func(t *testing.T) (*ControlPlane, string, *string, *gensurla.ChangeCardResult) {
+			setup: func(t *testing.T) (*ControlPlane, string, *string, *genhighbay.ChangeCardResult) {
 				wsDir := filepath.Join(t.TempDir(), "ws")
 				writeWorkspaceFiles(t, wsDir, validWorkspaceStub("package design\n"))
 				cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
@@ -797,7 +797,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 	for _, tc := range cases {
 		t.Run("propose_change/"+tc.name, func(t *testing.T) {
 			cp, opID, _, _ := tc.setup(t)
-			_, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+			_, err := cp.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{
 				ChangeID: "chg-new", Prompt: "Refunds up to $50 are instant.",
 				StoryRefreshOpID: &opID,
 				Analysis:         refundAnalysis("Refunds up to $50 are instant."),
@@ -814,7 +814,7 @@ func TestAdoptStoryRefreshRejectionsLeaveCardStorageUnchanged(t *testing.T) {
 			cp, opID, _, existing := tc.setup(t)
 			beforeBytes, err := os.ReadFile(cp.cards.path(existing.ChangeID))
 			require.NoError(t, err)
-			_, err = cp.ReviseChange(aliceCtx, &gensurla.ReviseChangePayload{
+			_, err = cp.ReviseChange(aliceCtx, &genhighbay.ReviseChangePayload{
 				ChangeID: existing.ChangeID, RequestRevision: existing.RequestRevision,
 				Prompt:           "Refunds up to $60 are instant.",
 				RevisionNote:     "Revise the change.",
@@ -926,11 +926,11 @@ func sampleAdoptedStories() []designeval.StorySummary {
 // needs_confirmation card, failing the test when none waits. Revising a
 // confirmed card returns the change with the new revision in
 // ProposedRevision.
-func proposalCard(t *testing.T, change *gensurla.ChangeCardResult) *gensurla.ChangeCardResult {
+func proposalCard(t *testing.T, change *genhighbay.ChangeCardResult) *genhighbay.ChangeCardResult {
 	t.Helper()
 	require.NotNil(t, change.ProposedRevision, "revising a confirmed change proposes a revision beside it")
 	p := change.ProposedRevision
-	return &gensurla.ChangeCardResult{
+	return &genhighbay.ChangeCardResult{
 		ChangeID:           change.ChangeID,
 		Status:             StatusNeedsConfirmation,
 		Prompt:             p.Prompt,
@@ -958,15 +958,15 @@ func TestReviseChangeRecordsTheRevisionNote(t *testing.T) {
 	confirmed := saveStoredCardBuildFixture(t, cp, nil)
 	require.Nil(t, confirmed.RevisionNote, "a card propose_change made has no note")
 	kept := confirmed.Examples[0].ID
-	payload := func(note string) *gensurla.ReviseChangePayload {
-		return &gensurla.ReviseChangePayload{
+	payload := func(note string) *genhighbay.ReviseChangePayload {
+		return &genhighbay.ReviseChangePayload{
 			ChangeID: "chg", RequestRevision: confirmed.RequestRevision,
 			Prompt:       "Refunds up to $60 are instant, and legal must pre-approve each refund rule.",
 			RevisionNote: note,
-			Analysis: &gensurla.CP1RevisionAnalysis{
+			Analysis: &genhighbay.CP1RevisionAnalysis{
 				Summary:     "Refunds up to $60 are instant; legal pre-approves refund rules.",
-				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-				Examples: []*gensurla.CP1RevisionAnalysisExample{{
+				Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+				Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 					PriorID: &kept, Scenario: "Refund at the limit", InputSummary: "Order total $60.00",
 					ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 				}},
@@ -977,7 +977,7 @@ func TestReviseChangeRecordsTheRevisionNote(t *testing.T) {
 
 	_, err := cp.ReviseChange(user, payload("  "))
 	assertRefused(t, err, "unprocessable")
-	unchanged, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	unchanged, err := cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, unchanged.ProposedRevision, "a refused revision saves nothing")
 
@@ -991,12 +991,12 @@ func TestReviseChangeRecordsTheRevisionNote(t *testing.T) {
 
 	require.NoError(t, cp.Close())
 	reopened := newControlPlane(t, options)
-	reloaded, err := reopened.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	reloaded, err := reopened.GetChange(user, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.NotNil(t, reloaded.ProposedRevision.RevisionNote, "the note survives a reload")
 	assert.Equal(t, note, *reloaded.ProposedRevision.RevisionNote)
 
-	adopted, err := reopened.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	adopted, err := reopened.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: reloaded.ProposedRevision.RequestRevision,
 		Answers: map[string]string{}, Examples: reloaded.ProposedRevision.Examples,
 	})
@@ -1007,7 +1007,7 @@ func TestReviseChangeRecordsTheRevisionNote(t *testing.T) {
 
 	// A file saved before notes were recorded has no RevisionNote key. Its
 	// revisions decode with the digests they were saved with.
-	_, err = reopened.ReviseChange(user, func() *gensurla.ReviseChangePayload {
+	_, err = reopened.ReviseChange(user, func() *genhighbay.ReviseChangePayload {
 		p := payload(note)
 		p.RequestRevision = adopted.RequestRevision
 		return p

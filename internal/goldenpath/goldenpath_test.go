@@ -11,7 +11,7 @@ import (
 )
 
 // TestResourceMarkdownServesThePlaybookThenTheDecisionCatalog verifies that the
-// surla://golden-path resource starts with the embedded GOLDEN_PATH.md
+// highbay://golden-path resource starts with the embedded GOLDEN_PATH.md
 // verbatim and ends with the generated decision catalog verbatim, so a caller
 // composing an analysis's ui_composition reads the same component list the
 // views page renders with.
@@ -43,15 +43,15 @@ func TestPlaybookLeavesConfirmationToTheUser(t *testing.T) {
 	assert.NotContains(t, md, "and confirm the revised card")
 }
 
-// TestPlaybookRegeneratesWithSurlaGenAndKeepsTheGRPCRoute verifies that the
-// playbook's executable regeneration step, which the surla://golden-path
-// resource carries, names surla gen, and that the module-pinned
-// goa gen route remains for gRPC designs surla gen refuses.
-func TestPlaybookRegeneratesWithSurlaGenAndKeepsTheGRPCRoute(t *testing.T) {
+// TestPlaybookRegeneratesWithHighbayGenAndKeepsTheGRPCRoute verifies that the
+// playbook's executable regeneration step, which the highbay://golden-path
+// resource carries, names hbay gen, and that the module-pinned
+// goa gen route remains for gRPC designs hbay gen refuses.
+func TestPlaybookRegeneratesWithHighbayGenAndKeepsTheGRPCRoute(t *testing.T) {
 	t.Parallel()
 
 	md := ResourceMarkdown()
-	assert.Contains(t, md, "surla gen -dir")
+	assert.Contains(t, md, "hbay gen -dir")
 	assert.Contains(t, md, "gRPC")
 	assert.Contains(t, md, "go run goa.design/goa/v3/cmd/goa gen")
 }

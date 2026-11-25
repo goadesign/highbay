@@ -5,7 +5,7 @@ package controlplane
 import (
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,12 +14,12 @@ import (
 // content; tests needing evaluated metadata add their explicit snapshot before
 // confirmation. Existing cards are never overwritten.
 func saveProposedCardFixture(
-	t *testing.T, cp *ControlPlane, owner, changeID, prompt string, analysis *gensurla.CP1Analysis,
-) *gensurla.ChangeCardResult {
+	t *testing.T, cp *ControlPlane, owner, changeID, prompt string, analysis *genhighbay.CP1Analysis,
+) *genhighbay.ChangeCardResult {
 	t.Helper()
 	ambiguities, examples, preserved, err := proposedCardContent(changeID, analysis)
 	require.NoError(t, err)
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID: changeID, Status: StatusNeedsConfirmation, Prompt: prompt,
 		Summary: analysis.Summary, Ambiguities: ambiguities, Examples: examples,
 		PreservedBehaviors: preserved,
@@ -27,7 +27,7 @@ func saveProposedCardFixture(
 	card.RequestRevision, err = computeCanonicalRevision(card, owner, "")
 	require.NoError(t, err)
 	if analysis.UIComposition != nil {
-		card.UIComposition = &gensurla.UICompositionItem{
+		card.UIComposition = &genhighbay.UICompositionItem{
 			Program: *analysis.UIComposition, ComposedForRevision: card.RequestRevision,
 		}
 	}

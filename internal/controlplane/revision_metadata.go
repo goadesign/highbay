@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designversion"
 )
 
 // savedArchitecture retains the evaluated facts a preview cannot derive from
@@ -20,13 +20,13 @@ type savedArchitecture struct {
 	// SystemName is the evaluated API, model system or primary service name.
 	SystemName string `json:"system_name"`
 	// Containers are the evaluated C4 nodes, in their declared order.
-	Containers []*gensurla.C4ContainerItem `json:"containers"`
+	Containers []*genhighbay.C4ContainerItem `json:"containers"`
 	// Edges are the evaluated directed relationships between those nodes.
-	Edges []*gensurla.C4EdgeItem `json:"edges"`
+	Edges []*genhighbay.C4EdgeItem `json:"edges"`
 	// AgentPolicies are the policies the evaluated design declares.
-	AgentPolicies []*gensurla.AgentPolicyItem `json:"agent_policies"`
+	AgentPolicies []*genhighbay.AgentPolicyItem `json:"agent_policies"`
 	// Tools are the evaluated model-facing tool contracts.
-	Tools []*gensurla.ToolContractItem `json:"tools"`
+	Tools []*genhighbay.ToolContractItem `json:"tools"`
 }
 
 // validateRevisionMetadata accepts older revisions without snapshot metadata

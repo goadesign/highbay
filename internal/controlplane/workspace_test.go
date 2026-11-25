@@ -26,10 +26,10 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 type (
@@ -41,35 +41,35 @@ type (
 )
 
 const (
-	// testSurlaVersion is a canonical Surla module pseudo-version used in workspace unit tests.
-	testSurlaVersion = testmodule.PublishedSurlaVersion
+	// testHighbayVersion is a canonical Highbay module pseudo-version used in workspace unit tests.
+	testHighbayVersion = testmodule.PublishedHighbayVersion
 	// fakeInitialCommit is the synthetic initial Git commit hash returned by fakeInitRunner.
 	fakeInitialCommit = "1111111111111111111111111111111111111111"
 )
 
-// TestNewValidatesSurlaVersionAndWorkspaceSeparation verifies that New rejects non-canonical
-// SurlaVersion values and CardsDir paths inside WorkspaceDir.
-func TestNewValidatesSurlaVersionAndWorkspaceSeparation(t *testing.T) {
+// TestNewValidatesHighbayVersionAndWorkspaceSeparation verifies that New rejects non-canonical
+// HighbayVersion values and CardsDir paths inside WorkspaceDir.
+func TestNewValidatesHighbayVersionAndWorkspaceSeparation(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	wsDir := filepath.Join(root, "workspace")
 	require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
-	// Invalid SurlaVersion is rejected at startup.
+	// Invalid HighbayVersion is rejected at startup.
 	_, err := New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     filepath.Join(root, "cards-bad-ver"),
-		WorkspaceDir: wsDir,
-		SurlaVersion: "(devel)",
+		Team:           testTeamBinding(),
+		CardsDir:       filepath.Join(root, "cards-bad-ver"),
+		WorkspaceDir:   wsDir,
+		HighbayVersion: "(devel)",
 	})
 	require.ErrorContains(t, err, "must be a canonical semantic version")
 
 	// CardsDir inside WorkspaceDir is rejected at startup.
 	_, err = New(Options{
-		Team:         testTeamBinding(),
-		CardsDir:     filepath.Join(wsDir, ".surla", "cards"),
-		WorkspaceDir: wsDir,
-		SurlaVersion: testSurlaVersion,
+		Team:           testTeamBinding(),
+		CardsDir:       filepath.Join(wsDir, ".highbay", "cards"),
+		WorkspaceDir:   wsDir,
+		HighbayVersion: testHighbayVersion,
 	})
 	require.ErrorContains(t, err, "must be outside the workspace")
 }
@@ -91,7 +91,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 
 		evalStageParent, err := abspath.Eval(stageParent)
 		require.NoError(t, err)
-		stagedDir := filepath.Join(evalStageParent, ".surla-init-123")
+		stagedDir := filepath.Join(evalStageParent, ".highbay-init-123")
 		require.NoError(t, os.MkdirAll(stagedDir, 0o700))
 		var st unix.Stat_t
 		require.NoError(t, unix.Lstat(stagedDir, &st))
@@ -99,7 +99,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		walBytes, err := json.Marshal(workspaceFile{
 			Dir:      "shop",
 			StageDir: evalStageParent,
-			Staging:  ".surla-init-123",
+			Staging:  ".highbay-init-123",
 			Dev:      uint64(st.Dev),
 			Ino:      st.Ino,
 		})
@@ -107,11 +107,11 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageParent,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageParent,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -142,7 +142,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		walBytes, err := json.Marshal(workspaceFile{
 			Dir:      "shop",
 			StageDir: evalStageParent,
-			Staging:  ".surla-init-missing",
+			Staging:  ".highbay-init-missing",
 			Dev:      1,
 			Ino:      1,
 		})
@@ -150,11 +150,11 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageParent,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageParent,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -180,7 +180,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		walBytes, err := json.Marshal(workspaceFile{
 			Dir:      "shop",
 			StageDir: stageParent,
-			Staging:  ".surla-init-456",
+			Staging:  ".highbay-init-456",
 			Dev:      uint64(st.Dev),
 			Ino:      st.Ino,
 		})
@@ -188,11 +188,11 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageParent,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageParent,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -219,7 +219,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 
 		evalStageParent, err := abspath.Eval(stageParent)
 		require.NoError(t, err)
-		foreignStageDir := filepath.Join(evalStageParent, ".surla-init-foreign")
+		foreignStageDir := filepath.Join(evalStageParent, ".highbay-init-foreign")
 		require.NoError(t, os.MkdirAll(foreignStageDir, 0o700))
 		targetKeep := filepath.Join(targetDir, "keep-target.txt")
 		stageKeep := filepath.Join(foreignStageDir, "keep-stage.txt")
@@ -231,7 +231,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		walBytes, err := json.Marshal(workspaceFile{
 			Dir:      "shop",
 			StageDir: evalStageParent,
-			Staging:  ".surla-init-foreign",
+			Staging:  ".highbay-init-foreign",
 			Dev:      uint64(wsStat.Dev),
 			Ino:      wsStat.Ino, // matches neither targetDir nor foreignStageDir
 		})
@@ -239,11 +239,11 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageParent,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageParent,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -281,10 +281,10 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		_, err = New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.ErrorContains(t, err, "no longer matches its initialized (dev, ino) identity")
 		gotTarget, readErr := os.ReadFile(targetKeep)
@@ -311,10 +311,10 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		_, err = New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.ErrorContains(t, err, "does not exist")
 	})
@@ -331,7 +331,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 
 		evalStageParent, err := abspath.Eval(stageParent)
 		require.NoError(t, err)
-		foreignStage := filepath.Join(evalStageParent, ".surla-init-replaced")
+		foreignStage := filepath.Join(evalStageParent, ".highbay-init-replaced")
 		require.NoError(t, os.MkdirAll(foreignStage, 0o700))
 		foreignFile := filepath.Join(foreignStage, "foreign.txt")
 		require.NoError(t, os.WriteFile(foreignFile, []byte("keep-foreign"), 0o644))
@@ -341,7 +341,7 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		walBytes, err := json.Marshal(workspaceFile{
 			Dir:      "shop",
 			StageDir: evalStageParent,
-			Staging:  ".surla-init-replaced",
+			Staging:  ".highbay-init-replaced",
 			Dev:      uint64(wsStat.Dev),
 			Ino:      wsStat.Ino, // does not match foreignStage
 		})
@@ -349,11 +349,11 @@ func TestWorkspaceWALReconciliationStates(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, workspaceRecordFile), walBytes, 0o600))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageParent,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageParent,
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -399,7 +399,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		defer cp.Close()
 
 		shopModule := "example.com/shop"
-		_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+		_, err = cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 			ModulePath: &shopModule,
 		})
 		var svcErr *goa.ServiceError
@@ -416,11 +416,11 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		wsDir := filepath.Join(root, "ws")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     filepath.Join(root, "cards"),
-			WorkspaceDir: wsDir,
-			InitStageDir: filepath.Join(root, "stage"),
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       filepath.Join(root, "cards"),
+			WorkspaceDir:   wsDir,
+			InitStageDir:   filepath.Join(root, "stage"),
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -445,7 +445,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				_, err := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+				_, err := cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 					ModulePath: tc.modulePath,
 					Dir:        tc.dir,
 				})
@@ -469,11 +469,11 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		cardsDir := filepath.Join(root, "cards")
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: filepath.Join(root, "stage"),
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   filepath.Join(root, "stage"),
+			HighbayVersion: testHighbayVersion,
 		})
 		require.NoError(t, err)
 		defer cp.Close()
@@ -482,7 +482,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.WriteFile(filepath.Join(cardsDir, corruptCardName), []byte(`{"card":{}}trailing`), 0o600))
 
 		shopModule := "example.com/shop"
-		_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+		_, err = cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 			ModulePath: &shopModule,
 		})
 		var svcErr *goa.ServiceError
@@ -506,11 +506,11 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 			secretTail    = "SECRET_COMPILER_TAIL_TOKEN_98765"
 		)
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageDir,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageDir,
+			HighbayVersion: testHighbayVersion,
 			InitRunner: func(_ context.Context, _, _ string, args ...string) error {
 				return &scaffold.StepError{
 					Args:   args,
@@ -581,7 +581,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		// 3. Verify the raw diagnostic error is recorded on the server trace spans.
 		var initSpans []tracetest.SpanStub
 		for _, sp := range exp.GetSpans() {
-			if sp.Name == "surla.controlplane.init_project" {
+			if sp.Name == "highbay.controlplane.init_project" {
 				initSpans = append(initSpans, sp)
 			}
 		}
@@ -601,12 +601,12 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageDir,
-			SurlaVersion: testSurlaVersion,
-			InitRunner:   fakeInitRunner,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageDir,
+			HighbayVersion: testHighbayVersion,
+			InitRunner:     fakeInitRunner,
 			NewGenerator: func() scaffold.Generator {
 				return &fakeInitGenerator{pkg: "shop"}
 			},
@@ -626,7 +626,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		}
 
 		shopModule := "example.com/shop"
-		_, err = cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+		_, err = cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 			ModulePath: &shopModule,
 		})
 		var svcErr *goa.ServiceError
@@ -649,12 +649,12 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		require.NoError(t, os.MkdirAll(wsDir, 0o755))
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageDir,
-			SurlaVersion: testSurlaVersion,
-			InitRunner:   fakeInitRunner,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageDir,
+			HighbayVersion: testHighbayVersion,
+			InitRunner:     fakeInitRunner,
 			NewGenerator: func() scaffold.Generator {
 				return &fakeInitGenerator{pkg: "shop"}
 			},
@@ -663,7 +663,7 @@ func TestInitProjectErrorAndSpanClassificationAndEndToEndTransition(t *testing.T
 		defer cp.Close()
 
 		paddedModule := " \t example.com/shop \n"
-		res, err := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+		res, err := cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 			ModulePath: &paddedModule,
 		})
 		require.NoError(t, err)
@@ -705,7 +705,7 @@ func TestInitProjectUsesSavedSourceToProtectAnExistingProject(t *testing.T) {
 			}
 			cp := newControlPlane(t, Options{
 				CardsDir: filepath.Join(root, "cards"), WorkspaceDir: workspace,
-				InitStageDir: filepath.Join(root, "stage"), SurlaVersion: testSurlaVersion,
+				InitStageDir: filepath.Join(root, "stage"), HighbayVersion: testHighbayVersion,
 				InitRunner:   fakeInitRunner,
 				NewGenerator: func() scaffold.Generator { return &fakeInitGenerator{pkg: "shop"} },
 			})
@@ -714,7 +714,7 @@ func TestInitProjectUsesSavedSourceToProtectAnExistingProject(t *testing.T) {
 				// Initialization must still protect that saved input.
 				saveDraftSourceCardFixture(t, cp, "chg", map[string]string{"design/design.go": "package design\n"})
 			} else {
-				_, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+				_, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 					ChangeID: "chg", Prompt: "Create a shop.", Analysis: refundAnalysis("Create a shop."),
 				})
 				require.NoError(t, err)
@@ -725,7 +725,7 @@ func TestInitProjectUsesSavedSourceToProtectAnExistingProject(t *testing.T) {
 				require.NoError(t, os.Remove(filepath.Join(workspace, "design")))
 			}
 			shopModule := "example.com/shop"
-			result, err := cp.InitProject(alice, &gensurla.InitProjectPayload{ModulePath: &shopModule})
+			result, err := cp.InitProject(alice, &genhighbay.InitProjectPayload{ModulePath: &shopModule})
 			if withSource {
 				assertServiceError(t, err, "conflict")
 				assert.ErrorContains(t, err, "Change Cards that captured existing design files")
@@ -758,11 +758,11 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		var runnerDone atomic.Bool
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageDir,
-			SurlaVersion: testSurlaVersion,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageDir,
+			HighbayVersion: testHighbayVersion,
 			InitRunner: func(ctx context.Context, dir, logPath string, args ...string) error {
 				select {
 				case <-runnerStarted:
@@ -787,7 +787,7 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		initDone := make(chan error, 1)
 		go func() {
 			shopModule := "example.com/shop"
-			_, initErr := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+			_, initErr := cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 				ModulePath: &shopModule,
 			})
 			initDone <- initErr
@@ -828,12 +828,12 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		t.Cleanup(releaseBarrier)
 
 		cp, err := New(Options{
-			Team:         testTeamBinding(),
-			CardsDir:     cardsDir,
-			WorkspaceDir: wsDir,
-			InitStageDir: stageDir,
-			SurlaVersion: testSurlaVersion,
-			InitRunner:   fakeInitRunner,
+			Team:           testTeamBinding(),
+			CardsDir:       cardsDir,
+			WorkspaceDir:   wsDir,
+			InitStageDir:   stageDir,
+			HighbayVersion: testHighbayVersion,
+			InitRunner:     fakeInitRunner,
 			NewGenerator: func() scaffold.Generator {
 				return &fakeInitGenerator{pkg: "shop"}
 			},
@@ -857,7 +857,7 @@ func TestCloseDrainsAndCancelsInFlightInitProjectBeforeReleasingLocks(t *testing
 		initDone := make(chan error, 1)
 		go func() {
 			shopModule := "example.com/shop"
-			_, initErr := cp.InitProject(aliceCtx, &gensurla.InitProjectPayload{
+			_, initErr := cp.InitProject(aliceCtx, &genhighbay.InitProjectPayload{
 				ModulePath: &shopModule,
 			})
 			initDone <- initErr
@@ -925,12 +925,12 @@ func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testi
 	writeWorkspaceFiles(t, project, files)
 	first := newControlPlane(t, opts)
 	refreshed := seedArchitectureRefreshForTest(t, first, guide, "orders")
-	card, err := first.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	card, err := first.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-workspace-origin", Prompt: "Route refunds under $50 automatically.",
 		Analysis: refundAnalysis("Route refunds under $50 automatically."), StoryRefreshOpID: refreshed.OpID,
 	})
 	require.NoError(t, err)
-	card, err = first.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	card, err = first.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 	})
 	require.NoError(t, err)
@@ -954,7 +954,7 @@ func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testi
 	assert.Equal(t, original.architecture, saved.architecture)
 	assert.Equal(t, original.goMod, saved.goMod)
 	assert.Equal(t, original.madeFrom, saved.madeFrom)
-	preview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	preview, err := second.PreviewArchitecture(guide, &genhighbay.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, "orders", preview.SystemName, "the confirmed revision stays previewable beside its proposal")
 	assert.Equal(t, card.RequestRevision, preview.RequestRevision)
@@ -980,17 +980,17 @@ func TestCP1WorkspaceDesignSourceProvenanceAcrossProposeReviseAndReopen(t *testi
 	assert.Equal(t, nextFiles["go.mod"], replaced.goMod)
 	assert.NotEqual(t, original.goMod, replaced.goMod)
 	assert.NotEqual(t, original.madeFrom, replaced.madeFrom)
-	adopted, err := second.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	adopted, err := second.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
 		Answers: map[string]string{card.ChangeID + "-ambiguity-01": "with_tax"}, Examples: revised.ProposedRevision.Examples,
 	})
 	require.NoError(t, err)
-	finalPreview, err := second.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
+	finalPreview, err := second.PreviewArchitecture(guide, &genhighbay.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, "shipping", finalPreview.SystemName)
 	require.NoError(t, second.Close())
 	third := newControlPlane(t, opts)
-	reopened, err := third.PreviewArchitecture(guide, &gensurla.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
+	reopened, err := third.PreviewArchitecture(guide, &genhighbay.PreviewArchitecturePayload{ChangeID: card.ChangeID, RequestRevision: adopted.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, finalPreview, reopened, "saved architecture survives restart with both folders still changed")
 }

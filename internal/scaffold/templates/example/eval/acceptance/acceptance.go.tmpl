@@ -2,7 +2,7 @@
 // [[.Name]] binary. Each scenario starts its own model gateway and [[.Name]] process,
 // asks one question over the public HTTP API, and checks both the answer and
 // the model exchange the gateway recorded. Live starts the same way for
-// Surla's live CP3 target, with a real model provider.
+// Highbay's live CP3 target, with a real model provider.
 package acceptance
 
 import (
@@ -22,8 +22,8 @@ import (
 	"goa.design/goa-ai/runtime/agent/model"
 	"google.golang.org/grpc"
 
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 
 	genhttp[[.Pkg]] "[[.Module]]/eval/gen/http/[[.Pkg]]/client"
 	gen[[.Pkg]] "[[.Module]]/eval/gen/[[.Pkg]]"
@@ -40,14 +40,14 @@ type Hooks struct {
 // calls still in flight.
 const gatewayStopTimeout = 10 * time.Second
 
-// Name is the binary name surla verify binds the [[.Name]] as (-binary [[.Name]]=...).
+// Name is the binary name hbay verify binds the [[.Name]] as (-binary [[.Name]]=...).
 const Name = "[[.Name]]"
 
 // systemPromptID is the [[.Name]]'s helper system prompt, which override_prompt replaces.
 const systemPromptID = "[[.Name]].helper.system"
 
 // liveKeyEnv is the variable the [[.Name]] reads its live key from.
-const liveKeyEnv = "SURLA_LIVE_TARGET_KEY"
+const liveKeyEnv = "HIGHBAY_LIVE_TARGET_KEY"
 
 // New returns the scenario hooks for the pinned [[.Name]] binary.
 func New(binary candidate.Artifact) *Hooks {
@@ -114,7 +114,7 @@ func (h *Hooks) PromptOverrideReachesModel(ctx context.Context) (res eval.Result
 	return res, nil
 }
 
-// Live starts the pinned [[.Name]] for Surla's live CP3 target the way a
+// Live starts the pinned [[.Name]] for Highbay's live CP3 target the way a
 // scenario does, but planning with provider instead of the scripted model, and
 // with key as its live key. The provider's credentials stay in this process;
 // the [[.Name]] receives only key, through candidate.Spec.Env. The target stops
@@ -127,7 +127,7 @@ func Live(ctx context.Context, binary candidate.Artifact, key string, provider m
 	return liveTarget(ctx, addr, exited, stop), nil
 }
 
-// LiveThroughGateway starts the pinned [[.Name]] for Surla's live CP3 target
+// LiveThroughGateway starts the pinned [[.Name]] for Highbay's live CP3 target
 // planning through the model gateway at gatewayAddr, the gateway selected for
 // the live target, and passes that address to the [[.Name]] unchanged.
 func LiveThroughGateway(ctx context.Context, binary candidate.Artifact, key, gatewayAddr string) (suite.LiveTarget, error) {

@@ -16,9 +16,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"goa.design/goa-ai/eval"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // artifactTextFixture is a control plane that saves its operation history,
@@ -45,8 +45,8 @@ func TestVerifyChangeAcceptsOnlyTheOwnersCurrentConfirmedRevision(t *testing.T) 
 	cp, card, cfg := verificationSetup(t)
 	commit := commitBuilderCandidateFixture(t, cp, card)
 
-	start := func(ctx context.Context, revision string) (*gensurla.VerificationStatusResult, error) {
-		return cp.VerifyChange(ctx, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: revision, CandidateCommit: commit})
+	start := func(ctx context.Context, revision string) (*genhighbay.VerificationStatusResult, error) {
+		return cp.VerifyChange(ctx, &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: revision, CandidateCommit: commit})
 	}
 	for _, tc := range []struct {
 		name    string
@@ -63,14 +63,14 @@ func TestVerifyChangeAcceptsOnlyTheOwnersCurrentConfirmedRevision(t *testing.T) 
 		})
 	}
 	t.Run("unknown change", func(t *testing.T) {
-		_, err := cp.VerifyChange(alice, &gensurla.VerifyChangePayload{ChangeID: "nope", RequestRevision: "r", CandidateCommit: commit})
+		_, err := cp.VerifyChange(alice, &genhighbay.VerifyChangePayload{ChangeID: "nope", RequestRevision: "r", CandidateCommit: commit})
 		assert.ErrorContains(t, err, `unknown change_id "nope"`)
 	})
 	t.Run("no verification configured", func(t *testing.T) {
 		unconfigured := newControlPlane(t, Options{})
-		_, err := unconfigured.VerifyChange(alice, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: "r", CandidateCommit: commit})
+		_, err := unconfigured.VerifyChange(alice, &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: "r", CandidateCommit: commit})
 		assert.ErrorIs(t, err, errVerificationUnavailable)
-		_, err = unconfigured.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: verifyrun.NewRunID()})
+		_, err = unconfigured.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: verifyrun.NewRunID()})
 		assert.ErrorIs(t, err, errVerificationUnavailable)
 	})
 
@@ -81,7 +81,7 @@ func TestVerifyChangeAcceptsOnlyTheOwnersCurrentConfirmedRevision(t *testing.T) 
 		assert.Equal(t, card.RequestRevision, started.RequestRevision)
 		assert.Equal(t, commit, started.CandidateCommit)
 		assert.Equal(t, cfg.Plan.SuiteCommit, started.SuiteCommit)
-		assert.Equal(t, gensurla.StateKindRunning, started.State.Kind())
+		assert.Equal(t, genhighbay.StateKindRunning, started.State.Kind())
 		assert.True(t, started.InputsCurrent)
 
 		saved, err := os.ReadFile(filepath.Join(cfg.RunsDir, started.RunID, "request.json"))
@@ -95,9 +95,9 @@ func TestVerifyChangeAcceptsOnlyTheOwnersCurrentConfirmedRevision(t *testing.T) 
 		assert.Equal(t, verifyrun.StoryRecorded, req.StoryContext.State)
 		assert.Positive(t, req.StoryContext.BuildNumber)
 		assert.False(t, req.StoryContext.BuildStartedAt.IsZero())
-		assert.Equal(t, gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}), started.TestSource)
+		assert.Equal(t, genhighbay.NewTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}), started.TestSource)
 
-		_, err = cp.GetVerification(bob, &gensurla.GetVerificationPayload{RunID: started.RunID})
+		_, err = cp.GetVerification(bob, &genhighbay.GetVerificationPayload{RunID: started.RunID})
 		assert.ErrorContains(t, err, "is not the owner of run_id")
 	})
 }
@@ -127,9 +127,9 @@ func TestGetVerificationReadsTheRunFromDiskInEveryState(t *testing.T) {
 		}
 		return runID
 	}
-	get := func(t *testing.T, runID string) *gensurla.VerificationStatusResult {
+	get := func(t *testing.T, runID string) *genhighbay.VerificationStatusResult {
 		t.Helper()
-		res, err := cp.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: runID})
+		res, err := cp.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: runID})
 		require.NoError(t, err)
 		assert.Equal(t, card.RequestRevision, res.RequestRevision)
 		assert.Equal(t, commit, res.CandidateCommit)
@@ -149,7 +149,7 @@ func TestGetVerificationReadsTheRunFromDiskInEveryState(t *testing.T) {
 		assert.Equal(t, "sim", completed.Environment)
 		assert.False(t, completed.Report.Passed)
 		assert.Equal(t, report.Digest, completed.Report.ReportDigest)
-		assert.Equal(t, &gensurla.VerificationCounts{Required: 2, Passed: 1, Failed: 1}, completed.Report.Counts)
+		assert.Equal(t, &genhighbay.VerificationCounts{Required: 2, Passed: 1, Failed: 1}, completed.Report.Counts)
 		require.Len(t, completed.Report.Scenarios, 2)
 		assert.Equal(t, "a", completed.Report.Scenarios[0].ID)
 		assert.Equal(t, "holdout-1", completed.Report.Scenarios[1].ID, "holdout names never reach builders")
@@ -161,19 +161,19 @@ func TestGetVerificationReadsTheRunFromDiskInEveryState(t *testing.T) {
 
 	t.Run("a failed artifact check reaches the builder as a fixed sentence only", func(t *testing.T) {
 		fx := newArtifactTextFixture(t)
-		res, err := fx.cp.GetVerification(asCaller("alice@example.com", CallerBuilder), &gensurla.GetVerificationPayload{RunID: fx.runID})
+		res, err := fx.cp.GetVerification(asCaller("alice@example.com", CallerBuilder), &genhighbay.GetVerificationPayload{RunID: fx.runID})
 		require.NoError(t, err)
 		completed, ok := res.State.AsCompleted()
 		require.True(t, ok)
 		assertArtifactCheckSentences(t, completed.Report)
-		assertArtifactTextStaysInSavedReport(t, fx, res, "surla.controlplane.get_verification")
+		assertArtifactTextStaysInSavedReport(t, fx, res, "highbay.controlplane.get_verification")
 	})
 
 	t.Run("not completed returns where it stopped", func(t *testing.T) {
 		res := get(t, writeRun(t, `{"kind":"no_report","failure":"execution_failed","stage":"build","summary":"The candidate did not build."}`))
 		failed, ok := res.State.AsNotCompleted()
 		require.True(t, ok)
-		assert.Equal(t, &gensurla.VerificationNotCompleted{Kind: "execution_failed", Stage: "build", Summary: "The candidate did not build."}, failed)
+		assert.Equal(t, &genhighbay.VerificationNotCompleted{Kind: "execution_failed", Stage: "build", Summary: "The candidate did not build."}, failed)
 	})
 
 	t.Run("a run whose processes ended without a result is interrupted", func(t *testing.T) {
@@ -186,14 +186,14 @@ func TestGetVerificationReadsTheRunFromDiskInEveryState(t *testing.T) {
 	t.Run("a new control plane reads runs started by an earlier one", func(t *testing.T) {
 		runID := writeRun(t, `{"kind":"no_report","failure":"interrupted","stage":"supervise","summary":"The verification was canceled."}`)
 		restarted := newControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
-		res, err := restarted.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: runID})
+		res, err := restarted.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: runID})
 		require.NoError(t, err, "the run does not depend on the saved Change Card")
 		assert.Equal(t, "chg", res.ChangeID)
 		assert.False(t, res.InputsCurrent, "a fresh card directory preserves historical access without a current match")
 	})
 
 	t.Run("unknown run", func(t *testing.T) {
-		_, err := cp.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: verifyrun.NewRunID()})
+		_, err := cp.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: verifyrun.NewRunID()})
 		assert.ErrorContains(t, err, "unknown run_id")
 	})
 }
@@ -224,7 +224,7 @@ func TestGetVerificationSafeErrors(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "request.json"), raw, 0o600))
 
-		_, err = cp.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: runID})
+		_, err = cp.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: runID})
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "is not the owner of run_id")
 		assert.NotContains(t, err.Error(), "accepted_at")
@@ -238,12 +238,12 @@ func TestGetVerificationSafeErrors(t *testing.T) {
 		require.NoError(t, os.MkdirAll(dir, 0o700))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "request.json"), []byte(`{}`), 0o600))
 
-		_, err := cp.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: runID})
+		_, err := cp.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: runID})
 		require.Error(t, err)
 		assert.Equal(t, `read verification "`+runID+`": saved verification record could not be read`, err.Error())
 		assert.NotContains(t, err.Error(), cfg.RunsDir)
 
-		spans := recorder.matching("surla.controlplane.get_verification")
+		spans := recorder.matching("highbay.controlplane.get_verification")
 		require.Len(t, spans, 1)
 		assert.Equal(t, codes.Error, spans[0].statusCode)
 		require.Len(t, spans[0].errors, 1)
@@ -270,12 +270,12 @@ func TestGetVerificationSafeErrors(t *testing.T) {
 		missingDigest := strings.Repeat("f", 64)
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"kind":"report","report_digest":"`+missingDigest+`"}`), 0o600))
 
-		_, err = cp.GetVerification(alice, &gensurla.GetVerificationPayload{RunID: runID})
+		_, err = cp.GetVerification(alice, &genhighbay.GetVerificationPayload{RunID: runID})
 		require.Error(t, err)
 		assert.Equal(t, `read verification "`+runID+`": saved verification record could not be read`, err.Error())
 		assert.NotContains(t, err.Error(), cfg.Plan.ReportDir)
 
-		spans := recorder.matching("surla.controlplane.get_verification")
+		spans := recorder.matching("highbay.controlplane.get_verification")
 		require.Len(t, spans, 1)
 		assert.Equal(t, codes.Error, spans[0].statusCode)
 		require.Len(t, spans[0].errors, 1)
@@ -299,22 +299,22 @@ func TestListVerifications(t *testing.T) {
 	}
 
 	t.Run("authorization and configuration guards", func(t *testing.T) {
-		_, err := cp.ListVerifications(context.Background(), &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		_, err := cp.ListVerifications(context.Background(), &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		assert.ErrorContains(t, err, "authenticated principal is required")
 
 		unconfigured := newControlPlane(t, Options{})
-		_, err = unconfigured.ListVerifications(alice, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		_, err = unconfigured.ListVerifications(alice, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		assert.ErrorIs(t, err, errVerificationUnavailable)
 
-		_, err = cp.ListVerifications(alice, &gensurla.ListVerificationsPayload{ChangeID: "unknown-card"})
+		_, err = cp.ListVerifications(alice, &genhighbay.ListVerificationsPayload{ChangeID: "unknown-card"})
 		assert.ErrorContains(t, err, `unknown change_id "unknown-card"`)
 
-		_, err = cp.ListVerifications(bob, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		_, err = cp.ListVerifications(bob, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		assert.ErrorContains(t, err, `principal "bob@example.com" is not the owner of change_id "chg"`)
 	})
 
 	t.Run("empty list when no runs exist yet", func(t *testing.T) {
-		res, err := cp.ListVerifications(alice, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		res, err := cp.ListVerifications(alice, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, "chg", res.ChangeID)
 		assert.NotNil(t, res.Runs)
@@ -352,18 +352,18 @@ func TestListVerifications(t *testing.T) {
 
 		// Revise the card into needs_confirmation; prior R1 runs must remain discoverable.
 		priorID := "check_01"
-		revised, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+		revised, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 			ChangeID:        "chg",
 			RequestRevision: card.RequestRevision,
 			Prompt:          "Require a refund reason.",
 			RevisionNote:    "Revise the change.",
-			Analysis: &gensurla.CP1RevisionAnalysis{
+			Analysis: &genhighbay.CP1RevisionAnalysis{
 				Summary: "Refunds up to $50 require a reason.",
-				Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
+				Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{
 					Question: "Which reasons are allowed?",
 					Options:  []string{"damaged_item", "any_reason"},
 				}},
-				Examples: []*gensurla.CP1RevisionAnalysisExample{{
+				Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 					PriorID:          &priorID,
 					Scenario:         "Refund at the limit",
 					InputSummary:     "Order total $50.00",
@@ -378,7 +378,7 @@ func TestListVerifications(t *testing.T) {
 		require.Equal(t, StatusConfirmed, revised.Status, "the agreed revision stays in force")
 		require.NotNil(t, revised.ProposedRevision, "the revision waits as a proposal")
 
-		res, err := cp.ListVerifications(alice, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		res, err := cp.ListVerifications(alice, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		require.Len(t, res.Runs, 2)
 		assert.Equal(t, runLate, res.Runs[0].RunID)
@@ -398,13 +398,13 @@ func TestListVerifications(t *testing.T) {
 
 	t.Run("a failed artifact check reaches the builder as a fixed sentence only", func(t *testing.T) {
 		fx := newArtifactTextFixture(t)
-		res, err := fx.cp.ListVerifications(asCaller("alice@example.com", CallerBuilder), &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		res, err := fx.cp.ListVerifications(asCaller("alice@example.com", CallerBuilder), &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		require.Len(t, res.Runs, 1)
 		completed, ok := res.Runs[0].State.AsCompleted()
 		require.True(t, ok)
 		assertArtifactCheckSentences(t, completed.Report)
-		assertArtifactTextStaysInSavedReport(t, fx, res, "surla.controlplane.list_verifications")
+		assertArtifactTextStaysInSavedReport(t, fx, res, "highbay.controlplane.list_verifications")
 	})
 
 	t.Run("corrupt published request.json records raw error on span and returns safe public error", func(t *testing.T) {
@@ -414,13 +414,13 @@ func TestListVerifications(t *testing.T) {
 		require.NoError(t, os.MkdirAll(corruptDir, 0o700))
 		require.NoError(t, os.WriteFile(filepath.Join(corruptDir, "request.json"), []byte(`{"secret_host_path":"/var/lib/secret`), 0o600))
 
-		_, err := cp.ListVerifications(alice, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+		_, err := cp.ListVerifications(alice, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 		require.Error(t, err)
 		assert.Equal(t, `list verifications for "chg": saved verification records could not be read`, err.Error())
 		assert.NotContains(t, err.Error(), cfg.RunsDir)
 		assert.NotContains(t, err.Error(), "secret_host_path")
 
-		spans := recorder.matching("surla.controlplane.list_verifications")
+		spans := recorder.matching("highbay.controlplane.list_verifications")
 		require.Len(t, spans, 1)
 		assert.Equal(t, codes.Error, spans[0].statusCode)
 		require.Len(t, spans[0].errors, 1)
@@ -431,7 +431,7 @@ func TestListVerifications(t *testing.T) {
 // verificationSetup returns a control plane with a verification
 // configuration whose runs are supervised by a command that exits at once,
 // and a confirmed card owned by alice, using the stored-evaluator profile.
-func verificationSetup(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult, *VerificationConfig) {
+func verificationSetup(t *testing.T) (*ControlPlane, *genhighbay.ChangeCardResult, *VerificationConfig) {
 	t.Helper()
 	return verificationSetupForSource(t, true)
 }
@@ -439,7 +439,7 @@ func verificationSetup(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult,
 // verificationSetupForSource binds the source before New starts background work.
 func verificationSetupForSource(
 	t *testing.T, stored bool,
-) (*ControlPlane, *gensurla.ChangeCardResult, *VerificationConfig) {
+) (*ControlPlane, *genhighbay.ChangeCardResult, *VerificationConfig) {
 	t.Helper()
 	cfg := verificationConfig(t)
 	cp, card := verificationSetupWithOptions(t, verificationSourceOptions(cfg, stored))
@@ -449,12 +449,12 @@ func verificationSetupForSource(
 // verificationSetupWithOptions returns a control plane built from opts, which
 // name the verification source, and its confirmed card "chg" owned by alice
 // with a stored open build.
-func verificationSetupWithOptions(t *testing.T, opts Options) (*ControlPlane, *gensurla.ChangeCardResult) {
+func verificationSetupWithOptions(t *testing.T, opts Options) (*ControlPlane, *genhighbay.ChangeCardResult) {
 	t.Helper()
-	analysis := &gensurla.CP1Analysis{
+	analysis := &genhighbay.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-		Examples: []*gensurla.CP1AnalysisExample{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+		Examples: []*genhighbay.CP1AnalysisExample{{
 			Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
@@ -523,9 +523,9 @@ func newArtifactTextFixture(t *testing.T) artifactTextFixture {
 
 // assertArtifactCheckSentences checks the builder view of the fixture's
 // report: every scenario could not be evaluated, each repair scenario
-// carries Surla's sentence about its record of binaries, and the holdout
+// carries Highbay's sentence about its record of binaries, and the holdout
 // carries nothing.
-func assertArtifactCheckSentences(t *testing.T, report *gensurla.BuilderVerificationReport) {
+func assertArtifactCheckSentences(t *testing.T, report *genhighbay.BuilderVerificationReport) {
 	t.Helper()
 	require.Len(t, report.Scenarios, 4)
 	for i, id := range []string{"a", "b", "c"} {
@@ -533,11 +533,11 @@ func assertArtifactCheckSentences(t *testing.T, report *gensurla.BuilderVerifica
 		assert.Equal(t, id, scenario.ID)
 		assert.Equal(t, "harness_error", scenario.Outcome)
 		if assert.NotNil(t, scenario.Error, id) {
-			assert.Contains(t, *scenario.Error, "does not match what Surla built", id)
+			assert.Contains(t, *scenario.Error, "does not match what Highbay built", id)
 			assert.Contains(t, *scenario.Error, "report_digest", id)
 		}
 	}
-	assert.Equal(t, &gensurla.VerificationScenario{ID: "holdout-1", Outcome: "harness_error"}, report.Scenarios[3])
+	assert.Equal(t, &genhighbay.VerificationScenario{ID: "holdout-1", Outcome: "harness_error"}, report.Scenarios[3])
 }
 
 // assertArtifactTextStaysInSavedReport checks every place the fixture's

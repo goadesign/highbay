@@ -11,14 +11,14 @@ import (
 )
 
 var (
-	// quickstartFS holds Surla's replacement for each AGENTS_QUICKSTART.md
-	// section surlaQuickstart may replace, one Markdown file per section name.
+	// quickstartFS holds Highbay's replacement for each AGENTS_QUICKSTART.md
+	// section highbayQuickstart may replace, one Markdown file per section name.
 	//
 	//go:embed quickstart/*.md
 	quickstartFS embed.FS
 
 	// quickstartSections maps a Goa-AI quickstart section name, without its
-	// agents-quickstart- prefix, to Surla's replacement text.
+	// agents-quickstart- prefix, to Highbay's replacement text.
 	quickstartSections = mustQuickstartSections()
 
 	// quickstartSource is quickstart.go itself, compiled again inside the
@@ -33,7 +33,7 @@ var (
 	//go:embed story_scenarios.go
 	storyScenariosSource string
 
-	// testProgramSection is the section surlaSuiteCommand adds to a Surla
+	// testProgramSection is the section highbaySuiteCommand adds to a Highbay
 	// test module's AGENTS_QUICKSTART.md: a Go template, executed with
 	// suiteCommandData, naming what the author's acceptance package must
 	// provide. Unlike quickstartSections it replaces no Goa-AI section.

@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -36,7 +36,7 @@ func TestDraftFirstUsePreservesAnExistingFolder(t *testing.T) {
 			folder := filepath.Join(project, draftFolderName)
 			original := map[string]string{"notes.txt": "Keep this preexisting work.\n"}
 			if marked {
-				original[".gitignore"] = "# surla draft 1\n*\n"
+				original[".gitignore"] = "# highbay draft 1\n*\n"
 			}
 			writeWorkspaceFiles(t, folder, original)
 			cp := newControlPlane(t, Options{WorkspaceDir: project})
@@ -69,7 +69,7 @@ func TestDraftFirstUsePublishesCanonicalFilesAndProvenance(t *testing.T) {
 	files := validWorkspaceStub("package design\nvar  A=1\n")
 	writeWorkspaceFiles(t, project, files)
 	writeWorkspaceFiles(t, filepath.Join(project, draftStagingName), map[string]string{
-		".gitignore": "# surla draft 1\n*\n", "leftover": "interrupted",
+		".gitignore": "# highbay draft 1\n*\n", "leftover": "interrupted",
 	})
 	opts := Options{WorkspaceDir: project, CardsDir: t.TempDir()}
 	cp := newControlPlane(t, opts)
@@ -87,7 +87,7 @@ func TestDraftFirstUsePublishesCanonicalFilesAndProvenance(t *testing.T) {
 	assert.Equal(t, files["go.sum"], snapshot["go.sum"])
 	marker, err := os.ReadFile(filepath.Join(none.DraftFolder, ".gitignore"))
 	require.NoError(t, err)
-	assert.Equal(t, "# surla draft 1\n*\n", string(marker))
+	assert.Equal(t, "# highbay draft 1\n*\n", string(marker))
 	_, err = os.Stat(filepath.Join(none.DraftFolder, "leftover"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
 	version := designversion.Digest(snapshot["design/design.go"])
@@ -131,7 +131,7 @@ func TestExistingDraftDoesNotReadOrRepairTheProject(t *testing.T) {
 	assert.Equal(t, want, got, "repairing the ignore must not read the project")
 	marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 	require.NoError(t, err)
-	assert.Equal(t, "# surla draft 1\n*\n", string(marker))
+	assert.Equal(t, "# highbay draft 1\n*\n", string(marker))
 }
 
 // TestDraftRefusesUnownedStagingAndLinkedFolders proves recovery never erases
@@ -264,7 +264,7 @@ func TestDraftRevalidatesAfterUnlockedGit(t *testing.T) {
 					}))
 				} else if change == "draft" {
 					writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{
-						".gitignore": "# surla draft 1\n*\n", "design/design.go": "user work",
+						".gitignore": "# highbay draft 1\n*\n", "design/design.go": "user work",
 					})
 				}
 			}()
@@ -384,7 +384,7 @@ func TestRefreshReuseRequiresTheDraftAndTheList(t *testing.T) {
 	reused, err := cp.RefreshStory(owner)
 	require.NoError(t, err)
 	assert.Equal(t, opID, *reused.OpID)
-	_, err = cp.ProposeChange(owner, &gensurla.ProposeChangePayload{
+	_, err = cp.ProposeChange(owner, &genhighbay.ProposeChangePayload{
 		ChangeID: "draft-only", Prompt: "Keep refunds bounded", StoryRefreshOpID: &opID,
 		Analysis: refundAnalysis("Keep refunds bounded"),
 	})
@@ -426,7 +426,7 @@ func TestMissingDraftRestoresTheLatestEligibleRevision(t *testing.T) {
 			saveCompleteRemakeCard(t, cp, "chg")
 			user := asCaller("alice@example.com", CallerUser)
 			record := loadMetadataRecord(t, cp, "chg")
-			card, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision, Answers: map[string]string{}, Examples: record.card.Examples})
+			card, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision, Answers: map[string]string{}, Examples: record.card.Examples})
 			require.NoError(t, err)
 			if state != "confirmed" {
 				writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{"design/design.go": "package design\nvar A=2\n"})
@@ -451,7 +451,7 @@ func TestMissingDraftRestoresTheLatestEligibleRevision(t *testing.T) {
 				record.proposed = &storedRevision{card: &proposal, designSource: source, architecture: selected.architecture, goMod: selected.goMod, madeFrom: selected.madeFrom}
 				saveMetadataRecord(t, cp, record)
 				if state == "declined" {
-					_, err = cp.DeclineRevision(user, &gensurla.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
+					_, err = cp.DeclineRevision(user, &genhighbay.DeclineRevisionPayload{ChangeID: "chg", RequestRevision: proposal.RequestRevision})
 					require.NoError(t, err)
 				}
 			}
@@ -543,7 +543,7 @@ func TestOlderDraftMarkerRemakesFromProject(t *testing.T) {
 	assert.Equal(t, expectedStart, provenance.Start, "the new generation captures its original folder on first materialization")
 	marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 	require.NoError(t, err)
-	assert.Equal(t, "# surla draft 2\n*\n", string(marker))
+	assert.Equal(t, "# highbay draft 2\n*\n", string(marker))
 	result := storyRefreshResultFromOp(&storyRefreshOp{state: storyRefreshStateRunning,
 		madeFrom: &provenance, dropNote: true}, project)
 	assert.Contains(t, result.Message, "user dropped change chg; edits made before then are gone")
@@ -632,7 +632,7 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 			next := validWorkspaceStub("package design\n\nvar A = 3\n")
 			writeWorkspaceFiles(t, project, next)
 			stage := validWorkspaceStub(next["design/design.go"])
-			stage[".gitignore"] = "# surla draft 2\n*\n"
+			stage[".gitignore"] = "# highbay draft 2\n*\n"
 			writeWorkspaceFiles(t, filepath.Join(project, draftStagingName), stage)
 			if phase != "before removal" {
 				require.NoError(t, os.RemoveAll(filepath.Join(project, draftFolderName)))
@@ -669,7 +669,7 @@ func TestDroppedUnmarkedDraftPublicationRecoversAtEveryStop(t *testing.T) {
 			assert.NotEmpty(t, provenance.Entries)
 			marker, err := os.ReadFile(filepath.Join(project, draftFolderName, ".gitignore"))
 			require.NoError(t, err)
-			assert.Equal(t, "# surla draft 2\n*\n", string(marker))
+			assert.Equal(t, "# highbay draft 2\n*\n", string(marker))
 		})
 	}
 }
@@ -728,7 +728,7 @@ func readDraftForTest(t *testing.T, cp *ControlPlane) (map[string]string, madeFr
 // recovery consumers; it does not claim a workspace proposal was evaluated.
 func saveDraftSourceCardFixture(
 	t *testing.T, cp *ControlPlane, changeID string, design map[string]string,
-) *gensurla.ChangeCardResult {
+) *genhighbay.ChangeCardResult {
 	t.Helper()
 	saveProposedCardFixture(t, cp, "alice@example.com", changeID, "Keep refunds bounded", refundAnalysis("Keep refunds bounded"))
 	record := loadMetadataRecord(t, cp, changeID)

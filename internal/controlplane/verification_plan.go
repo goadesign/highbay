@@ -18,11 +18,11 @@ import (
 
 	goa "goa.design/goa/v3/pkg"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 type (
@@ -44,7 +44,7 @@ type (
 		// ReportDir receives each run's full report, named by its digest. It
 		// must lie outside the workspace.
 		ReportDir string
-		// Command is the argument list that runs this surla executable;
+		// Command is the argument list that runs this hbay executable;
 		// runs start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 		Command []string
 		// Timeout is how long a run may take before it is stopped and
@@ -155,7 +155,7 @@ const (
 	// refusedMissingTests is an accepted tests' commit the repository no
 	// longer holds, such as after its branch was deleted or rewritten.
 	refusedMissingTests
-	// refusedNoLayout is a commit without the test layout `surla init`
+	// refusedNoLayout is a commit without the test layout `hbay init`
 	// makes.
 	refusedNoLayout
 	// refusedTestModuleChanged is a candidate commit that changed
@@ -171,17 +171,17 @@ const (
 // tests_not_accepted can take in every state. Only an acceptance makes the
 // builder's assignment unread, so the project server's Chorus reminder reaches
 // the builder exactly then.
-const testsNotAcceptedBuilderStep = "keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again"
+const testsNotAcceptedBuilderStep = "keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again"
 
 // Error says what is refused, why and who acts.
 func (r *layoutRefusal) Error() string {
 	switch r.reason {
 	case refusedReplacedFolder:
-		return fmt.Sprintf("the project folder %s was replaced or removed after Surla started, so the user restarts it:"+
-			" stop and start Surla in the project folder, then try again", r.folder)
+		return fmt.Sprintf("the project folder %s was replaced or removed after Highbay started, so the user restarts it:"+
+			" stop and start Highbay in the project folder, then try again", r.folder)
 	case refusedMissingTests:
 		return fmt.Sprintf("the accepted tests' commit %s is not in the project's repository:"+
-			" the test writer reports again, so Surla records the tests anew, or the user builds again", r.commit)
+			" the test writer reports again, so Highbay records the tests anew, or the user builds again", r.commit)
 	case refusedNoRepository:
 		return fmt.Sprintf("the project folder %s is not inside a git repository, so it has no commits to verify:"+
 			" make the project folder a git repository and commit it", r.folder)
@@ -209,11 +209,11 @@ func (r *layoutRefusal) Error() string {
 			" restore these files to their versions or absence in commit %s, commit, and call verify_change or start_live_target again",
 			r.commit, r.testModule, r.baseCommit, list, r.testModule, renameNote, r.baseCommit)
 	}
-	step := "the builder commits the layout surla init makes and verifies again"
+	step := "the builder commits the layout hbay init makes and verifies again"
 	if r.actor == testWriterActs {
-		step = "the test writer reports again, so Surla checks and records its tests again"
+		step = "the test writer reports again, so Highbay checks and records its tests again"
 	}
-	return fmt.Sprintf("commit %s does not have the test layout surla init makes (%s): %s", r.commit, r.missing, step)
+	return fmt.Sprintf("commit %s does not have the test layout hbay init makes (%s): %s", r.commit, r.missing, step)
 }
 
 // Error says only what is refused; each caller words the state and the step
@@ -270,13 +270,13 @@ func (c *ControlPlane) verificationBuild(
 	principal Principal, changeID, revision string,
 ) (heldBuild, error) {
 	if _, none := c.verifier.(noVerification); none {
-		return heldBuild{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return heldBuild{}, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
 	held, err := c.workerOwnedBuild(principal, changeID)
 	var missing *goa.ServiceError
 	if errors.As(err, &missing) && missing.Name == "not_found" {
 		if c.storedEvaluator() {
-			return heldBuild{}, gensurla.MakeNoBuild(fmt.Errorf(
+			return heldBuild{}, genhighbay.MakeNoBuild(fmt.Errorf(
 				"change %q has no build for revision %s: the user starts a build on the views page",
 				changeID, revision))
 		}
@@ -328,7 +328,7 @@ func (c *ControlPlane) checkBuildCommit(
 		return testwriter.CommitCheck{}, err
 	}
 	if !exists {
-		return testwriter.CommitCheck{}, gensurla.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: commit})
+		return testwriter.CommitCheck{}, genhighbay.MakeConflict(&layoutRefusal{reason: refusedUnknownCommit, commit: commit})
 	}
 	branches := [2]string{testwriter.BuilderRole.Branch(saved.Number), testwriter.TestsRole.Branch(saved.Number)}
 	return testwriter.CheckBuildCommit(work, workspace, commit, ownBranch, saved.Base, branches, recorded)
@@ -345,7 +345,7 @@ func checkCandidateDesign(
 		return err
 	}
 	if len(expected) == 0 {
-		return gensurla.MakeConflict(errors.New("The open build records no agreed design. Ask the guide to propose a revision from its draft, adopt it, then build."))
+		return genhighbay.MakeConflict(errors.New("The open build records no agreed design. Ask the guide to propose a revision from its draft, adopt it, then build."))
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
@@ -354,7 +354,7 @@ func checkCandidateDesign(
 		return err
 	}
 	if project == "" {
-		return gensurla.MakeConflict(errors.New("The project has no current Git commit. Commit the project, then build the change again and read its new assignment."))
+		return genhighbay.MakeConflict(errors.New("The project has no current Git commit. Commit the project, then build the change again and read its new assignment."))
 	}
 	actual, err := committedDesignAt(work, workspace, repo, prefix, candidate)
 	if err != nil {
@@ -381,7 +381,7 @@ func checkCandidateDesign(
 		return err
 	}
 	if !found {
-		return gensurla.MakeConflict(fmt.Errorf("candidate commit %s shares no history with the project's current commit %s: ask the user to Drop the current build on the views page; ask the guide to call update_draft, refresh_story and revise_change from the current project, adopt the revision, then start a new build, read its assignment and make the change again", candidate, project))
+		return genhighbay.MakeConflict(fmt.Errorf("candidate commit %s shares no history with the project's current commit %s: ask the user to Drop the current build on the views page; ask the guide to call update_draft, refresh_story and revise_change from the current project, adopt the revision, then start a new build, read its assignment and make the change again", candidate, project))
 	}
 	return checkDesignBase(work, workspace, base, &saved.MadeFrom)
 }
@@ -393,7 +393,7 @@ func candidateDesignRefusal(candidate string, files []string) error {
 	for i, file := range files {
 		names[i] = testwriter.ShownName(file)
 	}
-	return gensurla.MakeConflict(fmt.Errorf("candidate commit %s differs from this build's agreed design in %s: call generate_code, commit the agreed design, and call verify_change again", candidate, strings.Join(names, ", ")))
+	return genhighbay.MakeConflict(fmt.Errorf("candidate commit %s differs from this build's agreed design in %s: call generate_code, commit the agreed design, and call verify_change again", candidate, strings.Join(names, ", ")))
 }
 
 // candidateBuildRefusal gives the builder the branch and working-copy repair
@@ -403,7 +403,7 @@ func candidateBuildRefusal(candidate, base, branch string, check testwriter.Comm
 	if reasons == "" {
 		return nil
 	}
-	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own work again as a new commit on %s from base %s, then call verify_change again; if you cannot, ask the user to build the change again and make your own work again from that build's base.", reasons, branch, branch, base))
+	return genhighbay.MakeBuildBranchMismatch(fmt.Errorf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own work again as a new commit on %s from base %s, then call verify_change again; if you cannot, ask the user to build the change again and make your own work again from that build's base.", reasons, branch, branch, base))
 }
 
 // approvalBuildRefusal tells the user to have the builder repair and verify
@@ -413,7 +413,7 @@ func approvalBuildRefusal(candidate, base, branch string, check testwriter.Commi
 	if reasons == "" {
 		return nil
 	}
-	return gensurla.MakeBuildBranchMismatch(fmt.Errorf("%s. Ask the builder to make %s and its working copy hold neither the other builds' commits nor their changes to the named files, make its own work again as a new commit on %s from base %s, and call verify_change again; then approve that run.", reasons, branch, branch, base))
+	return genhighbay.MakeBuildBranchMismatch(fmt.Errorf("%s. Ask the builder to make %s and its working copy hold neither the other builds' commits nor their changes to the named files, make its own work again as a new commit on %s from base %s, and call verify_change again; then approve that run.", reasons, branch, branch, base))
 }
 
 // buildCommitReasons describes failed invariants without inventing file names
@@ -485,7 +485,7 @@ func (c *ControlPlane) verificationPlanForTests(
 			refusal.reason == refusedReplacedFolder ||
 			refusal.reason == refusedTestModuleChanged ||
 			refusal.reason == refusedNoCommonBase):
-			return VerificationConfig{}, gensurla.MakeConflict(refusal)
+			return VerificationConfig{}, genhighbay.MakeConflict(refusal)
 		case errors.As(err, &refusal):
 			return VerificationConfig{}, refuseNoTestLayout(refusal)
 		case err != nil:
@@ -496,7 +496,7 @@ func (c *ControlPlane) verificationPlanForTests(
 		cfg.Plan = plan
 		return cfg, nil
 	default:
-		return VerificationConfig{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return VerificationConfig{}, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
 }
 
@@ -544,12 +544,12 @@ func (c *ControlPlane) testsChoice(
 		}
 		return testSelection{commit: build.TestWriter.Commit, source: verify.TestsWritten, build: build}, nil
 	default:
-		return testSelection{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return testSelection{}, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
 }
 
 // starterPlanAt reads, with git and never from the working tree, the test
-// layout `surla init` makes at two commits of the repository holding the
+// layout `hbay init` makes at two commits of the repository holding the
 // bound workspace, and returns the plan that builds candidateCommit's
 // programs and runs testsCommit's generated entry point, written by agents
 // (verify.TestsWritten, the one place written tests are marked).
@@ -751,11 +751,11 @@ func verifierRuns(v verifier) *VerificationConfig {
 // user's step.
 func refuseNoBuild(changeID, revision string, build buildFile, found bool) error {
 	if !found {
-		return gensurla.MakeNoBuild(fmt.Errorf(
+		return genhighbay.MakeNoBuild(fmt.Errorf(
 			"change %q has no build with a test writer, so no tests are accepted for revision %s: the user starts a build on the views page",
 			changeID, revision))
 	}
-	return gensurla.MakeNoBuild(fmt.Errorf(
+	return genhighbay.MakeNoBuild(fmt.Errorf(
 		"change %q is built at revision %s, but the revision in force is %s: the user starts a build of revision %s on the views page",
 		changeID, build.RequestRevision, revision, revision))
 }
@@ -770,14 +770,14 @@ func refuseTestsNotAccepted(saved testWriterAssignment) error {
 	case testsAssigned:
 		state, who = "assigned", "the test writer writes the required tests and reports them finished"
 	case testsReported:
-		state, who = "reported", "Surla is checking the test writer's report"
+		state, who = "reported", "Highbay is checking the test writer's report"
 	case testsNeedChanges:
-		state, who = "needs changes", "the test writer fixes Surla's findings and reports again"
+		state, who = "needs changes", "the test writer fixes Highbay's findings and reports again"
 	case testsCouldNotRun:
 		// The saved step is a sentence; its full stop would end the refusal early.
-		state, who = "could not run", "Surla's check could not run ("+saved.Reason+"); the user's step: "+strings.TrimSuffix(saved.Step, ".")
+		state, who = "could not run", "Highbay's check could not run ("+saved.Reason+"); the user's step: "+strings.TrimSuffix(saved.Step, ".")
 	}
-	return gensurla.MakeTestsNotAccepted(fmt.Errorf("the tests of this build are not accepted; their state is %s: %s; your step: %s", state, who, testsNotAcceptedBuilderStep))
+	return genhighbay.MakeTestsNotAccepted(fmt.Errorf("the tests of this build are not accepted; their state is %s: %s; your step: %s", state, who, testsNotAcceptedBuilderStep))
 }
 
 // refuseApprovalTestsNotAccepted is approve_merge's tests_not_accepted refusal
@@ -789,21 +789,21 @@ func refuseApprovalTestsNotAccepted(saved testWriterAssignment) error {
 	var state, step string
 	switch saved.State {
 	case testsAssigned:
-		state, step = "assigned", "the test writer writes the required tests and reports them finished; the builder verifies again once Surla accepts them"
+		state, step = "assigned", "the test writer writes the required tests and reports them finished; the builder verifies again once Highbay accepts them"
 	case testsReported:
-		state, step = "reported", "Surla is checking the test writer's report; the builder verifies again after its verdict"
+		state, step = "reported", "Highbay is checking the test writer's report; the builder verifies again after its verdict"
 	case testsNeedChanges:
-		state, step = "needs changes", "the test writer fixes Surla's findings and reports again; the builder verifies again once Surla accepts them"
+		state, step = "needs changes", "the test writer fixes Highbay's findings and reports again; the builder verifies again once Highbay accepts them"
 	case testsCouldNotRun:
-		state, step = "could not run", "Surla's check could not run ("+saved.Reason+"); the user's step: "+saved.Step
+		state, step = "could not run", "Highbay's check could not run ("+saved.Reason+"); the user's step: "+saved.Step
 	}
-	return gensurla.MakeTestsNotAccepted(fmt.Errorf("the tests of this build are not accepted; their state is %s: %s", state, step))
+	return genhighbay.MakeTestsNotAccepted(fmt.Errorf("the tests of this build are not accepted; their state is %s: %s", state, step))
 }
 
 // refuseNoTestLayout is verify_change's no_test_layout refusal of a commit
-// without the test layout `surla init` makes, of an accepted tests' commit
+// without the test layout `hbay init` makes, of an accepted tests' commit
 // the repository no longer holds, or of a project folder outside any git
 // repository: it names what is missing and ends with the step.
 func refuseNoTestLayout(refusal *layoutRefusal) error {
-	return gensurla.MakeNoTestLayout(refusal)
+	return genhighbay.MakeNoTestLayout(refusal)
 }

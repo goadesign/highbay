@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,7 +94,7 @@ func TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears(t *testing.T
 			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg})
 			card := buildableChange(t, cp, "x")
 			user := asCaller("alice@example.com", CallerUser)
-			first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+			first, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			cp.mu.RLock()
 			saved, found, err := cp.cards.loadOpenBuild()
@@ -119,7 +119,7 @@ func TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears(t *testing.T
 			} else {
 				productionBuildGit(t, workspace, "branch", "--delete", "--force", branch)
 			}
-			read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "x"})
+			read, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "x"})
 			require.NoError(t, err)
 			started, ok := read.Build.AsStarted()
 			require.True(t, ok)
@@ -133,7 +133,7 @@ func TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears(t *testing.T
 			after, err := cp.ListChanges(user)
 			require.NoError(t, err)
 			assert.Equal(t, before.Version, after.Version)
-			restarted, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
+			restarted, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "x", RequestRevision: card.RequestRevision})
 			require.NoError(t, err, "the matching pass permits restart without replaces")
 			assert.NotEqual(t, first.Build.StartedAt, restarted.Build.StartedAt)
 		})

@@ -1,17 +1,17 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/img/surla-banner-dark.png">
-    <img alt="Surla — one compiled contract every coding agent builds to and an independent verifier checks against." src="docs/img/surla-banner.png" width="960">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/highbay-banner-dark.png">
+    <img alt="Highbay — one compiled contract every coding agent builds to and an independent verifier checks against." src="docs/img/highbay-banner.png" width="960">
   </picture>
 </p>
 
 <p align="center">
-  <a href="https://pkg.go.dev/github.com/goadesign/surla"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/goadesign/surla.svg"></a>
+  <a href="https://pkg.go.dev/github.com/goadesign/highbay"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/goadesign/highbay.svg"></a>
   <a href="https://modelcontextprotocol.io"><img alt="MCP" src="https://img.shields.io/badge/MCP-2026--07--28-6E56CF"></a>
-  <a href="https://github.com/goadesign/surla/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="https://github.com/goadesign/highbay/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
-# Surla
+# Highbay
 
 **An agentic software factory that builds, verifies, and evolves production services at a fraction of the token cost.**
 
@@ -19,45 +19,45 @@ A coding agent left alone writes the code and also the tests that judge it, so
 its mistakes pass. Hand-written routing, auth middleware and workflow plumbing
 drift with every feature, and each later edit costs more tokens.
 
-Surla organizes the coding agents you already use into a team with separate
+Highbay organizes the coding agents you already use into a team with separate
 jobs, and pairs them with a deterministic compiler. Agents write a compact
 service design and the business logic. [Goa](https://github.com/goadesign/goa)
 and [Goa-AI](https://github.com/goadesign/goa-ai) generate the transports,
 schemas, validation, durable workflows and tool guardrails from that design at
 **0 LLM tokens**. One agent writes the code; a different agent writes the
-tests; Surla itself judges those tests and runs them against the code. You agree
+tests; Highbay itself judges those tests and runs them against the code. You agree
 what is built, approve the result, and merge the approved commits into your
 local branch in your browser.
 
 ## One change from start to finish
 
-Install Surla and run [`surla up`](#install) once. Then open your project
+Install Highbay and run [`hbay up`](#install) once. Then open your project
 folder in your coding agent and say:
 
-> `/surla` — build a refund assistant: refunds up to $50 get instant store
+> `/highbay` — build a refund assistant: refunds up to $50 get instant store
 > credit; larger ones wait for a manager.
 
-Use `$surla` in Codex. Your current coding agent (which Surla registers under
+Use `$highbay` in Codex. Your current coding agent (which Highbay registers under
 its internal **guide** role) starts or attaches to the project's server and
 opens the browser window where you make the human decisions. In an empty
-folder, it creates the starter and first Git commit through Surla. You can keep
+folder, it creates the starter and first Git commit through Highbay. You can keep
 working in that conversation through the merge.
 
 Here is how that change reaches your branch:
 
-1. **Start in your agent.** Invoke `/surla` (or `$surla`) in the project
-   folder and describe what you want. The first Surla tool call attaches
+1. **Start in your agent.** Invoke `/highbay` (or `$highbay`) in the project
+   folder and describe what you want. The first Highbay tool call attaches
    this session as the guide and starts the server when needed. In Herdr, when
-   Surla can identify your coding agent's live pane in the project folder and
-   its project and team ownership are compatible, Surla can link that pane and
+   Highbay can identify your coding agent's live pane in the project folder and
+   its project and team ownership are compatible, Highbay can link that pane and
    space; when no Herdr pane is linked, your coding agent still registers with
    the project (**Coding agent registered · No Herdr pane linked**).
 2. **Open the page.** Your coding agent calls `open_views` to open the project's
    browser page in your default browser. In an empty folder, first-time Go
    module setup takes a couple of minutes while the welcome card shows the
    current initialization phase. If you close or reload the tab, ask your coding agent
-   to open Surla views again, click **Open Surla Window** in the Herdr
-   companion (`Cmd+Alt+Shift+S` on macOS), or run `surla --print-link` for
+   to open Highbay views again, click **Open Highbay Window** in the Herdr
+   companion (`Cmd+Alt+Shift+H` on macOS), or run `hbay --print-link` for
    headless or automated browsers.
 3. **Describe.** Your coding agent writes the Story, a description of your
    system's flows in Go, and proposes a Change Card: the saved request,
@@ -87,60 +87,60 @@ Here is how that change reaches your branch:
    change, ask your coding agent to revise the change, then review and adopt its
    proposal before building.
 6. **Build.** Choose agents, models and permissions inline in **Build**,
-   then press **Build this change**. Surla remembers your choices for this
+   then press **Build this change**. Highbay remembers your choices for this
    project and pre-populates missing user-scoped folder trust for the project
    and worker copies (while honoring any explicit untrusted folder rule).
    Defaults prefer different coding-agent families for the worker roles; one
    installed family can fill both. The builder and test writer work in separate
-   Git working copies, `.surla-build` and `.surla-tests`. Surla gives the test
+   Git working copies, `.highbay-build` and `.highbay-tests`. Highbay gives the test
    writer one required test per finished Story flow, plus the confirmed answers,
    examples and preserved behaviors.
 
-   | Worker mode | When Surla uses it | What it needs |
+   | Worker mode | When Highbay uses it | What it needs |
    | --- | --- | --- |
-   | **Herdr panes** | Surla finds both Herdr commands (`herdr-core` and `herdr-app`) | Herdr creates side-by-side worker panes; Chorus (`chorus up`) coordinates them and is required at initial Herdr worker startup. If Chorus becomes unreachable or cannot join a swarm afterwards, already-running workers keep waiting through Surla's assignment-wait tools and the page offers copyable nudges. |
-   | **Background workers** | Surla cannot find both Herdr commands | No Herdr or Chorus needed. Requires a supported coding-agent CLI with non-interactive execution, **Skip permission prompts (YOLO)** enabled per role when the client offers it (otherwise configured client permissions), and **I agree to run these workers in the background.** |
+   | **Herdr panes** | Highbay finds both Herdr commands (`herdr-core` and `herdr-app`) | Herdr creates side-by-side worker panes; Chorus (`chorus up`) coordinates them and is required at initial Herdr worker startup. If Chorus becomes unreachable or cannot join a swarm afterwards, already-running workers keep waiting through Highbay's assignment-wait tools and the page offers copyable nudges. |
+   | **Background workers** | Highbay cannot find both Herdr commands | No Herdr or Chorus needed. Requires a supported coding-agent CLI with non-interactive execution, **Skip permission prompts (YOLO)** enabled per role when the client offers it (otherwise configured client permissions), and **I agree to run these workers in the background.** |
 
 7. **Tests.** The test writer writes those tests in `eval/`, checks that
    `eval/` compiles (`GOWORK=off go build ./...`), and reports without running
-   the application itself. Surla does not take its word for it: it writes the
+   the application itself. Highbay does not take its word for it: it writes the
    required tests into the copy again, checks that nothing changed outside
    `eval/`, and builds and lists the test program. Problems go
    back to the test writer as findings. Build shows them beside the saved
    required tests; Next names the test writer’s next step.
-   When the tests pass the check, Surla accepts them at one commit on
-   `surla/tests-<n>`. Build shows which agreed answers and examples the test
-   writer says each scenario covers. Surla validates those references but does
+   When the tests pass the check, Highbay accepts them at one commit on
+   `highbay/tests-<n>`. Build shows which agreed answers and examples the test
+   writer says each scenario covers. Highbay validates those references but does
    not judge the statements; anything without one says **Not stated**.
 8. **Code and verify.** Meanwhile the builder writes the code, runs isolated
    container checks, and commits on its build branch, with the branch, live
    branch tip while building (and saved verified commit once passed), and check
    status shown in **Build**. If the application calls a
    model and you exported a provider key or attached a model gateway, the
-   builder can try prompt wording after Surla accepts the tests on a *live
+   builder can try prompt wording after Highbay accepts the tests on a *live
    target*: a running copy of the application that the server starts from a
-   commit. The builder then asks Surla to verify its commit. Surla builds that
+   commit. The builder then asks Highbay to verify its commit. Highbay builds that
    commit and runs the tests accepted for that exact revision against it; it
    refuses to verify until those tests are accepted. The result appears in the
    page's **Check** view.
 9. **Approve and merge.** Open the run in **Approve** to review its recorded
    Story flows, test outcomes, excluded drafts and unknown coverage. When the
    server says approval is available, Next offers **Approve this result**.
-   Surla checks that the run passed and ran the tests accepted
+   Highbay checks that the run passed and ran the tests accepted
    for the agreed revision, then records the approval with the builder's
    commit, the tests commit and the report. On **Approve**, press
    **Merge into current branch** to merge into the checked-out local branch.
-   Surla rechecks the current approval and requires clean tracked files. If Git refuses the merge, read
+   Highbay rechecks the current approval and requires clean tracked files. If Git refuses the merge, read
    the recovery shown on the page; manual merge instructions remain available.
    See [`merge_change`](docs/REFERENCE.md#merge_change) for the Git checks and
    recovery contract. Once your branch holds the verified
-   work, the build shows **Merged** and Surla stops that build's workers.
+   work, the build shows **Merged** and Highbay stops that build's workers.
    Verification covered the commits in the passed run before the merge;
    **Verify the merged branch from the terminal** discloses a pre-filled
-   [`surla verify`](docs/REFERENCE.md#surla-verify) template when you want to
+   [`hbay verify`](docs/REFERENCE.md#hbay-verify) template when you want to
    verify the merged commit or checked-out branch separately.
    Approval needs no settings. A project that stores
-   [promotion settings](docs/REFERENCE.md#surla-verification-and-surla-promotion)
+   [promotion settings](docs/REFERENCE.md#hbay-verification-and-hbay-promotion)
    (a release folder and the names of its binaries) gets one more check at
    approval: the files in the release folder must be the binaries the run
    built.
@@ -154,10 +154,10 @@ an assignment read. After 90 seconds of idling with that assignment unread,
 the page says what to tell it.
 
 In Herdr, workers appear beside the guide and close after the build is merged
-or dropped. The optional Surla companion shows the current stage and roles
+or dropped. The optional Highbay companion shows the current stage and roles
 that need you, focuses their panes, and opens the page. Outside Herdr, the
 browser remains the place for your decisions. Recommendations for Herdr are
-dismissible. When a build needs both workers, Surla also recommends a second
+dismissible. When a build needs both workers, Highbay also recommends a second
 agent family if only one suitable family is available. It remembers these dismissals for
 this project.
 
@@ -174,7 +174,7 @@ number from your branch as it is now, for the same agreement, with fresh
 assignments. Earlier reports do not establish that the new build passed.
 
 Two limits hold. All agents run as you on one machine, so they are separated
-by job, not walled off from each other. Surla runs the code the agents write
+by job, not walled off from each other. Highbay runs the code the agents write
 (the design at each refresh, the builder's programs and the test writer's
 test program) as ordinary processes with your file and network access, reusing
 compiled Go packages across operations without treating a cache hit as a passed
@@ -189,11 +189,11 @@ These words appear throughout:
 
 | Term | Meaning |
 | --- | --- |
-| **The server** | The project's Surla server. The guide's first Surla call starts or attaches to one per project folder. It keeps what you agreed, who was asked to do what, and what was accepted, and it runs the checks. |
+| **The server** | The project's Highbay server. The guide's first Highbay call starts or attaches to one per project folder. It keeps what you agreed, who was asked to do what, and what was accepted, and it runs the checks. |
 | **The page** | The server's page in your browser, which the reference calls the views page. You agree on changes and approve results there. |
 | **Herdr** | An optional terminal workspace that shows the team's agents side by side. |
 | **Chorus** | The messaging and pane-launch service for teams in Herdr. |
-| **The guide** | The internal role Surla assigns to your coding agent. It writes the Story and proposes changes. |
+| **The guide** | The internal role Highbay assigns to your coding agent. It writes the Story and proposes changes. |
 | **The builder** | The agent that writes the application code. |
 | **The test writer** | The agent that writes the change's tests, in its own working copy of the project. |
 | **Story** | A plain description of what the system does, written as Go in the project's design, one flow at a time. |
@@ -203,53 +203,53 @@ These words appear throughout:
 
 ## Install
 
-Surla needs:
+Highbay needs:
 
-- **macOS or Linux.** Surla runs the code the agents write (the design at
+- **macOS or Linux.** Highbay runs the code the agents write (the design at
   each refresh, candidate builds, the candidate service, test listing, and the
   test program) as ordinary processes with your file and network access.
 - **Go 1.27.3** or newer.
 - **Git 2.45 or newer**, with your name and address configured (`git config --global
-  user.name` and `user.email`). Surla records accepted tests as commits under
+  user.name` and `user.email`). Highbay records accepted tests as commits under
   your identity, and a build is refused until Git has one.
 - **Docker Desktop**, or another local Docker engine. The builder builds and
   tests its work in Linux containers. Each project retains downloaded
   dependencies across checks; tests mount them read-only and run offline with
   fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
-- A coding agent that supports MCP. Setup registers Surla with detected
-  clients; the [setup reference](docs/REFERENCE.md#surla-setup--global)
+- A coding agent that supports MCP. Setup registers Highbay with detected
+  clients; the [setup reference](docs/REFERENCE.md#hbay-setup--global)
   lists them. Background workers need an installed CLI with supported
   non-interactive execution.
 - For side-by-side agent panes, **Herdr core** (`herdr-core` and `hc`), the
   **Herdr app** (`herdr-app`), and **Chorus v0.14.0** or newer. Without
-  Herdr, Surla can run the build workers in the background without Chorus.
+  Herdr, Highbay can run the build workers in the background without Chorus.
 
-To install the Surla described by this README, clone this repository and check
+To install the Highbay described by this README, clone this repository and check
 out the version you are reading. From the repository root, run:
 
 ```bash
-go install ./cmd/surla
-surla up
+go install ./cmd/hbay
+hbay up
 ```
 
-`go install github.com/goadesign/surla/cmd/surla@latest` installs the latest
+`go install github.com/goadesign/highbay/cmd/hbay@latest` installs the latest
 module version available to Go, which may be older than this README and lack
 commands described here. When installing that version, follow its README.
 
-`surla up` registers the `surla stdio` MCP server with detected coding agents
-and installs `/surla` in supported client skill folders and the shared
+`hbay up` registers the `hbay stdio` MCP server with detected coding agents
+and installs `/highbay` in supported client skill folders and the shared
 `.agents` folder, preserving unrelated settings. Reload your
 agent's MCP configuration or start a new session if it does not yet show
-Surla. Repeat setup after adding a client or moving the Surla executable. `surla setup -global` performs the same registration
+Highbay. Repeat setup after adding a client or moving the Highbay executable. `hbay setup -global` performs the same registration
 without starting Chorus. If Chorus stops, including after a reboot, restart
 it with `chorus up` before starting Herdr workers; the project server does not
 start Chorus itself.
 
 Herdr is optional. For a side-by-side workspace, install Herdr and Chorus,
-open Herdr once to create its configuration folder, then run `surla up`
-again to install the Surla companion. On macOS, setup also adds
-**Cmd+Alt+Shift+S** to Herdr's `keys.json` when the shortcut is free; existing
-bindings stay in place. See [setup details](docs/REFERENCE.md#surla-setup--global).
+open Herdr once to create its configuration folder, then run `hbay up`
+again to install the Highbay companion. On macOS, setup also adds
+**Cmd+Alt+Shift+H** to Herdr's `keys.json` when the shortcut is free; existing
+bindings stay in place. See [setup details](docs/REFERENCE.md#hbay-setup--global).
 
 ```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
@@ -257,27 +257,27 @@ curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
 ```
 
-Before startup, `surla` checks for Git's `--no-lazy-fetch` capability and
+Before startup, `hbay` checks for Git's `--no-lazy-fetch` capability and
 the browser opener. See [Prerequisites](docs/REFERENCE.md#prerequisites).
 
-Surla's design and generation steps need no model key; each coding agent
+Highbay's design and generation steps need no model key; each coding agent
 uses its own sign-in. An application that calls a model needs a key when
 the builder tries prompts on a live target. Export the provider's key, such as
 `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, with any request settings it needs,
 in the environment that starts your coding agent. If the client passes those
-settings to `surla stdio`, it hands them to the server, which holds them in
-memory until `surla stop`. Real-client environment forwarding has not been
-live-verified; see [stdio integration](docs/REFERENCE.md#surla-stdio). While no
+settings to `hbay stdio`, it hands them to the server, which holds them in
+memory until `hbay stop`. Real-client environment forwarding has not been
+live-verified; see [stdio integration](docs/REFERENCE.md#hbay-stdio). While no
 model is chosen, live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`. The page's
 **Live target** view changes that model to another provider whose settings
 were handed over, or to a model gateway; see
-[`surla` and `surla stop`](docs/REFERENCE.md#surla-serve).
+[`hbay` and `hbay stop`](docs/REFERENCE.md#hbay-and-hbay-stop).
 
 ## Start a project
 
 Open an existing project or an empty folder in your coding agent and invoke
-`/surla` (`$surla` in Codex). Describe what you want to build (if you invoke
-`/surla` alone, your coding agent opens the browser window and asks what you
+`/highbay` (`$highbay` in Codex). Describe what you want to build (if you invoke
+`/highbay` alone, your coding agent opens the browser window and asks what you
 would like to build). In an empty folder, your coding agent calls
 [`init_project`](docs/REFERENCE.md#init_project) with `dir: "."` to create the
 starter and its first Git commit in place, deriving a default Go module path
@@ -291,67 +291,67 @@ an empty Story in `design/story.go`, and a test module in `eval/` with one
 test that the program starts. Nothing in it is about someone else's product.
 Your coding agent writes the Story with you and opens the browser window. You review, build, approve
 and merge there. To recover a closed or reloaded page, ask your coding agent to
-open it again, or use **Open Surla Window** in the Herdr companion.
+open it again, or use **Open Highbay Window** in the Herdr companion.
 
 The page keeps unsaved input when you open a fresh link in the same tab and
 offers **Open link** after you save or discard it. A fresh link expires two
 minutes after issue. [Terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
 remains available for operators and browser automation, including bare
-`surla`, `surla --print-link`, `surla status --json` and `surla stop`.
+`hbay`, `hbay --print-link`, `hbay status --json` and `hbay stop`.
 
 ## Use the tools without a team
 
-These commands need no server, no team and no model key. `surla init`,
-`surla preview` and `surla gen` run Goa with the module's own versions, so no
+These commands need no server, no team and no model key. `hbay init`,
+`hbay preview` and `hbay gen` run Goa with the module's own versions, so no
 separately installed `goa` is needed. They compile and run the design as an
 ordinary process with your file and network access.
 
 ```bash
 # Scaffold a blank service and its test module
-# (add -example for Surla's worked example, a price-answering service):
-surla init -dir shop -module example.com/shop
+# (add -example for Highbay's worked example, a price-answering service):
+hbay init -dir shop -module example.com/shop
 
 # Compile shop/design at 0 LLM tokens and print its
 # containers, boundary edges, agent policies and tool contracts:
-surla preview -dir shop
+hbay preview -dir shop
 
-# List all commands; "surla help <command>" prints a command's flags:
-surla help
+# List all commands; "hbay help <command>" prints a command's flags:
+hbay help
 ```
 
 Or clone this repository and look at the [`examples/orders`](examples/orders/README.md)
 reference platform:
 
 ```bash
-git clone https://github.com/goadesign/surla.git
-cd surla
+git clone https://github.com/goadesign/highbay.git
+cd highbay
 
 # Preview the Orders platform's architecture and tool guardrails:
-surla preview -dir examples/orders
+hbay preview -dir examples/orders
 
 # Compare two Goa design modules structurally:
-surla diff --old-dir examples/orders --new-dir examples/orders
+hbay diff --old-dir examples/orders --new-dir examples/orders
 ```
 
-From a checkout you can also run `go run ./cmd/surla`; `go run ./cmd/surla init`
-then needs `-surla-version` with a published version, such as
-`-surla-version v0.0.0-20261118203415-bec57123a61f`.
+From a checkout you can also run `go run ./cmd/hbay`; `go run ./cmd/hbay init`
+then needs `-highbay-version` with a published version, such as
+`-highbay-version v0.0.0-20261118203415-bec57123a61f`.
 
-After you edit a module's `design/`, `surla gen -dir <module>` regenerates its
+After you edit a module's `design/`, `hbay gen -dir <module>` regenerates its
 `gen/` and replaces it in one step. It needs `goa.design/goa/v3`
 `v3.35.1-0.20261103205041-35e789e8f9b1` or later and refuses a design with gRPC
-transports; see [`surla gen`](docs/REFERENCE.md#surla-gen). The operator tools
-`surla verify` and `surla approve` build a commit, run a test suite from a
+transports; see [`hbay gen`](docs/REFERENCE.md#hbay-gen). The operator tools
+`hbay verify` and `hbay approve` build a commit, run a test suite from a
 Git repository you name against it and check a saved report, outside any
 server; see
-[`surla verify`](docs/REFERENCE.md#surla-verify).
+[`hbay verify`](docs/REFERENCE.md#hbay-verify).
 
-## Why engineers use Surla
+## Why engineers use Highbay
 
 ### 1. Agents write the contract; the compiler writes the plumbing
 
 Why pay a model to write thousands of lines of HTTP handlers, gRPC stubs,
-OpenAPI specs, MCP schemas and JSON validators? In Surla, agents express your
+OpenAPI specs, MCP schemas and JSON validators? In Highbay, agents express your
 API, agent tools and security rules in a compact, strongly typed design
 (`design/*.go`). Goa generates the transports, OpenAPI specs, MCP schemas and
 validators from it with no model inference (**0 LLM tokens**), which removes
@@ -361,7 +361,7 @@ whole classes of glue-code bugs and the tokens spent writing them.
 
 AI-built codebases decay when every prompt invents a new folder layout, a new
 way to call models or a new auth pattern, and later agents spend tokens
-reverse-engineering the repository. Surla serves every agent the same
+reverse-engineering the repository. Highbay serves every agent the same
 **Golden Path** rules:
 
 - **Predictable layout and generated agent maps.** Every service follows the
@@ -375,13 +375,13 @@ reverse-engineering the repository. Surla serves every agent the same
 ### 3. Independent verification of each commit
 
 The agent that writes the code never decides whether it works. Tests come
-from the test writer and count only after Surla's own check accepts them.
+from the test writer and count only after Highbay's own check accepts them.
 Verification builds the builder's exact commit (`verify/candidate`) and runs
 the accepted tests against it; the code under test and the tests run as
 ordinary processes with your file and network access.
 
 - **Hidden scenarios.** A project can instead store verification settings
-  (`surla verification set <file>`, applied when Surla starts again) that
+  (`hbay verification set <file>`, applied when Highbay starts again) that
   name a test suite of your own at one commit of a Git repository you choose;
   its builds then add only the builder. The suite's scenarios tagged
   `holdout` are hidden: [`Report.ForBuilders()`](internal/verify/report.go)
@@ -422,29 +422,29 @@ Approve, with Story, Team, Live target and Diagnostics under **Inspect**. The ap
 shows safe summaries of what the agents and the server did, naming each caller's role. See the
 [views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
 
-> **Why the name "Surla"?** Named after **Tambdi Surla** in Goa, home to the
-> carved basalt Mahadeva temple beside the Surla River. In Surla
+> **Why the name "Highbay"?** Named after **Tambdi Highbay** in Goa, home to the
+> carved basalt Mahadeva temple beside the Highbay River. In Highbay
 > (*SOOR-lah*), `design/*.go` is that enduring stone contract: one compiled
 > specification every coding agent builds to, and an independent verifier
 > checks against.
 
 ## Dive deeper
 
-- **[How Surla works](docs/HOW_IT_WORKS.md)**: the journey step by step, by
+- **[How Highbay works](docs/HOW_IT_WORKS.md)**: the journey step by step, by
   who acts.
 - **[Reference](docs/REFERENCE.md)**: commands, MCP tools, builds, the page and
   the server's contracts.
 - **[Story language](story/README.md)**: the declarations a Story is written
   with.
 - **[Golden Path architecture](docs/ARCHITECTURE_PLAYBOOK.md)**: the rules that
-  keep Surla platforms maintainable, and who owns what in Surla.
+  keep Highbay platforms maintainable, and who owns what in Highbay.
 - **[Story flows and the tests a build requires](docs/STORY_TEST_DESIGN.md)**:
-  for contributors, how a Story becomes tests and how Surla judges them.
+  for contributors, how a Story becomes tests and how Highbay judges them.
 - **[Orders reference platform](examples/orders/README.md)**: a complete Golden
   Path platform with its test suite.
-- **[Product direction](docs/PRODUCT_DIRECTION.md)**: what Surla is meant to be
+- **[Product direction](docs/PRODUCT_DIRECTION.md)**: what Highbay is meant to be
   and for whom.
 
 ## License
 
-Surla is released under the [MIT License](LICENSE).
+Highbay is released under the [MIT License](LICENSE).

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa-ai/eval"
 
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 const (
@@ -32,7 +32,7 @@ const (
 	fakeTimeoutEnv = "VERIFYRUN_TEST_TIMEOUT"
 )
 
-// TestMain lets the test binary act as `surla verify-run supervise|execute`
+// TestMain lets the test binary act as `hbay verify-run supervise|execute`
 // so the lifecycle runs in real processes.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == "verify-run" {

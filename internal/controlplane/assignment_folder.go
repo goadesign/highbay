@@ -7,13 +7,13 @@ import (
 	"errors"
 	"path/filepath"
 
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 // builderCopyFolder resolves the project repository root, the builder's
-// working folder inside .surla-build (<workspace>/.surla-build/<prefix>), and
-// the copy root (<workspace>/.surla-build).
+// working folder inside .highbay-build (<workspace>/.highbay-build/<prefix>), and
+// the copy root (<workspace>/.highbay-build).
 func builderCopyFolder(
 	ctx context.Context, workspace string,
 ) (repo, folder, copyRoot string, err error) {
@@ -29,7 +29,7 @@ func builderCopyFolder(
 	return repo, folder, copyRoot, nil
 }
 
-// builderWorkingFolder reports the builder's folder inside .surla-build and
+// builderWorkingFolder reports the builder's folder inside .highbay-build and
 // whether GOWORK=off is required. A go.work within the builder copy root
 // belongs to this folder; a workspace above that copy root must not control
 // its Go commands. Callers hold workspaceMu and establish ownership before

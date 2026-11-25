@@ -1,5 +1,5 @@
 // This file runs the evaluation program's Story reader in process, against
-// the Story module version Surla's go.mod requires.
+// the Story module version Highbay's go.mod requires.
 package designeval
 
 import (
@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa/v3/eval"
 
-	storydsl "github.com/goadesign/surla/story/dsl"
-	storyexpr "github.com/goadesign/surla/story/expr"
+	storydsl "github.com/goadesign/highbay/story/dsl"
+	storyexpr "github.com/goadesign/highbay/story/expr"
 )
 
 // TestStorySummariesReadTheRequiredStoryModule declares a Story with the
-// Story language Surla requires, runs it, and checks that the reader the
+// Story language Highbay requires, runs it, and checks that the reader the
 // evaluation program uses copies every field, takes each flow's completeness
 // from the Story module, and prints what the host decodes into the required
 // tests: one scenario for the finished flow, none for the open one.

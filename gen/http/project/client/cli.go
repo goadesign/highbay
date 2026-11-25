@@ -3,7 +3,7 @@
 // project HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package client
 
@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	project "github.com/goadesign/surla/gen/project"
+	project "github.com/goadesign/highbay/gen/project"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -27,7 +27,7 @@ func BuildAttachGuidePayload(projectAttachGuideBody *string) (*project.AttachGui
 		}
 		err = json.Unmarshal([]byte(*projectAttachGuideBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ancestor_pids\": [\n         6680357311335224070,\n         8202761794251479320,\n         533187414794575372\n      ],\n      \"client\": \"gemini\",\n      \"hc_terminal_id\": \"x\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ancestor_pids\": [\n         7543639950017729695,\n         2348984008513872403,\n         5979814599123546776\n      ],\n      \"client\": \"gemini\",\n      \"hc_terminal_id\": \"q\"\n   }'")
 		}
 	}
 	v := &project.AttachGuidePayload{
@@ -55,7 +55,7 @@ func BuildExchangeBrowserLinkPayload(projectExchangeBrowserLinkBody *string) (*p
 		}
 		err = json.Unmarshal([]byte(*projectExchangeBrowserLinkBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"link\": \"mn9\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"link\": \"l7\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Link) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.link", body.Link, utf8.RuneCountInString(body.Link), 1, true))

@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -21,7 +21,7 @@ import (
 // latest revision: the proposed revision when one waits beside a confirmed
 // card, otherwise the card itself. Only the card's owner may revise it. It
 // first checks p against the design's rules with the generated
-// gensurla.ValidateReviseChangePayloadValue, so a Go caller gets the same
+// genhighbay.ValidateReviseChangePayloadValue, so a Go caller gets the same
 // structural checks the HTTP and MCP decoders apply. It then checks the rules
 // that span fields: every example of the revised revision is kept
 // (examples[].prior_id) or dropped (removed_example_ids) exactly once, and
@@ -48,20 +48,20 @@ import (
 // was. The result is the change as GetChange returns it.
 func (c *ControlPlane) ReviseChange(
 	ctx context.Context,
-	p *gensurla.ReviseChangePayload,
-) (*gensurla.ChangeCardResult, error) {
+	p *genhighbay.ReviseChangePayload,
+) (*genhighbay.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	if err := gensurla.ValidateReviseChangePayloadValue(p); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
+	if err := genhighbay.ValidateReviseChangePayloadValue(p); err != nil {
+		return nil, genhighbay.MakeUnprocessable(err)
 	}
 	if strings.TrimSpace(p.ChangeID) == "" ||
 		strings.TrimSpace(p.RequestRevision) == "" ||
 		strings.TrimSpace(p.Prompt) == "" ||
 		strings.TrimSpace(p.RevisionNote) == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New("change_id, request_revision, prompt, and revision_note are required"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("change_id, request_revision, prompt, and revision_note are required"))
 	}
 
 	// Phase 1: read the latest saved revision. A supplied operation replaces
@@ -73,10 +73,10 @@ func (c *ControlPlane) ReviseChange(
 		return nil, err
 	}
 	if !exists {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return nil, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return nil, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	latest := record.latest()
 	if err := checkLatestRevision(record, p.RequestRevision); err != nil {
@@ -98,10 +98,10 @@ func (c *ControlPlane) ReviseChange(
 		}
 	}
 
-	_, span := c.tracer("surla/controlplane").Start(
+	_, span := c.tracer("highbay/controlplane").Start(
 		ctx,
-		"surla.controlplane.revise_change",
-		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)),
+		"highbay.controlplane.revise_change",
+		trace.WithAttributes(attribute.String("highbay.change_id", p.ChangeID)),
 	)
 	defer span.End()
 
@@ -110,8 +110,8 @@ func (c *ControlPlane) ReviseChange(
 	// the latest revision, so they are still its examples then.
 	ambiguities, examples, preserved, err := revisedCardContent(p.ChangeID, latest.card.Examples, p.Analysis)
 	if err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1RejectedAnalysisSummary(true)))
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("invalid analysis: %w", err))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1RejectedAnalysisSummary(true)))
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf("invalid analysis: %w", err))
 	}
 	// Every revision enters needs_confirmation so the user explicitly reviews
 	// and confirms the revised summary, decisions, and examples before it
@@ -119,7 +119,7 @@ func (c *ControlPlane) ReviseChange(
 	// The revision keeps its own copy of the note rather than pointing into
 	// the caller's payload.
 	note := p.RevisionNote
-	revised := &gensurla.ChangeCardResult{
+	revised := &genhighbay.ChangeCardResult{
 		ChangeID:           p.ChangeID,
 		Status:             StatusNeedsConfirmation,
 		Prompt:             p.Prompt,
@@ -132,14 +132,14 @@ func (c *ControlPlane) ReviseChange(
 	}
 	rev, err := computeCanonicalRevision(revised, principal.ID, snapshot.designSource)
 	if err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultRevision)))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1SafeFaultSummary(true, cp1FaultRevision)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "compute revised cp1 card revision")
 		return nil, err
 	}
 	revised.RequestRevision = rev
 	if p.Analysis.UIComposition != nil {
-		revised.UIComposition = &gensurla.UICompositionItem{
+		revised.UIComposition = &genhighbay.UICompositionItem{
 			Program:             *p.Analysis.UIComposition,
 			ComposedForRevision: rev,
 		}
@@ -160,21 +160,21 @@ func (c *ControlPlane) ReviseChange(
 
 // DeclineRevision removes the revision the guide proposed beside a confirmed
 // card, which p.RequestRevision must name. It first checks p against the
-// design's rules with the generated gensurla.ValidateDeclineRevisionPayloadValue,
+// design's rules with the generated genhighbay.ValidateDeclineRevisionPayloadValue,
 // so a Go caller gets the checks the HTTP and MCP decoders apply. The
 // confirmed revision in force stays exactly as it was. Only the card's owner reaches this; the operation
 // table lets only the user's session call it. The result is the change as
 // GetChange returns it.
 func (c *ControlPlane) DeclineRevision(
 	ctx context.Context,
-	p *gensurla.DeclineRevisionPayload,
-) (*gensurla.ChangeCardResult, error) {
+	p *genhighbay.DeclineRevisionPayload,
+) (*genhighbay.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	if err := gensurla.ValidateDeclineRevisionPayloadValue(p); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
+	if err := genhighbay.ValidateDeclineRevisionPayloadValue(p); err != nil {
+		return nil, genhighbay.MakeUnprocessable(err)
 	}
 	record, err := c.declineRevision(principal, p)
 	if err != nil {
@@ -218,13 +218,13 @@ func checkLatestRevision(record storedChangeCard, requestRevision string) error 
 	case requestRevision == latest:
 		return nil
 	case record.proposed != nil && requestRevision == record.agreedRevision():
-		return gensurla.MakeConflict(fmt.Errorf(
+		return genhighbay.MakeConflict(fmt.Errorf(
 			"change_id %q has a proposed revision %q waiting beside the confirmed revision; read it with get_change and revise it by naming its request_revision",
 			record.card.ChangeID,
 			latest,
 		))
 	default:
-		return gensurla.MakeConflict(fmt.Errorf(
+		return genhighbay.MakeConflict(fmt.Errorf(
 			"request_revision mismatch for %q: got %q, want %q",
 			record.card.ChangeID,
 			requestRevision,
@@ -240,7 +240,7 @@ func checkLatestRevision(record storedChangeCard, requestRevision string) error 
 func (c *ControlPlane) saveRevision(
 	span trace.Span,
 	principal Principal,
-	p *gensurla.ReviseChangePayload,
+	p *genhighbay.ReviseChangePayload,
 	next storedRevision,
 ) (storedChangeCard, error) {
 	if p.StoryRefreshOpID != nil {
@@ -251,21 +251,21 @@ func (c *ControlPlane) saveRevision(
 	defer c.mu.Unlock()
 	current, exists, err := c.cards.load(p.ChangeID)
 	if err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultStorageRead)))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1SafeFaultSummary(true, cp1FaultStorageRead)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "load cp1 change card")
 		return storedChangeCard{}, err
 	}
 	if !exists {
-		span.SetAttributes(attribute.String("surla.public_summary", "Change Card was not found; check change_id or call propose_change."))
-		return storedChangeCard{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		span.SetAttributes(attribute.String("highbay.public_summary", "Change Card was not found; check change_id or call propose_change."))
+		return storedChangeCard{}, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if current.owner != principal.ID {
-		span.SetAttributes(attribute.String("surla.public_summary", "Caller does not own this Change Card (this request did not modify the Change Card)."))
-		return storedChangeCard{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		span.SetAttributes(attribute.String("highbay.public_summary", "Caller does not own this Change Card (this request did not modify the Change Card)."))
+		return storedChangeCard{}, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	if err := checkLatestRevision(current, p.RequestRevision); err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", "Change Card request_revision changed concurrently (this request did not modify the Change Card); call get_change and retry revise_change."))
+		span.SetAttributes(attribute.String("highbay.public_summary", "Change Card request_revision changed concurrently (this request did not modify the Change Card); call get_change and retry revise_change."))
 		return storedChangeCard{}, err
 	}
 	if p.StoryRefreshOpID == nil {
@@ -296,19 +296,19 @@ func (c *ControlPlane) saveRevision(
 		summary = "Proposed a revision beside the confirmed Change Card (needs the user's adoption)."
 	}
 	if err := c.cards.save(saved); err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(true, cp1FaultStorageSave)))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1SafeFaultSummary(true, cp1FaultStorageSave)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "save revised cp1 change card")
 		return storedChangeCard{}, err
 	}
 	c.suppressDraftDropNote(next.madeFrom)
-	span.SetAttributes(attribute.String("surla.public_summary", summary))
+	span.SetAttributes(attribute.String("highbay.public_summary", summary))
 	return saved, nil
 }
 
 // declineRevision removes the proposal p names from its change under c.mu
 // and returns the saved change.
-func (c *ControlPlane) declineRevision(principal Principal, p *gensurla.DeclineRevisionPayload) (storedChangeCard, error) {
+func (c *ControlPlane) declineRevision(principal Principal, p *genhighbay.DeclineRevisionPayload) (storedChangeCard, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	record, exists, err := c.cards.load(p.ChangeID)
@@ -316,16 +316,16 @@ func (c *ControlPlane) declineRevision(principal Principal, p *gensurla.DeclineR
 		return storedChangeCard{}, err
 	}
 	if !exists {
-		return storedChangeCard{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return storedChangeCard{}, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return storedChangeCard{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return storedChangeCard{}, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	if record.proposed == nil {
-		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("change_id %q has no proposed revision to decline", p.ChangeID))
+		return storedChangeCard{}, genhighbay.MakeConflict(fmt.Errorf("change_id %q has no proposed revision to decline", p.ChangeID))
 	}
 	if record.proposed.card.RequestRevision != p.RequestRevision {
-		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf(
+		return storedChangeCard{}, genhighbay.MakeConflict(fmt.Errorf(
 			"request_revision %q is not the proposed revision of %q; its proposed revision is %q",
 			p.RequestRevision,
 			p.ChangeID,
@@ -343,7 +343,7 @@ func (c *ControlPlane) declineRevision(principal Principal, p *gensurla.DeclineR
 // as currentCard reports it, with the proposed revision beside it when one
 // waits. Callers must not hold c.mu, because currentCard may ask a slow
 // promotion target.
-func (c *ControlPlane) changeResult(ctx context.Context, record storedChangeCard) (*gensurla.ChangeCardResult, error) {
+func (c *ControlPlane) changeResult(ctx context.Context, record storedChangeCard) (*genhighbay.ChangeCardResult, error) {
 	card, err := c.currentCard(ctx, record)
 	if err != nil {
 		return nil, err
@@ -363,7 +363,7 @@ func (c *ControlPlane) changeResult(ctx context.Context, record storedChangeCard
 // reports it, naming the design files it was made from that differ from the
 // agreed revision's, or nil when no proposal waits. A saved design source
 // that does not decode is an error.
-func proposedRevisionItem(record storedChangeCard) (*gensurla.ProposedRevisionItem, error) {
+func proposedRevisionItem(record storedChangeCard) (*genhighbay.ProposedRevisionItem, error) {
 	if record.proposed == nil {
 		return nil, nil
 	}
@@ -372,7 +372,7 @@ func proposedRevisionItem(record storedChangeCard) (*gensurla.ProposedRevisionIt
 		return nil, fmt.Errorf("change card %q: %w", record.card.ChangeID, err)
 	}
 	card := record.proposed.card
-	return &gensurla.ProposedRevisionItem{
+	return &genhighbay.ProposedRevisionItem{
 		Prompt:             card.Prompt,
 		RevisionNote:       card.RevisionNote,
 		Summary:            card.Summary,

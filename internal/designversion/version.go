@@ -7,7 +7,7 @@
 // gofmt does, such as goimports regrouping imports, does.
 //
 // Around that form the package reads the guide's draft as a refresh
-// evaluates it (ReadDraft), merges a design change made outside Surla into
+// evaluates it (ReadDraft), merges a design change made outside Highbay into
 // the draft's text of one file (MergeFile), and finds the modules a builder's
 // go.mod lacks to build a design as it was evaluated (Requirements,
 // MissingModules). It keeps no state and writes no file but MergeFile's

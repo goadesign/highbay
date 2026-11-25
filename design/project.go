@@ -8,7 +8,7 @@ var ProjectIdentity = Type("ProjectIdentity", func() {
 	Attribute("project_id", String, "Stable private project identifier.")
 	Attribute("directory", String, "Physical project folder.")
 	Attribute("owner", String, "Immutable operating-system account identity.")
-	Attribute("build", String, "SHA-256 of the surla executable the server started from, read when it started; it tells any two builds apart, including two local builds of one commit. The CLI attaches only to its own build. Servers built before this field omit it, and surla stop must still reach them, so it is not required.", func() {
+	Attribute("build", String, "SHA-256 of the hbay executable the server started from, read when it started; it tells any two builds apart, including two local builds of one commit. The CLI attaches only to its own build. Servers built before this field omit it, and hbay stop must still reach them, so it is not required.", func() {
 		Pattern("^[0-9a-f]{64}$")
 	})
 	Required("project_id", "directory", "owner")
@@ -17,7 +17,7 @@ var ProjectIdentity = Type("ProjectIdentity", func() {
 // ProjectTeamRole is the observed state of one server-owned role.
 var ProjectTeamRole = Type("ProjectTeamRole", func() {
 	Attribute("role", String, "Trusted role.", func() { Enum("guide", "builder", "test_writer") })
-	Attribute("handle", String, "Stable Chorus handle and Surla actor identity.")
+	Attribute("handle", String, "Stable Chorus handle and Highbay actor identity.")
 	Attribute("running", Boolean, "The matching live terminal is not reported as an idle shell; missing foreground information counts as running.")
 	Required("role", "handle", "running")
 })
@@ -60,14 +60,14 @@ var TeamSpaceConflict = Type("TeamSpaceConflict", func() {
 // that part's own recovery step without printing peer-authored error text.
 var TeamUnavailable = Type("TeamUnavailable", func() {
 	Attribute("name", String, "Error name.", func() { Meta("struct:error:name") })
-	Attribute("cause", String, "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Surla no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).", func() {
+	Attribute("cause", String, "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Highbay no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).", func() {
 		Enum("stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder")
 	})
 	Required("name", "cause")
 })
 
 var _ = Service("project", func() {
-	Description("Owns one local project's server identity, agent credentials, and one-use browser access. Management credentials last for one listening server and never authorize application decisions; besides this service, they may only hand over the model provider request settings of the shell running surla (the surla service's hand_over_model_settings). This service is not exposed as agent tools.")
+	Description("Owns one local project's server identity, agent credentials, and one-use browser access. Management credentials last for one listening server and never authorize application decisions; besides this service, they may only hand over the model provider request settings of the shell running hbay (the highbay service's hand_over_model_settings). This service is not exposed as agent tools.")
 	Error("forbidden", ErrorResult, "The trusted credential cannot perform this operation.")
 	Error("unprocessable", ErrorResult, "The requested credential exchange does not exist or is invalid.")
 	HTTP(func() {

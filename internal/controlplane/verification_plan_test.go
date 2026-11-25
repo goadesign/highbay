@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 // TestStarterPlanReadsTheCommittedLayout checks the plan starterPlanAt makes
@@ -236,7 +236,7 @@ func TestStarterPlanRefusesUnusableRepositories(t *testing.T) {
 				require.NoError(t, os.Mkdir(workspace, 0o755))
 			},
 			refusal: &layoutRefusal{reason: refusedReplacedFolder},
-			wantErr: "was replaced or removed after Surla started, so the user restarts it: stop and start Surla in the project folder, then try again",
+			wantErr: "was replaced or removed after Highbay started, so the user restarts it: stop and start Highbay in the project folder, then try again",
 		},
 		{
 			name: "not a git repository",
@@ -353,12 +353,12 @@ func planServer(t *testing.T, workspace string) *ControlPlane {
 	return newControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    workspace,
 		RunsDir:         filepath.Join(ops, "runs"),
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: filepath.Join(ops, "reports"), Timeout: time.Minute},
 	})
 }
 
-// writeStarterAt writes the files the plan reads from a starter `surla init`
+// writeStarterAt writes the files the plan reads from a starter `hbay init`
 // made for modulePath in dir: both go.mod files, the service's command and
 // the tests' generated entry point.
 func writeStarterAt(t *testing.T, dir, modulePath string) {

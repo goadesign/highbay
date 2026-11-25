@@ -1,4 +1,4 @@
-// Package project owns the private state and credentials of one local Surla project.
+// Package project owns the private state and credentials of one local Highbay project.
 package project
 
 import (
@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 type (
@@ -121,17 +121,17 @@ func Discover(root, directory string) (*State, error) {
 }
 
 // Open loads the initialized project whose private state folder dir the
-// `surla` command found with Discover and passed to the project server it
+// `hbay` command found with Discover and passed to the project server it
 // launched, so the server serves exactly that state and never derives a
 // folder from its own environment. dir must be the absolute, physical
 // (symlink-free) path of a folder private to this account, hold a valid
 // project record whose project folder exists and is named by its stored
 // physical path, carry the name Discover derives from that folder, and lie
 // outside it; otherwise Open refuses, naming dir and
-// never a credential. A folder without a record was never initialized by `surla`.
+// never a credential. A folder without a record was never initialized by `hbay`.
 func Open(dir string) (*State, error) {
 	if !filepath.IsAbs(dir) {
-		return nil, fmt.Errorf("project state folder %q is not an absolute path; start the project with surla", dir)
+		return nil, fmt.Errorf("project state folder %q is not an absolute path; start the project with hbay", dir)
 	}
 	if err := privateDirectory(dir); err != nil {
 		return nil, fmt.Errorf("project state folder %s: %w", dir, err)
@@ -141,12 +141,12 @@ func Open(dir string) (*State, error) {
 		return nil, fmt.Errorf("project state folder %s: %w", dir, err)
 	}
 	if physical != dir {
-		return nil, fmt.Errorf("project state folder %s is not its physical path %s; start the project with surla", dir, physical)
+		return nil, fmt.Errorf("project state folder %s is not its physical path %s; start the project with hbay", dir, physical)
 	}
 	var record Record
 	err = readJSON(filepath.Join(dir, "project.json"), &record)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("project state folder %s holds no project; start the project with surla", dir)
+		return nil, fmt.Errorf("project state folder %s holds no project; start the project with hbay", dir)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("project state folder %s: %w", dir, err)
@@ -154,7 +154,7 @@ func Open(dir string) (*State, error) {
 	// The record's project folder is compared with the path the volume stores
 	// for it, resolved here as Discover resolves it and never taken from the
 	// record itself: a record that names its folder by a relative path, through
-	// a link or in another spelling is not one `surla` wrote.
+	// a link or in another spelling is not one `hbay` wrote.
 	if !filepath.IsAbs(record.Directory) {
 		return nil, fmt.Errorf("project state folder %s: invalid project record", dir)
 	}
@@ -250,7 +250,7 @@ func (s *State) initialize(owner string, freePort func() (int, error)) (bool, er
 	port := 0
 	for attempt := 0; port == 0; attempt++ {
 		if attempt == freePortAttempts {
-			return false, fmt.Errorf("no free loopback port that another Surla project has not saved was found in %d tries; try again", freePortAttempts)
+			return false, fmt.Errorf("no free loopback port that another Highbay project has not saved was found in %d tries; try again", freePortAttempts)
 		}
 		offered, err := freePort()
 		if err != nil {
@@ -298,7 +298,7 @@ func (s *State) CardsDir() string { return filepath.Join(s.Dir, "cards") }
 func (s *State) AgentFile(id string) string { return filepath.Join(s.Dir, "agents", id) }
 
 // AgentCredential reads the bearer credential of the registered agent handle,
-// which `surla stdio` presents to /mcp on that agent's behalf. A missing file
+// which `hbay stdio` presents to /mcp on that agent's behalf. A missing file
 // returns an error that matches os.ErrNotExist; a file that is not private to
 // this account or does not hold a credential is refused without its bytes.
 func (s *State) AgentCredential(handle string) (string, error) {
@@ -429,22 +429,22 @@ func recordReadError(dir, project string, err error) error {
 // state folder dir, and the step that repairs it: a record this account cannot read
 // gets its permissions back, and a damaged one is restored, or its folder set aside so
 // the project folder starts again as a new, empty project. Discovery walks up through
-// parent folders, so project can be a parent of the folder where Surla starts; the step
-// names project as the folder to start Surla in, since a start in a subfolder would
+// parent folders, so project can be a parent of the folder where Highbay starts; the step
+// names project as the folder to start Highbay in, since a start in a subfolder would
 // create a new project for that subfolder instead.
 func stateFileError(dir, project string, err error) error {
 	path := filepath.Join(dir, "project.json")
 	if errors.Is(err, errNotPrivateFile) || errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.ELOOP) {
-		return fmt.Errorf("the record of the Surla project in %s cannot be read: %s: %w; make it a regular file of this account that only this account can read and write (chmod 600 %s, and chown it to this account if another account owns it), then try again", project, path, err, path)
+		return fmt.Errorf("the record of the Highbay project in %s cannot be read: %s: %w; make it a regular file of this account that only this account can read and write (chmod 600 %s, and chown it to this account if another account owns it), then try again", project, path, err, path)
 	}
-	return fmt.Errorf("the record of the Surla project in %s is damaged: %s: %w; restore it from a backup and try again, or move the folder %s out of %s, then start Surla in %s again to make that project folder a new, empty Surla project", project, path, err, dir, filepath.Dir(dir), project)
+	return fmt.Errorf("the record of the Highbay project in %s is damaged: %s: %w; restore it from a backup and try again, or move the folder %s out of %s, then start Highbay in %s again to make that project folder a new, empty Highbay project", project, path, err, dir, filepath.Dir(dir), project)
 }
 
-// stateFolderError names a private Surla state folder this account cannot use and its
+// stateFolderError names a private Highbay state folder this account cannot use and its
 // repair: either one project's state folder or the operator folder that holds them all,
 // which must both be folders of this account that only this account can open.
 func stateFolderError(dir string, err error) error {
-	return fmt.Errorf("the Surla state folder %s cannot be used: %w; make it a folder of this account that only this account can open (chmod 700 %s, and chown -R it to this account if another account owns it), then try again", dir, err, dir)
+	return fmt.Errorf("the Highbay state folder %s cannot be used: %w; make it a folder of this account that only this account can open (chmod 700 %s, and chown -R it to this account if another account owns it), then try again", dir, err, dir)
 }
 
 // projectDirectory derives one private state folder from the canonical folder identity.

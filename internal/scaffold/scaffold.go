@@ -1,13 +1,13 @@
-// Package scaffold creates a new Surla starter project for `surla init` and
+// Package scaffold creates a new Highbay starter project for `hbay init` and
 // the init_project tool: a Goa / Goa-AI service module and the evaluator suite
-// that `surla verify` runs against it. By default the project is blank: a
+// that `hbay verify` runs against it. By default the project is blank: a
 // service with no methods, a Story with no flows, and one scenario that checks
 // the program starts and listens. With Options.Example it is a worked example
 // instead, whose helper agent prices items through a tool.
 //
 // Init builds the whole project in the operator-provided work directory,
 // running `go mod tidy` in each module and generating its code with a
-// Generator (Surla's Goa generator, the one `surla gen` uses), and
+// Generator (Highbay's Goa generator, the one `hbay gen` uses), and
 // renames the staging directory to the target only when every step
 // succeeded. A failed or canceled step removes the staging directory, so the
 // target is never left half-written. When child cleanup cannot be confirmed,
@@ -41,10 +41,10 @@ import (
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 
-	"github.com/goadesign/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/gitenv"
-	"github.com/goadesign/surla/internal/procgroup"
+	"github.com/goadesign/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/gitenv"
+	"github.com/goadesign/highbay/internal/procgroup"
 )
 
 type (
@@ -60,10 +60,10 @@ type (
 		// Module is the candidate's Go module path, such as
 		// example.com/shop. Its last element names the service.
 		Module string
-		// SurlaVersion is the exact github.com/goadesign/surla version the
+		// HighbayVersion is the exact github.com/goadesign/highbay version the
 		// evaluator module requires, such as
 		// v0.0.0-20261118203415-bec57123a61f.
-		SurlaVersion string
+		HighbayVersion string
 		// Example selects the worked example instead of the blank project:
 		// a price-answering service with a helper agent, a model gateway, a
 		// prompt override method, one Story flow and four scenarios. The
@@ -118,15 +118,15 @@ type (
 		Pkg string
 		// Module is the candidate's module path.
 		Module string
-		// SurlaVersion is the evaluator's required Surla version.
-		SurlaVersion string
-		// GoVersion is the go directive of Surla's own go.mod.
+		// HighbayVersion is the evaluator's required Highbay version.
+		HighbayVersion string
+		// GoVersion is the go directive of Highbay's own go.mod.
 		GoVersion string
 		// GoaVersion, GoaAIVersion and ModelVersion are the versions
-		// Surla's own go.mod requires.
+		// Highbay's own go.mod requires.
 		GoaVersion, GoaAIVersion, ModelVersion string
-		// StoryVersion is the github.com/goadesign/surla/story version
-		// Surla's own go.mod requires: the Story language this Surla
+		// StoryVersion is the github.com/goadesign/highbay/story version
+		// Highbay's own go.mod requires: the Story language this Highbay
 		// evaluates, which the starter's design/story.go imports.
 		StoryVersion string
 	}
@@ -153,8 +153,8 @@ type (
 		templates string
 		// path is the module path.
 		path string
-		// requireSurla is set for the evaluator module, which pins Surla.
-		requireSurla bool
+		// requireHighbay is set for the evaluator module, which pins Highbay.
+		requireHighbay bool
 		// label names the module in the phases reported to the user.
 		label string
 	}
@@ -193,11 +193,11 @@ const (
 	// quickstartGuide is the one file generation writes outside gen/:
 	// goa-ai's guide for coding agents, written at the module root.
 	quickstartGuide = "AGENTS_QUICKSTART.md"
-	// surlaModule is Surla's module path.
-	surlaModule = "github.com/goadesign/surla"
+	// highbayModule is Highbay's module path.
+	highbayModule = "github.com/goadesign/highbay"
 	// storyModule is the path of the Story language's module, which the
 	// starter's design/story.go imports.
-	storyModule = "github.com/goadesign/surla/story"
+	storyModule = "github.com/goadesign/highbay/story"
 	// stopGrace is how long a canceled command's process group gets to exit
 	// after SIGTERM.
 	stopGrace = 5 * time.Second
@@ -314,23 +314,23 @@ func ValidVersion(v string) bool {
 	return semver.IsValid(v) && semver.Canonical(v) == v
 }
 
-// SurlaVersion returns the exact canonical github.com/goadesign/surla module
-// version recorded in info, or empty when info is nil, Surla is an unpublished
-// "(devel)" build or local replacement, or info records no valid Surla version.
-// When the binary's main module is github.com/goadesign/surla, it checks
-// info.Main; when Surla is embedded as a dependency of another main module, it
-// checks the github.com/goadesign/surla entry in info.Deps and never uses the
+// HighbayVersion returns the exact canonical github.com/goadesign/highbay module
+// version recorded in info, or empty when info is nil, Highbay is an unpublished
+// "(devel)" build or local replacement, or info records no valid Highbay version.
+// When the binary's main module is github.com/goadesign/highbay, it checks
+// info.Main; when Highbay is embedded as a dependency of another main module, it
+// checks the github.com/goadesign/highbay entry in info.Deps and never uses the
 // host application's info.Main.Version.
-func SurlaVersion(info *debug.BuildInfo) string {
+func HighbayVersion(info *debug.BuildInfo) string {
 	if info == nil {
 		return ""
 	}
-	if info.Main.Path == surlaModule {
-		return moduleSurlaVersion(&info.Main)
+	if info.Main.Path == highbayModule {
+		return moduleHighbayVersion(&info.Main)
 	}
 	for _, dep := range info.Deps {
-		if dep != nil && dep.Path == surlaModule {
-			return moduleSurlaVersion(dep)
+		if dep != nil && dep.Path == highbayModule {
+			return moduleHighbayVersion(dep)
 		}
 	}
 	return ""
@@ -441,7 +441,7 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 	}
 	if _, err := os.Lstat(target); err == nil {
 		return "", nil, "", fmt.Errorf(
-			"%s already exists; surla init only creates a new directory (pass a new path such as -dir %s, or change to the parent directory and remove an empty directory first)",
+			"%s already exists; hbay init only creates a new directory (pass a new path such as -dir %s, or change to the parent directory and remove an empty directory first)",
 			target,
 			filepath.Join(target, d.Name),
 		)
@@ -502,20 +502,20 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 }
 
 // newData validates o and returns the template data, with the Go, Goa,
-// Goa-AI, Model and Story versions read from Surla's own go.mod.
+// Goa-AI, Model and Story versions read from Highbay's own go.mod.
 func newData(o Options) (data, error) {
 	layout, err := LayoutForModule(o.Module)
 	if err != nil {
 		return data{}, fmt.Errorf("-module %w", err)
 	}
-	if !ValidVersion(o.SurlaVersion) {
-		return data{}, fmt.Errorf("Surla version %q is not an exact module version such as v0.0.0-20261118203415-bec57123a61f", o.SurlaVersion)
+	if !ValidVersion(o.HighbayVersion) {
+		return data{}, fmt.Errorf("Highbay version %q is not an exact module version such as v0.0.0-20261118203415-bec57123a61f", o.HighbayVersion)
 	}
-	mod, err := modfile.Parse("go.mod", []byte(surla.GoMod()), nil)
+	mod, err := modfile.Parse("go.mod", []byte(highbay.GoMod()), nil)
 	if err != nil {
-		return data{}, fmt.Errorf("parse Surla's go.mod: %w", err)
+		return data{}, fmt.Errorf("parse Highbay's go.mod: %w", err)
 	}
-	d := data{Name: layout.Service, Module: o.Module, SurlaVersion: o.SurlaVersion, GoVersion: mod.Go.Version}
+	d := data{Name: layout.Service, Module: o.Module, HighbayVersion: o.HighbayVersion, GoVersion: mod.Go.Version}
 	for _, req := range []struct {
 		path string
 		dst  *string
@@ -531,7 +531,7 @@ func newData(o Options) (data, error) {
 			}
 		}
 		if *req.dst == "" {
-			return data{}, fmt.Errorf("Surla's go.mod does not require %s", req.path)
+			return data{}, fmt.Errorf("Highbay's go.mod does not require %s", req.path)
 		}
 	}
 	return d, nil
@@ -545,10 +545,10 @@ func newData(o Options) (data, error) {
 // (which compiles and checks every package in the candidate module and runs
 // the non-e2e package tests in the evaluator module without starting a live
 // model-backed CP4 verification run). The evaluator module pins the exact
-// Surla version with go get before generation: the final tidy then keeps that
+// Highbay version with go get before generation: the final tidy then keeps that
 // version instead of picking another, and the code is generated with whatever
 // Goa versions it requires. The acceptance package is one of the facts that
-// make the test module a Surla test module, so the generator, which writes the
+// make the test module a Highbay test module, so the generator, which writes the
 // test program only for such a module, sees it: it is written with the
 // service package the service module's generation named, the package the
 // test module's design declares too, and the test module's own generation
@@ -556,25 +556,25 @@ func newData(o Options) (data, error) {
 func build(ctx context.Context, root, logs string, d data, v variant, run Runner, gen Generator, phase func(string) error) error {
 	for _, m := range []moduleStep{
 		{dir: ".", templates: v.templates + "/candidate", path: d.Module, label: "service"},
-		{dir: SuiteDir, templates: v.templates + "/eval", path: d.Module + "/" + SuiteDir, requireSurla: true, label: "test module"},
+		{dir: SuiteDir, templates: v.templates + "/eval", path: d.Module + "/" + SuiteDir, requireHighbay: true, label: "test module"},
 	} {
 		dir := filepath.Join(root, m.dir)
 		designFiles, err := render(dir, m.templates, d, isDesignFile)
 		if err != nil {
 			return err
 		}
-		if m.requireSurla {
+		if m.requireHighbay {
 			if err := writeStoryTests(dir, v.story); err != nil {
 				return err
 			}
 			designFiles = append(designFiles, designeval.StoryTestsPath)
 		}
 		steps := [][]string{{"go", "mod", "tidy"}}
-		if m.requireSurla {
-			// Pinning Surla first may raise Goa or Goa-AI to what this Surla
+		if m.requireHighbay {
+			// Pinning Highbay first may raise Goa or Goa-AI to what this Highbay
 			// version requires, so generation runs once with the final
 			// versions.
-			steps = append(steps, []string{"go", "get", surlaModule + "@" + d.SurlaVersion})
+			steps = append(steps, []string{"go", "get", highbayModule + "@" + d.HighbayVersion})
 		}
 		if err := phase("Resolving the " + m.label + "'s Go modules"); err != nil {
 			return err
@@ -583,7 +583,7 @@ func build(ctx context.Context, root, logs string, d data, v variant, run Runner
 			return err
 		}
 		inputs := designFiles
-		if m.requireSurla {
+		if m.requireHighbay {
 			acceptance, err := render(dir, m.templates, d, isAcceptanceFile)
 			if err != nil {
 				return err
@@ -600,12 +600,12 @@ func build(ctx context.Context, root, logs string, d data, v variant, run Runner
 		if err != nil {
 			return err
 		}
-		if m.requireSurla && pkg != d.Pkg {
+		if m.requireHighbay && pkg != d.Pkg {
 			return fmt.Errorf("the test module's generated service package %q is not the service module's %q, "+
 				"which its acceptance package was written with", pkg, d.Pkg)
 		}
 		d.Pkg = pkg
-		written := func(p string) bool { return !isDesignFile(p) && !(m.requireSurla && isAcceptanceFile(p)) }
+		written := func(p string) bool { return !isDesignFile(p) && !(m.requireHighbay && isAcceptanceFile(p)) }
 		if _, err := render(dir, m.templates, d, written); err != nil {
 			return err
 		}
@@ -924,15 +924,15 @@ func readTail(path string) (string, error) {
 	return prefix + string(b), nil
 }
 
-// moduleSurlaVersion returns the canonical github.com/goadesign/surla version
-// from m, honoring a version replacement of github.com/goadesign/surla and
+// moduleHighbayVersion returns the canonical github.com/goadesign/highbay version
+// from m, honoring a version replacement of github.com/goadesign/highbay and
 // returning empty for local directory or foreign-module replacements.
-func moduleSurlaVersion(m *debug.Module) string {
+func moduleHighbayVersion(m *debug.Module) string {
 	if m == nil {
 		return ""
 	}
 	if m.Replace != nil {
-		if m.Replace.Path == surlaModule && ValidVersion(m.Replace.Version) {
+		if m.Replace.Path == highbayModule && ValidVersion(m.Replace.Version) {
 			return m.Replace.Version
 		}
 		return ""

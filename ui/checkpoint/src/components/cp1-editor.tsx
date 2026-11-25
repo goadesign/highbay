@@ -13,7 +13,7 @@ import {
 } from "../context/cp1-draft";
 import {
   Renderer,
-  surlaDecisionLibrary,
+  highbayDecisionLibrary,
   validateCompletedOpenUI,
 } from "../openui/library";
 import { ChangeCardResult, ExampleItem } from "../types";
@@ -112,12 +112,12 @@ function FieldTextarea({
   }, [value]);
 
   return (
-    <Label className="surla-field-label">
+    <Label className="highbay-field-label">
       <span>{label}</span>
       <Textarea
         ref={elRef}
         rows={3}
-        className="surla-input"
+        className="highbay-input"
         data-example-id={exampleId}
         data-field={field}
         disabled={disabled}
@@ -181,11 +181,11 @@ export function CP1EditorView({
       composedQuestionIndices = check.questionIndices;
       openUINode = (
         <div
-          id="surla-openui-workspace"
+          id="highbay-openui-workspace"
           data-composed-for-revision={card.ui_composition.composed_for_revision}
         >
           <Renderer
-            library={surlaDecisionLibrary}
+            library={highbayDecisionLibrary}
             response={card.ui_composition.program}
             isStreaming={false}
             publishObservability={false}
@@ -194,11 +194,11 @@ export function CP1EditorView({
       );
     } else {
       openUINode = (
-        <Alert id="surla-openui-error" variant="destructive" role="alert">
+        <Alert id="highbay-openui-error" variant="destructive" role="alert">
           <strong>Interactive decision preview unavailable: </strong>
           You can still answer every open question and edit or confirm every example directly in the
           form below.
-          <details className="surla-details">
+          <details className="highbay-details">
             <summary>Details</summary>
             <p>{check.error}</p>
           </details>
@@ -212,7 +212,7 @@ export function CP1EditorView({
   const savedAgreement = (
     <>
       {card.status === "confirmed" && ambiguities.length > 0 ? (
-        <div id="surla-confirmed-decisions" role="region" aria-label="Confirmed Decisions">
+        <div id="highbay-confirmed-decisions" role="region" aria-label="Confirmed Decisions">
           <p>
             <strong>Confirmed Decisions:</strong>
           </p>
@@ -226,7 +226,7 @@ export function CP1EditorView({
           </ul>
         </div>
       ) : null}
-      <p id="surla-agreement-summary" tabIndex={-1}>
+      <p id="highbay-agreement-summary" tabIndex={-1}>
         <strong>
           {card.status === "confirmed" && ambiguities.length > 0
             ? "Initial Proposal Summary: "
@@ -248,7 +248,7 @@ export function CP1EditorView({
           <code>{card.confirmed_by}</code>
         </p>
       ) : null}
-      <details className="surla-details">
+      <details className="highbay-details">
         <summary>Agreement identifiers</summary>
         <p>
           change_id: <code>{card.change_id}</code> · status: <code>{card.status}</code> ·
@@ -262,16 +262,16 @@ export function CP1EditorView({
     <CP1DraftContext.Provider value={ctxValue}>
       {card.status === "confirmed" ? buildSection : null}
 
-      <Card className="surla-meta">
-        <div className="surla-region-header">
-          <div className="surla-region-title-group">
+      <Card className="highbay-meta">
+        <div className="highbay-region-header">
+          <div className="highbay-region-title-group">
             <h2>
               {card.status === "confirmed"
                 ? card.prompt.trim() === card.summary.trim() ? "Agreement" : "Agreed: " + card.prompt
                 : "Review & Confirm Change Intent"}
             </h2>
           </div>
-          <div className="surla-toolbar-actions">
+          <div className="highbay-toolbar-actions">
             <Badge variant={card.status === "confirmed" ? "success" : "warning"}>
               {card.status === "confirmed" ? "Agreed" : "Needs confirmation"}
             </Badge>
@@ -279,7 +279,7 @@ export function CP1EditorView({
             {card.unverified_approval ? <Badge variant="warning">Approval unverified</Badge> : null}
             {!cp4Open ? (
               <Button
-                id="surla-load-verifications"
+                id="highbay-load-verifications"
                 disabled={loadingVerifications}
                 onClick={onLoadVerifications}
               >
@@ -288,14 +288,14 @@ export function CP1EditorView({
             ) : null}
           </div>
         </div>
-        <p id="surla-agreement-revision">
+        <p id="highbay-agreement-revision">
           {card.status === "confirmed" ? "Agreed revision" : "Draft revision"} <code>{card.request_revision.slice(0, 12)}</code>
         </p>
         {card.revision_note ? (
-          <p id="surla-agreement-revision-note"><strong>Revision note: </strong>{card.revision_note}</p>
+          <p id="highbay-agreement-revision-note"><strong>Revision note: </strong>{card.revision_note}</p>
         ) : null}
         {card.status === "confirmed" ? (
-          <details className="surla-details" id="surla-agreement-details">
+          <details className="highbay-details" id="highbay-agreement-details">
             <summary>Agreement details</summary>
             {savedAgreement}
           </details>
@@ -305,20 +305,20 @@ export function CP1EditorView({
       {card.status !== "confirmed" ? buildSection : null}
 
       {card.approval !== undefined || card.unverified_approval !== undefined ? (
-        <section className="surla-approval-summary" aria-label="Saved approval">
+        <section className="highbay-approval-summary" aria-label="Saved approval">
           <p><strong>{card.unverified_approval !== undefined ? "Saved approval needs checking." : "Approval recorded."}</strong>
             {" Read its evidence, verified commits and current status in Approve."}</p>
-          {draftDirty ? <Alert id="surla-cp5-approval-dirty-warning" variant="warning" role="status">
+          {draftDirty ? <Alert id="highbay-cp5-approval-dirty-warning" variant="warning" role="status">
             Saving different answers or examples creates a new revision and clears this approval.
           </Alert> : null}
-          <Button id="surla-review-approval" onClick={onReviewApproval}>Review saved approval</Button>
+          <Button id="highbay-review-approval" onClick={onReviewApproval}>Review saved approval</Button>
         </section>
       ) : null}
 
       {priorCard ? (
         <details
-          id="surla-prior-revision"
-          className="surla-card surla-details"
+          id="highbay-prior-revision"
+          className="highbay-card highbay-details"
           key={priorCard.request_revision}
           open={priorWasDraft ? undefined : true}
         >
@@ -416,7 +416,7 @@ export function CP1EditorView({
           ) : (
             <p>None declared.</p>
           )}
-          <details className="surla-details">
+          <details className="highbay-details">
             <summary>Details</summary>
             <p>Previous saved revision: <code>{priorCard.request_revision}</code> · Status: <code>{priorCard.status}</code></p>
           </details>
@@ -425,8 +425,8 @@ export function CP1EditorView({
 
       {preservedDraft && Array.isArray(preservedDraft.lines) ? (
         <Card
-          id="surla-preserved-draft"
-          className="surla-card"
+          id="highbay-preserved-draft"
+          className="highbay-card"
           role="region"
           aria-label="Preserved Unsaved Draft Edits"
         >
@@ -439,7 +439,7 @@ export function CP1EditorView({
               <li key={String(idx)}>{line}</li>
             ))}
           </ul>
-          <details className="surla-details">
+          <details className="highbay-details">
             <summary>Details</summary>
             <p>
               Superseded revision: <code>{preservedDraft.fromRevision}</code>
@@ -455,17 +455,17 @@ export function CP1EditorView({
         {openUINode}
 
         <Card
-          id="surla-cp1-form-card"
-          className="surla-card"
+          id="highbay-cp1-form-card"
+          className="highbay-card"
           aria-busy={rpcInFlight ? "true" : undefined}
         >
           {formQuestions.length > 0 ? <>
             <h3>{(card.status === "confirmed" ? "Your answers" : "Open Questions") + " (" + formQuestions.length + ")"}</h3>
-            <div className="surla-question-list">
+            <div className="highbay-question-list">
               {formQuestions.map(({ question, number }) => {
                 const selected = Object.prototype.hasOwnProperty.call(draftAnswers, question.id) ? draftAnswers[question.id] : "";
                 const edited = card.status === "confirmed" && selected !== card.answers?.[question.id];
-                return <section className="surla-question" key={question.id}>
+                return <section className="highbay-question" key={question.id}>
                   <h4>{question.question} {selected ? <Badge variant="outline">{edited ? "Edited" : "Selected"}</Badge> : null}</h4>
                   <ChoiceGroup label={"Question " + number + ". " + question.question}
                     options={question.options} selected={selected} matchingOption={question.draft_option} disabled={rpcInFlight}
@@ -478,15 +478,15 @@ export function CP1EditorView({
           </> : null}
 
           <h3>Concrete examples</h3>
-          {draftExamples.length > 0 ? <p className="surla-muted" id="surla-example-check-labels">
+          {draftExamples.length > 0 ? <p className="highbay-muted" id="highbay-example-check-labels">
             Check labels guide test writing. Verification reports suite scenario results. Use scenario coverage to find the tests for an example.
             Starter tests use a scripted model and need no API key. Configure a model in Live target for live prompt trials.
           </p> : null}
-          <div className="surla-examples-list">
+          <div className="highbay-examples-list">
             {draftExamples.map((ex, idx) => (
-              <section key={ex.id} className="surla-example-card" aria-label={"Example " + (idx + 1)}
+              <section key={ex.id} className="highbay-example-card" aria-label={"Example " + (idx + 1)}
                 data-example-index={String(idx)}>
-                <div className="surla-example-header">
+                <div className="highbay-example-header">
                   <h4>{"Example " + (idx + 1)}</h4>
                   <Button
                     disabled={rpcInFlight}
@@ -508,7 +508,7 @@ export function CP1EditorView({
                   disabled={rpcInFlight}
                   onChangeValue={(v) => onSetExampleField(ex.id, "scenario", v)}
                 />
-                <div className="surla-example-fields">
+                <div className="highbay-example-fields">
                   <FieldTextarea
                     exampleId={ex.id}
                     field="input_summary"
@@ -538,15 +538,15 @@ export function CP1EditorView({
               ))}
             </ul>
           </> : null}
-          {ambiguities.length > 0 || draftExamples.length > 0 ? <details className="surla-details">
+          {ambiguities.length > 0 || draftExamples.length > 0 ? <details className="highbay-details">
             <summary>Technical identifiers</summary>
             {ambiguities.length > 0 ? <p>Questions {ambiguities.map((amb) => <code key={amb.id}>{amb.id} </code>)}</p> : null}
             {draftExamples.length > 0 ? <p>Examples {draftExamples.map((ex) => <code key={ex.id}>{ex.id} </code>)}</p> : null}
           </details> : null}
 
           <div
-            id="surla-confirm-story"
-            className="surla-panel-section"
+            id="highbay-confirm-story"
+            className="highbay-panel-section"
             role="region"
             aria-label="Story of this change"
           >
@@ -556,30 +556,30 @@ export function CP1EditorView({
                 : "This change's Story has " + countsPhrase(storyCounts(stories)) + "."}{" "}
               Only complete flows are tested end to end; drafts do not block confirming.
             </p>
-            <Button id="surla-confirm-open-story" onClick={onOpenStory}>
+            <Button id="highbay-confirm-open-story" onClick={onOpenStory}>
               Show the Story
             </Button>
           </div>
 
           {proposalWaiting ? (
-            <p id="surla-confirm-blocked">
+            <p id="highbay-confirm-blocked">
               A proposed revision waits above. Adopt or decline it before refining the agreed
               revision.
             </p>
           ) : null}
           {card.status === "confirmed" && draftDirty && !proposalWaiting && buildRevisionNotice !== null ? (
-            <p id="surla-confirm-build-consequence">{buildRevisionNotice}</p>
+            <p id="highbay-confirm-build-consequence">{buildRevisionNotice}</p>
           ) : null}
           {revisionAid}
           <CardFooter>
             <Button
-              id="surla-confirm-submit"
+              id="highbay-confirm-submit"
               variant={card.status === "confirmed" && draftDirty ? "primary" : "secondary"}
               disabled={rpcInFlight || proposalWaiting || revisionAid !== null}
-              aria-describedby={proposalWaiting ? "surla-confirm-blocked" :
-                revisionAid !== null ? "surla-confirm-revision-needed-label" :
+              aria-describedby={proposalWaiting ? "highbay-confirm-blocked" :
+                revisionAid !== null ? "highbay-confirm-revision-needed-label" :
                 card.status === "confirmed" && draftDirty && buildRevisionNotice !== null
-                  ? "surla-confirm-build-consequence" : undefined}
+                  ? "highbay-confirm-build-consequence" : undefined}
               onClick={onSubmitConfirm}
             >
               {card.status === "needs_confirmation"
@@ -587,7 +587,7 @@ export function CP1EditorView({
                 : "Refine Confirmed Answers & Examples"}
             </Button>
             <Button
-              id="surla-discard-draft"
+              id="highbay-discard-draft"
               variant="ghost"
               disabled={rpcInFlight}
               onClick={onDiscardDraft}
@@ -596,15 +596,15 @@ export function CP1EditorView({
             </Button>
           </CardFooter>
 
-          <div id="surla-confirm-feedback">
+          <div id="highbay-confirm-feedback">
             {formError ? (
-              <Alert id="surla-confirm-error" variant="destructive" role="alert" tabIndex={-1}>
+              <Alert id="highbay-confirm-error" variant="destructive" role="alert" tabIndex={-1}>
                 {onLoadLatestCard !== null ? <strong>Change Card request failed: </strong> : null}
                 <p>{formError}</p>
                 {onLoadLatestCard !== null ? <>
                   <p>Your edited answers and examples remain in this form. Choose <strong>Load Latest Card</strong> to inspect the current saved Change Card alongside your unsaved edits.</p>
-                  <div className="surla-field-row">
-                    <Button id="surla-load-latest-card" disabled={rpcInFlight} onClick={onLoadLatestCard}>
+                  <div className="highbay-field-row">
+                    <Button id="highbay-load-latest-card" disabled={rpcInFlight} onClick={onLoadLatestCard}>
                       Load Latest Card
                     </Button>
                   </div>
@@ -644,7 +644,7 @@ function RefinementDisclosure({
   return (
     <details
       ref={detailsRef}
-      id="surla-refine-agreement"
+      id="highbay-refine-agreement"
       onToggle={(event) => {
         if (keepOpen && !event.currentTarget.open) {
           event.currentTarget.open = true;

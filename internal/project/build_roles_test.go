@@ -13,9 +13,9 @@ import (
 	"sync"
 	"testing"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -185,7 +185,7 @@ func TestBuilderOnlyRevokesTestWriter(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, state.Record, loaded.Record)
 
-	// Returning to Surla's tests admits a fresh credential; revocation stays final.
+	// Returning to Highbay's tests admits a fresh credential; revocation stays final.
 	require.NoError(t, server.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir()}))
 	freshCredential, err := os.ReadFile(state.AgentFile(writer))
 	require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestFirstMessagesNameOnlyAllowedOperations(t *testing.T) {
 			if role == "test_writer" && (operation == "coverage_statements" || operation == "question_ids" || operation == "example_ids" || operation == "since_version") {
 				continue
 			}
-			assert.Contains(t, gensurla.MethodNames, operation)
+			assert.Contains(t, genhighbay.MethodNames, operation)
 			assert.True(t, controlplane.OperationAllowed(controlplane.CallerKind(role), operation), "%s may not call %s", role, operation)
 		}
 	}
@@ -279,15 +279,15 @@ func TestProjectRecordRejectsTrailingData(t *testing.T) {
 }
 
 // TestTheTestWriterMayRegenerateItsTestModule checks the test writer's first
-// message: Surla writes the Story table and the test writer leaves it as it
+// message: Highbay writes the Story table and the test writer leaves it as it
 // is, reporting or regenerating after a design change, because regenerating
 // keeps the required tests. No role is told that regenerating drops a test.
 func TestTheTestWriterMayRegenerateItsTestModule(t *testing.T) {
 	_, message := roleFirstMessage("test_writer")
 	for _, sentence := range []string{
-		"Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story",
+		"Highbay writes eval/design/story_tests.go, which declares the required tests, from the agreed Story",
 		"leave that file as it is",
-		"report to have it generated again or run surla gen -dir eval in the working folder first",
+		"report to have it generated again or run hbay gen -dir eval in the working folder first",
 		"regenerating keeps the required tests",
 	} {
 		assert.Contains(t, message, sentence)
@@ -310,12 +310,12 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"Set an ambiguity's draft_option to the option your draft already implements whenever another option would change the design, Story, examples or preserved behaviors",
 			"ask one short, plain question and wait; never ask for a Go module path, folder name or requirements checklist",
 			"call init_project with dir \".\" and no module path unless the user gave one",
-			"Before that call, tell the user in one sentence that creating the project downloads Go modules and can take a few minutes the first time, and that the Surla page shows its progress.",
+			"Before that call, tell the user in one sentence that creating the project downloads Go modules and can take a few minutes the first time, and that the Highbay page shows its progress.",
 			"instead of interviewing them in chat: put open product questions",
 			"into the analysis's ambiguities with concrete options, which the user answers on the views page",
-			"init_project creates a blank project; pass worked_example only when the user asks to see Surla's worked example.",
+			"init_project creates a blank project; pass worked_example only when the user asks to see Highbay's worked example.",
 			"The project's starting files are plumbing the user never asked about: never mention or ask about them on the Change Card or in chat",
-			"without repository file paths (such as design/design.go) or Surla runner flags (such as -listen)",
+			"without repository file paths (such as design/design.go) or Highbay runner flags (such as -listen)",
 			"call update_draft before each new change",
 			"Work only in the draft folder returned by update_draft or refresh_story",
 			"never edit the project folder or copy design files between it and the draft",
@@ -328,21 +328,21 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward.",
 			"it writes the agreed design into design/ and regenerates gen/; never edit either",
 			"When your assignment's gowork_off is true",
-			"Never merge, cherry-pick or copy files from another surla/ branch",
+			"Never merge, cherry-pick or copy files from another highbay/ branch",
 			"While you wait for that, do not stop and do not wait for a message: call wait_for_builder_assignment, passing the version it returned as since_version",
 			"when your client does not offer that tool, call list_builder_assignments about every 30 seconds instead",
 		}},
 		{"test_writer", []string{
 			"Read each new assignment with get_test_writer_assignment before any other work",
-			"Then run git status: the Story table and generated test-module files Surla just prepared, and tests you already authored for this build, are expected current work.",
-			"Leave Surla's prepared files unchanged.",
+			"Then run git status: the Story table and generated test-module files Highbay just prepared, and tests you already authored for this build, are expected current work.",
+			"Leave Highbay's prepared files unchanged.",
 			"If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward.",
-			"do not commit: Surla commits what it accepts",
+			"do not commit: Highbay commits what it accepts",
 			"Run every go command as GOWORK=off",
-			"Never bring files or commits from another surla/ branch",
-			"Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Surla's verification builds and runs the application.",
+			"Never bring files or commits from another highbay/ branch",
+			"Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Highbay's verification builds and runs the application.",
 			"after reporting, do not stop and do not wait for a message: call wait_for_test_writer_assignment, and while the list it returns still shows your assignment as reported, call it again, passing the version it returned as since_version",
-			"Surla may reach its verdict before your first call, so decide by what the list shows: as soon as it shows another state or no assignment at all, read get_test_writer_assignment again.",
+			"Highbay may reach its verdict before your first call, so decide by what the list shows: as soon as it shows another state or no assignment at all, read get_test_writer_assignment again.",
 			"when your client does not offer that tool, call list_test_writer_assignments about every 30 seconds instead",
 		}},
 	} {
@@ -357,8 +357,8 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			assert.NotContains(t, message, "a file it lists was left by earlier work")
 			for _, text := range []string{
 				"An empty list means no build needs you: say so and stop.",
-				"When a Surla call says a build was dropped or a new one started, stop",
-				"Never name, move or delete a surla/ branch.",
+				"When a Highbay call says a build was dropped or a new one started, stop",
+				"Never name, move or delete a highbay/ branch.",
 			} {
 				assert.Contains(t, message, text)
 			}

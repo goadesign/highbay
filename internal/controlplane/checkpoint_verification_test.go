@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestCheckpointUIVerificationStatesAndStatusReads drives the verification
@@ -22,9 +22,9 @@ func TestCheckpointUIVerificationStatesAndStatusReads(t *testing.T) {
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
 	user := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: pageUserID, Kind: CallerUser})
 	revisions := map[string]string{}
-	confirm := func(changeID string) *gensurla.ChangeCardResult {
+	confirm := func(changeID string) *genhighbay.ChangeCardResult {
 		proposed := mustPropose(t, cp, guide, changeID, "Refunds above $50 require a manager.", refundAnalysis("Refunds above $50 require a manager."))
-		confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		confirmed, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 			ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 		})
 		require.NoError(t, err)
@@ -38,31 +38,31 @@ func TestCheckpointUIVerificationStatesAndStatusReads(t *testing.T) {
 	incoming := mustPropose(t, cp, guide, "chg-incoming", "Refunds above $50 require a manager.", refundAnalysis("Refunds above $50 require a manager."))
 	revisions[incoming.ChangeID] = incoming.RequestRevision
 
-	run := func(runID, changeID string, state gensurla.State) *gensurla.VerificationStatusResult {
-		return &gensurla.VerificationStatusResult{
+	run := func(runID, changeID string, state genhighbay.State) *genhighbay.VerificationStatusResult {
+		return &genhighbay.VerificationStatusResult{
 			RunID: runID, ChangeID: changeID, RequestRevision: revisions[changeID],
 			CandidateCommit: strings.Repeat("1", 40), SuiteCommit: strings.Repeat("2", 40),
 			AcceptedAt: "2026-10-31T12:34:56.123Z", State: state,
 			// These evaluator fixtures model an owner observation of the selected tests.
 			InputsCurrent: true,
-			TestSource:    gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+			TestSource:    genhighbay.NewTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
 		}
 	}
-	passed := &gensurla.BuilderVerificationReport{
+	passed := &genhighbay.BuilderVerificationReport{
 		ReportDigest: strings.Repeat("3", 64), Passed: true,
-		Counts: &gensurla.VerificationCounts{Required: 2, Passed: 2},
-		Scenarios: []*gensurla.VerificationScenario{
-			{ID: "visible_refund", Outcome: "passed", Checks: []*gensurla.VerificationCheck{{Name: "one_refund", Passed: true}}},
+		Counts: &genhighbay.VerificationCounts{Required: 2, Passed: 2},
+		Scenarios: []*genhighbay.VerificationScenario{
+			{ID: "visible_refund", Outcome: "passed", Checks: []*genhighbay.VerificationCheck{{Name: "one_refund", Passed: true}}},
 			{ID: "holdout-1", Outcome: "passed"},
 		},
 	}
 	diagnostic := "Exact failing diagnostic <img src=x onerror=alert(1)>"
 	environmentError := "Test dependency was unavailable"
-	failed := &gensurla.BuilderVerificationReport{
+	failed := &genhighbay.BuilderVerificationReport{
 		ReportDigest: strings.Repeat("4", 64), SuiteFailed: true,
-		Counts: &gensurla.VerificationCounts{Required: 6, Passed: 3, Failed: 1, NotRun: 1, HarnessError: 1},
-		Scenarios: []*gensurla.VerificationScenario{
-			{ID: "visible_refund", Outcome: "failed", Checks: []*gensurla.VerificationCheck{{Name: "one_refund", Diagnostic: &diagnostic}}},
+		Counts: &genhighbay.VerificationCounts{Required: 6, Passed: 3, Failed: 1, NotRun: 1, HarnessError: 1},
+		Scenarios: []*genhighbay.VerificationScenario{
+			{ID: "visible_refund", Outcome: "failed", Checks: []*genhighbay.VerificationCheck{{Name: "one_refund", Diagnostic: &diagnostic}}},
 			{ID: "not_executed", Outcome: "not_run"},
 			{ID: "dependency_failed", Outcome: "harness_error", Error: &environmentError},
 			{ID: "visible_pass", Outcome: "passed"},
@@ -73,9 +73,9 @@ func TestCheckpointUIVerificationStatesAndStatusReads(t *testing.T) {
 	suiteFailed := *passed
 	suiteFailed.Passed, suiteFailed.SuiteFailed = false, true
 	suiteFailed.ReportDigest = strings.Repeat("5", 64)
-	runningState := gensurla.NewStateRunning(&gensurla.VerificationRunning{StartedAt: "2026-10-31T12:34:56.123Z"})
-	completed := func(report *gensurla.BuilderVerificationReport) gensurla.State {
-		return gensurla.NewStateCompleted(&gensurla.VerificationCompleted{SuiteID: "orders_acceptance", Environment: "sim", Report: report})
+	runningState := genhighbay.NewStateRunning(&genhighbay.VerificationRunning{StartedAt: "2026-10-31T12:34:56.123Z"})
+	completed := func(report *genhighbay.BuilderVerificationReport) genhighbay.State {
+		return genhighbay.NewStateCompleted(&genhighbay.VerificationCompleted{SuiteID: "orders_acceptance", Environment: "sim", Report: report})
 	}
 	const runA, runB = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
 	early := run("10000000-0000-4000-8000-000000000001", "chg-verify", completed(failed))
@@ -87,15 +87,15 @@ func TestCheckpointUIVerificationStatesAndStatusReads(t *testing.T) {
 	otherRevision.InputsCurrent = false
 	incomingRun := run("99999999-9999-4999-8999-999999999999", incoming.ChangeID, completed(passed))
 	incomingRun.InputsCurrent = false // The proposed card has no agreed revision.
-	fixtures := map[string]*gensurla.VerificationStatusResult{
+	fixtures := map[string]*genhighbay.VerificationStatusResult{
 		"running":         run(runA, "chg-verify", runningState),
 		"passed":          run(runA, "chg-verify", completed(passed)),
 		"otherRun":        run(runB, "chg-verify", runningState),
 		"otherPassed":     run(runB, "chg-verify", completed(passed)),
 		"failed":          run("44444444-4444-4444-8444-444444444444", "chg-verify", completed(failed)),
 		"suiteFailed":     run("55555555-5555-4555-8555-555555555555", "chg-verify", completed(&suiteFailed)),
-		"executionFailed": run("66666666-6666-4666-8666-666666666666", "chg-verify", gensurla.NewStateNotCompleted(&gensurla.VerificationNotCompleted{Kind: "execution_failed", Stage: "build", Summary: "The candidate could not be built."})),
-		"interrupted":     run("77777777-7777-4777-8777-777777777777", "chg-verify", gensurla.NewStateNotCompleted(&gensurla.VerificationNotCompleted{Kind: "interrupted", Stage: "supervise", Summary: "Verification stopped before a report was saved."})),
+		"executionFailed": run("66666666-6666-4666-8666-666666666666", "chg-verify", genhighbay.NewStateNotCompleted(&genhighbay.VerificationNotCompleted{Kind: "execution_failed", Stage: "build", Summary: "The candidate could not be built."})),
+		"interrupted":     run("77777777-7777-4777-8777-777777777777", "chg-verify", genhighbay.NewStateNotCompleted(&genhighbay.VerificationNotCompleted{Kind: "interrupted", Stage: "supervise", Summary: "Verification stopped before a report was saved."})),
 		"early":           early,
 		"late":            late,
 		"otherRevision":   otherRevision,
@@ -111,7 +111,7 @@ func TestCheckpointUIVerificationStatesAndStatusReads(t *testing.T) {
 	// before later scenarios reuse its historical runs.
 	setFixture := func(name string) {
 		snapshot := *fixtures[name]
-		current, err := cp.GetChange(guide, &gensurla.GetChangePayload{ChangeID: snapshot.ChangeID})
+		current, err := cp.GetChange(guide, &genhighbay.GetChangePayload{ChangeID: snapshot.ChangeID})
 		require.NoError(t, err)
 		snapshot.InputsCurrent = snapshot.InputsCurrent && current.Status == "confirmed" &&
 			current.RequestRevision == snapshot.RequestRevision
@@ -143,42 +143,42 @@ let pages = 0;
 const fixture = (key) => control(origin, "act", { key });
 const open = async (changeId) => {
   const page = await openPage(origin, { link: input.link + "-" + (++pages) });
-  await until(() => page.$("#surla-change-list li"), "the page did not list the changes");
+  await until(() => page.$("#highbay-change-list li"), "the page did not list the changes");
   await openChange(page, changeId);
   return page;
 };
 const openChange = async (page, changeId) => {
-  page.$("#surla-nav-changes").click();
-  await until(() => page.$("#surla-open-change-" + changeId) && !page.$("#surla-open-change-" + changeId).disabled, changeId + " is not offered");
+  page.$("#highbay-nav-changes").click();
+  await until(() => page.$("#highbay-open-change-" + changeId) && !page.$("#highbay-open-change-" + changeId).disabled, changeId + " is not offered");
   const buildPath = "/changes/" + changeId + "/build";
   const buildReads = page.sent("GET", buildPath).length;
-  page.$("#surla-open-change-" + changeId).click();
-  await until(() => page.$("#surla-cp1-editor").dataset.changeId === changeId, changeId + " did not open");
+  page.$("#highbay-open-change-" + changeId).click();
+  await until(() => page.$("#highbay-cp1-editor").dataset.changeId === changeId, changeId + " did not open");
   // The initial build observation may invalidate selected proof. Settle this
   // opening's own read before testing status actions under unchanged inputs.
-  await until(() => page.sent("GET", buildPath).slice(buildReads).some((r) => r.status === 200) && !page.$("#surla-build-loading") && !page.$("#surla-build-error"), changeId + " did not settle its initial build read");
+  await until(() => page.sent("GET", buildPath).slice(buildReads).some((r) => r.status === 200) && !page.$("#highbay-build-loading") && !page.$("#highbay-build-error"), changeId + " did not settle its initial build read");
 };
 const proof = async (page, changeId) => {
   const listPath = "/changes/" + changeId + "/verifications";
   const lists = page.sent("GET", listPath).length;
   const before = page.requests.length;
-  page.$("#surla-nav-cp4").click();
+  page.$("#highbay-nav-cp4").click();
   await until(() => {
-    const selected = page.$("#surla-result-view").dataset.runId;
+    const selected = page.$("#highbay-result-view").dataset.runId;
     return page.sent("GET", listPath).slice(lists).some((r) => r.status === 200) &&
       selected && page.requests.slice(before).some((r) =>
         r.method === "GET" && r.path === reviewPath(selected) && r.status === 200) &&
-      !page.$("#surla-cp4-verification").hasAttribute("aria-busy");
+      !page.$("#highbay-cp4-verification").hasAttribute("aria-busy");
   }, "the runs of " + changeId + " and the selected review did not settle");
 };
-const text = (page) => page.text("#surla-result-view");
+const text = (page) => page.text("#highbay-result-view");
 const field = (page) => page.$('textarea[data-field="expected_outcome"]');
-const button = (page) => page.$("#surla-cp4-check-status");
+const button = (page) => page.$("#highbay-cp4-check-status");
 const reviewPath = (runId) => "/verifications/" + runId + "/review";
 const reviewReads = (page, runId) => page.sent("GET", reviewPath(runId));
 const selectRun = async (page, runId) => {
-  page.$("#surla-cp4-run-" + runId).click();
-  await until(() => page.$("#surla-result-view").dataset.runId === runId, "run " + runId + " was not selected");
+  page.$("#highbay-cp4-run-" + runId).click();
+  await until(() => page.$("#highbay-result-view").dataset.runId === runId, "run " + runId + " was not selected");
 };
 
 // Refreshing a run preserves the exact editable draft and starts no poller.
@@ -187,8 +187,8 @@ const selectRun = async (page, runId) => {
   const page = await open("chg-verify");
   page.type(field(page), "Unsaved CP4 draft");
   await proof(page, "chg-verify");
-  expect(page.text("#surla-cp4-title") === "The check is running", "running state is missing");
-  expect(page.$("#surla-cp4-verification").getAttribute("aria-busy") === null, "idle run card marked aria-busy");
+  expect(page.text("#highbay-cp4-title") === "The check is running", "running state is missing");
+  expect(page.$("#highbay-cp4-verification").getAttribute("aria-busy") === null, "idle run card marked aria-busy");
   const reads = reviewReads(page, input.runA).length;
   const statusReads = () => page.sent("GET", "/verifications/" + input.runA).length;
   const statusBefore = statusReads();
@@ -201,15 +201,15 @@ const selectRun = async (page, runId) => {
   button(page).click();
   expect(reviewReads(page, input.runA).length === reads + 1 && statusReads() === statusBefore, "status action did not review this exact run");
   const refresh = reviewReads(page, input.runA)[reads];
-  expect(button(page).disabled && page.$("#surla-cp4-verification").getAttribute("aria-busy") === "true", "status request was not disabled or marked aria-busy");
+  expect(button(page).disabled && page.$("#highbay-cp4-verification").getAttribute("aria-busy") === "true", "status request was not disabled or marked aria-busy");
   expect(!field(page).disabled, "status read disabled independent CP1 editing");
   page.type(field(page), "Edited while checking status");
   await control(origin, "release", { key });
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "completed report is not shown");
   expect(refresh.status === 200 && JSON.parse(refresh.answer).run_id === input.runA, "status action did not receive its selected run");
-  expect(!button(page) && page.$("#surla-cp4-verification").getAttribute("aria-busy") === null, "completed report is not final or remained aria-busy");
+  expect(!button(page) && page.$("#highbay-cp4-verification").getAttribute("aria-busy") === null, "completed report is not final or remained aria-busy");
   expect(text(page).includes("The check passed: 2 of 2 scenarios.") && text(page).includes("holdout-1"), "report denominator or anonymous outcome is missing");
-  expect(page.text("#surla-cp4-evidence-limits").includes("What this run does not establish") && text(page).includes(input.commit), "coverage limits or verified inputs are missing");
+  expect(page.text("#highbay-cp4-evidence-limits").includes("What this run does not establish") && text(page).includes(input.commit), "coverage limits or verified inputs are missing");
   expect(field(page).value === "Edited while checking status", "status reply erased a draft");
   await sleep(200);
   expect(reviewReads(page, input.runA).length === reads + 1 && statusReads() === statusBefore, "completed report started another request");
@@ -225,13 +225,13 @@ const selectRun = async (page, runId) => {
   await selectRun(page, "44444444-4444-4444-8444-444444444444");
   expect(text(page).includes("The check did not pass:") && text(page).includes("Not run") && text(page).includes("Could not evaluate"), "failed report collapsed distinct outcomes");
   expect(text(page).includes("Exact failing diagnostic <img src=x onerror=alert(1)>"), "repair diagnostic was removed");
-  expect(!page.$("#surla-cp4-verification img"), "diagnostic became executable HTML");
+  expect(!page.$("#highbay-cp4-verification img"), "diagnostic became executable HTML");
   expect(text(page).includes("The check did not pass: 3 of 6 scenarios passed.") && text(page).includes("holdout-2") && !text(page).includes("hidden"), "failed report denominator changed");
   await selectRun(page, "55555555-5555-4555-8555-555555555555");
   expect(text(page).includes("The check did not pass:") && text(page).includes("evaluation failed or ended unexpectedly"), "suite failure was converted to a passing count verdict");
   for (const [runId, title] of [["66666666-6666-4666-8666-666666666666", "The check could not finish"], ["77777777-7777-4777-8777-777777777777", "The check was interrupted"]]) {
     await selectRun(page, runId);
-    await until(() => !page.$("#surla-cp4-verification").hasAttribute("aria-busy"), "the incomplete run's review did not settle");
+    await until(() => !page.$("#highbay-cp4-verification").hasAttribute("aria-busy"), "the incomplete run's review did not settle");
     expect(text(page).includes(title) && text(page).includes("Stopped during:"), "incomplete outcome is inaccurate");
     expect(!text(page).includes("Declared scenarios") && !button(page), "no-report outcome offered a completed report or restarted work");
   }
@@ -279,7 +279,7 @@ const selectRun = async (page, runId) => {
   await control(origin, "release", { key: keyA });
   await until(() => refreshA.status === 200, "the held run A review did not arrive");
   expect(JSON.parse(refreshA.answer).state.type === "completed", "run A's late review did not carry the saved completion");
-  expect(page.$("#surla-result-view").dataset.runId === input.runB && button(page).disabled && !reviewB.status, "late run A answer overwrote run B or cleared B's request");
+  expect(page.$("#highbay-result-view").dataset.runId === input.runB && button(page).disabled && !reviewB.status, "late run A answer overwrote run B or cleared B's request");
   await control(origin, "release", { key: keyB });
   await until(() => !button(page).disabled && reviewB.status === 200, "run B remained disabled after its own answer");
   expect(JSON.parse(reviewB.answer).run_id === input.runB, "run B's review returned a different run");
@@ -296,7 +296,7 @@ const selectRun = async (page, runId) => {
   expect(field(page), "the editor with unsaved edits did not stay beside the runs");
   const reads = reviewReads(page, input.runA).length;
   await control(origin, "hold", { key: "POST /changes/confirm" });
-  page.$("#surla-confirm-submit").click();
+  page.$("#highbay-confirm-submit").click();
   await fixture("run passed");
   button(page).click();
   expect(page.sent("POST", "/changes/confirm").length === 1 && reviewReads(page, input.runA).length === reads + 1, "independent review was blocked behind the save");
@@ -305,10 +305,10 @@ const selectRun = async (page, runId) => {
   await control(origin, "release", { key: "POST /changes/confirm" });
   await until(() => !field(page).disabled, "card answer did not finish independently");
   expect(field(page).value === "Saved edited outcome", "card answer lost saved text");
-  expect(page.$("#surla-cp4-different-revision") && text(page).includes(input.revision), "report for another revision looked current after the card changed");
+  expect(page.$("#highbay-cp4-different-revision") && text(page).includes(input.revision), "report for another revision looked current after the card changed");
   page.type(field(page), "Discard this local draft");
-  page.$("#surla-discard-draft").click();
-  expect(!field(page) && page.$("#surla-cp4-different-revision"), "closed editor lost the retained card revision warning");
+  page.$("#highbay-discard-draft").click();
+  expect(!field(page) && page.$("#highbay-cp4-different-revision"), "closed editor lost the retained card revision warning");
   page.close();
 }
 
@@ -317,20 +317,20 @@ const selectRun = async (page, runId) => {
   await fixture("runs chg-verify late,early");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  expect(page.state() === "cp4-verification" && page.$("#surla-result-view").dataset.runId === "20000000-0000-4000-8000-000000000002", "the list did not select the first server-ordered run");
-  const buttons = page.$$("#surla-cp4-run-list button");
+  expect(page.state() === "cp4-verification" && page.$("#highbay-result-view").dataset.runId === "20000000-0000-4000-8000-000000000002", "the list did not select the first server-ordered run");
+  const buttons = page.$$("#highbay-cp4-run-list button");
   expect(buttons.length === 2 && buttons[0].dataset.runId === "20000000-0000-4000-8000-000000000002" && buttons[1].dataset.runId === "10000000-0000-4000-8000-000000000001", "run buttons changed the server's sub-second ordering");
-  expect(buttons[0].textContent.includes("started ") && page.$('#surla-cp4-details time[datetime="2026-10-31T12:00:00.9Z"]').textContent === "2026-10-31T12:00:00.9Z", "the latest run lost its local start label or exact accepted_at time");
+  expect(buttons[0].textContent.includes("started ") && page.$('#highbay-cp4-details time[datetime="2026-10-31T12:00:00.9Z"]').textContent === "2026-10-31T12:00:00.9Z", "the latest run lost its local start label or exact accepted_at time");
   expect(buttons[0].textContent.includes("candidate " + input.commit.slice(0, 7)), "candidate commit prefix missing in run button");
-  expect(!page.$("#surla-checkpoint-nav").hidden && page.$("#surla-nav-cp4").getAttribute("aria-current") === "step", "the stage navigation does not mark the runs");
-  const subject = page.$("#surla-context-result");
+  expect(!page.$("#highbay-checkpoint-nav").hidden && page.$("#highbay-nav-cp4").getAttribute("aria-current") === "step", "the stage navigation does not mark the runs");
+  const subject = page.$("#highbay-context-result");
   expect(subject && subject.dataset.changeId === "chg-verify" && subject.dataset.requestRevision === input.revision, "the subject strip is not derived from the selected run");
   buttons[1].click();
-  expect(page.$("#surla-result-view").dataset.runId === "10000000-0000-4000-8000-000000000001" && buttons[1].getAttribute("aria-pressed") === "true", "clicking the second run did not switch the displayed run");
-  expect(page.$('#surla-cp4-details time[datetime="2026-10-31T12:00:00.1Z"]').textContent === "2026-10-31T12:00:00.1Z", "the older run lost its exact accepted_at time");
+  expect(page.$("#highbay-result-view").dataset.runId === "10000000-0000-4000-8000-000000000001" && buttons[1].getAttribute("aria-pressed") === "true", "clicking the second run did not switch the displayed run");
+  expect(page.$('#highbay-cp4-details time[datetime="2026-10-31T12:00:00.1Z"]').textContent === "2026-10-31T12:00:00.1Z", "the older run lost its exact accepted_at time");
   await fixture("runs chg-verify -");
-  page.$("#surla-load-verifications").click();
-  await until(() => page.$("#surla-cp4-empty") && !page.$("#surla-cp4-run-list"), "an empty list did not show #surla-cp4-empty");
+  page.$("#highbay-load-verifications").click();
+  await until(() => page.$("#highbay-cp4-empty") && !page.$("#highbay-cp4-run-list"), "an empty list did not show #highbay-cp4-empty");
   page.close();
 }
 
@@ -339,37 +339,37 @@ const selectRun = async (page, runId) => {
   await fixture("runs chg-verify passed,otherRun");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  expect(page.$("#surla-result-view").dataset.runId === input.runA && !page.$("#surla-cp4-unlisted-run"), "the first run was not selected");
+  expect(page.$("#highbay-result-view").dataset.runId === input.runA && !page.$("#highbay-cp4-unlisted-run"), "the first run was not selected");
   const reload = async () => {
     const lists = page.sent("GET", "/changes/chg-verify/verifications").length;
-    page.$("#surla-load-verifications").click();
-    await until(() => page.sent("GET", "/changes/chg-verify/verifications").length > lists && !page.$("#surla-load-verifications").disabled, "the list did not reload");
+    page.$("#highbay-load-verifications").click();
+    await until(() => page.sent("GET", "/changes/chg-verify/verifications").length > lists && !page.$("#highbay-load-verifications").disabled, "the list did not reload");
   };
   await fixture("runs chg-verify running,otherRun");
   await reload();
   expect(text(page).includes("The check passed: 2 of 2 scenarios."), "a stale running snapshot reverted a completed run");
   await control(origin, "hold", { key: "GET /changes/chg-verify/verifications" });
-  page.$("#surla-load-verifications").click();
-  expect(page.$("#surla-load-verifications").disabled, "the load button was not disabled while loading");
+  page.$("#highbay-load-verifications").click();
+  expect(page.$("#highbay-load-verifications").disabled, "the load button was not disabled while loading");
   const lists = page.sent("GET", "/changes/chg-verify/verifications").length;
-  page.$("#surla-load-verifications").click();
+  page.$("#highbay-load-verifications").click();
   expect(page.sent("GET", "/changes/chg-verify/verifications").length === lists, "a second click sent another list read");
-  page.$("#surla-cp4-run-" + input.runB).click();
+  page.$("#highbay-cp4-run-" + input.runB).click();
   await control(origin, "release", { key: "GET /changes/chg-verify/verifications" });
-  await until(() => !page.$("#surla-load-verifications").disabled, "the held list did not finish");
-  expect(page.$("#surla-result-view").dataset.runId === input.runB, "the list answer overwrote a run selected during the load");
+  await until(() => !page.$("#highbay-load-verifications").disabled, "the held list did not finish");
+  expect(page.$("#highbay-result-view").dataset.runId === input.runB, "the list answer overwrote a run selected during the load");
   await control(origin, "hold", { key: "GET /changes/chg-verify/verifications" });
-  page.$("#surla-load-verifications").click();
-  page.$("#surla-cp4-run-" + input.runA).click();
+  page.$("#highbay-load-verifications").click();
+  page.$("#highbay-cp4-run-" + input.runA).click();
   await fixture("runs chg-verify otherRun");
   await control(origin, "release", { key: "GET /changes/chg-verify/verifications" });
-  await until(() => !page.$("#surla-load-verifications").disabled, "the pruning list did not finish");
-  expect(page.$("#surla-result-view").dataset.runId === input.runA && page.$("#surla-cp4-unlisted-run") && page.text("#surla-cp4-unlisted-run").includes("Not included in the last loaded list; reload to check."), "a pruned run selected during the load did not stay with #surla-cp4-unlisted-run");
+  await until(() => !page.$("#highbay-load-verifications").disabled, "the pruning list did not finish");
+  expect(page.$("#highbay-result-view").dataset.runId === input.runA && page.$("#highbay-cp4-unlisted-run") && page.text("#highbay-cp4-unlisted-run").includes("Not included in the last loaded list; reload to check."), "a pruned run selected during the load did not stay with #highbay-cp4-unlisted-run");
   await reload();
-  expect(page.$("#surla-result-view").dataset.runId === input.runB && !page.$("#surla-cp4-run-list") && page.text("#surla-cp4-title") === "The check is running", "pruning [A, B] -> [B] did not advance to B");
+  expect(page.$("#highbay-result-view").dataset.runId === input.runB && !page.$("#highbay-cp4-run-list") && page.text("#highbay-cp4-title") === "The check is running", "pruning [A, B] -> [B] did not advance to B");
   await fixture("runs chg-verify -");
   await reload();
-  expect(page.$("#surla-cp4-empty") && !page.$("#surla-result-view").dataset.runId, "pruning to [] did not reach #surla-cp4-empty");
+  expect(page.$("#highbay-cp4-empty") && !page.$("#highbay-result-view").dataset.runId, "pruning to [] did not reach #highbay-cp4-empty");
   page.close();
 }
 
@@ -379,18 +379,18 @@ const selectRun = async (page, runId) => {
   await fixture("runs toString toStringRun");
   const page = await open("__proto__");
   await proof(page, "__proto__");
-  expect(page.$("#surla-result-view").dataset.changeId === "__proto__" && !page.$("#surla-cp4-run-list") && page.text("#surla-cp4-title") === "The check passed: 2 of 2 scenarios." && !page.$("#surla-cp4-list-error") && !page.$("#surla-cp4-card-error") && !page.$("#surla-cp4-unlisted-run"), "the __proto__ change's runs did not render cleanly");
+  expect(page.$("#highbay-result-view").dataset.changeId === "__proto__" && !page.$("#highbay-cp4-run-list") && page.text("#highbay-cp4-title") === "The check passed: 2 of 2 scenarios." && !page.$("#highbay-cp4-list-error") && !page.$("#highbay-cp4-card-error") && !page.$("#highbay-cp4-unlisted-run"), "the __proto__ change's runs did not render cleanly");
   expect(Object.prototype.hasOwnProperty.call(Object.prototype, "0") === false && ({}).toString === Object.prototype.toString, "a __proto__ change mutated Object.prototype");
   await openChange(page, "toString");
   await proof(page, "toString");
-  expect(page.$("#surla-result-view").dataset.changeId === "toString" && !page.$("#surla-cp4-list-error") && !page.$("#surla-cp4-card-error"), "the toString change's runs did not render cleanly");
+  expect(page.$("#highbay-result-view").dataset.changeId === "toString" && !page.$("#highbay-cp4-list-error") && !page.$("#highbay-cp4-card-error"), "the toString change's runs did not render cleanly");
   const ambiguous = (await api(origin, "GET", "/changes/toString", undefined, input.guide)).body;
   ambiguous.ambiguities = [{ id: "toString", question: "Prototype key question?", options: ["optA", "optB"] }];
   ambiguous.answers = {};
   await control(origin, "reply", { key: "GET /changes/toString", status: 200, body: ambiguous });
   await openChange(page, "chg-verify");
   await openChange(page, "toString");
-  expect(page.text("#surla-cp1-editor").includes("Prototype key question?") && !page.text("#surla-cp1-editor").includes("function toString") && !page.text("#surla-cp1-editor").includes("[Confirmed answer:"), "ambiguity id toString read Object.prototype.toString");
+  expect(page.text("#highbay-cp1-editor").includes("Prototype key question?") && !page.text("#highbay-cp1-editor").includes("function toString") && !page.text("#highbay-cp1-editor").includes("[Confirmed answer:"), "ambiguity id toString read Object.prototype.toString");
   page.close();
 }
 
@@ -401,16 +401,16 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   const page = await open("chg-verify");
   await control(origin, "hold", { key: "GET /changes/chg-verify/verifications" });
   await control(origin, "hold", { key: "GET /changes/chg-verify-b/verifications" });
-  page.$("#surla-nav-cp4").click();
+  page.$("#highbay-nav-cp4").click();
   await openChange(page, "chg-verify-b");
-  page.$("#surla-nav-cp4").click();
+  page.$("#highbay-nav-cp4").click();
   const first = order === "A_THEN_B" ? "chg-verify" : "chg-verify-b";
   const second = order === "A_THEN_B" ? "chg-verify-b" : "chg-verify";
   await control(origin, "release", { key: "GET /changes/" + first + "/verifications" });
   await sleep(150);
   await control(origin, "release", { key: "GET /changes/" + second + "/verifications" });
-  await until(() => page.$("#surla-result-view").dataset.runId === "33333333-3333-4333-8333-333333333333", "the chg-verify-b list did not settle in order " + order);
-  expect(!page.$("#surla-cp4-unlisted-run"), "overlapping lists left an unlisted run in order " + order);
+  await until(() => page.$("#highbay-result-view").dataset.runId === "33333333-3333-4333-8333-333333333333", "the chg-verify-b list did not settle in order " + order);
+  expect(!page.$("#highbay-cp4-unlisted-run"), "overlapping lists left an unlisted run in order " + order);
   page.close();
 }
 
@@ -418,7 +418,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
 {
   await fixture("runs chg-incoming incoming");
   const page = await open("chg-incoming");
-  const r1 = page.$("#surla-cp1-editor").dataset.requestRevision;
+  const r1 = page.$("#highbay-cp1-editor").dataset.requestRevision;
   page.type(field(page), "Dirty R1 before incoming R2");
   const current = (await api(origin, "GET", "/changes/chg-incoming", undefined, input.guide)).body;
   const revised = await api(origin, "POST", "/changes/revise", {
@@ -426,15 +426,15 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
     analysis: { summary: "Refunds above $50 require a manager and an audit log.", ambiguities: [], examples: [{ prior_id: "check_01", scenario: "Refund at the limit", input_summary: "Order total $50.00", expected_outcome: "Instant store credit", verification_kind: "deterministic" }], removed_example_ids: [], preserved_behaviors: [] },
   }, input.guide);
   expect(revised.status === 200, "could not revise: " + JSON.stringify(revised));
-  await until(() => page.$("#surla-incoming-change-card") && page.$("#surla-replace-incoming-card"), "incoming R2 did not render #surla-incoming-change-card");
-  page.$("#surla-nav-cp4").click();
-  await until(() => page.$("#surla-result-view").dataset.state === "cp4-verification", "did not switch to the runs while incoming R2 was held");
-  page.$("#surla-nav-cp1").click();
-  expect(page.$("#surla-incoming-change-card") && page.$("#surla-replace-incoming-card"), "returning from the runs lost the held incoming R2");
-  page.$("#surla-nav-cp1").click();
-  expect(page.$("#surla-incoming-change-card") && page.$("#surla-replace-incoming-card"), "clicking the open stage again cleared the held incoming R2");
-  page.$("#surla-replace-incoming-card").click();
-  expect(page.$("#surla-cp1-editor").dataset.requestRevision === revised.body.request_revision && page.text("#surla-prior-revision").includes(r1) && page.text("#surla-preserved-draft").includes("Dirty R1 before incoming R2"), "switching to the held R2 after the runs did not keep R1 as previous and the preserved draft");
+  await until(() => page.$("#highbay-incoming-change-card") && page.$("#highbay-replace-incoming-card"), "incoming R2 did not render #highbay-incoming-change-card");
+  page.$("#highbay-nav-cp4").click();
+  await until(() => page.$("#highbay-result-view").dataset.state === "cp4-verification", "did not switch to the runs while incoming R2 was held");
+  page.$("#highbay-nav-cp1").click();
+  expect(page.$("#highbay-incoming-change-card") && page.$("#highbay-replace-incoming-card"), "returning from the runs lost the held incoming R2");
+  page.$("#highbay-nav-cp1").click();
+  expect(page.$("#highbay-incoming-change-card") && page.$("#highbay-replace-incoming-card"), "clicking the open stage again cleared the held incoming R2");
+  page.$("#highbay-replace-incoming-card").click();
+  expect(page.$("#highbay-cp1-editor").dataset.requestRevision === revised.body.request_revision && page.text("#highbay-prior-revision").includes(r1) && page.text("#highbay-preserved-draft").includes("Dirty R1 before incoming R2"), "switching to the held R2 after the runs did not keep R1 as previous and the preserved draft");
   page.close();
 }
 
@@ -444,9 +444,9 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   const page = await open("chg-verify");
   page.type(field(page), "Retain older editor");
   await proof(page, "chg-verify");
-  const warning = page.$("#surla-cp4-different-revision");
+  const warning = page.$("#highbay-cp4-different-revision");
   expect(warning && warning.textContent.includes("different saved Change Card revision") && !warning.textContent.includes("earlier"), "revision hashes were used to invent chronology");
-  expect(page.text("#surla-cp4-inputs").includes("does not match"), "the saved other-revision fixture claimed current inputs");
+  expect(page.text("#highbay-cp4-inputs").includes("does not match"), "the saved other-revision fixture claimed current inputs");
   expect(field(page).value === "Retain older editor", "a report for a different revision erased the draft");
   page.close();
 }
@@ -464,10 +464,10 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   const stale = reviewReads(page, input.runA)[reads];
   await sleep(100);
   await fixture("runs chg-verify passed");
-  page.$("#surla-load-verifications").click();
+  page.$("#highbay-load-verifications").click();
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "the reloaded list did not show the finished run");
   await control(origin, "release", { key });
-  await until(() => stale?.status === 200 && !page.$("#surla-cp4-verification").hasAttribute("aria-busy"), "the stale answer did not arrive");
+  await until(() => stale?.status === 200 && !page.$("#highbay-cp4-verification").hasAttribute("aria-busy"), "the stale answer did not arrive");
   expect(JSON.parse(stale.answer).state.type === "running", "the held review did not capture a running snapshot");
   expect(text(page).includes("The check passed: 2 of 2 scenarios.") && !button(page), "an older answer reverted a completed run to running");
   page.close();
@@ -482,8 +482,8 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   await control(origin, "hold", { key });
   button(page).click();
   const refresh = reviewReads(page, input.runA)[reads];
-  page.$("#surla-load-verifications").click();
-  await until(() => !page.$("#surla-load-verifications").disabled, "the running list did not load");
+  page.$("#highbay-load-verifications").click();
+  await until(() => !page.$("#highbay-load-verifications").disabled, "the running list did not load");
   await fixture("run passed");
   await control(origin, "release", { key });
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios.") && !button(page), "another running snapshot caused a valid completion to be discarded");
@@ -502,11 +502,11 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   await control(origin, "hold", { key });
   button(page).click();
   const refresh = reviewReads(page, input.runA)[reads];
-  page.$("#surla-nav-cp1").click();
+  page.$("#highbay-nav-cp1").click();
   await fixture("run passed");
   await control(origin, "release", { key });
   await until(() => refresh?.status === 200, "the late review did not arrive");
-  expect(page.state() === "cp1-change-card" && page.$("#surla-result-view").dataset.state === undefined, "a late status answer replaced a different stage");
+  expect(page.state() === "cp1-change-card" && page.$("#highbay-result-view").dataset.state === undefined, "a late status answer replaced a different stage");
   page.close();
 }
 
@@ -550,7 +550,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
     expect(!text(page).includes("Hidden evaluator content"), "unknown evidence escaped the schema boundary");
   }
   await answer(otherRun);
-  expect(text(page).includes("different verification run") && page.$("#surla-result-view").dataset.runId === input.runA, "wrong run was accepted for a correlated read");
+  expect(text(page).includes("different verification run") && page.$("#highbay-result-view").dataset.runId === input.runA, "wrong run was accepted for a correlated read");
   page.close();
 }
 `)

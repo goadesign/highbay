@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -20,14 +20,14 @@ import (
 // never saves approval or changes build/assignment state. Agent reads keep their
 // existing builder-safe contract; this result retains that same safe report.
 func (c *ControlPlane) ReviewVerification(
-	ctx context.Context, p *gensurla.GetVerificationPayload,
-) (*gensurla.VerificationReviewResult, error) {
+	ctx context.Context, p *genhighbay.GetVerificationPayload,
+) (*genhighbay.VerificationReviewResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok || principal.Kind != CallerUser {
-		return nil, gensurla.MakeForbidden(errors.New("only the user may review a verification for approval"))
+		return nil, genhighbay.MakeForbidden(errors.New("only the user may review a verification for approval"))
 	}
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.review_verification",
-		trace.WithAttributes(attribute.String("surla.run_id", p.RunID)))
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.review_verification",
+		trace.WithAttributes(attribute.String("highbay.run_id", p.RunID)))
 	defer span.End()
 	req, state, inputsCurrent, err := c.readVerificationRun(principal, p.RunID, span)
 	if err != nil {
@@ -63,49 +63,49 @@ func (c *ControlPlane) ReviewVerification(
 		}
 	}
 	status := statusResult(req, state, inputsCurrent, binaries)
-	return &gensurla.VerificationReviewResult{
+	return &genhighbay.VerificationReviewResult{
 		RunID: status.RunID, ChangeID: status.ChangeID,
 		RequestRevision: status.RequestRevision, CandidateCommit: status.CandidateCommit,
 		SuiteCommit: status.SuiteCommit, AcceptedAt: status.AcceptedAt,
 		InputsCurrent: status.InputsCurrent, CandidateBinariesDir: status.CandidateBinariesDir,
 		TestSource: status.TestSource, State: status.State,
-		Review: &gensurla.VerificationReview{StoryContext: story, Approval: approval},
+		Review: &genhighbay.VerificationReview{StoryContext: story, Approval: approval},
 	}, nil
 }
 
 // runStoryContext renders only the accepted run's snapshot and owner's exact
 // test mapping. It never reads today's card or infers operator-test coverage.
-func runStoryContext(req verifyrun.Request) (gensurla.StoryContext, error) {
+func runStoryContext(req verifyrun.Request) (genhighbay.StoryContext, error) {
 	context := req.StoryContext
 	if context.State == verifyrun.StoryNotRecorded {
-		return gensurla.NewStoryContextNotRecorded(&gensurla.RunStoryNotRecorded{}), nil
+		return genhighbay.NewStoryContextNotRecorded(&genhighbay.RunStoryNotRecorded{}), nil
 	}
-	recorded := &gensurla.RecordedRunStory{
+	recorded := &genhighbay.RecordedRunStory{
 		BuildNumber:    context.BuildNumber,
 		BuildStartedAt: context.BuildStartedAt.UTC().Format(time.RFC3339Nano),
 		Stories:        storySummaryItems(context.Stories),
-		TestCoverage:   gensurla.NewTestCoverageNotRecorded(&gensurla.TestCoverageNotRecorded{}),
+		TestCoverage:   genhighbay.NewTestCoverageNotRecorded(&genhighbay.TestCoverageNotRecorded{}),
 	}
 	if context.TestCoverage != nil {
-		recorded.TestCoverage = gensurla.NewTestCoverageRecorded((*gensurla.RecordedTestCoverage)(context.TestCoverage))
+		recorded.TestCoverage = genhighbay.NewTestCoverageRecorded((*genhighbay.RecordedTestCoverage)(context.TestCoverage))
 	}
 	if req.Plan.Tests == verify.TestsEvaluator {
-		recorded.Mapping = gensurla.NewMappingNotRecordedForEvaluator(&gensurla.RunEvaluatorMappingUnknown{})
+		recorded.Mapping = genhighbay.NewMappingNotRecordedForEvaluator(&genhighbay.RunEvaluatorMappingUnknown{})
 	} else {
 		required, err := requiredStoryTests(context.Stories)
 		if err != nil {
-			return gensurla.StoryContext{}, err
+			return genhighbay.StoryContext{}, err
 		}
-		recorded.Mapping = gensurla.NewMappingMapped(&gensurla.RunStoryMapping{RequiredTests: required})
+		recorded.Mapping = genhighbay.NewMappingMapped(&genhighbay.RunStoryMapping{RequiredTests: required})
 	}
-	return gensurla.NewStoryContextRecorded(recorded), nil
+	return genhighbay.NewStoryContextRecorded(recorded), nil
 }
 
 // reviewRunApproval preserves currentCard's saved-approval semantics and uses
 // the same report checks and locked rechecks as the approval write for offers.
 func (c *ControlPlane) reviewRunApproval(
 	ctx context.Context, principal Principal, req verifyrun.Request, state verifyrun.State,
-) (gensurla.Approval, error) {
+) (genhighbay.Approval, error) {
 	if state.Kind != verifyrun.StateCompleted {
 		return blockedRunApproval("This run has no completed passed report. Read its progress or failure before checking again."), nil
 	}
@@ -116,14 +116,14 @@ func (c *ControlPlane) reviewRunApproval(
 	record, err := c.ownedCard(principal, req.ChangeID)
 	c.mu.RUnlock()
 	if err != nil {
-		return gensurla.Approval{}, err
+		return genhighbay.Approval{}, err
 	}
 	card, err := c.currentCard(ctx, record)
 	if err != nil {
-		return gensurla.Approval{}, err
+		return genhighbay.Approval{}, err
 	}
 	if card.RequestRevision == req.Plan.RequestRevision {
-		var saved *gensurla.ApprovalItem
+		var saved *genhighbay.ApprovalItem
 		if card.Approval != nil {
 			saved = card.Approval
 		} else if card.UnverifiedApproval != nil {
@@ -146,18 +146,18 @@ func (c *ControlPlane) reviewRunApproval(
 				tests == saved.SuiteCommit
 			c.mu.RUnlock()
 			if readErr != nil && !expectedRequestRefusal(readErr) {
-				return gensurla.Approval{}, readErr
+				return genhighbay.Approval{}, readErr
 			}
 			if !unchanged {
 				return blockedRunApproval("The agreement or tests changed while reading this approval. Refresh this result."), nil
 			}
 			if card.UnverifiedApproval != nil {
-				return gensurla.NewApprovalUnverified(card.UnverifiedApproval), nil
+				return genhighbay.NewApprovalUnverified(card.UnverifiedApproval), nil
 			}
-			return gensurla.NewApprovalRecorded(saved), nil
+			return genhighbay.NewApprovalRecorded(saved), nil
 		}
 	}
-	payload := &gensurla.ApproveMergePayload{
+	payload := &genhighbay.ApproveMergePayload{
 		ChangeID: req.ChangeID, RequestRevision: req.Plan.RequestRevision,
 		CandidateCommit: req.Plan.CandidateCommit, ReportDigest: state.Report.Digest,
 	}
@@ -179,12 +179,12 @@ func (c *ControlPlane) reviewRunApproval(
 		if expectedRequestRefusal(err) {
 			return blockedRunApproval(fmt.Sprint(err)), nil
 		}
-		return gensurla.Approval{}, err
+		return genhighbay.Approval{}, err
 	}
-	return gensurla.NewApprovalAvailable(&gensurla.RunApprovalAvailable{}), nil
+	return genhighbay.NewApprovalAvailable(&genhighbay.RunApprovalAvailable{}), nil
 }
 
 // blockedRunApproval centralizes the required owner reason for unavailable offers.
-func blockedRunApproval(reason string) gensurla.Approval {
-	return gensurla.NewApprovalBlocked(&gensurla.RunApprovalBlocked{Reason: reason})
+func blockedRunApproval(reason string) genhighbay.Approval {
+	return genhighbay.NewApprovalBlocked(&genhighbay.RunApprovalBlocked{Reason: reason})
 }

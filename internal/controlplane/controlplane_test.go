@@ -1,4 +1,4 @@
-// Package controlplane tests Checkpoints 1, 2, 3 and 5 of the Surla MCP
+// Package controlplane tests Checkpoints 1, 2, 3 and 5 of the Highbay MCP
 // software factory control plane.
 package controlplane
 
@@ -21,10 +21,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"golang.org/x/mod/modfile"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/goldenpath"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/goldenpath"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 // TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock verifies
@@ -36,9 +36,9 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 
-	ambiguousAnalysis := &gensurla.CP1Analysis{
+	ambiguousAnalysis := &genhighbay.CP1Analysis{
 		Summary: "  Auto-approve refunds under $50 and route larger refunds to manager approval.\n",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{
 			{
 				Question: "  Does the $50 threshold apply to item subtotal or total order amount including tax? ",
 				Options:  []string{"item_subtotal_cents", "total_order_cents"},
@@ -48,7 +48,7 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 				Options:  []string{"auto_approve_lte_5000", "require_manager_at_5000"},
 			},
 		},
-		Examples: []*gensurla.CP1AnalysisExample{
+		Examples: []*genhighbay.CP1AnalysisExample{
 			{
 				Scenario:         "  Refund under $50 auto-approves  ",
 				InputSummary:     "Order subtotal $48.00, tax $4.32 ($52.32 total)",
@@ -80,7 +80,7 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "design", "design.go"), []byte("package design // orders service"), 0o644))
 	cp := newControlPlane(t, Options{WorkspaceDir: workspace})
 	designSrc := "" // Intent before initialization does not inspect project design files.
-	if _, err := cp.ProposeChange(context.Background(), &gensurla.ProposeChangePayload{
+	if _, err := cp.ProposeChange(context.Background(), &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-refund-50",
 		Prompt:   "Refunds under $50 should be automatic, otherwise ask a manager.",
 
@@ -89,7 +89,7 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 		t.Fatal("expected unauthenticated ProposeChange to fail")
 	}
 
-	proposed, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{
+	proposed, err := cp.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-refund-50",
 		Prompt:   "Refunds under $50 should be automatic, otherwise ask a manager.",
 
@@ -116,7 +116,7 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 	assert.Equal(t, designSrc, stored.designSource)
 
 	// Attempting to overwrite an existing change_id must be rejected.
-	_, err = cp.ProposeChange(bobCtx, &gensurla.ProposeChangePayload{
+	_, err = cp.ProposeChange(bobCtx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-refund-50",
 		Prompt:   "Attempt to clobber Alice's change_id",
 		Analysis: refundAnalysis("Clobber"),
@@ -128,18 +128,18 @@ func TestCP1AmbiguityResolutionStrictValidationOwnershipAndRevisionLock(t *testi
 		"chg-refund-50-ambiguity-02": "require_manager_at_5000",
 	}
 	// Non-owner principal cannot confirm Alice's Change Card.
-	_, err = cp.ConfirmIntent(bobCtx, &gensurla.ConfirmIntentPayload{
+	_, err = cp.ConfirmIntent(bobCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg-refund-50", RequestRevision: proposed.RequestRevision, Answers: answers, Examples: proposed.Examples,
 	})
 	assertServiceError(t, err, "forbidden")
 
 	// Stale request_revision must be rejected.
-	_, err = cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+	_, err = cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg-refund-50", RequestRevision: "stale-revision", Answers: answers, Examples: proposed.Examples,
 	})
 	assertServiceError(t, err, "conflict")
 
-	confirmed, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg-refund-50", RequestRevision: proposed.RequestRevision, Answers: answers, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestProposeChangeWaitsForUserWithoutQuestions(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(ws, "design", "design.go"), []byte("package design // refunds\n"), 0o644))
 	cp := newControlPlane(t, Options{CardsDir: t.TempDir(), WorkspaceDir: ws})
 
-	card, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-instant",
 		Prompt:   "Refunds up to $50 are instant.",
 		Analysis: refundAnalysis("Refunds up to $50 are instant."),
@@ -197,7 +197,7 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{CardsDir: t.TempDir(), WorkspaceDir: tc.workspace})
-			card, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+			card, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 				ChangeID: "chg", Prompt: "Refunds up to $50 are instant.",
 				Analysis: refundAnalysis("Refunds up to $50 are instant."),
 			})
@@ -227,7 +227,7 @@ func TestProposeChangeRecordsTheDesignSourceItWasMadeAgainst(t *testing.T) {
 func TestChangeAnalysisIsRejectedAtTheBoundary(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 
@@ -360,14 +360,14 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 
 	blankSummary := refundAnalysis(" \n\t")
 	noExamples := refundAnalysis("Refunds up to $50 are instant.")
-	noExamples.Examples = []*gensurla.CP1AnalysisExample{}
+	noExamples.Examples = []*genhighbay.CP1AnalysisExample{}
 	nullQuestion := refundAnalysis("Refunds up to $50 are instant.", nil)
 	unknownKind := refundAnalysis("Refunds up to $50 are instant.")
 	unknownKind.Examples[0].VerificationKind = "eyeballed"
 	for _, tc := range []struct {
 		name     string
 		changeID string
-		analysis *gensurla.CP1Analysis
+		analysis *genhighbay.CP1Analysis
 		want     string
 	}{
 		{"blank summary", "chg-blank", blankSummary, "summary"},
@@ -378,7 +378,7 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 		{"change_id not valid UTF-8", "chg\xff", refundAnalysis("Refunds up to $50 are instant."), "invalid UTF-8"},
 	} {
 		t.Run("propose "+tc.name, func(t *testing.T) {
-			_, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: tc.changeID, Prompt: "Refunds up to $50 are instant.", Analysis: tc.analysis})
+			_, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{ChangeID: tc.changeID, Prompt: "Refunds up to $50 are instant.", Analysis: tc.analysis})
 			assertServiceError(t, err, "unprocessable")
 			assert.ErrorContains(t, err, tc.want)
 			_, ok, err := cp.cards.load(tc.changeID)
@@ -388,13 +388,13 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 	}
 
 	check01 := "check_01"
-	_, err := cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+	_, err := cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 		ChangeID: "chg", RequestRevision: saved.RequestRevision, Prompt: "Refunds up to $60 are instant.",
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     "",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &check01, Scenario: "Refund at the limit", InputSummary: "Order total $60.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -404,7 +404,7 @@ func TestGoCallersGetTheDesignRules(t *testing.T) {
 	})
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, "summary")
-	current, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	current, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, saved.RequestRevision, current.RequestRevision, "a refused revision leaves the card unchanged")
 }
@@ -424,10 +424,10 @@ func TestEvaluatedArchitecturePreviewFastDraftAndAuthenticatedHTTP(t *testing.T)
 		t.Setenv(name, value)
 	}
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	clearAnalysis := &gensurla.CP1Analysis{
+	clearAnalysis := &genhighbay.CP1Analysis{
 		Summary:     "Refunds with item_subtotal_cents < 5000 auto-approve; >= 5000 require manager approval.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-		Examples: []*gensurla.CP1AnalysisExample{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+		Examples: []*genhighbay.CP1AnalysisExample{
 			{
 				Scenario:         "Subtotal 4999 cents auto-approves",
 				InputSummary:     "item_subtotal_cents=4999",
@@ -507,11 +507,11 @@ var _ = Service("orders", func() {
 	card := mustProposeFromRefresh(t, cp, ctx, "chg-clear",
 		"Auto-approve when item_subtotal_cents < 5000; require manager when item_subtotal_cents >= 5000.", clearAnalysis)
 	require.Equal(t, StatusNeedsConfirmation, card.Status)
-	card, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
+	card, err := cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples})
 	require.NoError(t, err)
 	require.Equal(t, StatusConfirmed, card.Status)
 
-	preview, err := cp.PreviewArchitecture(ctx, &gensurla.PreviewArchitecturePayload{
+	preview, err := cp.PreviewArchitecture(ctx, &genhighbay.PreviewArchitecturePayload{
 		ChangeID:        card.ChangeID,
 		RequestRevision: card.RequestRevision,
 	})
@@ -532,11 +532,11 @@ var _ = Service("orders", func() {
 		t.Fatalf("unexpected evaluated ToolContractItem: %+v", preview.Tools)
 	}
 
-	// CP3: Surla changes prompts only in a live target it runs; with none
+	// CP3: Highbay changes prompts only in a live target it runs; with none
 	// running, a prompt draft is refused with the declared no_live_target
 	// error. live_test.go covers drafts on a running live target.
 	promptID := "orders.refund.system"
-	_, err = cp.DraftOverride(ctx, &gensurla.DraftOverridePayload{
+	_, err = cp.DraftOverride(ctx, &genhighbay.DraftOverridePayload{
 		TargetKind: TargetKindPromptTemplate,
 		PromptID:   &promptID,
 		NewContent: "You are a concise, empathetic refund specialist.",
@@ -578,7 +578,7 @@ var _ = Service("orders", func() {
 	}
 
 	// MCP Adapter ToolsList and ResourcesRead.
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 	toolsRes, err := adapter.ToolsList(ctx, &genmcpadapter.ToolsListPayload{})
 	if err != nil {
 		t.Fatalf("ToolsList: %v", err)
@@ -620,7 +620,7 @@ var _ = Service("orders", func() {
 	}
 	goldenComplete, ok := goldenRes.Outcome.AsComplete()
 	if !ok || len(goldenComplete.Contents) != 1 || goldenComplete.Contents[0].Text == nil || *goldenComplete.Contents[0].Text != goldenpath.ResourceMarkdown() {
-		t.Fatalf("unexpected surla://golden-path content: %+v", goldenRes)
+		t.Fatalf("unexpected highbay://golden-path content: %+v", goldenRes)
 	}
 
 	for name, want := range files {
@@ -659,7 +659,7 @@ func goaGoaAIDSLFixture(t *testing.T, design string) map[string]string {
 		for _, dependency := range mod.Require {
 			if dependency.Mod.Path == path {
 				found = true
-				require.Equal(t, testmodule.SurlaVersion(t, path), dependency.Mod.Version,
+				require.Equal(t, testmodule.HighbayVersion(t, path), dependency.Mod.Version,
 					"fixture input incomplete: update the profile after changing root requirements")
 			}
 		}
@@ -676,22 +676,22 @@ func goaGoaAIDSLFixture(t *testing.T, design string) map[string]string {
 func TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards(t *testing.T) {
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
-	ambiguous := refundAnalysis("Refunds up to $50 are instant.", &gensurla.CP1AnalysisAmbiguity{
+	ambiguous := refundAnalysis("Refunds up to $50 are instant.", &genhighbay.CP1AnalysisAmbiguity{
 		Question: "Is $50.00 itself instant?", Options: []string{"instant", "manager"},
 	})
 	unambiguous := refundAnalysis("Refunds up to $50 are instant.")
-	propose := func(t *testing.T, analysis *gensurla.CP1Analysis) (*ControlPlane, *gensurla.ChangeCardResult) {
+	propose := func(t *testing.T, analysis *genhighbay.CP1Analysis) (*ControlPlane, *genhighbay.ChangeCardResult) {
 		t.Helper()
 		cp := newControlPlane(t, Options{})
 		return cp, mustPropose(t, cp, aliceCtx, "chg", "Refunds up to $50 are instant.", analysis)
 	}
-	confirm := func(ctx context.Context, cp *ControlPlane, rev string, answers map[string]string, examples []*gensurla.ExampleItem) (*gensurla.ChangeCardResult, error) {
-		return cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: rev, Answers: answers, Examples: examples})
+	confirm := func(ctx context.Context, cp *ControlPlane, rev string, answers map[string]string, examples []*genhighbay.ExampleItem) (*genhighbay.ChangeCardResult, error) {
+		return cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: rev, Answers: answers, Examples: examples})
 	}
-	edited := func(card *gensurla.ChangeCardResult, outcome string) []*gensurla.ExampleItem {
+	edited := func(card *genhighbay.ChangeCardResult, outcome string) []*genhighbay.ExampleItem {
 		ex := *card.Examples[0]
 		ex.ExpectedOutcome = outcome
-		return []*gensurla.ExampleItem{&ex}
+		return []*genhighbay.ExampleItem{&ex}
 	}
 
 	t.Run("needs_confirmation card is confirmed, then refined", func(t *testing.T) {
@@ -737,7 +737,7 @@ func TestConfirmIntentRefinesNeedsConfirmationAndConfirmedCards(t *testing.T) {
 			t.Fatalf("missing answer err = %v, want missing confirmation answer", err)
 		}
 
-		_, err = cp.PreviewArchitecture(aliceCtx, &gensurla.PreviewArchitecturePayload{
+		_, err = cp.PreviewArchitecture(aliceCtx, &genhighbay.PreviewArchitecturePayload{
 			ChangeID: "chg", RequestRevision: first.RequestRevision,
 		})
 		if err == nil || !strings.Contains(err.Error(), "request_revision mismatch") {
@@ -783,35 +783,35 @@ func TestGetChangeLetsAStaleEditorRecover(t *testing.T) {
 	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
 	start := mustPropose(t, cp, aliceCtx, "chg", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	withOutcome := func(card *gensurla.ChangeCardResult, outcome string) []*gensurla.ExampleItem {
+	withOutcome := func(card *genhighbay.ChangeCardResult, outcome string) []*genhighbay.ExampleItem {
 		ex := *card.Examples[0]
 		ex.ExpectedOutcome = outcome
-		return []*gensurla.ExampleItem{&ex}
+		return []*genhighbay.ExampleItem{&ex}
 	}
 
 	// Editor B saves first; editor A then submits against the revision both started from.
-	saved, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: start.RequestRevision, Answers: map[string]string{}, Examples: withOutcome(start, "Waits for a manager")})
+	saved, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: start.RequestRevision, Answers: map[string]string{}, Examples: withOutcome(start, "Waits for a manager")})
 	if err != nil {
 		t.Fatalf("editor B confirm: %v", err)
 	}
-	_, err = cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: start.RequestRevision, Answers: map[string]string{}, Examples: withOutcome(start, "Store credit within a day")})
+	_, err = cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: start.RequestRevision, Answers: map[string]string{}, Examples: withOutcome(start, "Store credit within a day")})
 	if err == nil || !strings.Contains(err.Error(), "request_revision mismatch") {
 		t.Fatalf("editor A stale submit err = %v, want request_revision mismatch", err)
 	}
 
-	current, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+	current, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	if err != nil {
 		t.Fatalf("GetChange: %v", err)
 	}
 	if current.RequestRevision != saved.RequestRevision || current.Examples[0].ExpectedOutcome != "Waits for a manager" {
 		t.Fatalf("GetChange = revision %q outcome %q, want editor B's saved card", current.RequestRevision, current.Examples[0].ExpectedOutcome)
 	}
-	again, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+	again, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	if err != nil || again.RequestRevision != current.RequestRevision {
 		t.Fatalf("second GetChange = %v, %v; reading must not change the card", again, err)
 	}
 
-	resubmitted, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: current.RequestRevision, Answers: map[string]string{}, Examples: withOutcome(current, "Store credit within a day")})
+	resubmitted, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: current.RequestRevision, Answers: map[string]string{}, Examples: withOutcome(current, "Store credit within a day")})
 	if err != nil {
 		t.Fatalf("editor A resubmit after reading: %v", err)
 	}
@@ -819,10 +819,10 @@ func TestGetChangeLetsAStaleEditorRecover(t *testing.T) {
 		t.Fatal("editor A's reviewed change kept the revision")
 	}
 
-	if _, err := cp.GetChange(bobCtx, &gensurla.GetChangePayload{ChangeID: "chg"}); err == nil || !strings.Contains(err.Error(), "is not the owner") {
+	if _, err := cp.GetChange(bobCtx, &genhighbay.GetChangePayload{ChangeID: "chg"}); err == nil || !strings.Contains(err.Error(), "is not the owner") {
 		t.Fatalf("other principal GetChange err = %v, want owner refusal", err)
 	}
-	if _, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "missing"}); err == nil || !strings.Contains(err.Error(), `unknown change_id "missing"`) {
+	if _, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "missing"}); err == nil || !strings.Contains(err.Error(), `unknown change_id "missing"`) {
 		t.Fatalf("unknown GetChange err = %v, want unknown change_id", err)
 	}
 
@@ -876,11 +876,11 @@ func newControlPlane(t *testing.T, opts Options) *ControlPlane {
 // feature request: summary, the given open questions (none when omitted), one
 // deterministic example at the $50.00 limit, and one tenant-isolation rule the
 // change keeps.
-func refundAnalysis(summary string, questions ...*gensurla.CP1AnalysisAmbiguity) *gensurla.CP1Analysis {
-	return &gensurla.CP1Analysis{
+func refundAnalysis(summary string, questions ...*genhighbay.CP1AnalysisAmbiguity) *genhighbay.CP1Analysis {
+	return &genhighbay.CP1Analysis{
 		Summary:     summary,
-		Ambiguities: append([]*gensurla.CP1AnalysisAmbiguity{}, questions...),
-		Examples: []*gensurla.CP1AnalysisExample{{
+		Ambiguities: append([]*genhighbay.CP1AnalysisAmbiguity{}, questions...),
+		Examples: []*genhighbay.CP1AnalysisExample{{
 			Scenario:         "Refund at the limit",
 			InputSummary:     "Order total $50.00",
 			ExpectedOutcome:  "Instant store credit",
@@ -897,10 +897,10 @@ func mustPropose(
 	cp *ControlPlane,
 	ctx context.Context,
 	changeID, prompt string,
-	analysis *gensurla.CP1Analysis,
-) *gensurla.ChangeCardResult {
+	analysis *genhighbay.CP1Analysis,
+) *genhighbay.ChangeCardResult {
 	t.Helper()
-	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{ChangeID: changeID, Prompt: prompt, Analysis: analysis})
+	card, err := cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{ChangeID: changeID, Prompt: prompt, Analysis: analysis})
 	require.NoError(t, err)
 	return card
 }
@@ -923,17 +923,17 @@ func postJSON(t *testing.T, url, token, body string) (int, string) {
 }
 
 // proposeArgs encodes p as the MCP arguments of a propose_change call.
-func proposeArgs(t *testing.T, p *gensurla.ProposeChangePayload) json.RawMessage {
+func proposeArgs(t *testing.T, p *genhighbay.ProposeChangePayload) json.RawMessage {
 	t.Helper()
-	raw, err := gensurla.EncodeProposeChangePayload(p)
+	raw, err := genhighbay.EncodeProposeChangePayload(p)
 	require.NoError(t, err)
 	return raw
 }
 
 // reviseArgs encodes p as the MCP arguments of a revise_change call.
-func reviseArgs(t *testing.T, p *gensurla.ReviseChangePayload) json.RawMessage {
+func reviseArgs(t *testing.T, p *genhighbay.ReviseChangePayload) json.RawMessage {
 	t.Helper()
-	raw, err := gensurla.EncodeReviseChangePayload(p)
+	raw, err := genhighbay.EncodeReviseChangePayload(p)
 	require.NoError(t, err)
 	return raw
 }
@@ -955,10 +955,10 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	defer srv.Close()
 	card := saveProposedCardFixture(t, cp, "owner", "session-change", "Keep the same rules", refundAnalysis("Keep the same rules"))
 	card = attachBuildSnapshot(t, cp, card.ChangeID)
-	payload := &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
-	raw, err := gensurla.EncodeConfirmIntentPayload(payload)
+	payload := &genhighbay.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples}
+	raw, err := genhighbay.EncodeConfirmIntentPayload(payload)
 	require.NoError(t, err)
-	send := func(token string, raw []byte) *gensurla.ChangeCardResult {
+	send := func(token string, raw []byte) *genhighbay.ChangeCardResult {
 		request, err := http.NewRequest(http.MethodPost, srv.URL+"/changes/confirm", bytes.NewReader(raw))
 		require.NoError(t, err)
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -969,7 +969,7 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		body, err := io.ReadAll(response.Body)
 		require.NoError(t, err)
-		result, err := gensurla.DecodeChangeCardResult(body)
+		result, err := genhighbay.DecodeChangeCardResult(body)
 		require.NoError(t, err)
 		return result
 	}
@@ -978,11 +978,11 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	candidate := commitBuilderCandidateFixture(t, cp, confirmed)
 	first := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-one", Kind: CallerUser})
 	target.report = passingReport(t, confirmed.RequestRevision, candidate, spec)
-	approved, err := cp.ApproveMerge(first, &gensurla.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest})
+	approved, err := cp.ApproveMerge(first, &genhighbay.ApproveMergePayload{ChangeID: confirmed.ChangeID, RequestRevision: confirmed.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest})
 	require.NoError(t, err)
 	require.NotNil(t, approved.Approval)
 	payload.RequestRevision = approved.RequestRevision
-	raw, err = gensurla.EncodeConfirmIntentPayload(payload)
+	raw, err = genhighbay.EncodeConfirmIntentPayload(payload)
 	require.NoError(t, err)
 	unchanged := send("second", raw)
 	assert.Equal(t, approved.RequestRevision, unchanged.RequestRevision)
@@ -990,20 +990,20 @@ func TestUnchangedConfirmationFromAnotherSessionKeepsRevision(t *testing.T) {
 	require.NotNil(t, unchanged.ConfirmedBy)
 	assert.Equal(t, "owner", *unchanged.ConfirmedBy)
 	second := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session-two", Kind: CallerUser})
-	history, err := cp.ListTraces(second, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	history, err := cp.ListTraces(second, &genhighbay.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)
 	callers := map[string]bool{}
 	for _, span := range history.Spans {
-		if span.Name == "surla.request.confirm_intent" {
-			callers[span.Attributes["surla.caller_id"]] = true
+		if span.Name == "highbay.request.confirm_intent" {
+			callers[span.Attributes["highbay.caller_id"]] = true
 		}
 	}
 	assert.True(t, callers["session-one"])
 	assert.True(t, callers["session-two"])
 	for _, span := range exporter.GetSpans() {
 		for _, attr := range span.Attributes {
-			assert.NotEqual(t, "surla.caller_id", string(attr.Key))
-			assert.NotEqual(t, "surla.caller_kind", string(attr.Key))
+			assert.NotEqual(t, "highbay.caller_id", string(attr.Key))
+			assert.NotEqual(t, "highbay.caller_kind", string(attr.Key))
 		}
 	}
 }

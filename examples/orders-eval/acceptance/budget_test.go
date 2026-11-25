@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/goadesign/surla/examples/orders-eval/harness"
-	"github.com/goadesign/surla/examples/orders-eval/scriptedmodel"
+	"github.com/goadesign/highbay/examples/orders-eval/harness"
+	"github.com/goadesign/highbay/examples/orders-eval/scriptedmodel"
 	"github.com/stretchr/testify/assert"
 )
 

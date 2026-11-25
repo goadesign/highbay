@@ -3,7 +3,7 @@
 // targetprompt HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design/targetprompt -o
+// $ goa gen github.com/goadesign/highbay/design/targetprompt -o
 // internal/targetprompt
 
 package cli
@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"os"
 
-	promptsc "github.com/goadesign/surla/internal/targetprompt/gen/http/prompts/client"
+	promptsc "github.com/goadesign/highbay/internal/targetprompt/gen/http/prompts/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -154,7 +154,7 @@ func ParseEndpoint(
 
 // promptsUsage displays the usage of the prompts command and its subcommands.
 func promptsUsage() {
-	fmt.Fprintln(os.Stderr, `Prompt text a live target lets Surla replace. Each call replaces the text of one prompt the target registered, for every caller of that target process, until the process exits.`)
+	fmt.Fprintln(os.Stderr, `Prompt text a live target lets Highbay replace. Each call replaces the text of one prompt the target registered, for every caller of that target process, until the process exits.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] prompts COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    override-prompt: Replace the text of a registered prompt. The target renders the template with the prompt's registered spec before it saves it, so text that does not render is rejected and the text in use stays the same. Returns the version of the accepted text.`)

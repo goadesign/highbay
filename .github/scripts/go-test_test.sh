@@ -10,7 +10,7 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 fixture="$scratch/fixture"
 mkdir -p "$scratch/bin" "$fixture/.github"
-printf 'module github.com/goadesign/surla\n\ngo 1.20\n' > "$fixture/go.mod"
+printf 'module github.com/goadesign/highbay\n\ngo 1.20\n' > "$fixture/go.mod"
 for package in external owned plain uncovered; do
   mkdir -p "$fixture/$package"
   printf 'package %s\n' "$package" > "$fixture/$package/source.go"
@@ -18,8 +18,8 @@ done
 printf 'package owned\n' > "$fixture/owned/source_test.go"
 printf 'package external_test\n' > "$fixture/external/source_test.go"
 printf 'package plain\n' > "$fixture/plain/source_test.go"
-printf '%s\n' github.com/goadesign/surla/external github.com/goadesign/surla/owned \
-  github.com/goadesign/surla/uncovered > "$fixture/.github/race-packages.txt"
+printf '%s\n' github.com/goadesign/highbay/external github.com/goadesign/highbay/owned \
+  github.com/goadesign/highbay/uncovered > "$fixture/.github/race-packages.txt"
 
 # Only test execution is recorded; go list uses the actual selected toolchain.
 cat > "$scratch/bin/go" <<'SH'
@@ -27,7 +27,7 @@ cat > "$scratch/bin/go" <<'SH'
 set -euo pipefail
 if [ "$1" = list ]; then
   if [ "${WRAPPER_TEST_LIST_FAILURE:-}" = true ]; then
-    printf '%s\n' github.com/goadesign/surla/plain
+    printf '%s\n' github.com/goadesign/highbay/plain
     printf '%s\n' 'fixture metadata failure' >&2
     exit 23
   fi
@@ -45,10 +45,10 @@ cd "$fixture"
 bash "$repository/.github/scripts/go-test.sh" -short -count=1 -run '^Test(One|Two)$' -- ./...
 {
   printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' \
-    github.com/goadesign/surla/plain github.com/goadesign/surla/uncovered
+    github.com/goadesign/highbay/plain github.com/goadesign/highbay/uncovered
   printf '\n'
   printf '%s\0' test -race -short -count=1 -run '^Test(One|Two)$' \
-    github.com/goadesign/surla/external github.com/goadesign/surla/owned
+    github.com/goadesign/highbay/external github.com/goadesign/highbay/owned
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
@@ -58,10 +58,10 @@ printf 'package uncovered_test\n' > "$fixture/uncovered/source_test.go"
 : > "$WRAPPER_TEST_CALLS"
 bash "$repository/.github/scripts/go-test.sh" -short -count=1 -run '^Test(One|Two)$' -- ./...
 {
-  printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' github.com/goadesign/surla/plain
+  printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' github.com/goadesign/highbay/plain
   printf '\n'
   printf '%s\0' test -race -short -count=1 -run '^Test(One|Two)$' \
-    github.com/goadesign/surla/external github.com/goadesign/surla/owned github.com/goadesign/surla/uncovered
+    github.com/goadesign/highbay/external github.com/goadesign/highbay/owned github.com/goadesign/highbay/uncovered
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
@@ -73,7 +73,7 @@ printf 'package testwriter\n' > "$fixture/internal/testwriter/source.go"
 printf 'package testwriter\n' > "$fixture/internal/testwriter/source_test.go"
 printf 'package designeval\n' > "$fixture/internal/designeval/source.go"
 printf 'package designeval\n' > "$fixture/internal/designeval/source_test.go"
-printf '%s\n' github.com/goadesign/surla/internal/designeval >> "$fixture/.github/race-packages.txt"
+printf '%s\n' github.com/goadesign/highbay/internal/designeval >> "$fixture/.github/race-packages.txt"
 cp "$repository/.github/scripts/go-test.sh" "$fixture/.github/scripts/"
 cp "$repository/.github/scripts/test-root.sh" "$fixture/.github/scripts/"
 : > "$WRAPPER_TEST_CALLS"
@@ -81,10 +81,10 @@ bash "$fixture/.github/scripts/test-root.sh" other-plain
 bash "$fixture/.github/scripts/test-root.sh" other-concurrency
 {
   printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run . -skip '' \
-    github.com/goadesign/surla/plain
+    github.com/goadesign/highbay/plain
   printf '\n'
   printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run . -skip '' \
-    github.com/goadesign/surla/external github.com/goadesign/surla/owned github.com/goadesign/surla/uncovered
+    github.com/goadesign/highbay/external github.com/goadesign/highbay/owned github.com/goadesign/highbay/uncovered
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"
@@ -98,16 +98,16 @@ bash "$fixture/.github/scripts/test-root.sh" testwriter-remaining
 bash "$fixture/.github/scripts/test-root.sh" designeval
 {
   printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run "$compiler_tests" -skip '' \
-    github.com/goadesign/surla/internal/testwriter
+    github.com/goadesign/highbay/internal/testwriter
   printf '\n'
   printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run "$compiler_tests" -skip '' \
-    github.com/goadesign/surla/internal/designeval
+    github.com/goadesign/highbay/internal/designeval
   printf '\n'
   printf '%s\0' test -vet=all -count=1 -timeout 20m -json -run . -skip "$compiler_tests" \
-    github.com/goadesign/surla/internal/testwriter
+    github.com/goadesign/highbay/internal/testwriter
   printf '\n'
   printf '%s\0' test -race -vet=all -count=1 -timeout 20m -json -run . -skip "$compiler_tests" \
-    github.com/goadesign/surla/internal/designeval
+    github.com/goadesign/highbay/internal/designeval
   printf '\n'
 } > "$scratch/expected"
 cmp "$scratch/expected" "$WRAPPER_TEST_CALLS"

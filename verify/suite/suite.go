@@ -1,13 +1,13 @@
-// Package suite implements Surla's evaluator suite command contract: the
-// protocol between `surla verify` and an evaluator suite program.
+// Package suite implements Highbay's evaluator suite command contract: the
+// protocol between `hbay verify` and an evaluator suite program.
 //
-// `surla verify` builds the suite program from the suite commit and runs it
+// `hbay verify` builds the suite program from the suite commit and runs it
 // twice:
 //
 //   - suite --describe prints the suite's Declaration as JSON and exits 0. It
 //     needs no candidate binaries.
 //   - suite --artifact name=path ... receives every candidate binary the
-//     verification plan binds (`surla verify -binary name=package`). The suite
+//     verification plan binds (`hbay verify -binary name=package`). The suite
 //     pins each one, runs its scenarios, and prints the goa-ai eval.Report as
 //     JSON. It exits 0 when every scenario passed and the pinned binaries
 //     were removed, 1 when a scenario did not pass, and 2 when it could not
@@ -17,7 +17,7 @@
 // live target rather than by verification:
 //
 //   - suite --live --artifact name=path ... pins the binaries, calls Live
-//     with the key in the SURLA_LIVE_TARGET_KEY environment variable, prints
+//     with the key in the HIGHBAY_LIVE_TARGET_KEY environment variable, prints
 //     one JSON line {"url": "http://127.0.0.1:<port>"} once the candidate is
 //     listening, and serves until SIGINT or SIGTERM or until the target
 //     ends. It exits 0 when it was asked to stop and the target and pinned
@@ -50,7 +50,7 @@ import (
 
 	"goa.design/goa-ai/eval"
 
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 type (
@@ -145,7 +145,7 @@ const (
 	// LiveKeyEnv names the environment variable that carries the --live
 	// target's credential to the suite. It is an environment variable, not a
 	// flag, so the key stays out of command-line arguments.
-	LiveKeyEnv = "SURLA_LIVE_TARGET_KEY"
+	LiveKeyEnv = "HIGHBAY_LIVE_TARGET_KEY"
 )
 
 // Main runs the suite command described by c with the process's arguments
@@ -255,7 +255,7 @@ func run(ctx context.Context, c Command, artifacts, scenarios, tags []string) (_
 	if len(scenarios) > 0 && len(tags) > 0 {
 		return nil, errors.New("--scenario and --tag cannot be combined")
 	}
-	store, err := os.MkdirTemp("", "surla-suite-artifacts-*")
+	store, err := os.MkdirTemp("", "highbay-suite-artifacts-*")
 	if err != nil {
 		return nil, fmt.Errorf("create artifact store: %w", err)
 	}
@@ -304,7 +304,7 @@ func runLive(ctx context.Context, c Command, artifacts []string, key string, std
 	if err != nil {
 		return err
 	}
-	store, err := os.MkdirTemp("", "surla-suite-artifacts-*")
+	store, err := os.MkdirTemp("", "highbay-suite-artifacts-*")
 	if err != nil {
 		return fmt.Errorf("create artifact store: %w", err)
 	}
@@ -360,7 +360,7 @@ func runLive(ctx context.Context, c Command, artifacts []string, key string, std
 }
 
 // checkLiveURL requires an http origin on the IPv4 loopback address, so the
-// live target Surla links to is a service on this computer.
+// live target Highbay links to is a service on this computer.
 func checkLiveURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "http" || u.Hostname() != "127.0.0.1" || u.Port() == "" ||

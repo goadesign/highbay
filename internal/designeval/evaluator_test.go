@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

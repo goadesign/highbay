@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -67,7 +67,7 @@ func processDiagnosticPlan(t *testing.T, mode string) verify.Plan {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "case"), []byte(mode), 0o600))
 	t.Setenv("PATH", filepath.Join(root, "bin")+string(os.PathListSeparator)+filepath.Join(root, "goroot", "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("SURLA_TEST_SERVER_VALUE", "FAKE_SERVER_VALUE_521")
+	t.Setenv("HIGHBAY_TEST_SERVER_VALUE", "FAKE_SERVER_VALUE_521")
 	t.Setenv("ANTHROPIC_API_KEY", "FAKE_PROVIDER_VALUE_521")
 	return verify.Plan{
 		CandidateRepo: filepath.Join(root, "repo"), CandidateCommit: strings.TrimSpace(string(commit)), CandidateModule: "app", Binaries: map[string]string{"app": "."},
@@ -127,7 +127,7 @@ func TestProcessDiagnosticsStayPrivateInSpans(t *testing.T) {
 			exporter := tracetest.NewInMemoryExporter()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-			_, span := provider.Tracer("test").Start(t.Context(), "surla.controlplane.prepare_verification")
+			_, span := provider.Tracer("test").Start(t.Context(), "highbay.controlplane.prepare_verification")
 			wrapped := fmt.Errorf("prepare verification: %w", err)
 			assert.ErrorIs(t, recordBuildError(span, wrapped, "prepare verification"), err)
 			span.End()
@@ -162,7 +162,7 @@ func TestProcessDiagnosticsStayPrivateInLiveEvents(t *testing.T) {
 				Live:         &LiveConfig{Command: []string{os.Args[0]}, Env: append(os.Environ(), liveTargetModeEnv+"=process-diagnostics"), StartTimeout: 20 * time.Second},
 			}))
 			seedLiveChange(t, cp)
-			_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
+			_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
 			assertServiceError(t, err, "live_target_failed")
 			assertProcessDiagnosticText(t, err.Error())
 			var tail string

@@ -31,10 +31,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // Sentinels stand for the values a shell would hand over; none is a real
@@ -52,7 +52,7 @@ const (
 // allSentinels lists every sentinel value a test may hand over or inherit.
 var allSentinels = []string{sentinelKey, sentinelToken, sentinelSecondKey, sentinelOpenAIKey, sentinelAdmin, sentinelURLCred, sentinelURL}
 
-// managementCaller is the surla command's management principal.
+// managementCaller is the hbay command's management principal.
 var managementCaller = WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "management", Kind: CallerManagement})
 
 // TestHandOverModelSettingsReplacesOrKeepsByProvider hands settings over in
@@ -63,31 +63,31 @@ func TestHandOverModelSettingsReplacesOrKeepsByProvider(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	for _, step := range []struct {
 		name     string
-		payload  *gensurla.HandOverModelSettingsPayload
+		payload  *genhighbay.HandOverModelSettingsPayload
 		held     map[string][]string
 		launched []string
 	}{
 		{
 			name:     "first start: key and base URL",
-			payload:  &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL}},
+			payload:  &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL}},
 			held:     map[string][]string{"anthropic": {"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"}},
 			launched: []string{"ANTHROPIC_API_KEY=" + sentinelKey, "ANTHROPIC_BASE_URL=" + sentinelURL},
 		},
 		{
 			name:     "another tab without a key keeps everything",
-			payload:  &gensurla.HandOverModelSettingsPayload{},
+			payload:  &genhighbay.HandOverModelSettingsPayload{},
 			held:     map[string][]string{"anthropic": {"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"}},
 			launched: []string{"ANTHROPIC_API_KEY=" + sentinelKey, "ANTHROPIC_BASE_URL=" + sentinelURL},
 		},
 		{
 			name:     "base URL unset, key kept: replaced as a whole without it",
-			payload:  &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelSecondKey}},
+			payload:  &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelSecondKey}},
 			held:     map[string][]string{"anthropic": {"ANTHROPIC_API_KEY"}},
 			launched: []string{"ANTHROPIC_API_KEY=" + sentinelSecondKey},
 		},
 		{
 			name:     "another provider arrives; the first is kept",
-			payload:  &gensurla.HandOverModelSettingsPayload{Openai: map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey, "OPENAI_ORG_ID": "org-visible"}},
+			payload:  &genhighbay.HandOverModelSettingsPayload{Openai: map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey, "OPENAI_ORG_ID": "org-visible"}},
 			held:     map[string][]string{"anthropic": {"ANTHROPIC_API_KEY"}, "openai": {"OPENAI_API_KEY", "OPENAI_ORG_ID"}},
 			launched: []string{"ANTHROPIC_API_KEY=" + sentinelSecondKey},
 		},
@@ -115,33 +115,33 @@ func TestHandOverModelSettingsChoosesTheDefaultOnArrival(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	anthropic := map[string]string{"ANTHROPIC_API_KEY": sentinelKey}
 	openai := map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey}
-	gateway := gensurla.NewConnectionGateway(&gensurla.ModelGateway{GatewayAddr: "127.0.0.1:9090"})
+	gateway := genhighbay.NewConnectionGateway(&genhighbay.ModelGateway{GatewayAddr: "127.0.0.1:9090"})
 	for _, tc := range []struct {
 		name    string
 		prepare func(*testing.T, *ControlPlane)
-		payload *gensurla.HandOverModelSettingsPayload
-		want    gensurla.Connection
+		payload *genhighbay.HandOverModelSettingsPayload
+		want    genhighbay.Connection
 	}{
-		{name: "none + anthropic", payload: &gensurla.HandOverModelSettingsPayload{Anthropic: anthropic}, want: directModel("anthropic", "claude-sonnet-4-6")},
-		{name: "none + openai", payload: &gensurla.HandOverModelSettingsPayload{Openai: openai}, want: directModel("openai", "gpt-5.4-mini")},
-		{name: "none + both", payload: &gensurla.HandOverModelSettingsPayload{Anthropic: anthropic, Openai: openai}, want: directModel("anthropic", "claude-sonnet-4-6")},
-		{name: "none + nothing", payload: &gensurla.HandOverModelSettingsPayload{}, want: noModel()},
+		{name: "none + anthropic", payload: &genhighbay.HandOverModelSettingsPayload{Anthropic: anthropic}, want: directModel("anthropic", "claude-sonnet-4-6")},
+		{name: "none + openai", payload: &genhighbay.HandOverModelSettingsPayload{Openai: openai}, want: directModel("openai", "gpt-5.4-mini")},
+		{name: "none + both", payload: &genhighbay.HandOverModelSettingsPayload{Anthropic: anthropic, Openai: openai}, want: directModel("anthropic", "claude-sonnet-4-6")},
+		{name: "none + nothing", payload: &genhighbay.HandOverModelSettingsPayload{}, want: noModel()},
 		{
 			name: "gateway + settings",
 			prepare: func(t *testing.T, cp *ControlPlane) {
 				addr := "127.0.0.1:9090"
-				_, err := cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &addr})
+				_, err := cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &addr})
 				require.NoError(t, err)
 			},
-			payload: &gensurla.HandOverModelSettingsPayload{Anthropic: anthropic, Openai: openai},
+			payload: &genhighbay.HandOverModelSettingsPayload{Anthropic: anthropic, Openai: openai},
 			want:    gateway,
 		},
 		{
 			name: "openai + anthropic settings",
 			prepare: func(t *testing.T, cp *ControlPlane) {
-				handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Openai: openai})
+				handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Openai: openai})
 			},
-			payload: &gensurla.HandOverModelSettingsPayload{Anthropic: anthropic},
+			payload: &genhighbay.HandOverModelSettingsPayload{Anthropic: anthropic},
 			want:    directModel("openai", "gpt-5.4-mini"),
 		},
 	} {
@@ -175,9 +175,9 @@ func TestModelChoiceTextsSayTheDefaultFollowsOnlyWithoutAChoice(t *testing.T) {
 	assert.Contains(t, strings.ToLower(readme), "while no model is chosen, live targets then use")
 	for _, stale := range []string{
 		"the first hand_over_model_settings that holds a provider's settings selects",
-		"until `surla` hands over a provider's settings, which selects",
-		"the next `surla` hands the settings over again, which selects",
-		"until `surla stop` and starts live targets with",
+		"until `hbay` hands over a provider's settings, which selects",
+		"the next `hbay` hands the settings over again, which selects",
+		"until `hbay stop` and starts live targets with",
 	} {
 		for name, text := range map[string]string{"OpenAPI": openAPI, "REFERENCE.md": reference, "README.md": readme} {
 			assert.NotContains(t, text, stale, "%s says a hand-over always selects the default", name)
@@ -241,7 +241,7 @@ func TestHandOverModelSettingsRefusesWithNamesOnly(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	cardsDir := t.TempDir()
 	cp := newControlPlane(t, Options{CardsDir: cardsDir, TracerProvider: provider})
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Openai: map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey}})
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Openai: map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey}})
 	srv := httptest.NewServer(NewHTTPHandler(cp, kindAuthenticator()))
 	t.Cleanup(srv.Close)
 
@@ -343,7 +343,7 @@ func TestHandOverModelSettingsIsManagementOnly(t *testing.T) {
 			assertHoldsNoSentinel(t, answer)
 			assert.Empty(t, cp.evaluatorSettings(), "a refused caller hands nothing over")
 
-			adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+			adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 			tools, err := adapter.ToolsList(asCaller("alice@example.com", kind), &genmcpadapter.ToolsListPayload{})
 			require.NoError(t, err)
 			for _, tool := range tools.Tools {
@@ -366,10 +366,10 @@ func TestConfigureModelAndHandOverInEitherOrder(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	provider, custom := "anthropic", "claude-custom"
 	choose := func(cp *ControlPlane) error {
-		_, err := cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{Provider: &provider, ModelName: &custom})
+		_, err := cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{Provider: &provider, ModelName: &custom})
 		return err
 	}
-	anthropic := &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey}}
+	anthropic := &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey}}
 
 	t.Run("configure_model first is refused, then accepted after the hand-over", func(t *testing.T) {
 		cp := newControlPlane(t, Options{})
@@ -387,7 +387,7 @@ func TestConfigureModelAndHandOverInEitherOrder(t *testing.T) {
 		assert.Equal(t, directModel("anthropic", "claude-sonnet-4-6"), res.Connection)
 		require.NoError(t, choose(cp))
 		openai, model := "openai", "gpt-5.4-mini"
-		_, err := cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{Provider: &openai, ModelName: &model})
+		_, err := cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{Provider: &openai, ModelName: &model})
 		assert.EqualError(t, err, refusalOpenAI, "a provider never handed over stays refused")
 	})
 	t.Run("concurrently", func(t *testing.T) {
@@ -449,13 +449,13 @@ func TestModelResultsHoldNoHandedOverValue(t *testing.T) {
 // settings and the model state with every verb, slog handler and json.
 func TestHeldSettingsRevealNothingWhenFormatted(t *testing.T) {
 	cp := newControlPlane(t, Options{})
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{
 		Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_AUTH_TOKEN": sentinelToken, "ANTHROPIC_BASE_URL": sentinelURL},
 		Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey},
 	})
 	cp.modelMu.Lock()
 	state := struct {
-		choice gensurla.Connection
+		choice genhighbay.Connection
 		held   map[string]modelsettings.Settings
 	}{cp.liveModel, cp.heldSettings}
 	cp.modelMu.Unlock()
@@ -494,30 +494,30 @@ func TestStoredEvaluatorRunsReceiveEveryHeldProviderSnapshot(t *testing.T) {
 	report := t.TempDir()
 	cfg := verificationConfig(t)
 	cfg.Command = []string{"/bin/sh", "-c", presenceScript, filepath.Join(report, "run")}
-	t.Setenv("SURLA_TEST_FIRST_KEY", sentinelKey)
+	t.Setenv("HIGHBAY_TEST_FIRST_KEY", sentinelKey)
 	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(), Verification: cfg}))
 	alice := asCaller("alice@example.com", CallerUser)
-	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", &gensurla.CP1Analysis{
-		Summary: "Refunds up to $50 are instant.", Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, PreservedBehaviors: []string{},
-		Examples: []*gensurla.CP1AnalysisExample{{Scenario: "Refund at the limit", InputSummary: "Order total $50.00", ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic"}},
+	card := saveProposedCardFixture(t, cp, "alice@example.com", "chg", "Refunds up to $50 are instant.", &genhighbay.CP1Analysis{
+		Summary: "Refunds up to $50 are instant.", Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, PreservedBehaviors: []string{},
+		Examples: []*genhighbay.CP1AnalysisExample{{Scenario: "Refund at the limit", InputSummary: "Order total $50.00", ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic"}},
 	})
 	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, alice, card)
 
 	saveStoredBuildFixture(t, cp, card)
 	candidate := commitBuilderCandidateFixture(t, cp, card)
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{
 		Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL},
 		Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey, "OPENAI_ORG_ID": "org-visible"},
 	})
 	verifyOnce := func() string {
 		t.Helper()
-		run, err := cp.VerifyChange(alice, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate})
+		run, err := cp.VerifyChange(alice, &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate})
 		require.NoError(t, err)
 		return waitForPresence(t, filepath.Join(report, "run"), run.RunID)
 	}
 	first := verifyOnce()
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelSecondKey}})
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelSecondKey}})
 	second := verifyOnce()
 
 	assert.Equal(t, "ANTHROPIC_API_KEY=set\nFIRST_KEY=yes\nANTHROPIC_BASE_URL=set\nANTHROPIC_ADMIN_KEY=\nOPENAI_API_KEY=set\nOPENAI_ORG_ID=set\nOPENAI_ADMIN_KEY=\n", first)
@@ -536,24 +536,24 @@ func TestWrittenTestRunsReceiveNoProviderSettings(t *testing.T) {
 	gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 	runsDir := filepath.Join(root, "runs")
 	report := t.TempDir()
-	t.Setenv("SURLA_TEST_FIRST_KEY", sentinelKey)
+	t.Setenv("HIGHBAY_TEST_FIRST_KEY", sentinelKey)
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
-		WorkspaceDir: repo.workspace,
-		RunsDir:      runsDir,
-		SurlaVersion: testSurlaVersion,
+		WorkspaceDir:   repo.workspace,
+		RunsDir:        runsDir,
+		HighbayVersion: testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Timeout: time.Hour,
 			Command: []string{"/bin/sh", "-c", presenceScript, filepath.Join(report, "run")}},
 	})
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{
 		Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL},
 		Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey},
 	})
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", repo.tests)
 	readBuilderCandidateFixture(t, cp, card, repo.candidate)
-	run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+	run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
 	})
 	require.NoError(t, err)
@@ -579,11 +579,11 @@ func TestLiveStartFailureExportsProtectedDetail(t *testing.T) {
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=leak"), StartTimeout: time.Minute},
 	}))
 	seedLiveChange(t, cp)
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{
 		"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_AUTH_TOKEN": sentinelToken, "ANTHROPIC_BASE_URL": sentinelURL,
 	}})
 
-	_, err = cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
+	_, err = cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
 	assertServiceError(t, err, "live_target_failed")
 	assertHoldsNoSentinel(t, err.Error())
 	var tail string
@@ -631,9 +631,9 @@ func TestLiveStartFailureExportsNoKeyPieceAtTheCut(t *testing.T) {
 		Live:         &LiveConfig{Command: []string{"/bin/sh", "-c", script, "executor"}, Env: os.Environ(), StartTimeout: time.Minute},
 	}))
 	seedLiveChange(t, cp)
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": key}})
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": key}})
 
-	_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
+	_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
 	assertServiceError(t, err, "live_target_failed")
 	var tail string
 	for _, span := range recorder.Ended() {
@@ -672,12 +672,12 @@ func TestSavedFilesHoldNoHandedOverValue(t *testing.T) {
 		Live:         &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"), StartTimeout: time.Minute},
 	}))
 	seedLiveChange(t, cp)
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{
 		Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_AUTH_TOKEN": sentinelToken, "ANTHROPIC_BASE_URL": sentinelURL},
 		Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey},
 	})
 	builder := asCaller("alice@example.com", CallerBuilder)
-	started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
+	started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40)})
 	require.NoError(t, err)
 	assertHoldsNoSentinel(t, started.Message)
 	dirs, err := verifyrunLeftovers(cardsDir)
@@ -703,13 +703,13 @@ func TestChangedSettingsReachTheNextLaunchOnly(t *testing.T) {
 	self, err := os.Executable()
 	require.NoError(t, err)
 	reports := t.TempDir()
-	t.Setenv("SURLA_TEST_FIRST_KEY", sentinelKey)
-	t.Setenv("SURLA_TEST_PRESENCE_DIR", reports)
+	t.Setenv("HIGHBAY_TEST_FIRST_KEY", sentinelKey)
+	t.Setenv("HIGHBAY_TEST_PRESENCE_DIR", reports)
 	// The executor stand-in counts its launches and reports, by booleans
 	// only, whether its anthropic key is the first one handed over.
-	launch := `n=$(ls "$SURLA_TEST_PRESENCE_DIR" | wc -l | tr -d ' ')
-[ "$ANTHROPIC_API_KEY" = "$SURLA_TEST_FIRST_KEY" ] && first=yes || first=no
-printf 'FIRST_KEY=%s\nKEY_SET=%s\n' "$first" "${ANTHROPIC_API_KEY:+yes}" > "$SURLA_TEST_PRESENCE_DIR/launch-$n"
+	launch := `n=$(ls "$HIGHBAY_TEST_PRESENCE_DIR" | wc -l | tr -d ' ')
+[ "$ANTHROPIC_API_KEY" = "$HIGHBAY_TEST_FIRST_KEY" ] && first=yes || first=no
+printf 'FIRST_KEY=%s\nKEY_SET=%s\n' "$first" "${ANTHROPIC_API_KEY:+yes}" > "$HIGHBAY_TEST_PRESENCE_DIR/launch-$n"
 exec "$0" "$1" "$2" "$3" "$4"`
 	cp := newControlPlane(t, buildFixtureOptions(t, Options{BuildCacheDir: t.TempDir(),
 		Verification: &VerificationConfig{RunsDir: t.TempDir()},
@@ -719,11 +719,11 @@ exec "$0" "$1" "$2" "$3" "$4"`
 	builder := asCaller("alice@example.com", CallerBuilder)
 	commit := strings.Repeat("a", 40)
 	seedLiveChange(t, cp)
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey}})
-	started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey}})
+	started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
 	require.NoError(t, err)
 
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelSecondKey}})
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelSecondKey}})
 	status, err := cp.GetLiveTarget(builder)
 	require.NoError(t, err)
 	running, ok := status.LiveTarget.AsRunning()
@@ -739,7 +739,7 @@ exec "$0" "$1" "$2" "$3" "$4"`
 	require.NoError(t, err)
 	assert.Equal(t, "FIRST_KEY=yes\nKEY_SET=yes\n", string(raw), "the running target started with the first settings")
 
-	_, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
+	_, err = cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
 	require.NoError(t, err)
 	raw, err = os.ReadFile(filepath.Join(reports, "launch-1"))
 	require.NoError(t, err)
@@ -753,11 +753,11 @@ func verifyrunLeftovers(cardsDir string) ([]string, error) {
 
 // presenceScript is a supervisor stand-in: it writes, to the file named by
 // $0 followed by the run directory's name, whether each provider variable is
-// set and whether the anthropic key equals SURLA_TEST_FIRST_KEY, then exits.
+// set and whether the anthropic key equals HIGHBAY_TEST_FIRST_KEY, then exits.
 // It writes names and booleans only.
 const presenceScript = `out="$0-$(basename "$3")"; {
 printf 'ANTHROPIC_API_KEY=%s\n' "${ANTHROPIC_API_KEY:+set}"
-printf 'FIRST_KEY=%s\n' "$([ -n "$ANTHROPIC_API_KEY" ] && [ "$ANTHROPIC_API_KEY" = "$SURLA_TEST_FIRST_KEY" ] && echo yes)"
+printf 'FIRST_KEY=%s\n' "$([ -n "$ANTHROPIC_API_KEY" ] && [ "$ANTHROPIC_API_KEY" = "$HIGHBAY_TEST_FIRST_KEY" ] && echo yes)"
 printf 'ANTHROPIC_BASE_URL=%s\n' "${ANTHROPIC_BASE_URL:+set}"
 printf 'ANTHROPIC_ADMIN_KEY=%s\n' "${ANTHROPIC_ADMIN_KEY:+set}"
 printf 'OPENAI_API_KEY=%s\n' "${OPENAI_API_KEY:+set}"
@@ -783,7 +783,7 @@ func waitForPresence(t *testing.T, prefix, runID string) string {
 
 // handOverSettings hands p over as the management caller and returns the
 // result, or stops the test.
-func handOverSettings(t *testing.T, cp *ControlPlane, p *gensurla.HandOverModelSettingsPayload) *gensurla.ModelSettingsResult {
+func handOverSettings(t *testing.T, cp *ControlPlane, p *genhighbay.HandOverModelSettingsPayload) *genhighbay.ModelSettingsResult {
 	t.Helper()
 	res, err := cp.HandOverModelSettings(managementCaller, p)
 	require.NoError(t, err)

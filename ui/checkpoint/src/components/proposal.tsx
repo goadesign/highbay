@@ -63,17 +63,17 @@ export function ProposedRevisionView({
   const removedBehaviors = card.preserved_behaviors.filter((behavior) => !proposal.preserved_behaviors.includes(behavior));
   return (
     <Card
-      id="surla-proposal"
-      className="surla-card surla-proposal"
+      id="highbay-proposal"
+      className="highbay-card highbay-proposal"
       role="region"
-      aria-labelledby="surla-proposal-title"
+      aria-labelledby="highbay-proposal-title"
       tabIndex={-1}
       aria-busy={busy ? "true" : undefined}
       data-request-revision={proposal.request_revision}
     >
-      <div className="surla-region-header">
-        <div className="surla-region-title-group">
-          <h2 id="surla-proposal-title">Proposed revision <code>{proposal.request_revision.slice(0, 12)}</code></h2>
+      <div className="highbay-region-header">
+        <div className="highbay-region-title-group">
+          <h2 id="highbay-proposal-title">Proposed revision <code>{proposal.request_revision.slice(0, 12)}</code></h2>
           <Badge variant="warning">Waiting for you</Badge>
         </div>
       </div>
@@ -85,7 +85,7 @@ export function ProposedRevisionView({
       </p>
 
       {proposal.revision_note ? (
-        <p id="surla-proposal-revision-note">
+        <p id="highbay-proposal-revision-note">
           <strong>Revision note: </strong>
           {proposal.revision_note}
         </p>
@@ -93,7 +93,7 @@ export function ProposedRevisionView({
 
       {promptChanged ? <>
         <h3>Request</h3>
-        <div id="surla-proposal-prompt" data-changed="true">
+        <div id="highbay-proposal-prompt" data-changed="true">
           <p>
             <strong>Proposed: </strong>
             {proposal.prompt}
@@ -107,7 +107,7 @@ export function ProposedRevisionView({
 
       {summaryChanged ? <>
         <h3>Summary</h3>
-        <div id="surla-proposal-summary" data-changed="true">
+        <div id="highbay-proposal-summary" data-changed="true">
           <p>
             <strong>Proposed: </strong>
             {proposal.summary}
@@ -118,15 +118,15 @@ export function ProposedRevisionView({
           </p>
         </div>
       </> : null}
-      {!promptChanged || !summaryChanged ? <details className="surla-details">
+      {!promptChanged || !summaryChanged ? <details className="highbay-details">
         <summary>Unchanged {promptChanged ? "summary" : summaryChanged ? "request" : "request and summary"}</summary>
-        {!promptChanged ? <p id="surla-proposal-prompt" data-changed="false"><strong>Request </strong>{proposal.prompt}</p> : null}
-        {!summaryChanged ? <p id="surla-proposal-summary" data-changed="false"><strong>Summary </strong>{proposal.summary}</p> : null}
+        {!promptChanged ? <p id="highbay-proposal-prompt" data-changed="false"><strong>Request </strong>{proposal.prompt}</p> : null}
+        {!summaryChanged ? <p id="highbay-proposal-summary" data-changed="false"><strong>Summary </strong>{proposal.summary}</p> : null}
       </details> : null}
 
       <h3>{"Questions to answer (" + questions.length + ")"}</h3>
       {questions.length === 0 ? <p>This revision asks no questions.</p> : null}
-      <ul className="surla-proposal-questions">
+      <ul className="highbay-proposal-questions">
         {questions.map((question) => (
           <ProposalQuestion
             key={question.id}
@@ -139,13 +139,13 @@ export function ProposedRevisionView({
         ))}
       </ul>
       {dropped.length > 0 ? (
-        <p id="surla-proposal-dropped-questions">
+        <p id="highbay-proposal-dropped-questions">
           {"No longer asked: " + dropped.map((question) => question.question).join(" ")}
         </p>
       ) : null}
 
       <h3>{"Examples (" + proposal.examples.length + ")"}</h3>
-      <ul id="surla-proposal-examples">
+      <ul id="highbay-proposal-examples">
         {exampleChanges(card.examples, proposal.examples).map(({ example, prior, status }) => (
           <li key={status + example.id} data-example-id={example.id} data-status={status}>
             <Badge variant={status === "Kept" ? "default" : status === "Removed" ? "destructive" : "accent"}>
@@ -153,11 +153,11 @@ export function ProposedRevisionView({
             </Badge>{" "}
             {prior !== undefined ? (
               <>
-                <div className="surla-proposal-example-agreed">
+                <div className="highbay-proposal-example-agreed">
                   {"Agreed: "}
                   <ExampleText example={prior} />
                 </div>
-                <div className="surla-proposal-example-proposed">
+                <div className="highbay-proposal-example-proposed">
                   {"Proposed: "}
                   <ExampleText example={example} />
                 </div>
@@ -165,13 +165,13 @@ export function ProposedRevisionView({
             ) : (
               <ExampleText example={example} />
             )}
-            <code className="surla-muted">{example.id}</code>
+            <code className="highbay-muted">{example.id}</code>
           </li>
         ))}
       </ul>
 
       {proposal.preserved_behaviors.length > 0 || removedBehaviors.length > 0 ? <h3>Preserved behaviors</h3> : null}
-      {proposal.preserved_behaviors.length > 0 ? <ul id="surla-proposal-preserved">
+      {proposal.preserved_behaviors.length > 0 ? <ul id="highbay-proposal-preserved">
         {proposal.preserved_behaviors.map((behavior, index) => (
           <li key={String(index)} data-new={card.preserved_behaviors.includes(behavior) ? "false" : "true"}>
             {behavior} {card.preserved_behaviors.includes(behavior) ? null : <Badge variant="accent">New</Badge>}
@@ -179,7 +179,7 @@ export function ProposedRevisionView({
         ))}
       </ul> : null}
       {removedBehaviors.length > 0 ? (
-        <p id="surla-proposal-dropped-preserved">
+        <p id="highbay-proposal-dropped-preserved">
           {"No longer preserved: " +
             removedBehaviors.join(" ")}
         </p>
@@ -187,22 +187,22 @@ export function ProposedRevisionView({
 
       <h3>Story</h3>
       {story.same ? (
-        <p id="surla-proposal-story" data-same="true">
+        <p id="highbay-proposal-story" data-same="true">
           The Story is unchanged.
         </p>
       ) : (
-        <div id="surla-proposal-story" data-same="false">
+        <div id="highbay-proposal-story" data-same="false">
           <StoryDifferenceList difference={story} subject="this revision" />
         </div>
       )}
 
       <h3>Design files</h3>
       {proposal.changed_design_files.length === 0 ? (
-        <p id="surla-proposal-design" data-changed="false">
+        <p id="highbay-proposal-design" data-changed="false">
           Made from the same design files as the agreed revision.
         </p>
       ) : (
-        <div id="surla-proposal-design" data-changed="true">
+        <div id="highbay-proposal-design" data-changed="true">
           <p>Made from different design files than the agreed revision. Changed:</p>
           <ul>
             {proposal.changed_design_files.map((path) => (
@@ -215,42 +215,42 @@ export function ProposedRevisionView({
       )}
 
       {error !== null ? (
-        <Alert id="surla-proposal-error" variant="destructive" role="alert" tabIndex={-1}>
+        <Alert id="highbay-proposal-error" variant="destructive" role="alert" tabIndex={-1}>
           <strong>The proposed revision was not changed. </strong>
           {error}
         </Alert>
       ) : null}
       {buildRevisionNotice !== null ? (
-        <p id="surla-proposal-build-consequence">{buildRevisionNotice}</p>
+        <p id="highbay-proposal-build-consequence">{buildRevisionNotice}</p>
       ) : null}
       {revisionAid}
-      <div className="surla-field-row">
+      <div className="highbay-field-row">
         <Button
-          id="surla-proposal-adopt"
+          id="highbay-proposal-adopt"
           variant="primary"
           disabled={busy || unanswered.length > 0 || revisionAid !== null}
           aria-describedby={[
-            unanswered.length > 0 ? "surla-proposal-adopt-hint" : "",
-            revisionAid !== null ? "surla-proposal-revision-needed-label" : "",
-            buildRevisionNotice !== null ? "surla-proposal-build-consequence" : "",
+            unanswered.length > 0 ? "highbay-proposal-adopt-hint" : "",
+            revisionAid !== null ? "highbay-proposal-revision-needed-label" : "",
+            buildRevisionNotice !== null ? "highbay-proposal-build-consequence" : "",
           ].filter(Boolean).join(" ") || undefined}
           onClick={onAdopt}
         >
           Adopt this revision
         </Button>
-        <Button id="surla-proposal-decline" disabled={busy} onClick={onDecline}>
+        <Button id="highbay-proposal-decline" disabled={busy} onClick={onDecline}>
           Decline
         </Button>
         {Object.keys(answers).length > 0 ? (
-          <Button id="surla-proposal-discard-answers" variant="ghost" disabled={busy} onClick={onDiscardAnswers}>
+          <Button id="highbay-proposal-discard-answers" variant="ghost" disabled={busy} onClick={onDiscardAnswers}>
             Discard proposal answers
           </Button>
         ) : null}
       </div>
       {unanswered.length > 0 ? (
-        <p id="surla-proposal-adopt-hint">Answer every question to adopt this revision.</p>
+        <p id="highbay-proposal-adopt-hint">Answer every question to adopt this revision.</p>
       ) : null}
-      <details className="surla-details">
+      <details className="highbay-details">
         <summary>Details</summary>
         <p>Proposed revision: <code>{proposal.request_revision}</code></p>
       </details>

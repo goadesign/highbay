@@ -1,5 +1,5 @@
 // This file is compiled twice: as part of package designeval, against the
-// Story module version Surla's go.mod requires, where its unit tests run it,
+// Story module version Highbay's go.mod requires, where its unit tests run it,
 // and, with its package clause changed to main, as story.go of the evaluation
 // program Evaluator.Evaluate builds when the target design loads the portable
 // Story DSL module, against the Story version the target selects. It imports
@@ -10,7 +10,7 @@ package designeval
 import (
 	"slices"
 
-	storyexpr "github.com/goadesign/surla/story/expr"
+	storyexpr "github.com/goadesign/highbay/story/expr"
 )
 
 type (

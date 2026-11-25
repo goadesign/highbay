@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -32,8 +32,8 @@ const defaultBuildStartTimeout = 5 * time.Minute
 // sources; team window work starts only after it is released. Accepted work
 // survives a client disconnect and drains before Close releases its owners.
 func (c *ControlPlane) StartBuild(
-	ctx context.Context, p *gensurla.StartBuildPayload,
-) (*gensurla.StartBuildResult, error) {
+	ctx context.Context, p *genhighbay.StartBuildPayload,
+) (*genhighbay.StartBuildResult, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
@@ -44,15 +44,15 @@ func (c *ControlPlane) StartBuild(
 		return nil, err
 	}
 	defer finish()
-	accepted, span := c.tracer("surla/controlplane").Start(accepted, "surla.controlplane.start_build", trace.WithAttributes(
-		attribute.String("surla.change_id", p.ChangeID),
-		attribute.String("surla.request_revision", p.RequestRevision),
+	accepted, span := c.tracer("highbay/controlplane").Start(accepted, "highbay.controlplane.start_build", trace.WithAttributes(
+		attribute.String("highbay.change_id", p.ChangeID),
+		attribute.String("highbay.request_revision", p.RequestRevision),
 	))
 	defer span.End()
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return nil, gensurla.MakeWorkingCopyBusy(errors.New("Another build is starting or the builder is reading its assignment. Start the build again when that has ended."))
+		return nil, genhighbay.MakeWorkingCopyBusy(errors.New("Another build is starting or the builder is reading its assignment. Start the build again when that has ended."))
 	}
 	builderTurnHeld := true
 	defer func() {
@@ -67,7 +67,7 @@ func (c *ControlPlane) StartBuild(
 		if c.storedEvaluator() {
 			message = "Another build is starting. "
 		}
-		return nil, gensurla.MakeWorkingCopyBusy(errors.New(message + "Start the build again when that has ended."))
+		return nil, genhighbay.MakeWorkingCopyBusy(errors.New(message + "Start the build again when that has ended."))
 	}
 	heldTurn := true
 	defer func() {
@@ -89,7 +89,7 @@ func (c *ControlPlane) StartBuild(
 		return nil, recordBuildError(span, err, "check change for build")
 	}
 	if _, _, err := designeval.StoryScenarios(record.stories); err != nil {
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("the agreed Story cannot name its required tests: %w", err))
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf("the agreed Story cannot name its required tests: %w", err))
 	}
 	// The user decides against the exact open start before any copy effect.
 	c.mu.RLock()
@@ -119,7 +119,7 @@ func (c *ControlPlane) StartBuild(
 		return nil, recordBuildError(span, buildStartError(work, workspace, err), "read the build base")
 	}
 	base := strings.TrimSpace(string(head))
-	var openProgress *gensurla.StartedBuild
+	var openProgress *genhighbay.StartedBuild
 	if openFound {
 		openProgress, err = c.startedBuildAt(work, principal.ID, heldBuild{
 			file: open, inForce: buildInForce(open, openCard), storedEvaluator: c.storedEvaluator(),
@@ -128,7 +128,7 @@ func (c *ControlPlane) StartBuild(
 			return nil, recordBuildError(span, err, "read the open build's passed runs")
 		}
 		if err := checkBuildReplacement(p, open, openProgress); err != nil {
-			if refusal, ok := err.(*gensurla.OpenBuildRefusal); ok && refusal.Name == "previous_change_open" {
+			if refusal, ok := err.(*genhighbay.OpenBuildRefusal); ok && refusal.Name == "previous_change_open" {
 				if passed, ok := openProgress.Taking.AsPassed(); ok {
 					safe, readErr := dropSafeGuidance(work, repo, open.Base, base, passed.CandidateCommit)
 					if readErr != nil {
@@ -144,7 +144,7 @@ func (c *ControlPlane) StartBuild(
 			return nil, err
 		}
 	}
-	reuseBase := openFound && openProgress.Taking.Kind() != gensurla.BuildTakingKindMerged && openProgress.Taking.Kind() != gensurla.BuildTakingKindDropped
+	reuseBase := openFound && openProgress.Taking.Kind() != genhighbay.BuildTakingKindMerged && openProgress.Taking.Kind() != genhighbay.BuildTakingKindDropped
 	if reuseBase {
 		base = open.Base
 	}
@@ -168,7 +168,7 @@ func (c *ControlPlane) StartBuild(
 		}
 	}
 	if source != testSourceStoredEvaluator && source != testSourceStarterLayout {
-		return nil, gensurla.MakeNoTestLayout(errors.New("This project has neither stored verification settings nor Surla's test layout. Store verification settings, then build again."))
+		return nil, genhighbay.MakeNoTestLayout(errors.New("This project has neither stored verification settings nor Highbay's test layout. Store verification settings, then build again."))
 	}
 	identity := c.buildIdentityCheck
 	if identity == nil {
@@ -214,7 +214,7 @@ func (c *ControlPlane) StartBuild(
 		err = work.Err()
 	}
 	if err == nil && !reflect.DeepEqual(record.madeFrom, checkedHistory) {
-		err = gensurla.MakeConflict(errors.New("The agreed revision's saved design provenance changed while this build was being prepared. Read the change and build again."))
+		err = genhighbay.MakeConflict(errors.New("The agreed revision's saved design provenance changed while this build was being prepared. Read the change and build again."))
 	}
 	if err != nil {
 		c.mu.Unlock()
@@ -227,7 +227,7 @@ func (c *ControlPlane) StartBuild(
 	}
 	if currentFound != openFound || currentFound && (current.ChangeID != open.ChangeID || !current.StartedAt.Equal(open.StartedAt)) {
 		c.mu.Unlock()
-		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
+		return nil, genhighbay.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
 	}
 	provenance, hasProvenance, err := c.cards.loadMadeFrom()
 	if err != nil {
@@ -236,11 +236,11 @@ func (c *ControlPlane) StartBuild(
 	}
 	if draftedBeforeDrop(record, provenance) {
 		c.mu.Unlock()
-		return nil, gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
+		return nil, genhighbay.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
 	}
-	if currentFound && hasProvenance && buildDropped(provenance, current) != (openProgress.Taking.Kind() == gensurla.BuildTakingKindDropped) {
+	if currentFound && hasProvenance && buildDropped(provenance, current) != (openProgress.Taking.Kind() == genhighbay.BuildTakingKindDropped) {
 		c.mu.Unlock()
-		return nil, gensurla.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
+		return nil, genhighbay.MakeConflict(errors.New("The open build changed while this start was being prepared. Read get_build and decide again."))
 	}
 	if currentFound {
 		currentProgress, err := startedBuild(heldBuild{file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator()}, openProgress.Taking)
@@ -267,7 +267,7 @@ func (c *ControlPlane) StartBuild(
 	}
 	progress, err := startedBuild(heldBuild{
 		file: saved, inForce: true, storedEvaluator: c.storedEvaluator(),
-	}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
+	}, genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{}))
 	if err != nil {
 		c.mu.Unlock()
 		return nil, err
@@ -277,7 +277,7 @@ func (c *ControlPlane) StartBuild(
 	if err != nil {
 		return nil, recordBuildError(span, err, "save build")
 	}
-	result := &gensurla.StartBuildResult{
+	result := &genhighbay.StartBuildResult{
 		Build: progress,
 	}
 	builderFolder := filepath.Join(workspace, testwriter.BuilderRole.Folder, filepath.FromSlash(prefix))
@@ -397,10 +397,10 @@ func (c *ControlPlane) saveBuildPreparation(
 // confirmedAnswers pairs each question of the confirmed card with the answer
 // the user confirmed for it, in question order. confirm_intent confirmed the
 // card only with one declared option for every question and no other answer.
-func confirmedAnswers(card *gensurla.ChangeCardResult) []*gensurla.ConfirmedAnswer {
-	answers := make([]*gensurla.ConfirmedAnswer, len(card.Ambiguities))
+func confirmedAnswers(card *genhighbay.ChangeCardResult) []*genhighbay.ConfirmedAnswer {
+	answers := make([]*genhighbay.ConfirmedAnswer, len(card.Ambiguities))
 	for i, q := range card.Ambiguities {
-		answers[i] = &gensurla.ConfirmedAnswer{ID: q.ID, Question: q.Question, Answer: card.Answers[q.ID]}
+		answers[i] = &genhighbay.ConfirmedAnswer{ID: q.ID, Question: q.Question, Answer: card.Answers[q.ID]}
 	}
 	return answers
 }
@@ -425,15 +425,15 @@ func preparationFailure(ctx context.Context, err error) (reason, step string) {
 	case errors.Is(ctx.Err(), context.Canceled):
 		return "The server stopped before the required tests could be prepared.", buildAgain
 	case errors.Is(err, testwriter.ErrDependencies):
-		return "Surla could not prepare the required tests: " + testwriter.WithoutAbsolutePaths(err.Error()),
+		return "Highbay could not prepare the required tests: " + testwriter.WithoutAbsolutePaths(err.Error()),
 			stepDependencies + ", then build this change again on the views page."
 	case errors.Is(err, testwriter.ErrGeneration):
 		return designeval.GenerationDiagnostic(err), buildAgain
 	case errors.Is(err, testwriter.ErrWriteGenerated):
-		return "Surla generated the required tests but could not write them into the test writer's working copy: " +
+		return "Highbay generated the required tests but could not write them into the test writer's working copy: " +
 			testwriter.WithoutAbsolutePaths(err.Error()), stepWriteCopy + ", then build this change again on the views page."
 	default:
-		return "Surla could not prepare the required tests, for a cause outside the test module. " +
+		return "Highbay could not prepare the required tests, for a cause outside the test module. " +
 			"The server trace of the test writer's assignment read has the details.", buildAgain
 	}
 }
@@ -441,27 +441,27 @@ func preparationFailure(ctx context.Context, err error) (reason, step string) {
 // buildStartError preserves named library steps and maps only pre-save refusals.
 func buildStartError(ctx context.Context, workspace string, err error) error {
 	if ctx.Err() != nil {
-		return gensurla.MakeUnavailable(errors.New("The server stopped or the build-start limit ended before saving. Call again on a running server."))
+		return genhighbay.MakeUnavailable(errors.New("The server stopped or the build-start limit ended before saving. Call again on a running server."))
 	}
 	switch {
 	case errors.Is(err, testwriter.ErrNotRepository), errors.Is(err, errNoRepository):
-		return gensurla.MakeNotRepository(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
+		return genhighbay.MakeNotRepository(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
 	case errors.Is(err, testwriter.ErrNoCommit):
-		return gensurla.MakeNoCommit(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
+		return genhighbay.MakeNoCommit(fmt.Errorf("Project folder %s: %w", shquote.Quote(workspace), err))
 	case errors.Is(err, testwriter.ErrIdentityMissing):
-		return gensurla.MakeGitIdentityMissing(err)
+		return genhighbay.MakeGitIdentityMissing(err)
 	case errors.Is(err, testwriter.ErrFolderInUse):
-		return gensurla.MakeCopyFolderInUse(err)
+		return genhighbay.MakeCopyFolderInUse(err)
 	case errors.Is(err, testwriter.ErrBranchInUse):
-		return gensurla.MakeTestsBranchInUse(err)
+		return genhighbay.MakeTestsBranchInUse(err)
 	default:
 		return err
 	}
 }
 
 // buildAgainTeamOutcome is the recovery for a saved start interrupted before its team phase.
-func buildAgainTeamOutcome() gensurla.Team {
-	return gensurla.NewTeamUnavailable(&gensurla.BuildTeamUnavailable{Step: "Build this change again on the views page."})
+func buildAgainTeamOutcome() genhighbay.Team {
+	return genhighbay.NewTeamUnavailable(&genhighbay.BuildTeamUnavailable{Step: "Build this change again on the views page."})
 }
 
 // boundedBuildReason fits a safe owner diagnostic to the declared reason bound.
@@ -478,7 +478,7 @@ func (c *ControlPlane) admitBuildStart(ctx context.Context) (context.Context, fu
 	c.workspaceMu.RLock()
 	defer c.workspaceMu.RUnlock()
 	if c.serverCtx.Err() != nil {
-		return nil, nil, gensurla.MakeUnavailable(errors.New("the server is shutting down; call again on a running server"))
+		return nil, nil, genhighbay.MakeUnavailable(errors.New("the server is shutting down; call again on a running server"))
 	}
 	c.buildStartOps.Add(1)
 	accepted, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -507,28 +507,28 @@ func (c *ControlPlane) buildStartDeadline(ctx context.Context) (context.Context,
 // Outside error messages never become user steps: the team returns typed
 // conditions, and this boundary owns the action shown by start_build. A team
 // failure keeps its typed cause, which selects the cause's own step.
-func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
+func buildTeamOutcome(team *genhighbay.ProjectTeam, err error) genhighbay.Team {
 	if err == nil {
-		return gensurla.NewTeamReady(team)
+		return genhighbay.NewTeamReady(team)
 	}
 	var spaces *TeamSpaceConflict
 	if errors.As(err, &spaces) {
-		return gensurla.NewTeamAmbiguousSpace(&gensurla.BuildTeamAmbiguousSpace{
+		return genhighbay.NewTeamAmbiguousSpace(&genhighbay.BuildTeamAmbiguousSpace{
 			Count: spaces.Count,
-			Step:  gensurla.BuildStartStep(duplicateTeamSpacesStep()),
+			Step:  genhighbay.BuildStartStep(duplicateTeamSpacesStep()),
 		})
 	}
 	var policy *TeamPolicyRefusal
 	if errors.As(err, &policy) {
-		return gensurla.NewTeamUnavailable(&gensurla.BuildTeamUnavailable{
-			Step: gensurla.BuildStartStep(policy.Step(
+		return genhighbay.NewTeamUnavailable(&genhighbay.BuildTeamUnavailable{
+			Step: genhighbay.BuildStartStep(policy.Step(
 				"then use Team → Start workers on the views page to start the team agents for this saved build.",
 			)),
 		})
 	}
 	var unavailable *goa.ServiceError
 	if errors.As(err, &unavailable) && unavailable.Name == "window_busy" {
-		return gensurla.NewTeamWindowBusy(&gensurla.BuildTeamWindowBusy{
+		return genhighbay.NewTeamWindowBusy(&genhighbay.BuildTeamWindowBusy{
 			Step: "Close the open Herdr dialog, then start the team agents.",
 		})
 	}
@@ -537,8 +537,8 @@ func buildTeamOutcome(team *gensurla.ProjectTeam, err error) gensurla.Team {
 	if errors.As(err, &failure) {
 		cause = failure.Cause
 	}
-	return gensurla.NewTeamUnavailable(&gensurla.BuildTeamUnavailable{
-		Step: gensurla.BuildStartStep(buildTeamStep(cause)),
+	return genhighbay.NewTeamUnavailable(&genhighbay.BuildTeamUnavailable{
+		Step: genhighbay.BuildStartStep(buildTeamStep(cause)),
 	})
 }
 
@@ -550,20 +550,20 @@ func buildTeamStep(cause string) string {
 	const retry = "then use Team → Start workers on the views page to start the team agents for this saved build."
 	switch cause {
 	case "stopping":
-		return "The project server is stopping. Ask your coding agent to open Surla views, or choose Start Surla " +
+		return "The project server is stopping. Ask your coding agent to open Highbay views, or choose Start Highbay " +
 			"in the Herdr companion; either starts the server again and opens a fresh page, " + retry
 	case "chorus":
 		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), " + retry
 	case "herdr":
 		return "Herdr did not complete a team command. Open the Herdr app, " + retry
 	case "saved_space":
-		return "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."
+		return "This project's saved Herdr space has an ID this version of Highbay no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Highbay will prepare a replacement space."
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written. Make data/chorus-launcher/rosters " +
 			"in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
 	case "project_state":
 		return "This project's private state could not be read or written. Make sure this account can read and write " +
-			"this project's Surla state (under surla/operator in your user configuration folder) and restore anything " +
+			"this project's Highbay state (under highbay/operator in your user configuration folder) and restore anything " +
 			"missing or damaged there from a backup; once Build can read this build again, start the team agents for this saved build."
 	case "role_folder":
 		return "A team role's working folder could not be read. Make sure this account can open " +
@@ -574,15 +574,15 @@ func buildTeamStep(cause string) string {
 
 // checkBuildReplacement refuses another change while the open build remains,
 // and an unfinished restart without consent naming exactly the observed start.
-func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progress *gensurla.StartedBuild) error {
+func checkBuildReplacement(p *genhighbay.StartBuildPayload, saved buildFile, progress *genhighbay.StartedBuild) error {
 	name, message := "", ""
-	if progress.Taking.Kind() == gensurla.BuildTakingKindMerged || progress.Taking.Kind() == gensurla.BuildTakingKindDropped {
+	if progress.Taking.Kind() == genhighbay.BuildTakingKindMerged || progress.Taking.Kind() == genhighbay.BuildTakingKindDropped {
 		return nil
 	}
 	if saved.ChangeID != p.ChangeID {
 		name = "previous_change_open"
 		message = fmt.Sprintf("Change %s still has an open build. Merge a passed run or drop that build before building %s.", saved.ChangeID, p.ChangeID)
-	} else if progress.Taking.Kind() == gensurla.BuildTakingKindBuilding &&
+	} else if progress.Taking.Kind() == genhighbay.BuildTakingKindBuilding &&
 		(p.Replaces == nil || p.Replaces.ChangeID != saved.ChangeID || p.Replaces.StartedAt != saved.StartedAt.UTC().Format(time.RFC3339Nano)) {
 		name = "unfinished_build_open"
 		message = fmt.Sprintf("No verification of change %s's open build has passed. Decide whether to build it again, then send replaces naming the build shown.", saved.ChangeID)
@@ -590,7 +590,7 @@ func checkBuildReplacement(p *gensurla.StartBuildPayload, saved buildFile, progr
 	if name == "" {
 		return nil
 	}
-	return &gensurla.OpenBuildRefusal{Name: name, Message: message, ChangeID: saved.ChangeID, Build: progress}
+	return &genhighbay.OpenBuildRefusal{Name: name, Message: message, ChangeID: saved.ChangeID, Build: progress}
 }
 
 // checkDraftAfterDrop refuses only revisions older than an actual drop.
@@ -601,7 +601,7 @@ func (c *ControlPlane) checkDraftAfterDrop(record storedChangeCard) error {
 		return err
 	}
 	if draftedBeforeDrop(record, provenance) {
-		return gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
+		return genhighbay.MakeDraftedBeforeDrop(errors.New("A build was dropped after this revision was drafted. Ask your coding agent to call refresh_story and revise_change, adopt the revision, then build."))
 	}
 	return nil
 }

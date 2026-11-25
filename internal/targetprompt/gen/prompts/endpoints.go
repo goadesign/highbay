@@ -3,7 +3,7 @@
 // prompts endpoints
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design/targetprompt -o
+// $ goa gen github.com/goadesign/highbay/design/targetprompt -o
 // internal/targetprompt
 
 package prompts

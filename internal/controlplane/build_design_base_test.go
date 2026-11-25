@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,9 +29,9 @@ func TestBuildAdmitsANewDraftFileAndRejectsLaterRemovalAndRevert(t *testing.T) {
 	assert.NotContains(t, record.madeFrom.Start.FolderVersions, newFile)
 	_, explicit := enteredVersion(record.madeFrom.Entries[newFile], absentDesignVersion)
 	assert.False(t, explicit, "the real revision writer does not manufacture explicit initial absence")
-	card, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision, Answers: map[string]string{}, Examples: record.card.Examples})
+	card, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &genhighbay.ConfirmIntentPayload{ChangeID: "chg", RequestRevision: record.card.RequestRevision, Answers: map[string]string{}, Examples: record.card.Examples})
 	require.NoError(t, err)
-	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assert.NotNil(t, started.Build)
 	_, err = os.Stat(filepath.Join(project, newFile))
@@ -42,7 +42,7 @@ func TestBuildAdmitsANewDraftFileAndRejectsLaterRemovalAndRevert(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(project, newFile)))
 	commitProjectDesign(t, project, newFile)
 	head := strings.TrimSpace(gitForLayoutTest(t, project, "rev-parse", "HEAD"))
-	assert.ErrorContains(t, checkDesignBase(t.Context(), project, head, immutable), "changed outside Surla")
+	assert.ErrorContains(t, checkDesignBase(t.Context(), project, head, immutable), "changed outside Highbay")
 	_, err = cp.UpdateDraft(asCaller("alice@example.com", CallerGuide))
 	require.NoError(t, err)
 	list, _, err := cp.cards.loadMadeFrom()
@@ -71,12 +71,12 @@ func TestBuildBaseRefusalHasNoStartEffects(t *testing.T) {
 	commitProjectDesign(t, cp.activeWorkspaceDir, "design/outside.go")
 	identityCalled := false
 	cp.buildIdentityCheck = func(context.Context, string) error { identityCalled = true; return nil }
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "design/outside.go")
 	assert.False(t, identityCalled)
 	assertNoBuildSaved(t, cp, "chg")
-	assert.Empty(t, strings.TrimSpace(gitForLayoutTest(t, cp.activeWorkspaceDir, "for-each-ref", "--format=%(refname)", "refs/heads/surla/")))
+	assert.Empty(t, strings.TrimSpace(gitForLayoutTest(t, cp.activeWorkspaceDir, "for-each-ref", "--format=%(refname)", "refs/heads/highbay/")))
 }
 
 // TestBuildRechecksTheSameHashProvenance prevents a metadata-only update from
@@ -90,7 +90,7 @@ func TestBuildRechecksTheSameHashProvenance(t *testing.T) {
 		saveMetadataRecord(t, cp, record)
 		return nil
 	}
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "provenance changed")
 	assertNoBuildSaved(t, cp, "chg")
@@ -101,7 +101,7 @@ func TestBuildRechecksTheSameHashProvenance(t *testing.T) {
 func TestBuildLegacyCardNamesTheGuideStep(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := confirmedChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "records no design")
 	assert.ErrorContains(t, err, "your coding agent to propose a revision from its draft")

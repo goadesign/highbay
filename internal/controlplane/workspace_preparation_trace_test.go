@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/internal/verify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -57,7 +57,7 @@ func TestWorkspacePreparationFailuresKeepSecretsOutOfSpans(t *testing.T) {
 			exporter := tracetest.NewInMemoryExporter()
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-			_, span := provider.Tracer("test").Start(t.Context(), "surla.controlplane.prepare_verification")
+			_, span := provider.Tracer("test").Start(t.Context(), "highbay.controlplane.prepare_verification")
 			wrapped := fmt.Errorf("prepare verification: %w", err)
 			assert.ErrorIs(t, recordBuildError(span, wrapped, "prepare verification"), err)
 			span.End()
@@ -138,7 +138,7 @@ func TestModuleDownloadKeepsDiagnosticsOutOfSpans(t *testing.T) {
 				exporter := tracetest.NewInMemoryExporter()
 				provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 				t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-				_, span := provider.Tracer("test").Start(t.Context(), "surla.controlplane.prepare_verification")
+				_, span := provider.Tracer("test").Start(t.Context(), "highbay.controlplane.prepare_verification")
 				wrapped := fmt.Errorf("prepare verification: %w", err)
 				assert.ErrorIs(t, recordBuildError(span, wrapped, "prepare verification"), err)
 				span.End()

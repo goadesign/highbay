@@ -50,11 +50,11 @@ case "$1" in
     ;;
   cli-first)
     run=$first_cli
-    packages=(./cmd/surla)
+    packages=(./cmd/hbay)
     ;;
   cli-remaining)
     skip=$first_cli
-    packages=(./cmd/surla)
+    packages=(./cmd/hbay)
     ;;
   other-plain|other-concurrency)
     # These independent owners remove the old plain-then-race job barrier.
@@ -63,7 +63,7 @@ case "$1" in
     listed=$(go list ./...)
     while IFS= read -r package; do
       case "$package" in
-        github.com/goadesign/surla/internal/controlplane|github.com/goadesign/surla/internal/designeval|github.com/goadesign/surla/internal/testwriter|github.com/goadesign/surla/cmd/surla)
+        github.com/goadesign/highbay/internal/controlplane|github.com/goadesign/highbay/internal/designeval|github.com/goadesign/highbay/internal/testwriter|github.com/goadesign/highbay/cmd/hbay)
           continue
           ;;
       esac

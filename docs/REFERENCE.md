@@ -1,19 +1,19 @@
-# Surla Reference
+# Highbay Reference
 
-**[← Back to README](../README.md)** · **[← How Surla Works](HOW_IT_WORKS.md)** · **[← Golden Path Architecture](ARCHITECTURE_PLAYBOOK.md)**
+**[← Back to README](../README.md)** · **[← How Highbay Works](HOW_IT_WORKS.md)** · **[← Golden Path Architecture](ARCHITECTURE_PLAYBOOK.md)**
 
 ---
 
 This page is for a user or an agent who needs one exact contract: a command,
 an operation, who may call it, what it returns and how it refuses.
-[How Surla Works](HOW_IT_WORKS.md) explains the journey step by step.
+[How Highbay Works](HOW_IT_WORKS.md) explains the journey step by step.
 
 ## Terminology at a Glance
 
 | Term | Meaning |
 | :--- | :--- |
-| **The user** | The person who describes the goal to the guide. Only the user confirms a change, starts a build, approves a result and requests a merge, on the views page: the page the server serves to the user's browser, which the README and How Surla Works call the page. |
-| **The server** | The project's Surla server: one per project folder, started by the guide's first Surla call or by `surla`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
+| **The user** | The person who describes the goal to the guide. Only the user confirms a change, starts a build, approves a result and requests a merge, on the views page: the page the server serves to the user's browser, which the README and How Highbay Works call the page. |
+| **The server** | The project's Highbay server: one per project folder, started by the guide's first Highbay call or by `hbay`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
 | **Herdr** | An optional workspace in which the server and agents can run in separate terminals. Its core service is the Herdr core (the commands `herdr-core` and `hc`); its window is the Herdr app (`herdr-app`). A *Herdr space* is the set of tabs that holds one project's terminals. |
 | **Chorus** | The service that launches the project's agent panes in Herdr and carries their messages. The *roster* describes the roles whose panes it can launch. An agent's *watcher* is its background wait for Chorus messages. |
 | **The guide** | The agent the user talks to. It writes the Story and proposes and revises changes. |
@@ -26,12 +26,12 @@ an operation, who may call it, what it returns and how it refuses.
 | **Agreed revision** | The confirmed revision of a change, the one *in force* (`in_force: true` on builds and assignments). It stays in force while the guide's proposed revision waits beside it. |
 | **Proposed revision** | A revision the guide saved beside an agreed change. The user adopts or declines it on the views page. |
 | **Build** | The user's decision to build one agreed revision as the project's one open build (numbered `n`, with `taking` state `building`, `passed`, `merged` or `dropped`). It saves that revision's Story, design, base commit and confirmed answers, examples and preserved behaviors, and gives the builder and the test writer their assignments. |
-| **The build working copies** | Linked Git working copies of the project at `.surla-build` on `surla/build-<n>` (where the builder works and commits) and `.surla-tests` on `surla/tests-<n>` (where the test writer works and where Surla commits accepted tests). |
-| **Evaluator** | A test program that follows the [evaluator suite command contract](#evaluator-suite-command-contract): it declares its scenarios, runs them against the application's binaries and prints a report. Surla generates the evaluator of a Surla test module, such as the one the test writer works in, from that module's tests; stored verification settings name an evaluator the user maintains. |
+| **The build working copies** | Linked Git working copies of the project at `.highbay-build` on `highbay/build-<n>` (where the builder works and commits) and `.highbay-tests` on `highbay/tests-<n>` (where the test writer works and where Highbay commits accepted tests). |
+| **Evaluator** | A test program that follows the [evaluator suite command contract](#evaluator-suite-command-contract): it declares its scenarios, runs them against the application's binaries and prints a report. Highbay generates the evaluator of a Highbay test module, such as the one the test writer works in, from that module's tests; stored verification settings name an evaluator the user maintains. |
 | **Scenario** | One named test in an evaluator, such as `starts_and_listens`. A report gives each scenario's outcome: passed, failed, not run or a harness error. |
-| **Tests commit** | The commit at which Surla accepted a build's tests, or the evaluator commit named in stored verification settings. Verification runs those tests. |
-| **Stored verification settings** | An evaluator the user stores with `surla verification set`. With them, every change verifies with that evaluator and builds add no test writer. |
-| **Live target** | A running copy of the application, built from a commit by the server, on which the builder tries prompt wording. Surla never changes an application the user runs or deployed. |
+| **Tests commit** | The commit at which Highbay accepted a build's tests, or the evaluator commit named in stored verification settings. Verification runs those tests. |
+| **Stored verification settings** | An evaluator the user stores with `hbay verification set`. With them, every change verifies with that evaluator and builds add no test writer. |
+| **Live target** | A running copy of the application, built from a commit by the server, on which the builder tries prompt wording. Highbay never changes an application the user runs or deployed. |
 | **Hidden scenario** | A scenario whose name, inputs, checks and logs are never shown to the builder. An evaluator marks it with the tag `holdout`; the builder sees it only as `holdout-N`. Tests written by the test writer may not use the tag. |
 | **Run directory** | The private folder that holds one verification run: its request, its state, its report digest and its full output (`executor.log`). |
 | **`CP1` – `CP5`** | The checkpoint labels used in operation descriptions and the server's status lines: **CP1** agreeing the change, **CP2** previewing the architecture, **CP3** trying prompt wording on a live target, **CP4** verification, and **CP5** approval. |
@@ -43,19 +43,19 @@ an operation, who may call it, what it returns and how it refuses.
 
 | Need | Why | How to get it |
 | --- | --- | --- |
-| **macOS or Linux** | Surla runs the code the agents write (the design at each refresh, candidate builds, the candidate service, test listing, and the test program) as ordinary processes with your file and network access. Verification gives the test writer's accepted test program only `PATH` and `TMPDIR`; a live target also gives it a target key and a model gateway, without provider settings (see [`verify_change`](#verify_change) and [`start_live_target`](#start_live_target)). With stored verification settings, the operator's evaluator receives provider settings. Running as you, these programs can still read keys your other programs hold. `check_project` runs the project's tests in Linux containers (see **Docker** below). | — |
+| **macOS or Linux** | Highbay runs the code the agents write (the design at each refresh, candidate builds, the candidate service, test listing, and the test program) as ordinary processes with your file and network access. Verification gives the test writer's accepted test program only `PATH` and `TMPDIR`; a live target also gives it a target key and a model gateway, without provider settings (see [`verify_change`](#verify_change) and [`start_live_target`](#start_live_target)). With stored verification settings, the operator's evaluator receives provider settings. Running as you, these programs can still read keys your other programs hold. `check_project` runs the project's tests in Linux containers (see **Docker** below). | — |
 
-| **Go 1.27.3 or later** | `surla` is a Go program, and the project's checks use Go. Surla runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
-| **Surla** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/surla`; see [Install](../README.md#install). `go install github.com/goadesign/surla/cmd/surla@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
+| **Go 1.27.3 or later** | `hbay` is a Go program, and the project's checks use Go. Highbay runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
+| **Highbay** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/hbay`; see [Install](../README.md#install). `go install github.com/goadesign/highbay/cmd/hbay@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
 | **Herdr core** (`herdr-core` and `hc`) | Optional. With `hc` available, the project server starts in a Herdr terminal. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
 | **Herdr app** (`herdr-app`) | Optional. With Herdr core, the app shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
 | **Chorus v0.14.0 or later** | Pane launch and agent messaging for a Herdr team. Background workers can run without Chorus. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
-| **A coding agent** | Run `surla up` once to register the integration with detected clients. One installed family can fill both worker roles. Background workers need a supported CLI and explicit non-interactive permission. | — |
-| **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Surla's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Surla records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
+| **A coding agent** | Run `hbay up` once to register the integration with detected clients. One installed family can fill both worker roles. Background workers need a supported CLI and explicit non-interactive permission. | — |
+| **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Highbay's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Highbay records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
-| **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Surla verifies the Orders project or starts a live target of it, when `surla verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/surla`). | `brew install temporal` |
+| **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Highbay verifies the Orders project or starts a live target of it, when `hbay verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/hbay`). | `brew install temporal` |
 
-Before creating state, `surla` checks for the browser opener (`open` on macOS
+Before creating state, `hbay` checks for the browser opener (`open` on macOS
 or `xdg-open` on Linux) and probes Git with `git --no-lazy-fetch version`.
 `--print-link` skips the opener check. Git 2.45 introduced the required
 option. Builds with the option backported also work. A refusal names the
@@ -65,11 +65,11 @@ missing opener or Git capability.
 
 ## Terminal and browser automation
 
-The ordinary journey starts in your coding agent with `/surla` (`$surla`
-in Codex) after one-time [`surla up`](#surla-up). These terminal entrypoints
+The ordinary journey starts in your coding agent with `/highbay` (`$highbay`
+in Codex) after one-time [`hbay up`](#hbay-up). These terminal entrypoints
 remain available for operators and automation.
 
-Run `surla --print-link` in the project folder to start or attach and receive
+Run `hbay --print-link` in the project folder to start or attach and receive
 one JSON object on stdout, `{ "url": "...", "expires_at": "..." }`. Startup
 notices and the server address go to stderr. The command takes no additional
 arguments. Open the URL in a browser you control. The first exchange within
@@ -78,65 +78,65 @@ Repeat the command after use, expiry or page reload. A startup, authentication
 or link validation error exits nonzero without printing a link.
 
 The guide can call [`open_views`](#open_views) to open a new session for the
-user. Use [`surla status`](#surla-status) to read the project's current stage and
+user. Use [`hbay status`](#hbay-status) to read the project's current stage and
 roles without opening a session. The [team API](#team-supervision) exposes
 installed agent options and accepts explicit launch choices.
 
 ## Commands
 
-`surla help`, `surla -h` and `surla --help` print the command list to standard
-output and exit 0. `surla help <command>` and `surla <command> -h` print that
+`hbay help`, `hbay -h` and `hbay --help` print the command list to standard
+output and exit 0. `hbay help <command>` and `hbay <command> -h` print that
 command's flags to standard error and exit 0. Every command refuses
-unexpected positional arguments: `surla stop` with `surla: stop takes no
-arguments`, `surla verification` and `surla promotion` with their usage line
-(`surla: usage: surla verification set <file> | show | remove`), and the
-others with `surla: unexpected arguments [...]`. An unknown command, such as
-`surla build`, answers `surla: unknown command "build"; run "surla help" to
+unexpected positional arguments: `hbay stop` with `hbay: stop takes no
+arguments`, `hbay verification` and `hbay promotion` with their usage line
+(`hbay: usage: hbay verification set <file> | show | remove`), and the
+others with `hbay: unexpected arguments [...]`. An unknown command, such as
+`hbay build`, answers `hbay: unknown command "build"; run "hbay help" to
 list the commands`.
 
-### `surla up`
+### `hbay up`
 
-Run once after installing Surla. It performs [`surla setup -global`](#surla-setup--global),
+Run once after installing Highbay. It performs [`hbay setup -global`](#hbay-setup--global),
 then starts Chorus if installed. Missing Chorus is reported and does not
-prevent setup; without it, agents have no Chorus messaging. `SURLA_NO_SETUP=1`
+prevent setup; without it, agents have no Chorus messaging. `HIGHBAY_NO_SETUP=1`
 skips registration and only starts Chorus when present. This command does
 not start a project server.
 
-After setup, open your project folder in a coding agent and invoke `/surla`
-(`$surla` in Codex). Reload its MCP configuration or start a new session if
-Surla is not yet listed.
+After setup, open your project folder in a coding agent and invoke `/highbay`
+(`$highbay` in Codex). Reload its MCP configuration or start a new session if
+Highbay is not yet listed.
 
-### `surla setup -global`
+### `hbay setup -global`
 
-Registers the installed executable as the global `surla` MCP server with
-`args: ["stdio"]`, and installs `/surla` in client and shared skill folders.
+Registers the installed executable as the global `highbay` MCP server with
+`args: ["stdio"]`, and installs `/highbay` in client and shared skill folders.
 MCP registration targets are Claude Code, Codex, Cursor, Antigravity,
 Gemini CLI, Windsurf and GitHub Copilot CLI. On macOS and Linux, setup also
 registers MCP in VS Code's user settings when that folder exists; it writes
 no VS Code-specific skill file. Setup also writes the shared
-`~/.agents/skills/surla/SKILL.md`. It detects client settings folders or
+`~/.agents/skills/highbay/SKILL.md`. It detects client settings folders or
 supported CLI executables, so adding a client later requires setup again.
 
 Setup preserves other servers and settings. An unchanged registration is
 left alone. Invalid or unsupported configuration stops setup and names the
 file; some errors, such as JSON parse failures, include no recovery step.
-`surla up` adds advice to fix that file and rerun setup or explicitly skip it.
+`hbay up` adds advice to fix that file and rerun setup or explicitly skip it.
 Earlier successful file writes remain. Run the installed
 binary: a temporary `go run` executable cannot be registered for later use.
 Without `-global`, setup explains the flag and writes nothing. Unlike
-`surla up`, this command starts no Chorus server.
+`hbay up`, this command starts no Chorus server.
 
 Open Herdr once before setup so it creates its configuration folder. Setup
 skips companion installation if that folder does not exist. When it exists,
-setup installs the Surla floating companion in `mods/surla/`. It shows the current project stage and role attention,
-focuses live panes, and offers **Open Surla Window**. It reads project status and
-holds no Surla browser-session credential. It does not change Herdr's shipped
-workspace layout. On macOS, setup adds `cmd-alt-shift-s` to the global section
+setup installs the Highbay floating companion in `mods/highbay/`. It shows the current project stage and role attention,
+focuses live panes, and offers **Open Highbay Window**. It reads project status and
+holds no Highbay browser-session credential. It does not change Herdr's shipped
+workspace layout. On macOS, setup adds `cmd-alt-shift-h` to the global section
 of Herdr's `keys.json` when that shortcut is free. Existing bindings are
 preserved; a missing or read-only file is reported and left alone. Adding
 the shortcut makes Herdr treat `keys.json` as user-owned on later upgrades.
 
-### `surla stdio`
+### `hbay stdio`
 
 The MCP entrypoint installed in coding-agent configuration. It reads
 newline-delimited JSON-RPC from stdin and writes only protocol responses to
@@ -152,63 +152,63 @@ The guide calls [`open_views`](#open_views) to open the page without receiving
 a browser credential.
 
 Setup does not populate provider settings in the MCP registration; for Codex,
-setup adds `HC_TERMINAL_ID` to `mcp_servers.surla.env_vars` so direct CLI
-spawns can forward the Herdr terminal identifier. `surla stdio` uses the
+setup adds `HC_TERMINAL_ID` to `mcp_servers.highbay.env_vars` so direct CLI
+spawns can forward the Herdr terminal identifier. `hbay stdio` uses the
 environment and direct OS process lineage observed at bind time (omitting
 inherited daemon terminal IDs and lineage when spawned by `codex app-server`,
 which leaves shared-daemon sessions external) to attempt live Herdr adoption.
-Bare `surla` remains the operator path for handing over settings from a known
+Bare `hbay` remains the operator path for handing over settings from a known
 shell environment.
 
 The physical working folder determines the role. A folder inside
-`.surla-build` or `.surla-tests`, including nested modules, connects only as
+`.highbay-build` or `.highbay-tests`, including nested modules, connects only as
 its registered worker role. Binding requires a running server, a matching
 role registration and a readable credential; it does not check whether the
 role currently has an active assignment. Assignment tools enforce their own
 build requirements. A binding failure never starts a server or falls back
 to guide access.
 
-<a id="surla-serve"></a>
-### `surla` and `surla stop`
+<a id="highbay-serve"></a>
+### `hbay` and `hbay stop`
 
-Run `surla` in a project folder to start or attach to its server and open a
+Run `hbay` in a project folder to start or attach to its server and open a
 fresh views page. It prints the folder and server address after opening the
 browser. The first start also prints
-`Started a Surla project for this folder. Moving or renaming this folder starts a new project.`
-Running `surla` leaves agent startup to [the team operations](#team-supervision).
+`Started a Highbay project for this folder. Moving or renaming this folder starts a new project.`
+Running `hbay` leaves agent startup to [the team operations](#team-supervision).
 If opening the page fails, the command reports `open project views: …` and
 the server stays running.
 
 <a id="model-provider-settings"></a>
 
 **Model provider settings.** Once the server answers for the project,
-`surla` hands it the request settings of each model provider whose key is set
+`hbay` hands it the request settings of each model provider whose key is set
 in the current shell ([`hand_over_model_settings`](#hand_over_model_settings)).
 It prints one line with the settings' names, for example
 
 ```text
-Model settings held by the project server: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (from this shell); not sent: ANTHROPIC_ADMIN_KEY. Live targets use anthropic/claude-sonnet-4-6; change it on the views page. surla stop makes the project server forget them.
+Model settings held by the project server: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (from this shell); not sent: ANTHROPIC_ADMIN_KEY. Live targets use anthropic/claude-sonnet-4-6; change it on the views page. hbay stop makes the project server forget them.
 ```
 
-A shell without a key sends nothing and keeps what an earlier `surla` handed
-over, marked `(from an earlier surla)`. A family variable without its key is
+A shell without a key sends nothing and keeps what an earlier `hbay` handed
+over, marked `(from an earlier hbay)`. A family variable without its key is
 named as not sent, such as `ANTHROPIC_BASE_URL (ANTHROPIC_API_KEY is not
 set)`. With nothing held and nothing left unsent, no line prints. A refused
-hand-over stops `surla` before opening the page; a value longer than 4,096
+hand-over stops `hbay` before opening the page; a value longer than 4,096
 characters is refused with that limit named.
 
-`surla` leaves its own environment unchanged and gives it unchanged to
-Herdr's programs (`hc`, `herdr-app`). When `surla` is what starts the Herdr
+`hbay` leaves its own environment unchanged and gives it unchanged to
+Herdr's programs (`hc`, `herdr-app`). When `hbay` is what starts the Herdr
 core, the core keeps that shell's environment, provider variables included,
 for as long as it runs, and every terminal it opens inherits it, the agents'
-included, exactly as if you had started Herdr in that shell; `surla stop` does
+included, exactly as if you had started Herdr in that shell; `hbay stop` does
 not change that. Chorus and the browser opener receive the environment
 without any `ANTHROPIC_` or `OPENAI_` variable. Programs you started from that
 shell keep what they inherited.
 
 <a id="idle-shell"></a>
 
-**Idle shell detection.** Surla treats a pane's foreground program as an *idle
+**Idle shell detection.** Highbay treats a pane's foreground program as an *idle
 shell* when both hold:
 
 - Its executable name, with leading dashes removed, is `sh`, `bash`, `zsh`,
@@ -223,12 +223,12 @@ reports no foreground program also counts as running.
 <a id="project-state-folder"></a>
 
 **The project and its state folder.** A project is a folder, with or without
-Git. Surla resolves symlinks in the path and uses the nearest project record
-in that folder or its parents, so running `surla` inside a project the guide
+Git. Highbay resolves symlinks in the path and uses the nearest project record
+in that folder or its parents, so running `hbay` inside a project the guide
 created with `init_project` finds the original project. Moving or renaming the
 folder starts a different, empty project. Each project's private state lives
 outside the folder, in
-`<UserConfigDir>/surla/operator/project-<digest>/`, where `<UserConfigDir>` is
+`<UserConfigDir>/highbay/operator/project-<digest>/`, where `<UserConfigDir>` is
 the user's configuration folder (on macOS, `~/Library/Application Support`).
 It holds the owner's account identity, one saved `127.0.0.1` port, the Change
 Cards and builds (`cards/`), verification runs (`runs/`), reports
@@ -255,7 +255,7 @@ is unsupported. When none of these compiler operations is running, you can delet
 `build-cache/`; the next operation recreates it and builds cold.
 
 The retained packages are trusted compiler inputs, like the Go module cache,
-toolchain, executable search path and Surla's files. Go checks a cached file's
+toolchain, executable search path and Highbay's files. Go checks a cached file's
 existence and recorded size; it does not check compiled contents against the
 selected source. Code running as you can plant a compiled package that a later
 build links into the candidate or test program. Its report can bind a binary
@@ -263,18 +263,18 @@ the selected source would not produce; the binary digest does not authenticate
 that correspondence. Deleting
 this cache forces recompilation but does not authenticate the other inputs.
 
-Before starting the server or accepting `surla verification set` or
-`surla promotion set`, Surla asks Git for the project's enclosing working tree
+Before starting the server or accepting `hbay verification set` or
+`hbay promotion set`, Highbay asks Git for the project's enclosing working tree
 so private files stay outside it. Each read has a 30-second allowance. A read
 that times out stops the operation, names `git rev-parse --show-toplevel`, and
 asks you to check that Git can read the workspace before retrying the command.
 A folder without a Git repository remains a valid project folder.
 
-The command passes the discovered state folder to `surla serve -state <dir>`.
+The command passes the discovered state folder to `hbay serve -state <dir>`.
 The foreground command also accepts this explicit state folder. A server
 started in Herdr inherits the Herdr core's environment. For example, Docker
 settings for that server must be available to the core. The detached process
-inherits its launching shell's environment. For Surla's live target and
+inherits its launching shell's environment. For Highbay's live target and
 verification settings, the server clears inherited provider variables and
 uses those the CLI hands over. Coding agents can still use the credentials
 in their launch environment. See [Model provider settings](#model-provider-settings).
@@ -282,54 +282,54 @@ The server refuses a state folder that is not private to your account, holds no 
 belongs to another project folder, lies inside the project folder, or is not
 named by its physical path.
 
-When `surla`, `surla stop`, a settings command or a coding agent's first Surla
+When `hbay`, `hbay stop`, a settings command or a coding agent's first Highbay
 tool call cannot use a project's record or state folder, the error names them
 and the repair; then try again the same way. `<record>` is the
 `project.json` in the project's state folder, and the folder that holds
-every project's state folder is `<UserConfigDir>/surla/operator`:
+every project's state folder is `<UserConfigDir>/highbay/operator`:
 
 | What cannot be used | The error |
 | --- | --- |
-| The record cannot be read, for example because it is not a private file of this account | `the record of the Surla project in <project folder> cannot be read: <record>: <cause>; make it a regular file of this account that only this account can read and write (chmod 600 <record>, and chown it to this account if another account owns it), then try again` |
-| The record is damaged | `the record of the Surla project in <project folder> is damaged: <record>: <cause>; restore it from a backup and try again, or move the folder <state folder> out of <UserConfigDir>/surla/operator, then start Surla in <project folder> again to make that project folder a new, empty Surla project` |
-| `<UserConfigDir>/surla/operator` exists but is not a folder of this account that only this account can open; it is checked before any record is read | `prepare operator storage root <folder>: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then try again` |
-| A project's state folder is closed to this account or owned by another, or a new project cannot list the folder that holds them | `the Surla state folder <folder> cannot be used: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then try again` |
-| The project's state folder cannot be created | `project state folder <folder> could not be created: <cause>; make <UserConfigDir>/surla/operator a folder this account can write, then try again` |
+| The record cannot be read, for example because it is not a private file of this account | `the record of the Highbay project in <project folder> cannot be read: <record>: <cause>; make it a regular file of this account that only this account can read and write (chmod 600 <record>, and chown it to this account if another account owns it), then try again` |
+| The record is damaged | `the record of the Highbay project in <project folder> is damaged: <record>: <cause>; restore it from a backup and try again, or move the folder <state folder> out of <UserConfigDir>/highbay/operator, then start Highbay in <project folder> again to make that project folder a new, empty Highbay project` |
+| `<UserConfigDir>/highbay/operator` exists but is not a folder of this account that only this account can open; it is checked before any record is read | `prepare operator storage root <folder>: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then try again` |
+| A project's state folder is closed to this account or owned by another, or a new project cannot list the folder that holds them | `the Highbay state folder <folder> cannot be used: <cause>; make it a folder of this account that only this account can open (chmod 700 <folder>, and chown -R it to this account if another account owns it), then try again` |
+| The project's state folder cannot be created | `project state folder <folder> could not be created: <cause>; make <UserConfigDir>/highbay/operator a folder this account can write, then try again` |
 
 **Starting, attaching and failures.** A start lock serializes simultaneous
 commands. A running server is attached to only after it proves the project's
 identity and reports the build it started from, the SHA-256 of its
-executable, which must be that of the `surla` attaching. A server another
-build started, such as the one still running after a new `surla` is
-installed, is refused with `surla: this project's server was started by
-another build of surla; run surla stop, then surla`; `surla stop` stops a
+executable, which must be that of the `hbay` attaching. A server another
+build started, such as the one still running after a new `hbay` is
+installed, is refused with `hbay: this project's server was started by
+another build of hbay; run hbay stop, then hbay`; `hbay stop` stops a
 server of any build. A record left by a server that died is stale and is
 removed by the next start. With `hc` available, the server runs in its own
-Herdr terminal labeled `surla_project=<project id>`. Without `hc`, it runs
+Herdr terminal labeled `highbay_project=<project id>`. Without `hc`, it runs
 as a detached background process and sends its output to the private
 `serve-startup.log` in the state folder. Both survive the launching shell.
 The output shows the address, the Change Card folder and the checkpoint
 status. The `CP4` line names the verification test source.
 
-Before starting the server, `surla` checks that the saved port is
-free. When it is taken, `surla` starts nothing and names what holds it: the
-running server of another Surla project that saved the same port, with
-`surla: project port 52011 is held by the Surla server of the project in
+Before starting the server, `hbay` checks that the saved port is
+free. When it is taken, `hbay` starts nothing and names what holds it: the
+running server of another Highbay project that saved the same port, with
+`hbay: project port 52011 is held by the Highbay server of the project in
 <folder>, which saved the same port, so only one of the two can run at a
-time; no server was started; run surla stop in that folder, then run surla
-here`, or otherwise another program, with `surla: another program is
+time; no server was started; run hbay stop in that folder, then run hbay
+here`, or otherwise another program, with `hbay: another program is
 listening on 127.0.0.1:52011, the address saved for this project; no server
-was started; stop that program, then run surla (lsof -nP -iTCP:52011
+was started; stop that program, then run hbay (lsof -nP -iTCP:52011
 -sTCP:LISTEN names it)`. When the server's terminal ends before the server
 answers, for example because it cannot read its stored settings, or because
-another program took the port after that check, `surla` reads what that
+another program took the port after that check, `hbay` reads what that
 terminal printed, removes the terminal, and shows the last lines (at most 20
 lines and 4 KiB, with control characters removed). For a detached server that
 exits before answering, it reads the startup log within the same bounds.
 
 ```text
-surla: the project server stopped while starting, and its last lines were:
-  surla: project port 52011 is occupied: listen tcp 127.0.0.1:52011: bind: address already in use; stop the program listening on it, then run surla
+hbay: the project server stopped while starting, and its last lines were:
+  hbay: project port 52011 is occupied: listen tcp 127.0.0.1:52011: bind: address already in use; stop the program listening on it, then run hbay
 ```
 
 If those lines cannot be read, the error says so and keeps the original
@@ -338,24 +338,24 @@ terminal or background process. The error identifies the launch so you can
 read its output. A taken port leaves the saved port and credentials
 in place.
 
-**`surla stop`.** Asks the server to shut down in order and waits until it has
-released the project, then prints `Surla stopped.`, or `Surla is stopped.`
+**`hbay stop`.** Asks the server to shut down in order and waits until it has
+released the project, then prints `Highbay stopped.`, or `Highbay is stopped.`
 when no server was running. Before its listener closes, the server revokes its
 management credential and withdraws its running record. It drains its background
 workers before releasing the project. Interrupt,
 termination and hangup signals cause the same shutdown. A killed server is
-recovered by the next `surla`.
+recovered by the next `hbay`.
 
 **Credentials and browser access.** Each server creates a management
 credential in memory and publishes it in its private running record after
-binding its port; `surla` and `surla stop` read it there for each request,
+binding its port; `hbay` and `hbay stop` read it there for each request,
 use the literal local address without a proxy, and refuse redirects.
 Management can check identity and status, read team metadata, attach a guide,
 stop the server, mint a browser link and hand over the shell's model provider
 settings. Application decisions use the browser session. Agent credentials
 survive restarts and are removed with their agent.
 
-`surla` opens only the saved views address with a single-use link in the
+`hbay` opens only the saved views address with a single-use link in the
 address fragment. The link expires after two minutes and is exchanged once
 for a browser session (see [Views page](#views-page)). Every response
 disables MIME sniffing, and every request must use the saved host and, when
@@ -363,13 +363,13 @@ present, the server's own origin.
 
 All processes run as the same operating system account. File permissions keep
 other accounts out, not other programs of that account: a deliberate program
-could read another role's credential or run `surla` to obtain a browser link.
+could read another role's credential or run `hbay` to obtain a browser link.
 The roles are a separation of duties, not isolation from a malicious agent.
 
-### `surla status`
+### `hbay status`
 
-Run `surla status` in the project folder or one of its subfolders.
-`surla status --json` prints `{"running":false}` when the folder has no saved
+Run `hbay status` in the project folder or one of its subfolders.
+`hbay status --json` prints `{"running":false}` when the folder has no saved
 project or its server is stopped. It creates no project state or server.
 If a server holds the project, the command authenticates and verifies its
 project ID, directory and owner. It can read a compatible server started by
@@ -384,19 +384,19 @@ selected change. Roles use the same fields as [`get_team`](#get_team).
 #### Project management status
 
 The management-only `GET /project/status` uses the same response fields as
-[`surla status`](#surla-status) without the CLI's `running` flag. It can
+[`hbay status`](#hbay-status) without the CLI's `running` flag. It can
 consult Git to establish whether the open build was taken by the project
 branch, including a manual merge. A status read never starts or stops agents.
 
-### `surla init`
+### `hbay init`
 
 Creates a starter project in `<dir>`: a Goa and Goa-AI service with a
 `goa.design/model` architecture, and a test module in `<dir>/eval`. The
-project is blank unless `-example` asks for Surla's worked example. It
+project is blank unless `-example` asks for Highbay's worked example. It
 resolves dependencies, generates each module's code with the generator
-[`surla gen`](#surla-gen) uses, runs `go vet ./...` and
+[`hbay gen`](#hbay-gen) uses, runs `go vet ./...` and
 `go test ./...` in both modules, and prints the commands that make the first
-commit and start `surla` in the project. It builds the project in protected
+commit and start `hbay` in the project. It builds the project in protected
 temporary storage on the destination's file system and moves it to `<dir>` in
 one step only when everything succeeded; a failure or interrupt leaves `<dir>`
 absent, and it never replaces an existing entry.
@@ -405,18 +405,18 @@ absent, and it never replaces an existing entry.
 - `-module <path>`: the service's Go module path, such as `example.com/shop`
   *(required)*. Its last element names the service and must be a lowercase Go
   identifier (`^[a-z][a-z0-9]*$`, not a Go keyword or `main`).
-- `-surla-version <version>`: the exact semantic version of
-  `github.com/goadesign/surla` that `eval/go.mod` requires. It defaults to the
-  version the `surla` binary was built from and is required for a `(devel)` or
+- `-highbay-version <version>`: the exact semantic version of
+  `github.com/goadesign/highbay` that `eval/go.mod` requires. It defaults to the
+  version the `hbay` binary was built from and is required for a `(devel)` or
   `+dirty` build; `latest` and branch names are refused.
-- `-example`: create Surla's worked example instead of the blank project.
+- `-example`: create Highbay's worked example instead of the blank project.
 
 **What the blank project holds.** The service in `design/design.go` has no
 methods, and `cmd/<name>` serves it on `-listen <host:port>` with nothing
 mounted. `design/model.go` declares the service's one container.
 `design/story.go` imports the Story language and declares no Story. The
 service's `go.mod` requires the Story language's module,
-`github.com/goadesign/surla/story`, at the version Surla itself requires.
+`github.com/goadesign/highbay/story`, at the version Highbay itself requires.
 
 `eval/` is the test module. Its suite declares one scenario,
 `starts_and_listens`, tagged `repair`: it starts the program and checks that
@@ -442,7 +442,7 @@ requires, which the method `PricesCookie` of `eval/acceptance` implements.
 The module runs these scenarios against a scripted model (`eval/scripted`)
 and implements the live target prompt contract.
 
-### `surla verification` and `surla promotion`
+### `hbay verification` and `hbay promotion`
 
 Each takes `set <file>`, `show` or `remove` and works with or without a
 running server. `set` reads a JSON file outside the project folder and its
@@ -450,10 +450,10 @@ Git working tree, refuses unknown fields and trailing data, resolves relative
 paths against the file's folder, and stores a private copy; a refused file
 leaves the earlier settings in place. `show` prints the stored settings;
 `remove` deletes them. The server reads them when it starts, so a change takes
-effect after `surla stop` and `surla`. `surla help verification` and
-`surla help promotion` print each format's fields and a minimal valid file.
+effect after `hbay stop` and `hbay`. `hbay help verification` and
+`hbay help promotion` print each format's fields and a minimal valid file.
 
-**Verification settings** name an evaluator Surla runs instead of tests
+**Verification settings** name an evaluator Highbay runs instead of tests
 written by the test writer:
 
 | Field | Meaning |
@@ -465,7 +465,7 @@ written by the test writer:
 
 With stored verification settings, every change verifies with that evaluator,
 builds add only the builder, and live targets run that evaluator. Without
-them, verification and live targets run the tests Surla accepted for the
+them, verification and live targets run the tests Highbay accepted for the
 change's current build, alongside the candidate's own programs. Runs and
 reports always go to the project's state folder.
 
@@ -489,11 +489,11 @@ the approval error panel repeats it. Without promotion settings, an approval
 records no release binaries. A stored file the server cannot accept, such
 as one with any other field (`suite_id`), stops the server while it starts;
 the shown error ends by naming
-`surla promotion show` to see the settings, `surla promotion set <file>` to
-store them again and `surla promotion remove` to remove them, then `surla`.
+`hbay promotion show` to see the settings, `hbay promotion set <file>` to
+store them again and `hbay promotion remove` to remove them, then `hbay`.
 Approval never merges or deploys.
 
-### `surla preview`
+### `hbay preview`
 
 Reads a design module into a snapshot (`go.mod`, `go.sum` and non-test `.go`
 files, never following symlinks; run `go mod tidy` first if `go.sum` is
@@ -502,7 +502,7 @@ indented JSON to standard output: `system_name`, `declarations`, C4
 `containers` and `edges`, `agent_policies`, `tools`, and `stories` when the
 design declares Stories. Then it writes one
 summary line to standard error, such as
-`surla: "orders": 3 container(s), 2 boundary edge(s), 1 agent policy(s), 4 tool contract(s)`.
+`hbay: "orders": 3 container(s), 2 boundary edge(s), 1 agent policy(s), 4 tool contract(s)`.
 It needs no server, no Change Card and no model key. Interrupt and termination
 signals cancel it; it removes its temporary folders before exiting, or names
 one it could not remove.
@@ -510,9 +510,9 @@ one it could not remove.
 - `-dir <path>`: the module's root, holding `go.mod`, `go.sum` and `design/`
   (default `.`).
 
-### `surla diff`
+### `hbay diff`
 
-Evaluates two design modules, as `surla preview` does, at their own
+Evaluates two design modules, as `hbay preview` does, at their own
 dependency versions, and prints the structural `DiffResult` as JSON:
 declarations added, removed and changed, dependency version changes and a
 summary. It gives no compatibility verdict.
@@ -520,18 +520,18 @@ summary. It gives no compatibility verdict.
 - `--old-dir <path>`: the earlier module *(required)*.
 - `--new-dir <path>`: the later module *(required)*.
 
-### `surla gen`
+### `hbay gen`
 
 Regenerates a design module's `gen/` from its `design/` and
 replaces `gen/` in one atomic rename, so `gen/` is never missing or
 half-written. Generated subfolders the design does not produce disappear,
-and top-level files in `gen/` that Surla did not generate are kept. On success
+and top-level files in `gen/` that Highbay did not generate are kept. On success
 it prints `gen/ updated`, the files added, changed and removed, and a reminder
 that it did not build the application against the regenerated code; after
 the swap, problems are only warnings. Before the swap, any failure or
 interrupt leaves `gen/` untouched and exits non-zero. It never changes
 `go.mod` or `go.sum`, and says to run `go mod tidy` when generated code
-imports a module `go.mod` lacks. Leftover `.surla-gen-*` folders from an
+imports a module `go.mod` lacks. Leftover `.highbay-gen-*` folders from an
 interrupted run are listed, never deleted, because another run's staging
 folder looks the same.
 
@@ -539,21 +539,21 @@ folder looks the same.
 
 | The module | What generation also writes |
 | --- | --- |
-| Declares agents | `AGENTS_QUICKSTART.md`, Goa-AI's guide to the design's agents and tools. Surla replaces its parts that name commands to run with steps that use Surla's operations, and replaces its evaluation section when the design declares no evaluation suite. |
-| Is a Surla test module: its path is `<service module>/eval`, its design declares exactly one evaluation suite, and it has an `acceptance` package | The program `gen/cmd/<service>-evals/main.go`, built from the generated tests and the `acceptance` package's `Name`, `Hooks`, `New`, `Live` and `LiveThroughGateway`. A missing scenario method then fails to compile. Every run declares the environment `scripted-model`. `AGENTS_QUICKSTART.md` gains a section naming those five names. |
+| Declares agents | `AGENTS_QUICKSTART.md`, Goa-AI's guide to the design's agents and tools. Highbay replaces its parts that name commands to run with steps that use Highbay's operations, and replaces its evaluation section when the design declares no evaluation suite. |
+| Is a Highbay test module: its path is `<service module>/eval`, its design declares exactly one evaluation suite, and it has an `acceptance` package | The program `gen/cmd/<service>-evals/main.go`, built from the generated tests and the `acceptance` package's `Name`, `Hooks`, `New`, `Live` and `LiveThroughGateway`. A missing scenario method then fails to compile. Every run declares the environment `scripted-model`. `AGENTS_QUICKSTART.md` gains a section naming those five names. |
 
 Generation needs `goa.design/goa/v3` `v3.35.1-0.20261103205041-35e789e8f9b1`
 or later; with an older Goa the build fails and the error names the Goa
 version in use. The named-section rewrite of `AGENTS_QUICKSTART.md` needs
 `goa.design/goa-ai` `v0.90.1-0.20261110011046-f32bd628f2bf` or later. A design
-with gRPC transports is refused, because `surla gen` runs Goa's generator
+with gRPC transports is refused, because `hbay gen` runs Goa's generator
 without protoc; generate it with the module's own `go run goa.design/goa/v3/cmd/goa gen`.
-`generate_code` writes the same files. A Surla test module's Story table,
+`generate_code` writes the same files. A Highbay test module's Story table,
 `design/story_tests.go`, is a source file of its design, so regenerating the
 module keeps the tests the table requires (see
 [builds and assignments](#builds-and-assignments)).
 
-### `surla verify`
+### `hbay verify`
 
 An operator tool that checks a commit without a server. It clones the
 committed application and evaluator into a private work folder, builds the
@@ -564,20 +564,20 @@ the evaluator with the caller's shell environment unchanged (unlike
 prints the builder view of the report (hidden scenarios shown only as
 `holdout-N`) to standard output. Then it writes one summary line to standard
 error, such as
-`surla: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
+`hbay: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
 It exits 0 when the report completed and passed, and 1 otherwise.
 A report that did not pass is written and printed before the command exits
 non-zero; a setup or build failure prints no report. Omitting a required flag
-fails with `surla: verify requires <flags>`.
+fails with `hbay: verify requires <flags>`.
 
-To verify the current commit of a Surla project (`shop`, with the test module in
+To verify the current commit of a Highbay project (`shop`, with the test module in
 `eval/` and generated evaluator `./gen/cmd/shop-evals`) from its repository root:
 
 ```sh
 VERIFY_DIR="$(mktemp -d)"
 WORK_DIR="$VERIFY_DIR/work"
 REPORT_DIR="$VERIFY_DIR/reports"
-surla verify \
+hbay verify \
   -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary shop=./cmd/shop \
   -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/shop-evals \
   -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
@@ -594,7 +594,7 @@ merged branch from the terminal** on **Approve** or **Build** after merging:
 - Replace `SERVICE` with your service name and adjust `-candidate-module` or
   `-suite-module` if your service or test module lives outside the default
   directories. When the project uses stored verification settings instead of
-  written tests, run `surla verification show` to fill in the candidate and
+  written tests, run `hbay verification show` to fill in the candidate and
   evaluator flags (including one `-binary` flag per candidate binary).
 - When crafting the command manually, read the full `<request_revision>` and
   `<tests_commit>` from **Verified inputs and digests** on **Approve** (or the
@@ -608,18 +608,18 @@ merged branch from the terminal** on **Approve** or **Build** after merging:
 | `-binary <name=package>` *(repeatable, at least one)* | Binary name and package path, `.` or `./…`, such as `shop=./cmd/shop` or `orders=./cmd/orders`. |
 | `-suite-repo <path\|url>` *(required)* | Repository holding the evaluator. |
 | `-suite-commit <sha>` *(required)* | Full commit ID of the evaluator. |
-| `-suite-module <dir>` | Evaluator module folder (default `.`; `eval` for a Surla test module). |
-| `-suite-command <package>` *(required)* | The evaluator program's package, such as `./gen/cmd/shop-evals` for a Surla test module or `./cmd/orders_acceptance-evals`. |
-| `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `surla approve` gets the same one. |
+| `-suite-module <dir>` | Evaluator module folder (default `.`; `eval` for a Highbay test module). |
+| `-suite-command <package>` *(required)* | The evaluator program's package, such as `./gen/cmd/shop-evals` for a Highbay test module or `./cmd/orders_acceptance-evals`. |
+| `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `hbay approve` gets the same one. |
 | `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. It is kept after the run, so retrying or running again requires a new or emptied `-work-dir`. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
 
 When a run ends without completing (`checkout`, `build`, `describe`, `suite`,
-`report` or `supervise`), `surla verify` writes
-`surla: verification <failure> at stage <stage>: <summary>` followed by the
-run's `executor.log` to standard error (or `surla: read executor log: …` if the
+`report` or `supervise`), `hbay verify` writes
+`hbay: verification <failure> at stage <stage>: <summary>` followed by the
+run's `executor.log` to standard error (or `hbay: read executor log: …` if the
 run stopped before creating `executor.log`) and exits 1 (when a canceled or
 timed-out run saved a partial report, it writes that report JSON to standard
 output and the summary line to standard error first, then exits 1).
@@ -635,7 +635,7 @@ build-output excerpts.
 #### Evaluator suite command contract
 
 An evaluator program implements this contract with
-[`suite.Main(suite.Command{...})`](../verify/suite/suite.go). Surla's own test
+[`suite.Main(suite.Command{...})`](../verify/suite/suite.go). Highbay's own test
 layout generates it; an evaluator named in stored verification settings
 implements it itself:
 
@@ -671,7 +671,7 @@ func main() {
    starts the application with
    [`candidate.Exec`](../verify/candidate/candidate.go) and
    attaches the evidence of every binary it used, such as
-   `pinned["orders"].Evidence("orders")`, which `surla verify` compares with the
+   `pinned["orders"].Evidence("orders")`, which `hbay verify` compares with the
    digest it measured; missing or different evidence makes the scenario a
    `harness_error`. The builder view then says in one fixed sentence which
    check failed; the names and digests the scenario reported stay in the
@@ -681,7 +681,7 @@ func main() {
    for direct runs.
 3. **`--live --artifact <name>=<path> ...`** *(optional)*. Starts the
    application for a live target and is never used by verification. The
-   program reads the live key from `SURLA_LIVE_TARGET_KEY`, calls
+   program reads the live key from `HIGHBAY_LIVE_TARGET_KEY`, calls
    `Command.Live`, prints one line `{"url":"http://127.0.0.1:<port>"}`, and
    serves until interrupted or until the target ends. A program without
    `Live` exits 2 with `this evaluator suite does not support --live`.
@@ -690,7 +690,7 @@ func main() {
 and [`examples/orders-eval/acceptance/hooks.go`](../examples/orders-eval/acceptance/hooks.go)
 are a complete example.
 
-### `surla approve`
+### `hbay approve`
 
 An operator tool that checks a saved full report against explicit promotion
 facts and prints a JSON summary (`report_digest`, `binding`, `counts`). It
@@ -699,13 +699,13 @@ records nothing, contacts no server, and merges and deploys nothing.
 
 | Flag *(all required)* | Meaning |
 | --- | --- |
-| `-report <path>` | A full report written by `surla verify`. |
+| `-report <path>` | A full report written by `hbay verify`. |
 | `-candidate-commit <sha>` | The commit being promoted. |
 | `-request-revision <digest>` | The revision the report must name. |
 | `-suite-id <id>`, `-suite-commit <sha>`, `-environment <env>` | The evaluator and environment the report must name. |
 | `-artifact <name=sha256>` *(repeatable)* | Each binary's 64-hex-digit SHA-256 digest. |
 
-### `surla version`
+### `hbay version`
 
 Prints the module version the binary was built from, or `(devel)`.
 
@@ -744,7 +744,7 @@ all act for that owner.
 | [`refresh_story`](#refresh_story) | | ✓ | | | | MCP tool and HTTP |
 | [`get_story_refresh`](#get_story_refresh) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
 | [`update_draft`](#update_draft) | | ✓ | | | | MCP tool and HTTP |
-| [`surla://golden-path`](#mcp-resources) (`golden_path`) | ✓ | ✓ | ✓ | ✓ | | MCP resource and HTTP |
+| [`highbay://golden-path`](#mcp-resources) (`golden_path`) | ✓ | ✓ | ✓ | ✓ | | MCP resource and HTTP |
 | [`open_views`](#open_views) | ✓ | ✓ | | | | MCP tool and HTTP |
 | [`init_project`](#init_project) | | ✓ | | | | MCP tool and HTTP |
 | [`generate_code`](#generate_code) | | | ✓ | | | MCP tool and HTTP |
@@ -793,7 +793,7 @@ all act for that owner.
 The user's browser session sends HTTP only, so the user-only MCP tools
 (`confirm_intent`, `decline_revision`, `configure_model`, `review_verification`,
 `approve_merge`)
-appear in no agent's tool list. `surla` and `surla stop` call the management
+appear in no agent's tool list. `hbay` and `hbay stop` call the management
 operations. The views page exchanges its single-use link with
 `POST /project/browser-session`, which needs no credential because the link
 is one.
@@ -812,7 +812,7 @@ applied the text. Refusals take these shapes:
 
 | Cause | HTTP | MCP |
 | --- | --- | --- |
-| No credential, or one the server does not hold (for example after a restart) | `401` with the message `session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion` | The same `401` on `POST /mcp` |
+| No credential, or one the server does not hold (for example after a restart) | `401` with the message `session or credential is no longer valid; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion` | The same `401` on `POST /mcp` |
 | The caller's kind may not call the operation | `403` `forbidden`, message `caller may not call <operation>` | A tool error result (`isError: true`) with the same message |
 | A field the route does not declare, at any depth, or a structurally invalid value | `400`, such as `decode_payload` naming the field (`json: unknown field "id"`), `missing_field` or `invalid_pattern` | A tool error starting with `invalid arguments:` that names the field |
 | A named domain refusal, listed with each operation | The status the route declares, such as `404` `not_found`, `409` `conflict` or `422` `unprocessable` | A tool error result with the same message |
@@ -869,8 +869,8 @@ no verification, even with a promotion target, the
 release check that stored promotion settings configure. It is also `false`
 when resolving that target fails: the list still answers, and the error is
 recorded on the read's span
-(`surla.controlplane.list_changes`, or `surla.controlplane.wait_for_changes`
-on each of its polls). Outside initialization, a server started by `surla`
+(`highbay.controlplane.list_changes`, or `highbay.controlplane.wait_for_changes`
+on each of its polls). Outside initialization, a server started by `hbay`
 always runs verification, with or without promotion settings, so there it is
 `true` unless resolving stored promotion settings fails.
 `version` changes whenever a listed value, `initializing_phase` or `draft_state` changes, and also when a build, the
@@ -916,13 +916,13 @@ A saved approval is returned in `approval` only while the tests chosen for
 its revision are still at the approval's `suite_commit` and, when promotion
 settings are stored, the release binaries still have the approved digests. A
 later report of the tests, the acceptance of other tests, a build after which
-Surla does not accept the same commit again, or changed release binaries
+Highbay does not accept the same commit again, or changed release binaries
 hide it; the card file keeps it. After the user rebuilds an unmerged,
-undropped open build of the same change, Surla's check of a report accepts the
-same commit again only while that build's branch `surla/tests-<n>` still
+undropped open build of the same change, Highbay's check of a report accepts the
+same commit again only while that build's branch `highbay/tests-<n>` still
 points at it and the files it checked are exactly the files that commit holds.
 A build started after a merge or drop is a new numbered build on a new
-`surla/tests-<n>` branch at the project's current commit, so the earlier
+`highbay/tests-<n>` branch at the project's current commit, so the earlier
 approval stays hidden.
 When the tests still match and promotion settings are stored but the
 release binaries cannot be read, `unverified_approval` carries the saved
@@ -930,8 +930,8 @@ approval and this `reason`: "Saved approval for candidate
 commit <commit> could not be verified because the release binaries could not
 be read. Publish the binaries the run built into the release folder that the
 promotion settings name, in a folder named after the commit, and press Check
-current approval; or remove the promotion settings with surla promotion
-remove and restart Surla; or press Approve this result on a newly verified
+current approval; or remove the promotion settings with hbay promotion
+remove and restart Highbay; or press Approve this result on a newly verified
 run." The read records why on its `controlplane.check_approval` span: the
 event `approval.hidden_tests_changed` when the tests changed, and the error
 when the release binaries cannot be read.
@@ -942,20 +942,20 @@ when the release binaries cannot be read.
 `story_refresh_op_id?`, `analysis`. **Output:** `ChangeCardResult`.
 
 Saves the guide's analysis of a request as a Change Card waiting for the
-user. Surla runs no model to propose or revise, so these operations need no
-model key. The guide reads [`surla://golden-path`](#mcp-resources), drafts only
-in the `.surla-draft` folder [`refresh_story`](#refresh_story) returns, and
+user. Highbay runs no model to propose or revise, so these operations need no
+model key. The guide reads [`highbay://golden-path`](#mcp-resources), drafts only
+in the `.highbay-draft` folder [`refresh_story`](#refresh_story) returns, and
 sends `analysis`:
 
 | Field | Content |
 | --- | --- |
 | `summary` | The change in plain words. |
 | `ambiguities` | The questions only the user can answer, each a `question` with at least two distinct `options` and optional `draft_option` (the exact string in `options` that the evaluated draft design, Story, examples and preserved behaviors already implement when the choice changes them; omitted when every option fits the current draft); empty when nothing is open. |
-| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer. Verification runs the scenarios of the selected suite, the tests Surla accepted for the build or, with stored [verification settings](#surla-verification-and-surla-promotion), the operator's evaluator; the label does not select how or whether one runs. |
+| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer. Verification runs the scenarios of the selected suite, the tests Highbay accepted for the build or, with stored [verification settings](#hbay-verification-and-hbay-promotion), the operator's evaluator; the label does not select how or whether one runs. |
 | `preserved_behaviors` | The behaviors the change must keep, possibly none. |
 | `ui_composition` *(optional)* | An illustration of the decision for the views page (see [MCP resources](#mcp-resources)). It is never checked, never part of `request_revision`, and is dropped when the user changes the answers or examples. |
 
-Surla numbers the questions `<change_id>-ambiguity-NN` and the examples
+Highbay numbers the questions `<change_id>-ambiguity-NN` and the examples
 `check_01`, `check_02`, …, keeps every text as sent, computes
 `request_revision`, and saves the card as `needs_confirmation`, even with no
 question. With `story_refresh_op_id`, it saves what that succeeded
@@ -971,7 +971,7 @@ design.
 | `drafted_before_drop` (`409`) | The user dropped a build after `story_refresh_op_id` was evaluated; call `refresh_story` to remake and evaluate the draft from the project folder, then propose again. |
 | `unprocessable` (`422`) | `change_id` or `prompt` is blank; the analysis breaks a rule that spans fields (message starting `invalid analysis:`, such as a question that repeats an option or names a `draft_option` that is not one of its `options`); `story_refresh_op_id` does not name the owner's current succeeded `refresh_story` operation (the message names `refresh_story`); or the project folder holds a `go.mod` and `story_refresh_op_id` is omitted. |
 
-Surla cannot judge whether an analysis is complete or right; the user does
+Highbay cannot judge whether an analysis is complete or right; the user does
 that when confirming.
 
 #### `revise_change`
@@ -1071,10 +1071,10 @@ stays exactly as saved.
 `StoryRefreshResult` (`op_id`, `state`, `snapshot_digest`, `draft_folder`,
 `stories`, `diagnostic`, `message`).
 
-Reads the guide's draft Go module in `.surla-draft` (`go.mod`, `go.sum` and
+Reads the guide's draft Go module in `.highbay-draft` (`go.mod`, `go.sum` and
 the non-test `.go` files under `design/`; on the first `refresh_story` after
-the user drops a build with [`drop_build`](#drop_build), Surla remakes
-`.surla-draft` from the project folder and notes in `message` that edits made
+the user drops a build with [`drop_build`](#drop_build), Highbay remakes
+`.highbay-draft` from the project folder and notes in `message` that edits made
 before the drop are gone until a revision is saved),
 computes its `snapshot_digest`, and starts, or reuses, an evaluation
 of its Stories. It answers at once with `state` `running` or `succeeded`.
@@ -1086,7 +1086,7 @@ disconnecting. A design that does not use the Story language succeeds with
 
 | Refusal | When |
 | --- | --- |
-| `unprocessable` (`422`) | The project folder has no `go.mod` or was replaced; a draft file is not valid UTF-8, cannot be parsed as Go, or imports a package of the project outside `design/` (the message names the file and line); or `.surla-draft` is a link or a file, not a folder. |
+| `unprocessable` (`422`) | The project folder has no `go.mod` or was replaced; a draft file is not valid UTF-8, cannot be parsed as Go, or imports a package of the project outside `design/` (the message names the file and line); or `.highbay-draft` is a link or a file, not a folder. |
 | `unavailable` (`503`) | The server is stopping. |
 
 #### `get_story_refresh`
@@ -1101,27 +1101,27 @@ Pass a succeeded `op_id` as `story_refresh_op_id` to
 [`propose_change`](#propose_change) or [`revise_change`](#revise_change).
 
 When a design file imports the Story language but the draft's `go.mod`
-does not require `github.com/goadesign/surla/story`, the `diagnostic` of the
+does not require `github.com/goadesign/highbay/story`, the `diagnostic` of the
 failed evaluation also names the step: “`In the folder that holds that
-go.mod, run: go get github.com/goadesign/surla/story@<version>, then try
-again.`” The version is the one Surla's own `go.mod` requires. The guide runs
+go.mod, run: go get github.com/goadesign/highbay/story@<version>, then try
+again.`” The version is the one Highbay's own `go.mod` requires. The guide runs
 the command in its draft, whose `go.mod` was evaluated. A project made by
-`surla init` or `init_project` already requires the module.
+`hbay init` or `init_project` already requires the module.
 
 #### `update_draft`
 
 `POST /workspace/draft/update`. **Input:** none. **Output:**
 `DraftUpdateResult` (`draft_folder`, `taken`, `merged`, `to_correct`).
 
-The guide brings design changes from the project folder into `.surla-draft`
-(making `.surla-draft` first when missing, as [`refresh_story`](#refresh_story)
+The guide brings design changes from the project folder into `.highbay-draft`
+(making `.highbay-draft` first when missing, as [`refresh_story`](#refresh_story)
 does) without running an evaluation. Call it before drafting each new change,
 such as after the user merges a passed build, and whenever a design file
-changed in the project folder outside Surla (after committing an outside design
+changed in the project folder outside Highbay (after committing an outside design
 change when a build or verification reports `design_changed_outside`).
 
 For each Go file under `design/` (test files excluded) in the recorded history,
-`.surla-draft` or the project folder, Surla compares the project folder's
+`.highbay-draft` or the project folder, Highbay compares the project folder's
 canonical Go version and the draft's version over a comparison base: whichever
 was recorded later between the history base (the latest recorded version in the
 project's committed history since the draft's start, or the starting folder
@@ -1130,12 +1130,12 @@ took. A project folder version equal to that comparison base, or already
 current in the recorded history, changes nothing. Otherwise, unless a
 `to_correct` case below applies:
 
-- When the draft did not change the file from the comparison base, Surla writes
-  the project folder's version into `.surla-draft` (or removes the file when the
+- When the draft did not change the file from the comparison base, Highbay writes
+  the project folder's version into `.highbay-draft` (or removes the file when the
   project folder removed it) and lists its path in `taken`.
 - When the draft already holds the project folder's version, or when both
   changed the file and `git merge-file` merges them without conflict into valid
-  Go, Surla writes the canonical Go result into `.surla-draft` and lists its
+  Go, Highbay writes the canonical Go result into `.highbay-draft` and lists its
   path in `merged`.
 - When a file needs correction, it is listed in `to_correct`
   (`path`, `folder`, `problem`), in path order. `path` is relative to the folder
@@ -1144,9 +1144,9 @@ current in the recorded history, changes nothing. Otherwise, unless a
   - the draft file cannot be parsed as Go, or the project folder's file cannot
     be parsed as Go; `folder` identifies which file needs correction;
   - the project's committed history gained a recorded version from another line
-    after the file was last taken, so Surla wrote the project folder's live file
-    into `.surla-draft` without merging (`The project's history gained design
-    changes from another line after this file was taken. Surla took the live
+    after the file was last taken, so Highbay wrote the project folder's live file
+    into `.highbay-draft` without merging (`The project's history gained design
+    changes from another line after this file was taken. Highbay took the live
     project file without merging; check that it holds your intended draft edits
     once.`);
   - one side removed the file while the other changed it (`One side removed
@@ -1157,12 +1157,12 @@ current in the recorded history, changes nothing. Otherwise, unless a
     conflict markers in this draft file.`), or the merged text does not parse as
     Go;
   - a previous `update_draft` stopped while writing the file and the draft
-    changed since (`Surla stopped while bringing the project folder's change
+    changed since (`Highbay stopped while bringing the project folder's change
     into your draft, and the draft changed since: make sure it holds that
     change once.`); when the draft file is still as it was before the write or
     already holds its result, `update_draft` finishes the interrupted update and
     never brings that change in a second time;
-  - `go.mod`, which Surla never merges or rewrites, cannot be parsed in the
+  - `go.mod`, which Highbay never merges or rewrites, cannot be parsed in the
     project or draft, the project's `go.mod` declares no module, the draft
     declares a different module path (`The project and draft
     must declare the same module.`), lacks or differs on a version the project's
@@ -1179,7 +1179,7 @@ calls `update_draft` again until `to_correct` is empty, then calls
 
 | Refusal | When |
 | --- | --- |
-| `unprocessable` (`422`) | The project folder was replaced; `.surla-draft` is a link or a file rather than a folder, its `.gitignore` has no Surla draft marker, or its provenance is missing; the draft or provenance changed while Surla first made the draft; the draft's or project folder's `go.mod` is missing, or a `go.mod`, `go.sum` or design file there is not regular, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link or submodule. The message names the file or folder and who corrects it. The guide corrects its draft, or asks the user to correct the project file (and commit a correction to committed design), then calls again. |
+| `unprocessable` (`422`) | The project folder was replaced; `.highbay-draft` is a link or a file rather than a folder, its `.gitignore` has no Highbay draft marker, or its provenance is missing; the draft or provenance changed while Highbay first made the draft; the draft's or project folder's `go.mod` is missing, or a `go.mod`, `go.sum` or design file there is not regular, cannot be read or is not valid UTF-8; or a design file in the project's current commit cannot be parsed as Go or is a link or submodule. The message names the file or folder and who corrects it. The guide corrects its draft, or asks the user to correct the project file (and commit a correction to committed design), then calls again. |
 | `conflict` (`409`) | The project's commit, the draft, the project files or the design provenance changed while preparing the update (`The project's commit changed while preparing the draft update; call update_draft again.` or `The draft, project files or design provenance changed while preparing the update; call update_draft again.`). |
 | `unavailable` (`503`) | The server is stopping. |
 
@@ -1199,7 +1199,7 @@ and session credential stay with the server and browser.
 `worked_example?`. **Output:**
 `InitProjectResult` (`dir`, `module_path`, `service_name`, `commit`).
 
-Creates the [`surla init`](#surla-init) starter, blank unless
+Creates the [`hbay init`](#hbay-init) starter, blank unless
 `worked_example` is `true`, and runs `go mod tidy`,
 `go vet ./...` and `go test ./...` in both modules. The server saves
 `Initial scaffold` with its Git identity and makes the starter its active
@@ -1215,10 +1215,10 @@ a valid service name.
 
 Pass `dir: "."` (or omit both `module_path` and `dir`) to initialize the bound
 folder in place. When `module_path` is given and `dir` is omitted or empty,
-Surla creates a child folder named for the service. A named child must match
-`^[a-zA-Z0-9][a-zA-Z0-9._-]*$` and cannot start with `.surla`. In-place mode
+Highbay creates a child folder named for the service. A named child must match
+`^[a-zA-Z0-9][a-zA-Z0-9._-]*$` and cannot start with `.highbay`. In-place mode
 may already contain `.claude`, `.codex`, `.cursor`, `.gemini`, `.agents`,
-`.vscode`, `.mcp.json` or `.DS_Store`. Surla preserves those entries and
+`.vscode`, `.mcp.json` or `.DS_Store`. Highbay preserves those entries and
 refuses other existing entries or collisions with generated files in this mode.
 It publishes the checked starter with `.git` last and resumes interrupted
 publication on restart.
@@ -1227,7 +1227,7 @@ publication on restart.
 | --- | --- |
 | `unprocessable` (`422`) | `module_path` or `dir` is invalid. |
 | `conflict` (`409`) | The workspace already holds a project or durable work based on it, the child destination exists, or the in-place destination contains an entry the operation cannot preserve. |
-| `not_implemented` (`501`) | The `surla` binary was built without an exact module version. Install a tagged or pseudo-versioned release, stop the running project server with `surla stop` in the project folder (it keeps the version it started with, and a new `surla` refuses to attach to an older server), restart the coding agent so its `surla stdio` is the new build, then call `init_project` again. |
+| `not_implemented` (`501`) | The `hbay` binary was built without an exact module version. Install a tagged or pseudo-versioned release, stop the running project server with `hbay stop` in the project folder (it keeps the version it started with, and a new `hbay` refuses to attach to an older server), restart the coding agent so its `hbay stdio` is the new build, then call `init_project` again. |
 
 #### `generate_code`
 
@@ -1235,16 +1235,16 @@ publication on restart.
 `eval`). **Output:** `GenerateCodeResult` (`target`, `files_written`,
 `warnings`).
 
-The builder's generation in its `.surla-build` working copy on `surla/build-<n>`
+The builder's generation in its `.highbay-build` working copy on `highbay/build-<n>`
 (never in the project folder). For `candidate` (the default), it writes the open
 build's saved agreed design into `design/` of the builder's working folder,
 checks that `go.mod` there requires the modules that design imports, compiles
-the design, and replaces that module's `gen/` exactly as [`surla gen`](#surla-gen)
+the design, and replaces that module's `gen/` exactly as [`hbay gen`](#hbay-gen)
 does. With `{"target":"eval"}`, it regenerates the `eval/` module of the
 builder's working folder from that module's own design. In a build that runs
 with a test writer (without stored verification settings), `eval/`,
 `eval/design/` included, belongs to the test writer and the builder leaves it
-untouched; Surla regenerates `eval/gen/` in `.surla-tests` when
+untouched; Highbay regenerates `eval/gen/` in `.highbay-tests` when
 `get_test_writer_assignment` marks an assigned build's assignment read and on
 each report. Both targets require an open, undropped build in force with the
 builder's assignment read. It compiles only; call
@@ -1256,10 +1256,10 @@ means `gen/` was not replaced; a warning means it was.
 | `no_build` (`409`) | No build is open, or the open build was dropped. |
 | `conflict` (`409`) | The open build is of an earlier revision (`in_force: false`); the user builds the agreed revision first. |
 | `assignment_unread` (`409`) | The builder has not read the open build's assignment; call `get_builder_assignment` first. |
-| `copy_off_branch` (`409`) | `.surla-build` is not on `surla/build-<n>` or has a Git operation in progress. |
-| `working_folder_missing` (`409`) | The builder's working folder in `.surla-build` is missing or not a directory. |
+| `copy_off_branch` (`409`) | `.highbay-build` is not on `highbay/build-<n>` or has a Git operation in progress. |
+| `working_folder_missing` (`409`) | The builder's working folder in `.highbay-build` is missing or not a directory. |
 | `working_copy_busy` (`409`) | Another operation is using the builder's working copy; call again when it ends. |
-| `missing_modules` (`422`) | `.surla-build/go.mod` lacks a module the agreed design requires, requires an older version, or has a differing `replace` directive. |
+| `missing_modules` (`422`) | `.highbay-build/go.mod` lacks a module the agreed design requires, requires an older version, or has a differing `replace` directive. |
 | `unprocessable` (`422`) | The module is absent, replaced or invalid. |
 | A server fault (`500`) | The design does not compile or generation fails; the message states the failed phase and says to call `generate_code` again. |
 
@@ -1269,18 +1269,18 @@ means `gen/` was not replaced; a warning means it was.
 (`op_id`, `passed`, `message`).
 
 Runs `go test ./...` in every Go module of the builder's working folder in
-`.surla-build` on `surla/build-<n>` (skipping
+`.highbay-build` on `highbay/build-<n>` (skipping
 `testdata`, `vendor` and folders starting with `.` or `_`, and leaving out
 `eval` without stored verification settings when the project has the starter
 test layout `go.mod` and `eval/go.mod`: `Left test module eval out (tests
-belong to the test writer)`) on the current files in `.surla-build`, uncommitted
+belong to the test writer)`) on the current files in `.highbay-build`, uncommitted
 edits included, without changing them. The server copies
-the files (leaving out `.git` and `.surla*`, never following a link) into a
+the files (leaving out `.git` and `.highbay*`, never following a link) into a
 private folder, then runs each module in two Linux containers from
 `golang:1.27.3`: first preparing dependencies with your `GOPROXY`,
 `GOSUMDB`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB` and `GOINSECURE` and no
 credentials, then testing with no network. Dependency preparation omits package
-names so they cannot displace Go's errors from the failure message. A helper process, `surla
+names so they cannot displace Go's errors from the failure message. A helper process, `hbay
 check-run`, owns the containers and finishes removing them even when the call
 is canceled or the server stops. `passed` is true only when every module's
 tests pass. `message` (at most 16 KiB) names the first failure; read the full
@@ -1312,8 +1312,8 @@ cleanup never removes the retained directory. Projects keep separate caches.
 `UpdateDependenciesResult` (`op_id`, `files_written`, `message`).
 
 Runs `go mod tidy` for every module of the builder's working folder in
-`.surla-build` on `surla/build-<n>` in the same kind of private copy and
-containers, with network, then writes back into `.surla-build` only the `go.mod`,
+`.highbay-build` on `highbay/build-<n>` in the same kind of private copy and
+containers, with network, then writes back into `.highbay-build` only the `go.mod`,
 `go.sum` and `go.work.sum` files whose bytes changed. Without stored verification
 settings, when the project has the starter test layout (`go.mod` and `eval/go.mod`
 for `<module>/eval`), `eval` is left out (`Left test module eval out (tests belong
@@ -1364,7 +1364,7 @@ declares a confirmation gate, not that the application delivers it; see
 #### `diff`
 
 `POST /diff`. **Input:** `old` and `new` (`DesignSnapshot`). **Output:**
-`DiffResult`. Compares two design snapshots as [`surla diff`](#surla-diff)
+`DiffResult`. Compares two design snapshots as [`hbay diff`](#hbay-diff)
 does.
 
 ### Live target and model connection
@@ -1381,7 +1381,7 @@ from a commit, so the builder can try prompt wording with
 
 Checks the owner's confirmed change and builds the candidate as verification
 does. Without stored verification settings, the current revision must have a
-build whose tests Surla accepted, and a model must be chosen in the Live target
+build whose tests Highbay accepted, and a model must be chosen in the Live target
 view. The candidate's programs come from `candidate_commit`; the generated test
 program comes from the accepted tests commit and starts them with `--live`.
 Builder edits to its own test module never become that live test program.
@@ -1391,7 +1391,7 @@ needs no build or accepted tests; the change must still be owned and confirmed.
 
 The test program and the application run on this computer as ordinary
 processes, with your access to files and the network. For
-written tests, Surla gives the program no provider setting. With a direct
+written tests, Highbay gives the program no provider setting. With a direct
 provider, the executor serves the selected model through a loopback gateway;
 with a chosen gateway, the program uses that gateway. The operator's stored
 evaluator keeps its provider settings. Running as you, a test program can
@@ -1412,8 +1412,8 @@ building continues if the caller disconnects.
 | `conflict` (`409`) | The change is not confirmed, the commit is not in the repository, or the project folder was replaced. Without stored verification settings, a candidate that changes hand-written files of the test module or shares no history with the accepted tests is also refused. Follow the named user or builder step; after restoring and committing the test module, retry the intended verification or live-target start. |
 | `no_build` (`409`), `tests_not_accepted` (`409`) | Without stored settings, the current revision has no build or its tests are not accepted. The message names who acts; the builder waits for that step before verifying or starting again. |
 | `no_test_layout` (`409`) | The required starter test layout is missing; follow the same layout step as verification. |
-| `live_target_failed` (`422`) | Building or starting failed. For written tests, fix the candidate's startup or tell the user so the test writer can correct and report its acceptance package. If the earlier target's processes could not be confirmed stopped, stop and start Surla before another start. |
-| `live_target_unavailable` (`501`) | The server is stopping, or a written-tests project has no model choice. The message names whether to start Surla again or choose a model in the Live target view. |
+| `live_target_failed` (`422`) | Building or starting failed. For written tests, fix the candidate's startup or tell the user so the test writer can correct and report its acceptance package. If the earlier target's processes could not be confirmed stopped, stop and start Highbay before another start. |
+| `live_target_unavailable` (`501`) | The server is stopping, or a written-tests project has no model choice. The message names whether to start Highbay again or choose a model in the Live target view. |
 
 #### `stop_live_target`
 
@@ -1426,7 +1426,7 @@ process was running. A process stop is attempted once.
 
 | Refusal | When |
 | --- | --- |
-| `live_target_stop_failed` (`500`) | Its processes or folder could not be confirmed stopped; stop and start Surla. A later stop reports the same. |
+| `live_target_stop_failed` (`500`) | Its processes or folder could not be confirmed stopped; stop and start Highbay. A later stop reports the same. |
 
 #### `get_live_target`
 
@@ -1438,7 +1438,7 @@ which cannot be stopped until the start finishes; `running`
 draft's `prompt_id`, `version` and `accepted_at`, never its text);
 `ended` (`candidate_commit`, `started_at`, `ended_at`, `message`); or
 `not_confirmed_stopped` (`candidate_commit` and a `message` naming the step:
-stop and start Surla). An unexpected ending is published only after confirmed
+stop and start Highbay). An unexpected ending is published only after confirmed
 process cleanup. Its message states that the exact cause is unavailable and
 names the builder's recovery step; it exposes no address, key, provider
 settings, prompt drafts or logs. That one observation survives reads and page
@@ -1472,22 +1472,22 @@ answers `applied_in_store: false` and `requires_rebuild: true`, with a
 
 The user's **Apply** in the Live target view. It chooses, without a restart,
 the model that live targets started afterwards receive: a direct provider,
-whose request settings the guide's `surla stdio` connection or bare `surla`
+whose request settings the guide's `hbay stdio` connection or bare `hbay`
 handed to the server from its environment
 ([`hand_over_model_settings`](#hand_over_model_settings)), or a plaintext
 gRPC `goa-ai` model gateway at a hostname or IP address and port 1–65535,
 such as `127.0.0.1:53114` or `[::1]:53114`, without a URL scheme or path.
-Surla validates its syntax without trying to connect. A running target keeps its model. Keys never
+Highbay validates its syntax without trying to connect. A running target keeps its model. Keys never
 travel in this request or through MCP. The choice and the held settings last
 until the server stops; after a restart no model is chosen, so the next
-guide attachment or bare `surla` hand-over selects that provider's default
+guide attachment or bare `hbay` hand-over selects that provider's default
 model again.
 Verification does not use the choice.
 
 | Refusal | When |
 | --- | --- |
 | `400` | An unknown provider or another schema violation. |
-| `unprocessable` (`422`) | An invalid combination or gateway address, or the server holds no request settings for the chosen provider: `provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway.` The previous choice stays in force. |
+| `unprocessable` (`422`) | An invalid combination or gateway address, or the server holds no request settings for the chosen provider: `provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway.` The previous choice stays in force. |
 
 #### `get_model_connection`
 
@@ -1507,7 +1507,7 @@ variable name to value. **Output:** `ModelSettingsResult` (`held`: each
 provider's held variable names, sorted; `connection`: the choice, as
 `get_model_connection` reports it). It never returns a value.
 
-`surla` calls it after the server answers for the project, with the request
+`hbay` calls it after the server answers for the project, with the request
 settings of each provider whose key is set in its own environment. A
 provider's request settings are the variables of its family (every name
 starting with its prefix) that cross; any other family variable, such as
@@ -1521,7 +1521,7 @@ starting with its prefix) that cross; any other family variable, such as
 The pinned Anthropic SDK uses the API key and base URL. When an API key is
 held, it ignores `ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_CUSTOM_HEADERS`; handing
 them over does not make them apply to a written-tests live target's provider.
-Surla preserves that SDK precedence rather than parsing those values itself.
+Highbay preserves that SDK precedence rather than parsing those values itself.
 
 Choose a base URL whose endpoint you control. If a held base URL names a
 loopback port where nothing listens, another local process can bind that port
@@ -1564,7 +1564,7 @@ started with.
 | Built source | Workspace selection for toolchain lookup, dependency download and compilation |
 | --- | --- |
 | Application binaries and tests, and suites from stored verification settings | Use the checkout's internal `go.work` when present; ignore a workspace above the checkout. |
-| Surla-written tests, both report checks and verification suites | Use `GOWORK=off`, including when `go.work` exists in the checkout root or the test module. The module's `go.mod` and `go.sum` own its dependencies. |
+| Highbay-written tests, both report checks and verification suites | Use `GOWORK=off`, including when `go.work` exists in the checkout root or the test module. The module's `go.mod` and `go.sum` own its dependencies. |
 
 Both policies keep the full checkout, including sibling files used by local
 module replacements.
@@ -1585,7 +1585,7 @@ Which tests run depends on the project:
 
 | The project has | Tests that run |
 | --- | --- |
-| No stored verification settings | The tests Surla accepted for the user's build of this revision, at their tests commit (`get_build` shows `tests.state == "accepted"`). The run builds the application's programs from `candidate_commit` and the test program `eval/gen/cmd/<service>-evals` from the tests commit, both read from Git, never from working files. Both commits need the layout `surla init` makes: `go.mod`, `eval/go.mod` for `<module>/eval`, `cmd/<service>` in the candidate and the generated test program in the tests commit. |
+| No stored verification settings | The tests Highbay accepted for the user's build of this revision, at their tests commit (`get_build` shows `tests.state == "accepted"`). The run builds the application's programs from `candidate_commit` and the test program `eval/gen/cmd/<service>-evals` from the tests commit, both read from Git, never from working files. Both commits need the layout `hbay init` makes: `go.mod`, `eval/go.mod` for `<module>/eval`, `cmd/<service>` in the candidate and the generated test program in the tests commit. |
 | Stored verification settings | The evaluator the settings name, at their `suite_commit`. The change's open, undropped build of the agreed revision is still required for the builder's working copy and branch. |
 
 Tests a separate agent wrote run, like the application, as ordinary processes
@@ -1599,13 +1599,13 @@ provider's settings.
 | --- | --- |
 | `no_build` | No build is open, the open build belongs to another change or is of another revision (named), the user dropped the build, or the build was started without a test writer while verification settings were stored and they have since been removed. The user builds again. |
 | `assignment_unread` | The builder has not read the open build's assignment; call `get_builder_assignment` first. |
-| `copy_off_branch` | `.surla-build` is not on `surla/build-<n>` or has a Git operation in progress. |
-| `working_folder_missing` | The builder's working folder in `.surla-build` is missing or not a directory. |
-| `build_branch_mismatch` | `candidate_commit` is not on the open build's branch `surla/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
-| `design_changed_outside` | A design file at `candidate_commit`'s merge base with the project's commit was changed outside Surla. |
-| `tests_not_accepted` | Surla has not accepted the build's tests. The message names their state (assigned, reported, needs changes, could not run) and who acts next, and ends with the builder's own step, for example `the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again`. |
+| `copy_off_branch` | `.highbay-build` is not on `highbay/build-<n>` or has a Git operation in progress. |
+| `working_folder_missing` | The builder's working folder in `.highbay-build` is missing or not a directory. |
+| `build_branch_mismatch` | `candidate_commit` is not on the open build's branch `highbay/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
+| `design_changed_outside` | A design file at `candidate_commit`'s merge base with the project's commit was changed outside Highbay. |
+| `tests_not_accepted` | Highbay has not accepted the build's tests. The message names their state (assigned, reported, needs changes, could not run) and who acts next, and ends with the builder's own step, for example `the tests of this build are not accepted; their state is reported: Highbay is checking the test writer's report; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again`. |
 | `no_test_layout` | A commit lacks the layout, naming what is missing: the builder fixes its commit, or the test writer reports again for the tests commit. Also an accepted tests commit the repository does not hold (the test writer reports again, or the user builds again), and a project folder in no Git repository (make it one and commit). |
-| `conflict` | The card is not confirmed or `request_revision` is stale; Surla is using the builder's working copy (call `verify_change` again when that operation has ended); `candidate_commit` is not in the repository (commit it and try again), shares no history with the project's current commit, or its `design/` differs from the open build's agreed design (run `generate_code` to restore the agreed design, commit on `surla/build-<n>`, and verify again); without stored verification settings, `candidate_commit` changes hand-written files of the test module since the last commit it shares with the accepted tests commit (`eval/gen/...` and `eval/AGENTS_QUICKSTART.md` excluded; the message names up to 20 files, notes on `eval/go.mod` changes that renaming the service module is the user's to do on their own branch between changes, and gives the `git restore` or `git rm -f` command to restore or remove them and commit again) or shares no commit with the accepted tests commit (build the change again from the project's current commit, then read the new assignments and verify again); or the project folder was replaced after the server started (stop and start Surla). |
+| `conflict` | The card is not confirmed or `request_revision` is stale; Highbay is using the builder's working copy (call `verify_change` again when that operation has ended); `candidate_commit` is not in the repository (commit it and try again), shares no history with the project's current commit, or its `design/` differs from the open build's agreed design (run `generate_code` to restore the agreed design, commit on `highbay/build-<n>`, and verify again); without stored verification settings, `candidate_commit` changes hand-written files of the test module since the last commit it shares with the accepted tests commit (`eval/gen/...` and `eval/AGENTS_QUICKSTART.md` excluded; the message names up to 20 files, notes on `eval/go.mod` changes that renaming the service module is the user's to do on their own branch between changes, and gives the `git restore` or `git rm -f` command to restore or remove them and commit again) or shares no commit with the accepted tests commit (build the change again from the project's current commit, then read the new assignments and verify again); or the project folder was replaced after the server started (stop and start Highbay). |
 
 `not_found` (`404`) means no card has this `change_id`.
 
@@ -1693,7 +1693,7 @@ no card has this `change_id`.
 `approval`.
 
 The user's **Approve this result** for a passed run. The server takes the
-tests commit from the plan for that revision: the commit Surla accepted for
+tests commit from the plan for that revision: the commit Highbay accepted for
 the build, or the `suite_commit` of the stored verification settings. It
 loads the full report from the project's report store, derives it again from
 its evidence, and checks that it passed and ran those tests against
@@ -1702,8 +1702,8 @@ stored, it also measures the release binaries in
 `<release_dir>/<candidate_commit>/`; without them, the approval records no
 release binaries. Then it saves the approval, after checking that the
 revision and its accepted tests did not change meanwhile. The approval names
-two commits: `candidate_commit`, the builder's commit on `surla/build-<n>`,
-and `suite_commit`, the tests commit on `surla/tests-<n>` (or the stored
+two commits: `candidate_commit`, the builder's commit on `highbay/build-<n>`,
+and `suite_commit`, the tests commit on `highbay/tests-<n>` (or the stored
 evaluator's commit), with `test_source`. Approval records permission to
 merge; it changes no branch. The page offers **Merge into current branch**
 for the current approved result and keeps manual instructions as a secondary path. See
@@ -1714,11 +1714,11 @@ for the current approved result and keeps manual instructions as a secondary pat
 | `not_found` (`404`) | No card has this `change_id`. |
 | `conflict` (`409`) | The card is not confirmed, `request_revision` is stale, or the accepted tests changed while approving (approve again). |
 | `no_build` (`409`) | The change has no open, undropped build of the agreed revision, or a builder-only build lost stored verification settings; the user builds again. |
-| `build_branch_mismatch` (`409`) | `candidate_commit` is not on the open build's branch `surla/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
-| `tests_not_accepted` (`409`) | Surla has not accepted the build's tests. The message, which the user reads, names their state and who acts next, naming the builder rather than instructing it, for example `the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; the builder verifies again after its verdict`. |
+| `build_branch_mismatch` (`409`) | `candidate_commit` is not on the open build's branch `highbay/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
+| `tests_not_accepted` (`409`) | Highbay has not accepted the build's tests. The message, which the user reads, names their state and who acts next, naming the builder rather than instructing it, for example `the tests of this build are not accepted; their state is reported: Highbay is checking the test writer's report; the builder verifies again after its verdict`. |
 | `unprocessable` (`422`) | The report did not pass, does not follow from its own evidence, was made for another candidate commit or another revision than the ones named, or ran tests at another commit than the tests chosen for the revision. For other tests the message names both commits and ends with the step `the builder verifies the candidate again; then approve that run`. |
-| `unprocessable` (`422`) | Promotion settings are stored and a release binary is missing, unreadable or differs from the run's. The message names no folder path and ends with the step `publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings`: that folder is `<release_dir>/<candidate_commit>/`, and removing the settings is `surla promotion remove`, then `surla stop` and `surla`. |
-| `not_implemented` (`501`) | The server runs no verification. A server started by `surla` always does. |
+| `unprocessable` (`422`) | Promotion settings are stored and a release binary is missing, unreadable or differs from the run's. The message names no folder path and ends with the step `publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings`: that folder is `<release_dir>/<candidate_commit>/`, and removing the settings is `hbay promotion remove`, then `hbay stop` and `hbay`. |
+| `not_implemented` (`501`) | The server runs no verification. A server started by `hbay` always does. |
 
 #### `merge_change`
 
@@ -1736,7 +1736,7 @@ step fails after Git starts changing the branch, the server attempts to
 restore the original branch tip, index and tracked files and reports any
 rollback failure. A successful response gives `branch` and `head_commit`.
 Retrying the exact current approval after its work has already landed
-returns the branch and its current tip without merging again. Surla stops
+returns the branch and its current tip without merging again. Highbay stops
 only the workers for that build. The team supervisor also stops them after
 it observes a manual merge or a drop.
 
@@ -1748,7 +1748,7 @@ while Git reads or merges the candidate. Use the page's manual merge
 instructions for those repositories. Unused filter or driver definitions,
 external configuration includes, installed filesystem hooks and commit
 signing remain supported. The refusal leaves the branch and tracked files
-unchanged; Surla does not silently discard the configured behavior.
+unchanged; Highbay does not silently discard the configured behavior.
 
 | Refusal | Recovery |
 | --- | --- |
@@ -1756,8 +1756,8 @@ unchanged; Surla does not silently discard the configured behavior.
 | `not_approved` (`409`) | Review and approve the current result for the open build. |
 | `detached_head` (`409`) | Check out the local branch that should receive the result. |
 | `dirty_worktree` (`409`) | Commit or stash the tracked changes named in the refusal. |
-| `working_copy_busy` (`409`) | Finish the other Git or Surla operation, then retry. |
-| `merge_conflict` (`409`) | Read the Git and restoration outcomes. If Surla names an unsupported Git configuration, review it and merge the approved commits manually. |
+| `working_copy_busy` (`409`) | Finish the other Git or Highbay operation, then retry. |
+| `merge_conflict` (`409`) | Read the Git and restoration outcomes. If Highbay names an unsupported Git configuration, review it and merge the approved commits manually. |
 
 ### Diagnostics
 
@@ -1786,9 +1786,9 @@ status, including `unset`, which does not prove success. `unprocessable`
 for a first build.
 **Who acts:** the server saves the agreed revision's Story and design, with
 the answers, examples and preserved behaviors the user confirmed for it,
-creates any missing `.surla-build` and `.surla-tests` working copies, gives the
+creates any missing `.highbay-build` and `.highbay-tests` working copies, gives the
 builder and the test writer their assignments, and adds them to the team; when
-each worker first reads its assignment, Surla joins its working copy to the
+each worker first reads its assignment, Highbay joins its working copy to the
 build's branch, and `get_test_writer_assignment` writes the required tests when
 marking the assignment read. **What the user sees:** the Build section shows the
 build, each
@@ -1807,28 +1807,28 @@ drop; a revision drafted before it is refused with `drafted_before_drop`. A
 proposed revision is built only after the user adopts
 it. With stored verification settings, a build adds only the builder.
 
-**The build working copies.** Surla creates linked Git working copies inside
-the project folder at `.surla-build` on `surla/build-<n>` for the builder and,
+**The build working copies.** Highbay creates linked Git working copies inside
+the project folder at `.highbay-build` on `highbay/build-<n>` for the builder and,
 when no verification settings are stored (the project then needs the test
-layout `surla init` makes), at `.surla-tests` on `surla/tests-<n>` for the
-test writer, each starting at the build's base commit. It adds `# Surla's
+layout `hbay init` makes), at `.highbay-tests` on `highbay/tests-<n>` for the
+test writer, each starting at the build's base commit. It adds `# Highbay's
 working copies.`,
-`.surla-build/` and `.surla-tests/` to the repository's own `.git/info/exclude`
+`.highbay-build/` and `.highbay-tests/` to the repository's own `.git/info/exclude`
 file, never to a tracked file, so `git status` stays clean. Starting a build
 creates any missing working copy and leaves existing copies where they are;
-when each worker first reads its assignment for a new numbered build, Surla
-switches its copy to `surla/build-<n>` or `surla/tests-<n>` at the build's base
+when each worker first reads its assignment for a new numbered build, Highbay
+switches its copy to `highbay/build-<n>` or `highbay/tests-<n>` at the build's base
 commit (first committing any uncommitted files left on an earlier build branch
 of that role onto that earlier branch with `Left uncommitted when change <id>
-started`). Accepted tests are commits on `surla/tests-<n>`, so deleting a
+started`). Accepted tests are commits on `highbay/tests-<n>`, so deleting a
 working copy loses only uncommitted work: the next build recreates the folder.
 
-**Required tests.** For a build with a test writer, Surla writes the test
+**Required tests.** For a build with a test writer, Highbay writes the test
 module's Story table, `eval/design/story_tests.go`, which declares one scenario
 per finished flow of the saved Story, and generates the module from its design.
 Flow `refund-over-limit` requires scenario `refund_over_limit` and the hook
 method `RefundOverLimit`. Unfinished flows require none; with no finished flow,
-the test program must still build. Surla writes the table and the test module's
+the test program must still build. Highbay writes the table and the test module's
 generated code when `get_test_writer_assignment` marks an assigned build's
 assignment read (at report 0) and again at each report, generating with the
 table it renders in place of whatever the test writer left at that path; the
@@ -1855,11 +1855,11 @@ one of the builder's tools (`generate_code`, `check_project`,
 `update_dependencies`, `verify_change`) or a check of a report is running. A
 worker's assignment read and the builder's tools are refused too while their
 copy is in use (`working_copy_busy`, or `conflict` for `verify_change`); only
-Surla's check of a report waits for the copy. After a start has saved the
+Highbay's check of a report waits for the copy. After a start has saved the
 build and made the copies,
 bringing the team up has 45 seconds. A team problem after saving leaves the
 build and its roles in place: the result says what to do, and **Start workers**
-or `surla` finishes it. If the server stops after saving, the saved build
+or `hbay` finishes it. If the server stops after saving, the saved build
 stays; building again makes any missing working copy and registers the roles.
 Required tests that a stopped read did not finish writing are written again at
 the test writer's next report.
@@ -1888,14 +1888,14 @@ Every refusal below saves no build and registers no role.
 | `previous_change_open` | 409 | Another change's open build (`OpenBuildRefusal`: `name`, `message`, `change_id` and `build`, the open build as `get_build` reports it, with its `started_at` and `taking`) is still `building` or `passed`; merge or drop it first. |
 | `unfinished_build_open` | 409 | This change's open build (`OpenBuildRefusal`) is still `building`, and `replaces` was omitted or did not match its `change_id` and `started_at`. |
 | `drafted_before_drop` | 409 | The agreed revision was made from a draft before a build was dropped; the guide refreshes the Story and revises the change, and the user adopts the revision before building. |
-| `design_changed_outside` | 409 | A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla. The message names the file and the commit. |
+| `design_changed_outside` | 409 | A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Highbay. The message names the file and the commit. |
 | `unprocessable` | 422 | Two finished flows would have the same test name, or one has an empty name; the guide revises the Story. |
 | `not_repository` | 409 | Make the project folder a Git repository and commit its files. |
 | `no_commit` | 409 | Commit the project's files. |
 | `no_test_layout` | 409 | The project has neither stored verification settings nor the test layout; store verification settings, then build again. |
 | `git_identity_missing` | 409 | Configure Git's name and address, then build again. |
-| `copy_folder_in_use` | 409 | Move the project's `.surla-build` or `.surla-tests` entry, which is not Surla's working copy, out of the project. |
-| `tests_branch_in_use` | 409 | Another working copy holds `surla/build-<n>` or `surla/tests-<n>`; the message names it and the step. |
+| `copy_folder_in_use` | 409 | Move the project's `.highbay-build` or `.highbay-tests` entry, which is not Highbay's working copy, out of the project. |
+| `tests_branch_in_use` | 409 | Another working copy holds `highbay/build-<n>` or `highbay/tests-<n>`; the message names it and the step. |
 | `working_copy_busy` | 409 | Build again when the current build start, assignment read or report check has ended. |
 | `unavailable` | 503 | The server is stopping or the start ran out of time; build again. |
 
@@ -1908,11 +1908,11 @@ Every refusal below saves no build and registers no role.
 The user's **Drop change** confirmation on the views page. Marks the open build
 `dropped` when its `change_id` and `started_at` match (the page offers the
 action while `taking.state` is `building` or `passed`; a `merged` build may be
-dropped too), records the branches (`surla/build-<n>` and
-`surla/tests-<n>`) that already hold commits beyond the build's base in
+dropped too), records the branches (`highbay/build-<n>` and
+`highbay/tests-<n>`) that already hold commits beyond the build's base in
 `kept_branches`, stops that build's workers, refuses their tools with
 `no_build`, and causes the next [`refresh_story`](#refresh_story) to remake
-`.surla-draft` from the project folder. The dropped build no longer blocks starting another build,
+`.highbay-draft` from the project folder. The dropped build no longer blocks starting another build,
 but an agreement drafted before the drop still cannot be built. The guide
 refreshes the draft and revises the change, then the user adopts that revision;
 [`get_build`](#get_build) reports this condition as `drafted_before_drop`. Other
@@ -1926,18 +1926,18 @@ start checks still apply.
 
 ### Judging reports
 
-Surla, not the test writer, decides whether the tests count. Each
+Highbay, not the test writer, decides whether the tests count. Each
 [`report_tests_finished`](#report_tests_finished) raises the build's report
 number and wakes the server's report checker, which judges the working copy
 against the build's saved Story:
 
 1. It writes the required tests into the copy again from the Story. Like the
    test writer's read that marks its assignment read, it first removes any
-   `.surla-gen-*` staging folder that a
+   `.highbay-gen-*` staging folder that a
    write cut short by a server's death left in the test module. An entry with
    such a name that is a link, a file, or a folder holding anything but a
    generated `gen` folder is the test writer's and is left alone.
-2. It checks that `.surla-tests` is on `surla/tests-<n>` with no Git operation
+2. It checks that `.highbay-tests` is on `highbay/tests-<n>` with no Git operation
    in progress and that only files inside the test module changed since the
    build's base, regenerates the generated folder in a private snapshot,
    downloads the module's dependencies, builds the test program
@@ -1946,7 +1946,7 @@ against the build's saved Story:
    processes with your file and network access, each in its own process
    group that the check stops; a process that starts its own session leaves
    its group and keeps running. The whole judgment has 15 minutes. Before
-   recording an acceptance, it also checks that the tip of `surla/tests-<n>`
+   recording an acceptance, it also checks that the tip of `highbay/tests-<n>`
    descends from the build's base without commits from other builds' branches.
 3. Its verdict replaces `reported` and marks the test writer's assignment
    unread:
@@ -1955,26 +1955,26 @@ against the build's saved Story:
      that does not declare exactly one evaluation suite, or a build or
      listing that ran out of time (when building hits the 10-minute limit, the
      finding says `The test program did not finish building within 10 minutes. Report again: the retained build cache can reuse compilation that completed. If it still does not finish, make the test module build faster, for example with fewer or smaller dependencies.`);
-   - `accepted`: Surla commits the tests on `surla/tests-<n>` and marks the
+   - `accepted`: Highbay commits the tests on `highbay/tests-<n>` and marks the
      builder's assignment unread too;
    - `could_not_run`: a cause the test writer cannot fix, with the user's
      step.
 
-Surla never shows the output of the dependency download, which may hold
+Highbay never shows the output of the dependency download, which may hold
 proxy settings, so it decides whose failure a failed download is from what it
 can compare. When the test module's `go.mod` and `go.sum` are those of the
 copy's base, or the base's own cannot be downloaded either, the check could
-not run, and the step has the user run the download in the terminal `surla`
+not run, and the step has the user run the download in the terminal `hbay`
 was started from, where its output can be read. When the base's lists
 download and only the test writer's changed ones do not, it is the test
 writer's finding, which names the base commit. A module the test writer
-added that exists but cannot be reached from where Surla runs reads the same
+added that exists but cannot be reached from where Highbay runs reads the same
 as one that does not exist, so that finding also says to tell the user when
 the download works in the copy. The writing of the required tests on that read
 decides the same way when generation fails while loading the module's
 dependencies.
 
-Every acceptance carries `not_judged`, always the sentence `Surla checked that
+Every acceptance carries `not_judged`, always the sentence `Highbay checked that
 these tests build into the generated test program and declare every required
 scenario; it did not judge what they assert.` The user reads the tests before
 merging them.
@@ -2016,10 +2016,10 @@ returns the same required fact in its `ChangeBuild` result.
 | --- | --- |
 | `request_revision`, `started_at` | The revision built and when. |
 | `in_force` | `true` while that revision is the agreed one, including while a proposed revision waits; `false` when adoption or confirmation changes the agreed `request_revision`. Adopting a refreshed draft with unchanged content can keep it `true`. The build is not redone by itself. |
-| `taking` | How the open build stands with the project folder's branch: `building`, `passed` (with `run_id`, `candidate_commit`, `candidate_branch` `surla/build-<n>`, `tests`—`evaluator` or `written_tests` with `commit` and `branch` `surla/tests-<n>`—and `base_in_branch`), `merged`, or `dropped` (with `kept_branches`). |
+| `taking` | How the open build stands with the project folder's branch: `building`, `passed` (with `run_id`, `candidate_commit`, `candidate_branch` `highbay/build-<n>`, `tests`—`evaluator` or `written_tests` with `commit` and `branch` `highbay/tests-<n>`—and `base_in_branch`), `merged`, or `dropped` (with `kept_branches`). |
 | `required_test_count` | Finished flows in the saved Story; `0` means no test was required. It counts entries; it does not judge what the tests assert. |
 | `required_tests` | Required for every caller: one `RequiredTest` per finished flow in the saved build Story, in declaration order (`story`, `flow_key`, `scenario`, `hook`); empty when none. Later agreement edits do not replace this list. It names requirements, not a mapping from findings to tests or proof of evaluator coverage. |
-| `builder` | `read` (whether the builder read its assignment), plus optional `branch` (`surla/build-<n>`), `head_commit` (in `get_build` while `taking` is `building`: the commit `surla/build-<n>` points at once it differs from the build's base; omitted in other states—a passed build records its verified `candidate_commit` in `taking`), `last_check_passed` and `last_check_at` (outcome and completion time of the latest completed `check_project` for this build on the builder's working folder, committed or not; independent of `head_commit`). |
+| `builder` | `read` (whether the builder read its assignment), plus optional `branch` (`highbay/build-<n>`), `head_commit` (in `get_build` while `taking` is `building`: the commit `highbay/build-<n>` points at once it differs from the build's base; omitted in other states—a passed build records its verified `candidate_commit` in `taking`), `last_check_passed` and `last_check_at` (outcome and completion time of the latest completed `check_project` for this build on the builder's working folder, committed or not; independent of `head_commit`). |
 | `test_writer` | `read`, `report` (0 until the first report, one more with each) and `tests`. |
 
 `required_tests` also appears in other responses carrying `StartedBuild`,
@@ -2047,7 +2047,7 @@ verification settings are stored; once they are removed, it reads as
 (`change_id`, `request_revision`, `started_at`, `report`, `checked_at`,
 `findings`).
 
-The text of Surla's findings while the tests are `needs_changes`, for the
+The text of Highbay's findings while the tests are `needs_changes`, for the
 views page, with the build and the report they belong to (`report` is 0 when
 the problems were found while writing the required tests, before any report).
 `conflict` (`409`) in any other state, naming it; `not_found` when there is no
@@ -2067,11 +2067,11 @@ waiting so workers without Chorus never busy-poll; traced without saving to
 (`change_id`, `request_revision`, `in_force`, `working_folder`, `gowork_off`,
 `read`, `written_tests`).
 
-The builder works in `working_folder`, inside `.surla-build` on `surla/build-<n>`
+The builder works in `working_folder`, inside `.highbay-build` on `highbay/build-<n>`
 (never in the project folder), and runs Go with `GOWORK=off` when `gowork_off`
-is `true`. On the first `get_builder_assignment` of a new numbered build, Surla
-joins `.surla-build` to `surla/build-<n>` at the build's base commit (first
-committing any uncommitted files left on an earlier `surla/build-<k>` branch
+is `true`. On the first `get_builder_assignment` of a new numbered build, Highbay
+joins `.highbay-build` to `highbay/build-<n>` at the build's base commit (first
+committing any uncommitted files left on an earlier `highbay/build-<k>` branch
 onto that earlier branch). `written_tests.state` is `not_used`,
 `not_yet_accepted`, or `accepted` with the tests commit and the verdict's time.
 Reading one assignment marks it read; listing changes nothing. `get_builder_assignment`
@@ -2097,12 +2097,12 @@ verdict or `no_build` refusal), or one `TestWriterAssignment`:
 | Field | Meaning |
 | --- | --- |
 | `request_revision`, `in_force`, `progress` | As in `get_build`. |
-| `working_folder` | The project's folder inside the test writer's `.surla-tests` working copy on `surla/tests-<n>`. |
+| `working_folder` | The project's folder inside the test writer's `.highbay-tests` working copy on `highbay/tests-<n>`. |
 | `design_source`, `stories` | The design and Story as agreed at the built revision; later revisions do not change them. |
 | `answers` | Each question of the agreed revision with the option the user confirmed (`id`, `question`, `answer`), in question order; empty when the revision asked none. |
 | `examples`, `preserved_behaviors` | The revision's confirmation examples and preserved behaviors, exactly as the user confirmed them. |
 | `required_tests` | One entry per finished flow: `story`, `flow_key`, `scenario`, `hook`. |
-| `findings` | The text of Surla's findings while `progress` is `needs_changes`; empty otherwise. The list carries only their number. |
+| `findings` | The text of Highbay's findings while `progress` is `needs_changes`; empty otherwise. The list carries only their number. |
 
 The build saves `answers`, `examples` and `preserved_behaviors` when it
 starts, so a revision proposed or adopted later does not change them. The
@@ -2110,27 +2110,27 @@ test writer may not read the change with `get_change`, so these fields are
 how its tests learn what the user agreed: the tests must hold the service to
 them as well as to the Story's flows. For example, when the user answered
 "Without tax" to "Does the $50 limit include tax?" and the limit includes $50.00 itself, a test checks that an
-order of $50.00 before tax is refunded at once. Surla's check of a report
+order of $50.00 before tax is refunded at once. Highbay's check of a report
 confirms the required tests, not what they assert. Reading the assignment of
-a build that holds no example, such as one saved by a `surla` without these
+a build that holds no example, such as one saved by a `hbay` without these
 fields, fails with `the build of change "<change_id>" holds none of the
 agreed answers, examples and preserved behaviors; the user builds this change
 again on the views page`.
 
-On the first `get_test_writer_assignment` of a new numbered build, Surla joins
-`.surla-tests` to `surla/tests-<n>` at the build's base commit (first committing
-any uncommitted files left on an earlier `surla/tests-<k>` branch onto that
+On the first `get_test_writer_assignment` of a new numbered build, Highbay joins
+`.highbay-tests` to `highbay/tests-<n>` at the build's base commit (first committing
+any uncommitted files left on an earlier `highbay/tests-<k>` branch onto that
 earlier branch). The test writer aligns the service interface in its copy with
 the agreed design, writes the tests in `eval/` of `working_folder`, checks them
 with `go build ./...` in `eval/`, which names any required method still missing,
 and then reports. It leaves the Story table, `eval/design/story_tests.go`,
-as it is: Surla writes it from the agreed Story and generates `eval/gen/` when
+as it is: Highbay writes it from the agreed Story and generates `eval/gen/` when
 `get_test_writer_assignment` marks an assigned build's assignment read, and
 again at each report. Because the required tests are part of the module's
-design, regenerating the module with `surla gen -dir eval` keeps them. After
-changing the test module's design, the test writer reports, and Surla generates
+design, regenerating the module with `hbay gen -dir eval` keeps them. After
+changing the test module's design, the test writer reports, and Highbay generates
 the module again; it can also run
-`surla gen -dir eval` in `working_folder` first. Reading an assignment marks
+`hbay gen -dir eval` in `working_folder` first. Reading an assignment marks
 it read. `get_test_writer_assignment` refuses with `not_found` (`404`) when
 there is no usable test assignment for this change, and with `no_build` (`409`,
 when the open build was dropped), `copy_off_branch` (`409`),
@@ -2152,7 +2152,7 @@ a report. It checks scenario names against the test program it already lists,
 including extra declared tests, without a second compilation or listing.
 An unknown scenario produces a finding to correct the report statement.
 
-Statements are the test writer's account; Surla does not judge them. Missing
+Statements are the test writer's account; Highbay does not judge them. Missing
 statements on older saved reports read as **Not stated**. The assignment keeps
 the latest submitted statements for correction after findings or a check that
 could not run. Build shows the accepted report's statements with the built
@@ -2169,8 +2169,8 @@ verdict, returns at once and wakes the report checker.
 | `invalid_coverage` (`400`) | A statement repeats a scenario or reference, names no requirement, or refers to a question/example outside the built agreement. Nothing is saved. |
 | `no_build` (`409`) | The open build was dropped. |
 | `assignment_unread` (`409`) | The test writer has not read the open build's assignment; call `get_test_writer_assignment` first. |
-| `copy_off_branch` (`409`) | `.surla-tests` is not on `surla/tests-<n>` or has a Git operation in progress. |
-| `working_folder_missing` (`409`) | The test writer's working folder in `.surla-tests` is missing or not a directory. |
+| `copy_off_branch` (`409`) | `.highbay-tests` is not on `highbay/tests-<n>` or has a Git operation in progress. |
+| `working_folder_missing` (`409`) | The test writer's working folder in `.highbay-tests` is missing or not a directory. |
 | `conflict` (`409`) | Another revision than the assignment's, or the project stores verification settings and uses no test writer. |
 | `not_found` (`404`) | No usable test assignment for this change. |
 
@@ -2180,9 +2180,9 @@ verdict, returns at once and wakes the report checker.
 
 The server tracks each team's role state in memory. In a Herdr workspace,
 Chorus launches role panes and reports which agents are waiting for messages.
-One-time `surla up` starts Chorus when installed; the guide attaches in place
-through `surla stdio`. The project server does not start Chorus. If Chorus
-has stopped, including after a reboot, run `chorus up` (or `surla up` to
+One-time `hbay up` starts Chorus when installed; the guide attaches in place
+through `hbay stdio`. The project server does not start Chorus. If Chorus
+has stopped, including after a reboot, run `chorus up` (or `hbay up` to
 repeat setup too), then retry **Start workers**. Open Herdr before launching
 pane workers. To change the managed address, run `chorus up -addr :9550`, then use **Start workers** to
 update the team's connection. A failed connection check leaves the page
@@ -2195,7 +2195,7 @@ verification before requesting follow-up work. Each role gets at most three
 invocations per build during the running server's supervision, with a
 30-minute deadline per invocation. Shutdown stops and waits for the managed
 worker process groups. Agents use their own credentials and
-the globally registered `surla stdio` connection to work on their assignments.
+the globally registered `hbay stdio` connection to work on their assignments.
 
 Build and Team show agent, model and permission choices inline. Preferences
 are saved by role in the project. A running role keeps its session; the
@@ -2237,7 +2237,7 @@ project's space and tab, and focuses that role's pane, only when the user asks.
 | Refusal | When |
 | --- | --- |
 | `window_busy` (`409`) | A Herdr dialog is open; close it first. Nothing in the window changed. |
-| `pane_unavailable` (`409`) | The role has no pane Surla can identify. |
+| `pane_unavailable` (`409`) | The role has no pane Highbay can identify. |
 | `team_unavailable` (`503`) | Herdr could not establish the pane: `Herdr did not complete a team command; open the Herdr app, then try again`. |
 
 ### `start_team_agents`
@@ -2265,14 +2265,14 @@ start a missing guide in Herdr.
 {"choices":{"guide":{"client":"codex","program":"/path/to/codex","yolo":false}}}
 ```
 
-For an omitted worker choice, Surla uses a supported saved choice or an
+For an omitted worker choice, Highbay uses a supported saved choice or an
 installed default. By default it prefers Codex for the builder and a different
 family for the test writer, using Claude Code when available and distinct.
-With one supported installed family both workers can use it. Surla saves
+With one supported installed family both workers can use it. Highbay saves
 the resolved choices by role for later requests. A worker that is already
 running keeps its existing session.
 
-Surla starts a guide only when this operation receives an explicit
+Highbay starts a guide only when this operation receives an explicit
 `choices.guide` in Herdr. It refuses a guide start if a guide already has a
 running pane or a Chorus watcher. The browser's **Start workers** sends the
 selected choices for every registered worker that currently has work,
@@ -2316,7 +2316,7 @@ without launching an agent or creating a space.
 
 `POST /project/attach-guide` lets a local management client register an
 existing coding session as the guide. Send `hc_terminal_id`, `client` and
-`ancestor_pids` when attaching a direct session in Herdr. Surla adopts the pane
+`ancestor_pids` when attaching a direct session in Herdr. Highbay adopts the pane
 only if it is a running local model pane inside the project folder with
 matching client and OS lineage facts and compatible project and team labels.
 Outside Herdr (or when spawned by a shared daemon without direct lineage), omit
@@ -2324,7 +2324,7 @@ the terminal ID and ancestor PIDs. The result includes `team`, the guide's
 `handle`, `adopted_herdr` and `herdr_mode`. The integration gives the coding
 agent its role credential from `agents/<handle>` in the private project
 state folder. The project serves MCP at `/mcp` and authenticates the agent
-with that bearer credential. `surla stdio` performs this attachment for the
+with that bearer credential. `hbay stdio` performs this attachment for the
 current guide session; no second guide or launcher is needed. Registration
 also works without pane adoption.
 
@@ -2335,11 +2335,11 @@ writer one, and an acceptance ends the test writer's work on that build and
 gives the builder one while no verification of the build has passed with
 current inputs. The server
 sends the role one fixed Chorus direct message for all its generations not yet
-tried, so at most one per generation, for example `Surla: you have an unread
+tried, so at most one per generation, for example `Highbay: you have an unread
 assignment. Use list_builder_assignments and get_builder_assignment to read
-it. Surla reads no replies.` It first registers its own handle, `surla-`
+it. Highbay reads no replies.` It first registers its own handle, `highbay-`
 followed by the first 12 characters of the project ID, in the team's swarm
-with the role `Surla server. Sends reminders only. Reads no replies.`
+with the role `Highbay server. Sends reminders only. Reads no replies.`
 
 A message is sent only after a complete assignment read, and only when the
 last read of Chorus's agent list succeeded and has listed the role's handle
@@ -2349,7 +2349,7 @@ message: Chorus keeps it until the role's next watcher, `read` or `send`. The
 message names nothing about the work and never changes what is owed.
 
 Each post is bounded at 5 seconds, a response longer than 2 MiB fails, and no
-byte of a response is kept. Every attempt records one `surla.team.reminder`
+byte of a response is kept. Every attempt records one `highbay.team.reminder`
 span with outcome `sent` or `failed`. A failed one has error status,
 `team.post` (`who` or `send`) and `team.failure` (`connection`, `timeout`,
 `http_status`, `rpc_error`, `tool_error` or `response`); no caller sees an
@@ -2370,7 +2370,7 @@ a terminal and never takes focus without the user's action.
 
 ## Live target prompt contract
 
-A live target serves one operation for `draft_override`. Surla calls it with
+A live target serves one operation for `draft_override`. Highbay calls it with
 a client it generates from [`design/targetprompt`](../design/targetprompt/design.go);
 the target declares the same method in its own Goa design and implements it:
 
@@ -2378,18 +2378,18 @@ the target declares the same method in its own Goa design and implements it:
   and header `X-Live-Target-Key: <key>` answers `200` with
   `{"prompt_id": "...", "version": "..."}`. The version is an opaque,
   non-blank identifier of at most 256 characters, such as
-  `sha256:<64 hex digits>`; any other answer is an update Surla cannot
+  `sha256:<64 hex digits>`; any other answer is an update Highbay cannot
   confirm.
 - `401` (`unauthorized`) for a missing or wrong key, `404` (`unknown_prompt`)
   for an unregistered prompt, and `422` (`invalid_prompt`) for a template
   that does not render. The target renders before it saves, so a refused
   template leaves the text in use unchanged.
 - The server mints the key for each start. It reaches the program in
-  `SURLA_LIVE_TARGET_KEY`, and the program's live entry point passes it to the
+  `HIGHBAY_LIVE_TARGET_KEY`, and the program's live entry point passes it to the
   application through `candidate.Spec.Env`.
 - The test writer's accepted test program receives only `PATH`, `TMPDIR`,
-  `SURLA_LIVE_TARGET_KEY` and `SURLA_LIVE_MODEL_GATEWAY`. It receives no
-  provider setting or `SURLA_LIVE_MODEL_PROVIDER`/`SURLA_LIVE_MODEL_NAME`.
+  `HIGHBAY_LIVE_TARGET_KEY` and `HIGHBAY_LIVE_MODEL_GATEWAY`. It receives no
+  provider setting or `HIGHBAY_LIVE_MODEL_PROVIDER`/`HIGHBAY_LIVE_MODEL_NAME`.
   For a direct provider, the executor receives that provider's held settings
   over standard input, applies them after preparation, constructs the
   provider and serves an executor-owned model gateway on `127.0.0.1:<port>`.
@@ -2401,8 +2401,8 @@ the target declares the same method in its own Goa design and implements it:
 - An evaluator named in stored verification settings keeps its existing
   environment: the server's environment, without inherited `ANTHROPIC_` or
   `OPENAI_` variables, plus the chosen provider's held settings and
-  `SURLA_LIVE_MODEL_PROVIDER`/`SURLA_LIVE_MODEL_NAME`, or
-  `SURLA_LIVE_MODEL_GATEWAY`. No model variable is set when no model is
+  `HIGHBAY_LIVE_MODEL_PROVIDER`/`HIGHBAY_LIVE_MODEL_NAME`, or
+  `HIGHBAY_LIVE_MODEL_GATEWAY`. No model variable is set when no model is
   chosen; the evaluator in the stored verification settings may supply its own model. This profile opens
   no executor-owned gateway. Both profiles build and prepare without any
   provider setting.
@@ -2434,7 +2434,7 @@ the target declares the same method in its own Goa design and implements it:
   escaped, or rewritten by a URL parser or an
   SDK, is not recognized and is exported as printed; a custom-headers value
   is recognized only as a whole, not header by header.
-- The worked example's test module (`surla init -example`) implements this
+- The worked example's test module (`hbay init -example`) implements this
   contract: `override_prompt` replaces `<name>.helper.system`. As accepted written tests, its
   `LiveThroughGateway` function uses the model gateway, keeping provider
   settings out of the test program's and application's environments. Its
@@ -2452,7 +2452,7 @@ Changing this contract breaks every target that implements it.
 
 ## MCP resources
 
-- **`surla://golden-path`** (`text/markdown` through MCP `resources/read`;
+- **`highbay://golden-path`** (`text/markdown` through MCP `resources/read`;
   a JSON string from `GET /golden-path`). The
   [Golden Path playbook](../internal/goldenpath/GOLDEN_PATH.md) for Goa and
   Goa-AI platforms, followed by the decision components an analysis's
@@ -2466,7 +2466,7 @@ Changing this contract breaks every target that implements it.
 ## Views page
 
 The server serves the views page at `GET /views` on its loopback address.
-`surla` opens it with a single-use link in the address fragment
+`hbay` opens it with a single-use link in the address fragment
 (`/views#link=<link>`), which a browser never sends to a server. On load the
 page exchanges the link once for a session, removes it from the address, and
 keeps the session only in memory: never in browser storage or a cookie. The
@@ -2475,10 +2475,10 @@ physical folder, without its path. The tab's title is the next step and that
 name, such as `Confirm change: shop`, from the facts the page last read;
 after a failed read of the changes or the team, a lost update connection or
 an ended session, it names the recovery instead, such as
-`Reconnecting: shop`. Before the exchange succeeds, the title is `Surla`.
+`Reconnecting: shop`. Before the exchange succeeds, the title is `Highbay`.
 Reloading or closing the tab ends the session. Ask your coding agent to
-[reopen Surla](#open_views) or choose **Open Surla Window** in the Herdr companion
-to open a fresh session. Bare `surla` remains an operator fallback.
+[reopen Highbay](#open_views) or choose **Open Highbay Window** in the Herdr companion
+to open a fresh session. Bare `hbay` remains an operator fallback.
 Opening a fresh link in the same tab reloads the page through the normal link
 exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form
 edits, or a pending edit request, the page removes the link from the address
@@ -2589,7 +2589,7 @@ commits as a secondary path. A start's team outcome is shown with the time
 of that start, not as current health.
 
 When tests need changes, the test writer is the actor that fixes and reports
-them; **Read findings** opens **What Surla told the test writer**. A matching
+them; **Read findings** opens **What Highbay told the test writer**. A matching
 passed check gives the build **Review result**, opening that exact run.
 The selected run refreshes its input match when the agreement or build
 changes, including when it is older than the latest run. A stale, pending or
@@ -2638,7 +2638,7 @@ approval and show recovery, including any restoration result. A successful
 dated merge receipt names the actual destination branch and short resulting
 commit; **Merge receipt** discloses the full commit and timestamp. Once the
 build is `merged`, **Verify the merged branch from the terminal** discloses a
-separate [`surla verify`](#surla-verify) template: on **Approve** (when the
+separate [`hbay verify`](#hbay-verify) template: on **Approve** (when the
 displayed run matches the recorded approval of the current build), it binds
 that approval's `suite_commit` and any matching merge receipt's resulting
 commit (otherwise checking `"$(git rev-parse --verify HEAD)"` on the checked-out
@@ -2699,7 +2699,7 @@ which the page repeats, are saved only when they fail with an error status or
 a panic; refused reads, such as `forbidden` or `not_found`, are expected
 answers and are not saved. `wait_for_changes`, `wait_for_builder_assignment`
 and `wait_for_test_writer_assignment` are never saved. Each HTTP or
-MCP call has a `surla.request.<operation>` span; a refusal is recorded
+MCP call has a `highbay.request.<operation>` span; a refusal is recorded
 without error status, and an unexpected fault records an error. Calls refused
 before authentication or decoding, verification processes, the check helper
 and outside services are absent. An `unset` status does not prove success.
@@ -2710,7 +2710,7 @@ only by your account (`0600`), and read again after a restart. Each record is
 at most 64 KiB, with names, summaries and values shortened when needed. The
 file holds a SHA-256 hash of each caller for read isolation; neither the
 caller nor the hash appears in results or exported spans. The hash is not
-anonymization: keep the file private. To discard the history, stop Surla,
+anonymization: keep the file private. To discard the history, stop Highbay,
 then remove the file.
 
 **The server's terminal.** When a `propose_change` or `revise_change` span
@@ -2724,7 +2724,7 @@ server's environment to send full spans to an OpenTelemetry collector over
 OTLP/HTTP. Exported spans keep their original fields and status and carry no
 caller identity; restrict access to the collector. The check helper exports
 its own spans the same way, as children of the call's span. With neither
-variable set, Surla sends nothing.
+variable set, Highbay sends nothing.
 
 ---
 
@@ -2831,8 +2831,8 @@ remain independent read-only consumers. A missing module or compiler archive
 triggers preparation of the committed and synthetic test-module closures (including
 `sum.golang.org` verification tiles via `go mod tidy` without an initial `go.sum`)
 for the ordinary partitions (`internal/testmodule` callers in `internal/testwriter`,
-`cmd/surla`, `internal/designeval`, `internal/diff`, and `internal/controlplane`;
-real networked starter-template initialization in `surla init` stays owned by
+`cmd/hbay`, `internal/designeval`, `internal/diff`, and `internal/controlplane`;
+real networked starter-template initialization in `hbay init` stays owned by
 **Full / starter** and **Full / generation**),
 the declared race/plain compilation,
 CGO-free product dependencies and pinned Goa generator, then compiles Story,
@@ -2908,7 +2908,7 @@ backstop. Pull requests do not execute this job automatically. To run the
 journey locally with a running Docker engine:
 
 ```sh
-go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/surla </dev/null
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/hbay </dev/null
 ```
 
 ### Committed test module profiles
@@ -2936,8 +2936,8 @@ matching versions in the profiles and refresh their checksums. For example,
 with the root requirements currently in this repository, run:
 
 ```sh
-GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
-GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/surla/story@v0.0.0-20261111183703-4568fcf5bb85 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125223710-b7bf4a7f4fa5 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125223710-b7bf4a7f4fa5 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
 GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
 GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
@@ -2977,7 +2977,7 @@ Temporal CLI for the first three:
 ```bash
 (cd examples/orders-eval && go test -race -tags e2e ./acceptance)
 go test -race -tags e2e ./internal/verify
-go test -race -count=1 -tags e2e ./cmd/surla
+go test -race -count=1 -tags e2e ./cmd/hbay
 go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold
 ```
 
@@ -2988,7 +2988,7 @@ hosted Chrome, Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail 
 Its explicit browser roots cover page policy and sessions, phone layout, build
 and test review, keyboard access, and browser cleanup after its parent ends.
 They execute independently of ordinary project tests. The Herdr root, `TestHC`,
-runs the real headless Core and Surla server with isolated state and fixture
+runs the real headless Core and Highbay server with isolated state and fixture
 window and team effects; it starts no coding agent or model. Each package command
 has a five-minute alarm and the job has a ten-minute backstop. These bounds are
 not measured completion times. The complete selected set is in
@@ -2998,7 +2998,7 @@ storage stays empty, long Story rows scroll within the Story view, and Live
 fits a 375-pixel-wide screen.
 
 Local native checks need Chrome or Chromium and Node 22 or later. Set
-`SURLA_TEST_BROWSER` when the browser is not installed in a standard place.
+`HIGHBAY_TEST_BROWSER` when the browser is not installed in a standard place.
 For example, run the phone layout contract with:
 
 ```bash
@@ -3011,7 +3011,7 @@ go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneW
 .
 ├── .github/workflows/ci.yml     # Complete Linux PR checks, reused by integration
 ├── .github/workflows/integration.yml # Native PR coverage and full push/nightly/manual journeys
-├── cmd/surla/                   # The surla command: project start and stop, settings, init, preview, diff, gen, verify, approve
+├── cmd/hbay/                   # The hbay command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval
 │   ├── changes.go               # The change list and the views page's waiting read
@@ -3035,11 +3035,11 @@ go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneW
 │   ├── designeval/              # Design evaluation and the C4 extractor
 │   ├── diff/                    # Structural design and dependency diff
 │   ├── goldenpath/              # The Golden Path playbook and decision component catalog
-│   ├── scaffold/                # The surla init starter and its templates
+│   ├── scaffold/                # The hbay init starter and its templates
 │   ├── traceview/               # The saved operation diagnostics
 │   ├── genpublish/              # Atomic replacement of generated folders
 │   ├── targetprompt/            # Generated client of the live target prompt contract
-│   ├── procgroup/               # Process groups for the commands Surla starts
+│   ├── procgroup/               # Process groups for the commands Highbay starts
 │   ├── abspath/, renameat/, shquote/   # Path resolution, atomic renames, shell quoting
 │   └── testmodule/              # Go module fixtures for tests
 ├── story/                       # The Story language, a separate Go module

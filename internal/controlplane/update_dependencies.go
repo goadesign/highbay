@@ -21,9 +21,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/renameat"
-	"github.com/goadesign/surla/internal/scaffold"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/renameat"
+	"github.com/goadesign/highbay/internal/scaffold"
 )
 
 const (
@@ -59,12 +59,12 @@ var (
 // a manifest is replaced, later failures are reported next to the written
 // paths, never instead of them. It requires an authenticated principal and a
 // read assignment for the open build, reserved until helper cleanup completes.
-func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.UpdateDependenciesResult, retErr error) {
+func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *genhighbay.UpdateDependenciesResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	request := trace.SpanFromContext(ctx)
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_dependencies")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.update_dependencies")
 	if err := c.admitCheckOperation(); err != nil {
 		endCheckRequestSpan(span, err)
 		return nil, err
@@ -91,7 +91,7 @@ func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.Up
 // stops publication before any file was written is an error; one that
 // stops it after some files were written leaves them reported with the
 // files that were not.
-func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.UpdateDependenciesResult, error) {
+func (op *checkOperation) updateDependencies(ctx context.Context) (*genhighbay.UpdateDependenciesResult, error) {
 	if err := op.start(ctx); err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (op *checkOperation) updateDependencies(ctx context.Context) (*gensurla.Upd
 		trace.SpanFromContext(ctx).RecordError(err)
 		warning = clipText(fmt.Sprintf(" The files were written, but finishing the operation failed: %v.", err), maxCleanupWarningBytes)
 	}
-	return &gensurla.UpdateDependenciesResult{
+	return &genhighbay.UpdateDependenciesResult{
 		OpID:         op.id,
 		FilesWritten: written,
 		Message:      op.updateMessage(written, notes, warning, failures),
@@ -220,17 +220,17 @@ func (op *checkOperation) publishManifests(ctx context.Context, failures []modul
 		case replaced && err != nil:
 			written = append(written, wsRel)
 			note = fmt.Sprintf("%s was written, but making the write durable failed: %v", wsRel, err)
-			span.AddEvent("manifest_written", trace.WithAttributes(attribute.String("surla.check.path", wsRel), attribute.String("surla.check.warning", err.Error())))
+			span.AddEvent("manifest_written", trace.WithAttributes(attribute.String("highbay.check.path", wsRel), attribute.String("highbay.check.warning", err.Error())))
 		case replaced:
 			written = append(written, wsRel)
-			span.AddEvent("manifest_written", trace.WithAttributes(attribute.String("surla.check.path", wsRel)))
+			span.AddEvent("manifest_written", trace.WithAttributes(attribute.String("highbay.check.path", wsRel)))
 		case errors.Is(err, errPublicationCanceled):
 			canceled = true
 			note = fmt.Sprintf("%s was not written: %v", wsRel, err)
-			span.AddEvent("manifest_not_written", trace.WithAttributes(attribute.String("surla.check.path", wsRel), attribute.String("surla.check.reason", err.Error())))
+			span.AddEvent("manifest_not_written", trace.WithAttributes(attribute.String("highbay.check.path", wsRel), attribute.String("highbay.check.reason", err.Error())))
 		case err != nil:
 			note = fmt.Sprintf("%s was not written: %v", wsRel, err)
-			span.AddEvent("manifest_refused", trace.WithAttributes(attribute.String("surla.check.path", wsRel), attribute.String("surla.check.reason", err.Error())))
+			span.AddEvent("manifest_refused", trace.WithAttributes(attribute.String("highbay.check.path", wsRel), attribute.String("highbay.check.reason", err.Error())))
 		}
 		if replaced {
 			fmt.Fprintf(op.out, "==> wrote: %s\n", wsRel)
@@ -272,11 +272,11 @@ func (op *checkOperation) publishManifest(ctx context.Context, rel string) (bool
 	if err := ctx.Err(); err != nil {
 		return false, fmt.Errorf("%w: %w", errPublicationCanceled, err)
 	}
-	_, span := checkTracer(ctx).Start(ctx, "surla.check.publish_manifest", trace.WithAttributes(attribute.String("surla.check.path", rel)))
+	_, span := checkTracer(ctx).Start(ctx, "highbay.check.publish_manifest", trace.WithAttributes(attribute.String("highbay.check.path", rel)))
 	replaced, err := op.replaceManifest(rel, before, beforeOK, after)
-	span.SetAttributes(attribute.Bool("surla.check.replaced", replaced))
+	span.SetAttributes(attribute.Bool("highbay.check.replaced", replaced))
 	if err != nil && !replaced {
-		span.AddEvent("manifest_refused", trace.WithAttributes(attribute.String("surla.check.reason", err.Error())))
+		span.AddEvent("manifest_refused", trace.WithAttributes(attribute.String("highbay.check.reason", err.Error())))
 		span.End()
 		return false, err
 	}
@@ -417,7 +417,7 @@ func readAtNoFollow(dirFD int, name string) ([]byte, bool, error) {
 // whether the rename happened; an error after it means name holds data but
 // the directory entry may not yet be durable.
 func writeAtomic(dirFD int, name string, data []byte, create bool) (bool, error) {
-	tmp := "." + name + ".surla-" + newOperationID()
+	tmp := "." + name + ".highbay-" + newOperationID()
 	fd, err := unix.Openat(dirFD, tmp, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o644)
 	if err != nil {
 		return false, fmt.Errorf("create temporary %s: %w", name, err)

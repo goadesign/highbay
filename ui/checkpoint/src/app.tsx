@@ -1,10 +1,10 @@
-// Package main implements the Surla views page. The page exchanges the
-// one-use link `surla` opened it with for a session held only in this
+// Package main implements the Highbay views page. The page exchanges the
+// one-use link `hbay` opened it with for a session held only in this
 // script's memory, then reads and acts on the project's changes by calling
-// the Surla server at the address it was loaded from. It coordinates the
-// stage navigation bar (#surla-checkpoint-nav), the displayed-subject context
-// strip (#surla-workspace-context), the two-region layout (#surla-cp1-editor
-// and #surla-result-view), the change list, and synchronous React 19
+// the Highbay server at the address it was loaded from. It coordinates the
+// stage navigation bar (#highbay-checkpoint-nav), the displayed-subject context
+// strip (#highbay-workspace-context), the two-region layout (#highbay-cp1-editor
+// and #highbay-result-view), the change list, and synchronous React 19
 // rendering.
 
 // zod-jitless stays the first import: it configures zod before any imported
@@ -122,7 +122,7 @@ interface ActiveEditorState {
   proposalError: string | null;
 }
 
-// ActiveResultState selects the view displayed in #surla-result-view.
+// ActiveResultState selects the view displayed in #highbay-result-view.
 type ActiveResultState =
   | { kind: "changes" }
   | { kind: "story" }
@@ -370,7 +370,7 @@ function liveTargetKey(target: LiveTargetStatus): string {
   }
 }
 
-// describeActiveResultSubject derives the subject of #surla-result-view strictly
+// describeActiveResultSubject derives the subject of #highbay-result-view strictly
 // from the displayed payload and selected verification run, never falling
 // back to the editor's card. The Story stage shows the Story saved with
 // storyCard, the change open in the editor, and the owner's current
@@ -452,10 +452,10 @@ function describeActiveResultSubject(
 // bootstrapViewsPage mounts the views page, obtains its session, and starts
 // reading the project's changes.
 export function bootstrapViewsPage() {
-  const rawRootEl = document.getElementById("surla-checkpoint-root");
-  const rawStatusEl = document.getElementById("surla-checkpoint-status");
-  const rawViewEl = document.getElementById("surla-checkpoint-view");
-  const rawNavEl = document.getElementById("surla-checkpoint-nav");
+  const rawRootEl = document.getElementById("highbay-checkpoint-root");
+  const rawStatusEl = document.getElementById("highbay-checkpoint-status");
+  const rawViewEl = document.getElementById("highbay-checkpoint-view");
+  const rawNavEl = document.getElementById("highbay-checkpoint-nav");
   if (!rawRootEl || !rawStatusEl || !rawViewEl || !rawNavEl) {
     return;
   }
@@ -465,14 +465,14 @@ export function bootstrapViewsPage() {
   const navEl: HTMLElement = rawNavEl;
 
   const noticeEl = document.createElement("div");
-  noticeEl.setAttribute("id", "surla-session-notice");
+  noticeEl.setAttribute("id", "highbay-session-notice");
   statusEl.after(noticeEl);
   const editorRegionEl = document.createElement("div");
-  editorRegionEl.setAttribute("id", "surla-cp1-editor");
+  editorRegionEl.setAttribute("id", "highbay-cp1-editor");
   editorRegionEl.setAttribute("tabindex", "-1");
   editorRegionEl.setAttribute("aria-label", "Change decisions");
   const resultRegionEl = document.createElement("div");
-  resultRegionEl.setAttribute("id", "surla-result-view");
+  resultRegionEl.setAttribute("id", "highbay-result-view");
   viewEl.appendChild(editorRegionEl);
   viewEl.appendChild(resultRegionEl);
   const traceRegionEl = document.createElement("aside");
@@ -524,7 +524,7 @@ export function bootstrapViewsPage() {
   // lock editing too, but only writes can leave a save pending on unload.
   let editorRequest: OperationName | null = null;
   let activeEditor: ActiveEditorState | null = null;
-  // editorOpen tracks whether #surla-cp1-editor is mounted. Another stage
+  // editorOpen tracks whether #highbay-cp1-editor is mounted. Another stage
   // keeps activeEditor in memory while the editor is not shown.
   let editorOpen = false;
   // editorStage tracks navigation intent while Agree and Build share the
@@ -693,7 +693,7 @@ export function bootstrapViewsPage() {
         ok: false,
         kind: "network",
         status: 0,
-        message: "The Surla server did not answer. Check that surla is still running.",
+        message: "The Highbay server did not answer. Check that hbay is still running.",
       };
     }
     let parsed: unknown = undefined;
@@ -807,7 +807,7 @@ export function bootstrapViewsPage() {
 
   // sessionEndedMessage tells the user what to do once the session is gone.
   function sessionEndedMessage(): string {
-    return "This page's Surla session has ended. Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.";
+    return "This page's Highbay session has ended. Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.";
   }
 
   // start exchanges the link from the address fragment for a session, removes
@@ -821,7 +821,7 @@ export function bootstrapViewsPage() {
       signOut("no-link", "");
       return;
     }
-    statusEl.textContent = "Opening your Surla session...";
+    statusEl.textContent = "Opening your Highbay session...";
     const outcome = await send("exchange_browser_link", { link });
     if (!outcome.ok) {
       signOut(outcome.status === 422 ? "link-used" : "link-failed", outcome.message);
@@ -836,7 +836,7 @@ export function bootstrapViewsPage() {
     await loadChanges();
   }
 
-  // signOut shows how to open the page with `surla`; the page then sends no
+  // signOut shows how to open the page with `hbay`; the page then sends no
   // further requests.
   function signOut(reason: SignedOutReason, message: string) {
     sessionState = "signed-out";
@@ -846,8 +846,8 @@ export function bootstrapViewsPage() {
     rootEl.dataset.state = reason === "link-used" ? "link-used" : "signed-out";
     statusEl.textContent =
       reason === "link-used"
-        ? "This link was already used. Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion."
-        : "Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.";
+        ? "This link was already used. Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion."
+        : "Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.";
     syncAllRegions();
   }
 
@@ -1016,7 +1016,7 @@ export function bootstrapViewsPage() {
           failedRounds = 0;
           if (waitTroubleShown) {
             waitTroubleShown = false;
-            statusEl.textContent = "This page is up to date with the Surla server again.";
+            statusEl.textContent = "This page is up to date with the Highbay server again.";
             syncAllRegions();
           }
           continue;
@@ -1034,7 +1034,7 @@ export function bootstrapViewsPage() {
         return;
       } else {
         trouble =
-          "Lost contact with the Surla server; trying again. Your edits stay on this page. " +
+          "Lost contact with the Highbay server; trying again. Your edits stay on this page. " +
           outcome.message;
       }
       if (!waitTroubleShown) {
@@ -1301,7 +1301,7 @@ export function bootstrapViewsPage() {
     if (!lastLoadedListByChangeId.has(run.change_id)) refreshVerificationsInBackground(run.change_id);
     readApprovalReview(run.run_id, run.change_id);
     syncAllRegions();
-    focusResult("#surla-cp5-title");
+    focusResult("#highbay-cp5-title");
   }
 
   // openApproval preserves an explicitly selected run; otherwise it opens the
@@ -1321,7 +1321,7 @@ export function bootstrapViewsPage() {
     rootEl.dataset.state = "cp5-approval";
     if (selectedVerificationChangeId !== null) refreshVerificationsInBackground(selectedVerificationChangeId);
     syncAllRegions();
-    focusResult("#surla-cp5-title");
+    focusResult("#highbay-cp5-title");
   }
 
   // openRecordedApproval retains the exact saved binding rather than choosing
@@ -1341,7 +1341,7 @@ export function bootstrapViewsPage() {
       refreshVerificationsInBackground(card.change_id);
     }
     syncAllRegions();
-    focusResult("#surla-cp5-title");
+    focusResult("#highbay-cp5-title");
   }
 
   // displayedApprovalReview never borrows another selected run's observation.
@@ -1409,11 +1409,11 @@ export function bootstrapViewsPage() {
     const outcome = identity !== null && mergeOutcome?.identity === identity ? mergeOutcome : null;
     let reason: string | null = null;
     if (run === null) reason = "Read the exact saved approval before merging.";
-    else if (sessionState !== "active") reason = "Open a fresh Surla page through your coding agent to check current approval.";
+    else if (sessionState !== "active") reason = "Open a fresh Highbay page through your coding agent to check current approval.";
     else if (anyMergePending && !pending) reason = "Another change is being merged. Wait for that operation to finish.";
     else if (build === null) reason = "Read the current build before merging.";
     else if (build.taking.state === "merged") reason = "This build is already merged. Describe the next change when you are ready.";
-    else if (build.taking.state === "dropped") reason = "This build was dropped; it cannot be merged through Surla.";
+    else if (build.taking.state === "dropped") reason = "This build was dropped; it cannot be merged through Highbay.";
     else if (!build.in_force || !runBelongsToBuild(run.change_id, build, run)) reason = "This result does not belong to the current agreed build.";
     else if (!approvalReviewFresh(run)) reason = "Refresh merge state to read current approval and build facts.";
     else if (review?.approval.state !== "recorded") reason = "Review and approve this result before merging.";
@@ -1641,7 +1641,7 @@ export function bootstrapViewsPage() {
     statusEl.textContent = "Showing the project team.";
     if (teamSnapshot === null || teamReadError !== null || waitTroubleShown) readTeam();
     syncAllRegions();
-    document.getElementById("surla-team-title")?.focus();
+    document.getElementById("highbay-team-title")?.focus();
   }
 
   // readTeam follows the existing single version chain. One extra read is
@@ -1759,11 +1759,11 @@ export function bootstrapViewsPage() {
     const notices: { notice: TeamNotice; title: string; text: string }[] = [];
     if (buildWorkerRoles().includes("test_writer") && families.size === 1) notices.push({
       notice: "single_agent_family", title: "One coding-agent family is installed.",
-      text: "Surla can use it for both workers. A second model family can give the builder and test writer different perspectives.",
+      text: "Highbay can use it for both workers. A second model family can give the builder and test writer different perspectives.",
     });
     if (snapshot.herdr_mode === "available") notices.push({
       notice: "outside_herdr", title: "No Herdr pane linked.",
-      text: "To link your coding agent’s pane, open a project tab in Herdr and run /surla there. Starting workers opens their panes in Herdr without bringing its window to the foreground.",
+      text: "To link your coding agent’s pane, open a project tab in Herdr and run /highbay there. Starting workers opens their panes in Herdr without bringing its window to the foreground.",
     });
     if (snapshot.herdr_mode === "unavailable") notices.push({
       notice: "herdr_unavailable", title: "Workers will run in the background.",
@@ -1846,7 +1846,7 @@ export function bootstrapViewsPage() {
   // focusVerificationHeading keeps a removed result command in its own view.
   // Its stable identity avoids ref cleanup during unrelated renders.
   function focusVerificationHeading() {
-    focusResult(activeResult?.kind === "cp5-approval" ? "#surla-cp5-title" : "#surla-cp4-title");
+    focusResult(activeResult?.kind === "cp5-approval" ? "#highbay-cp5-title" : "#highbay-cp4-title");
   }
 
   // teamWorkersHaveWork reads the current work facts for registered workers.
@@ -2343,7 +2343,7 @@ export function bootstrapViewsPage() {
     modelDraftDirty = false;
     modelDraftReset++;
     syncAllRegions();
-    document.getElementById("surla-model-title")?.focus();
+    document.getElementById("highbay-model-title")?.focus();
   }
 
   // applyModel asks the server to use choice for live targets started
@@ -2446,9 +2446,9 @@ export function bootstrapViewsPage() {
   }
 
   // syncNavRegion renders the stage navigation bar for an active session
-  // along with the displayed-subject context strip (#surla-workspace-context).
+  // along with the displayed-subject context strip (#highbay-workspace-context).
   function syncNavRegion() {
-    const approvalWasFocused = document.activeElement?.id === "surla-cp5-approve";
+    const approvalWasFocused = document.activeElement?.id === "highbay-cp5-approve";
     if (sessionState === "starting" || sessionState === "signed-out") {
       navEl.hidden = true;
       flushSync(() => {
@@ -2467,22 +2467,22 @@ export function bootstrapViewsPage() {
     const changesLabel = changeList !== null && (changeList.changes.length > 0 || activeEditor !== null)
       ? "Changes" : "Describe";
     if (!onDescribe || changeList === null || changeList.changes.length > 0 || activeEditor !== null) {
-      tabs.push({ id: "surla-nav-changes", label: changesLabel, active: onDescribe, onClick: showChanges });
+      tabs.push({ id: "highbay-nav-changes", label: changesLabel, active: onDescribe, onClick: showChanges });
     }
     tabs.push({
-      id: "surla-nav-team",
+      id: "highbay-nav-team",
       label: "Team",
       active: activeResult?.kind === "team",
       onClick: openTeam,
     });
     tabs.push({
-      id: "surla-nav-story",
+      id: "highbay-nav-story",
       label: "Story",
       active: activeResult?.kind === "story",
       onClick: openStory,
     });
     tabs.push({
-      id: "surla-nav-live",
+      id: "highbay-nav-live",
       label: "Live target",
       active: activeResult?.kind === "live",
       onClick: openLive,
@@ -2491,25 +2491,25 @@ export function bootstrapViewsPage() {
       editorOpen && (!activeResult || activeResult.kind === "cp1-incoming-card");
     if (activeEditor !== null) {
       tabs.push({
-        id: "surla-nav-cp1",
+        id: "highbay-nav-cp1",
         label: "Agree",
         active: cp1Active && editorStage === "agree",
         onClick: handleReturnToChangeCard,
       });
       tabs.push({
-        id: "surla-nav-cp2",
+        id: "highbay-nav-cp2",
         label: "Architecture",
         active: activeResult?.kind === "cp2-architecture-preview",
         onClick: openArchitecture,
       });
       tabs.push({
-        id: "surla-nav-build", label: "Build", active: cp1Active && editorStage === "build",
-        onClick: () => { showChangeEditor("build"); focusResult("#surla-build-title"); },
+        id: "highbay-nav-build", label: "Build", active: cp1Active && editorStage === "build",
+        onClick: () => { showChangeEditor("build"); focusResult("#highbay-build-title"); },
       });
     }
     if (activeEditor !== null || selectedVerificationChangeId !== null) {
       tabs.push({
-        id: "surla-nav-cp4",
+        id: "highbay-nav-cp4",
         label: "Check",
         active: activeResult?.kind === "cp4-verification",
         onClick: openProof,
@@ -2517,7 +2517,7 @@ export function bootstrapViewsPage() {
     }
 
     if (activeEditor !== null || selectedVerificationChangeId !== null) {
-      tabs.push({ id: "surla-nav-cp5", label: "Approve", active: activeResult?.kind === "cp5-approval", onClick: openApproval });
+      tabs.push({ id: "highbay-nav-cp5", label: "Approve", active: activeResult?.kind === "cp5-approval", onClick: openApproval });
     }
 
     const bothRegionsShown =
@@ -2580,7 +2580,7 @@ export function bootstrapViewsPage() {
 
     navEl.hidden = false;
     const journeyIds = new Set([
-      "surla-nav-changes", "surla-nav-cp1", "surla-nav-cp2", "surla-nav-build", "surla-nav-cp4", "surla-nav-cp5",
+      "highbay-nav-changes", "highbay-nav-cp1", "highbay-nav-cp2", "highbay-nav-build", "highbay-nav-cp4", "highbay-nav-cp5",
     ]);
     const run = resolveDisplayedVerificationRun();
     const review = displayedApprovalReview();
@@ -2600,9 +2600,9 @@ export function bootstrapViewsPage() {
     const proposal = activeEditor?.card.proposed_revision;
     const revisionTarget = activeEditor === null ? null : proposal !== undefined
       ? answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0
-        ? "#surla-proposal-revision-needed" : null
+        ? "#highbay-proposal-revision-needed" : null
       : answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0
-        ? "#surla-confirm-revision-needed" : null;
+        ? "#highbay-confirm-revision-needed" : null;
     const showingInitialization = onDescribe && !editorOpen && listError === null &&
       changeList?.initializing_phase !== undefined && changeList.changes.length === 0;
     const storyDraftAttention = changeList?.draft_state === "story_failed" &&
@@ -2620,13 +2620,13 @@ export function bootstrapViewsPage() {
         ? "Your approval is recorded."
         : fresh ? "Decide whether this verified result may be promoted." : "Check the owner’s current approval requirements.";
       next = review?.approval.state === "available" && run !== null
-        ? <><Button id="surla-cp5-approve" variant="primary" disabled={!fresh || editorRequest !== null}
-          aria-describedby={!fresh ? "surla-cp5-observation-status" : undefined}
+        ? <><Button id="highbay-cp5-approve" variant="primary" disabled={!fresh || editorRequest !== null}
+          aria-describedby={!fresh ? "highbay-cp5-observation-status" : undefined}
           onClick={() => handleApprove(run)}>{editorRequest !== null ? "Approving…" : "Approve this result"}</Button>
-          <span className="surla-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
+          <span className="highbay-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
         : review?.approval.state === "recorded" ? <span>Review the current build before merging.</span>
         : review?.approval.state === "blocked"
-        ? <Button onClick={() => focusResult("#surla-cp5-approve-blocked")}>Review requirements</Button>
+        ? <Button onClick={() => focusResult("#highbay-cp5-approve-blocked")}>Review requirements</Button>
         : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
       if (review?.approval.state === "recorded" && run !== null) {
         const build = knownTakingBuild(run.change_id);
@@ -2640,7 +2640,7 @@ export function bootstrapViewsPage() {
               next = <span>Describe the next change when you are ready.</span>;
               break;
             case "passed":
-              next = <MergePrimaryAction id="surla-cp5-merge" controls={mergeControls(run)} />;
+              next = <MergePrimaryAction id="highbay-cp5-merge" controls={mergeControls(run)} />;
               break;
             case "dropped":
               attention = "This build was dropped. Your saved approval remains readable.";
@@ -2652,13 +2652,13 @@ export function bootstrapViewsPage() {
       const newer = run !== null ? newerCheckFor(run) : null;
       if (newer !== null) {
         if (review?.approval.state === "blocked") attention = "A newer check is available.";
-        next = <><Button id="surla-cp5-review-latest"
+        next = <><Button id="highbay-cp5-review-latest"
           variant={review?.approval.state === "available" || review?.approval.state === "recorded" ? "default" : "primary"}
           disabled={editorRequest !== null} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
       }
       if (run !== null && hasPending("merge_change", run.change_id)) {
         attention = "Merging the approved result.";
-        next = <MergePrimaryAction id="surla-cp5-merge" controls={mergeControls(run)} />;
+        next = <MergePrimaryAction id="highbay-cp5-merge" controls={mergeControls(run)} />;
       }
     } else if (cp1Active && activeEditor !== null &&
         (revisionTarget !== null || proposal !== undefined && activeEditor.card.status === "confirmed") &&
@@ -2667,12 +2667,12 @@ export function bootstrapViewsPage() {
         !hasPending("merge_change", activeEditor.card.change_id)) {
       if (revisionTarget !== null) {
         attention = "Ask your coding agent to revise the draft for your selected answers.";
-        next = <Button id="surla-review-revision-request" variant="primary"
+        next = <Button id="highbay-review-revision-request" variant="primary"
           onClick={() => focusResult(revisionTarget)}>Review revision request</Button>;
       } else {
         attention = "Adopt or decline the proposed revision.";
-        next = <Button id="surla-review-proposal" variant="primary"
-          onClick={() => focusResult("#surla-proposal")}>Review proposed revision</Button>;
+        next = <Button id="highbay-review-proposal" variant="primary"
+          onClick={() => focusResult("#highbay-proposal")}>Review proposed revision</Button>;
       }
     } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
       const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
@@ -2702,12 +2702,12 @@ export function bootstrapViewsPage() {
           const approved = buildApprovalRun(activeEditor.card);
           attention = approved !== null ? "Your approval is recorded." : "A verification of this build passed.";
           next = approved !== null && mergeControls(approved).eligible
-            ? <MergePrimaryAction id="surla-build-merge" controls={mergeControls(approved)} />
+            ? <MergePrimaryAction id="highbay-build-merge" controls={mergeControls(approved)} />
             : approved !== null ? <Button onClick={() => refreshMergeState(approved)}>Check current approval</Button>
             : <span>Review the saved result below before approving it.</span>;
         } else if (tests.state === "reported") {
-          attention = "Surla is checking the reported tests.";
-          next = <span>Wait for Surla's verdict.</span>;
+          attention = "Highbay is checking the reported tests.";
+          next = <span>Wait for Highbay's verdict.</span>;
         } else {
           const assignmentsRead = build.builder.read &&
             (build.test_writer.read || tests.state === "accepted" || tests.state === "not_used");
@@ -2719,7 +2719,7 @@ export function bootstrapViewsPage() {
       }
       if (hasPending("merge_change", activeEditor.card.change_id)) {
         attention = "Merging the approved result.";
-        next = <MergePrimaryAction id="surla-build-merge" controls={mergeControls(buildApprovalRun(activeEditor.card))} />;
+        next = <MergePrimaryAction id="highbay-build-merge" controls={mergeControls(buildApprovalRun(activeEditor.card))} />;
       }
       if (next !== null && teamError === null && teamNeedsYou !== undefined) {
         attention = teamRoles.filter((role) => role.state === "needs_you")
@@ -2731,7 +2731,7 @@ export function bootstrapViewsPage() {
     }
     if (next === null) {
       // Recovery takes precedence over guidance based on retained observations.
-      const connectGuide = "Connect your coding agent to this project’s Surla MCP server.";
+      const connectGuide = "Connect your coding agent to this project’s Highbay MCP server.";
       attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, roleHasPane(teamNeedsYou.role, herdrMode), teamSnapshot?.chorus_status)
         : teamLoading || teamSnapshot === null ? "Waiting for Team status."
         : teamStatusUnknown ? "Team status unknown."
@@ -2739,13 +2739,13 @@ export function bootstrapViewsPage() {
       let step: string | React.ReactElement;
       if (sessionState !== "active") {
         attention = "The session ended.";
-        step = "Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.";
+        step = "Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.";
       } else if (listError !== null) {
         attention = "The changes could not be read.";
         step = onDescribe ? "Choose Read the changes again below." : "Open " + changesLabel + " to retry reading changes.";
       } else if (waitTroubleShown) {
         attention = "Updates are unavailable.";
-        step = "Wait for Surla to reconnect.";
+        step = "Wait for Highbay to reconnect.";
       } else if (teamError !== null) {
         attention = "Team status could not be read.";
         step = activeResult?.kind === "team" ? "Choose Retry team read below." : "Open Team to retry reading roles.";
@@ -2762,11 +2762,11 @@ export function bootstrapViewsPage() {
         if (editorRequest === "get_change") {
           step = "Wait for the Change Card to open.";
         } else if (changeList === null) {
-          step = "Wait for Surla to read the changes.";
+          step = "Wait for Highbay to read the changes.";
         } else if (changeList.changes.length > 0) {
           step = "Open a change from the list below.";
         } else if (changeList.initializing_phase !== undefined) {
-          step = "Wait for Surla to finish preparing the project.";
+          step = "Wait for Highbay to finish preparing the project.";
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
         } else if (guide === undefined) {
@@ -2826,15 +2826,15 @@ export function bootstrapViewsPage() {
           const confirming = editorRequest === "confirm_intent";
           if (question !== undefined) {
             attention = unanswered.length === 1 ? "1 question to answer." : unanswered.length + " questions to answer.";
-            step = <Button id="surla-cp1-next-question" variant="primary"
+            step = <Button id="highbay-cp1-next-question" variant="primary"
               onClick={() => focusDraftQuestion(question.id)}>Jump to unanswered question</Button>;
           } else if (exampleIssue !== null) {
             attention = "An example needs " + exampleIssue.label + ".";
-            step = <Button id="surla-cp1-next-example" variant="primary"
+            step = <Button id="highbay-cp1-next-example" variant="primary"
               onClick={() => focusDraftExample(exampleIssue)}>Review example</Button>;
           } else {
             attention = confirming ? "Saving your agreement." : "Ready to confirm intent.";
-            step = <Button id="surla-cp1-next-confirm" variant="primary" disabled={confirming}
+            step = <Button id="highbay-cp1-next-confirm" variant="primary" disabled={confirming}
               onClick={handleConfirmSubmit}>{confirming ? "Confirming…" : "Confirm intent"}</Button>;
           }
         } else if (ed.card.status === "needs_confirmation") {
@@ -2854,7 +2854,7 @@ export function bootstrapViewsPage() {
       } else if (activeResult?.kind === "cp2-architecture-preview" && activeEditor !== null) {
         const card = activeEditor.card;
         if (hasPending("preview_architecture", card.change_id)) {
-          step = "Wait for Surla to evaluate the design.";
+          step = "Wait for Highbay to evaluate the design.";
         } else if (previewErrors.has(card.change_id)) {
           attention = "The architecture preview could not be loaded.";
           step = card.status === "needs_confirmation" ? "Open Agree to confirm the change."
@@ -2877,7 +2877,7 @@ export function bootstrapViewsPage() {
           attention = "The Story draft could not be read.";
           step = "Choose Read the draft again below.";
         } else {
-          step = storyEvaluation === null ? "Wait for Surla to read the Story draft."
+          step = storyEvaluation === null ? "Wait for Highbay to read the Story draft."
             : storyEvaluation.state === "none" ? "Ask your coding agent to refresh the Story."
             : storyEvaluation.state === "running" ? "Wait for the Story evaluation."
             : storyEvaluation.state === "failed" ? "Ask your coding agent to fix the Story and refresh it."
@@ -2890,7 +2890,7 @@ export function bootstrapViewsPage() {
             : "Choose Read the model connection again below.";
         } else {
           const target = liveTarget?.live_target;
-          step = target === undefined ? "Wait for Surla to read the live target."
+          step = target === undefined ? "Wait for Highbay to read the live target."
             : target.state === "running" ? "Review the running service and its prompt drafts below."
             : target.state === "starting" ? "Wait for the live target to start."
             : target.state === "none" ? "Ask the builder to start a live target to try prompts."
@@ -2920,21 +2920,21 @@ export function bootstrapViewsPage() {
           details={subjects.length >= 1 ? (
 
             <div
-              id="surla-workspace-context"
-              className="surla-workspace-context"
+              id="highbay-workspace-context"
+              className="highbay-workspace-context"
               role="region"
               aria-label="Displayed workspace subject"
             >
               {subjects.map((subj) => (
                 <div
                   key={subj.role}
-                  id={"surla-context-" + subj.role}
-                  className="surla-subject-item"
+                  id={"highbay-context-" + subj.role}
+                  className="highbay-subject-item"
                   data-subject-role={subj.role}
                   data-change-id={subj.changeId}
                   data-request-revision={subj.requestRevision}
                 >
-                  <span className="surla-subject-label">{subj.label}</span>{" "}
+                  <span className="highbay-subject-label">{subj.label}</span>{" "}
                   <strong>{subj.stage}</strong>
                   {subj.changeId ? (
                     <>
@@ -2961,8 +2961,8 @@ export function bootstrapViewsPage() {
         />
       );
     });
-    if (approvalWasFocused && document.getElementById("surla-cp5-approve") === null) {
-      focusResult("#surla-cp5-title");
+    if (approvalWasFocused && document.getElementById("highbay-cp5-approve") === null) {
+      focusResult("#highbay-cp5-title");
     }
   }
 
@@ -2970,7 +2970,7 @@ export function bootstrapViewsPage() {
   // Recovery outranks retained observations; saved run history does not prove
   // that the current change can be built or approved.
   function projectTitle(): string {
-    if (projectName === null) return "Surla";
+    if (projectName === null) return "Highbay";
     let step: string;
     if (sessionState !== "active") {
       step = "Reopen project";
@@ -3027,15 +3027,15 @@ export function bootstrapViewsPage() {
       noticeRoot.render(
         <>
         {pendingLinkFragment !== null ? (
-          <Alert id="surla-pending-link" role="status">
-            <p>You opened a new Surla link in this tab. Save or discard your edits, then choose Open link.</p>
+          <Alert id="highbay-pending-link" role="status">
+            <p>You opened a new Highbay link in this tab. Save or discard your edits, then choose Open link.</p>
             {hasPendingEditorSave() ? <p>Wait for the current save to finish.</p> : null}
             {activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0 ? (
               <p>For proposal answers, choose Adopt this revision or Discard proposal answers. Discard clears your answers without declining the proposal.</p>
             ) : null}
             {modelDraftDirty ? <p>For the model choice, choose Apply or Discard model edits.</p> : null}
             <p>The link expires two minutes after it was printed, even while you finish your edits.</p>
-            <Button id="surla-open-pending-link" disabled={hasUnsavedPageInput()} onClick={openPendingLink}>
+            <Button id="highbay-open-pending-link" disabled={hasUnsavedPageInput()} onClick={openPendingLink}>
               Open link
             </Button>
           </Alert>
@@ -3058,7 +3058,7 @@ export function bootstrapViewsPage() {
           />
         ) : null}
         {teamActionError !== null && activeResult?.kind !== "team" ? (
-          <Alert id="surla-team-action-error" variant="destructive" role="alert">{teamActionError}</Alert>
+          <Alert id="highbay-team-action-error" variant="destructive" role="alert">{teamActionError}</Alert>
         ) : null}
         </>
       );
@@ -3103,7 +3103,7 @@ export function bootstrapViewsPage() {
       <p id={id + "-label"}>
         Your selected answers need a revision. Send this request to your coding agent, then review its revised draft here.
       </p>
-      <div className="surla-field-row">
+      <div className="highbay-field-row">
         <CopyPrompt text={prompt} label="Copy request for coding agent" />
         {guidePane ? <Button disabled={hasPending("show_team_pane", "guide")}
           onClick={() => showTeamPane("guide")}>Show coding agent pane</Button> : null}
@@ -3138,7 +3138,7 @@ export function bootstrapViewsPage() {
             answers={ed.proposalAnswers}
             busy={editorRequest !== null}
             error={ed.proposalError}
-            revisionAid={draftRevisionAid("surla-proposal-revision-needed", ed.card.change_id,
+            revisionAid={draftRevisionAid("highbay-proposal-revision-needed", ed.card.change_id,
               answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers))}
             buildRevisionNotice={buildRevisionNotice}
             onAnswer={(questionId, option) => {
@@ -3157,7 +3157,7 @@ export function bootstrapViewsPage() {
               if (activeEditor === null || editorRequest !== null) return;
               activeEditor = { ...activeEditor, proposalAnswers: {} };
               syncAllRegions();
-              focusResult("#surla-proposal");
+              focusResult("#highbay-proposal");
             }}
           />
         ) : null}
@@ -3189,9 +3189,9 @@ export function bootstrapViewsPage() {
               checkError={cardLoadErrors.get(ed.card.change_id) ??
                 (latestCheck !== null ? runRequestErrors.get(latestCheck.run_id) ?? null : null)}
               approvalAvailable={approvalUnavailable === null && changeList?.approval_available === true}
-              agentPicker={workerPicker("surla-build-agents", buildWorkerRoles())}
+              agentPicker={workerPicker("highbay-build-agents", buildWorkerRoles())}
               agentsReady={workersReady(buildWorkerRoles())}
-              mergeAction={mergePanel(buildApprovalRun(ed.card), "surla-build-merge-feedback", knownTakingBuild(ed.card.change_id))}
+              mergeAction={mergePanel(buildApprovalRun(ed.card), "highbay-build-merge-feedback", knownTakingBuild(ed.card.change_id))}
               onRefresh={() => readBuild(ed.card.change_id)}
               onReadFindings={readBuildFindings}
               onBuild={startBuild}
@@ -3203,7 +3203,7 @@ export function bootstrapViewsPage() {
             />
           }
           proposalWaiting={proposal !== undefined}
-          revisionAid={proposal === undefined ? draftRevisionAid("surla-confirm-revision-needed", ed.card.change_id,
+          revisionAid={proposal === undefined ? draftRevisionAid("highbay-confirm-revision-needed", ed.card.change_id,
             answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers)) : null}
           priorCard={ed.priorCard}
           draftAnswers={ed.draftAnswers}
@@ -3356,7 +3356,7 @@ export function bootstrapViewsPage() {
             error={teamFactsError()}
             starting={hasPending("start_team_agents", "")}
             canStartWorkers={teamWorkersHaveWork()}
-            agentPicker={teamWorkersHaveWork() ? workerPicker("surla-team-agents", teamWorkerRoles()) : workerRecommendations("surla-team-agents")}
+            agentPicker={teamWorkersHaveWork() ? workerPicker("highbay-team-agents", teamWorkerRoles()) : workerRecommendations("highbay-team-agents")}
             agentsReady={workersReady(teamWorkerRoles())}
             disabled={sessionState !== "active"}
             showing={showingTeamRoles()}
@@ -3424,20 +3424,20 @@ export function bootstrapViewsPage() {
               />
             ) : null}
             {loading ? (
-              <Card id="surla-cp2-loading" className="surla-card" role="status" aria-busy="true">
+              <Card id="highbay-cp2-loading" className="highbay-card" role="status" aria-busy="true">
                 Evaluating the design. This can take a little while.
               </Card>
             ) : null}
             {error !== null ? (
-              <Alert id="surla-cp2-error" variant="destructive" role="alert">
+              <Alert id="highbay-cp2-error" variant="destructive" role="alert">
                 <strong>Could not preview the architecture. </strong>
                 {error}
               </Alert>
             ) : null}
             {card !== null ? (
-              <div className="surla-field-row">
+              <div className="highbay-field-row">
                 <Button
-                  id="surla-cp2-refresh"
+                  id="highbay-cp2-refresh"
                   disabled={loading}
                   onClick={() => requestArchitecture(card)}
                 >
@@ -3470,7 +3470,7 @@ export function bootstrapViewsPage() {
         approvalError={run !== null ? approveErrors.get(run.run_id) ?? null : null}
         unavailableReason={approvalUnavailable}
         build={run !== null ? knownTakingBuild(run.change_id) : null} unsaved={hasUnsavedEdits()}
-        mergeAction={mergePanel(run, "surla-cp5-merge-feedback")}
+        mergeAction={mergePanel(run, "highbay-cp5-merge-feedback")}
         savedRecord={recordCard !== undefined && recordCard.change_id === selectedVerificationChangeId && recordApproval !== undefined
           ? { approval: recordApproval, requestRevision: recordCard.request_revision, reason: recordCard.unverified_approval?.reason ?? null } : null}
         onRefresh={() => { if (run !== null) readApprovalReview(run.run_id, run.change_id); else handleLoadLatestCard(); }}
@@ -3525,7 +3525,7 @@ export function bootstrapViewsPage() {
   function syncAllRegions() {
     statusEl.toggleAttribute("data-connection-warning", waitTroubleShown);
     viewEl.classList.toggle(
-      "surla-split-workspace",
+      "highbay-split-workspace",
       Boolean(activeEditor !== null && editorOpen && activeResult !== null)
     );
     syncNoticeRegion();
@@ -3557,7 +3557,7 @@ export function bootstrapViewsPage() {
     if (!run.inputs_current) {
       next = "The saved check describes earlier inputs. The builder checks the current agreement and tests again before you approve.";
     } else if (run.state.type === "running") {
-      next = "Surla is checking the builder’s code. Your next decision is approval after the check passes.";
+      next = "Highbay is checking the builder’s code. Your next decision is approval after the check passes.";
     } else if (run.state.type === "completed" && run.state.value.report.passed) {
       next = ed.card.approval?.report_digest === run.state.value.report.report_digest
         ? "The check passed and your approval is recorded."
@@ -3883,10 +3883,10 @@ export function bootstrapViewsPage() {
   // replacing the retained editor or submitting its unsaved refinement.
   function handleReadFullSummary() {
     showChangeEditor("agree");
-    const details = document.getElementById("surla-agreement-details");
+    const details = document.getElementById("highbay-agreement-details");
     if (details instanceof HTMLDetailsElement) details.open = true;
-    focusResult("#surla-agreement-summary");
-    document.getElementById("surla-agreement-summary")?.scrollIntoView({ block: "start" });
+    focusResult("#highbay-agreement-summary");
+    document.getElementById("highbay-agreement-summary")?.scrollIntoView({ block: "start" });
   }
 
   // showChangeEditor restores retained form state and names the chosen stage.
@@ -4053,7 +4053,7 @@ export function bootstrapViewsPage() {
       return;
     }
     if (answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0) {
-      focusResult("#surla-confirm-revision-needed");
+      focusResult("#highbay-confirm-revision-needed");
       return;
     }
     const unanswered = unansweredQuestions(activeEditor)[0];
@@ -4095,11 +4095,11 @@ export function bootstrapViewsPage() {
       submittedCard.change_id,
       (updatedCard) => {
         mountChangeCard(updatedCard, null, nextPriorCard(activeEditor, updatedCard));
-        focusResult("#surla-cp1-editor");
+        focusResult("#highbay-cp1-editor");
       },
       (message) => {
         showFormError(message);
-        focusResult("#surla-confirm-error");
+        focusResult("#highbay-confirm-error");
       }
     );
   }
@@ -4120,7 +4120,7 @@ export function bootstrapViewsPage() {
       return;
     }
     if (answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0) {
-      focusResult("#surla-proposal-revision-needed");
+      focusResult("#highbay-proposal-revision-needed");
       return;
     }
     const answers: Record<string, string> = {};
@@ -4141,7 +4141,7 @@ export function bootstrapViewsPage() {
         const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
         mountChangeCard(adopted, preserved, nextPriorCard(activeEditor, adopted));
         statusEl.textContent = "Adopted the proposed revision; it is now the agreed revision.";
-        focusResult("#surla-cp1-editor");
+        focusResult("#highbay-cp1-editor");
       },
       (message, failure) => {
         failProposal(message, failure, card.change_id);
@@ -4173,7 +4173,7 @@ export function bootstrapViewsPage() {
         }
         statusEl.textContent = "Declined the proposed revision; the agreed revision stays in force.";
         syncAllRegions();
-        focusResult("#surla-cp1-editor");
+        focusResult("#highbay-cp1-editor");
       },
       (message, failure) => {
         failProposal(message, failure, card.change_id);
@@ -4189,7 +4189,7 @@ export function bootstrapViewsPage() {
     }
     statusEl.textContent = "The proposed revision was not changed.";
     syncAllRegions();
-    focusResult("#surla-proposal-error");
+    focusResult("#highbay-proposal-error");
     if (failure.status === 409) {
       refreshOpenCard(changeId);
     }
@@ -4218,9 +4218,9 @@ export function bootstrapViewsPage() {
           ...selectedReview.review, approval: { ...approved.approval, state: "recorded" },
         } };
       }
-      statusEl.textContent = "Approval recorded. Surla did not merge or deploy anything.";
+      statusEl.textContent = "Approval recorded. Highbay did not merge or deploy anything.";
       syncAllRegions();
-      if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) focusResult("#surla-cp5-approval");
+      if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) focusResult("#highbay-cp5-approval");
     }, (message, failure) => {
       approveErrors.set(current.run_id, message);
       if (failure.status === 501) {
@@ -4236,7 +4236,7 @@ export function bootstrapViewsPage() {
       syncAllRegions();
       if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) {
         if (failure.status !== 501) readApprovalReview(current.run_id, current.change_id);
-        focusResult("#surla-cp5-approve-error");
+        focusResult("#highbay-cp5-approve-error");
       }
       if (failure.status === 409) refreshOpenCard(current.change_id);
     });
@@ -4401,9 +4401,9 @@ export function bootstrapViewsPage() {
     }
     history.replaceState(null, "", window.location.pathname + window.location.search);
     pendingLinkFragment = fragment;
-    statusEl.textContent = "You opened a new Surla link. Save or discard your edits, or wait for the save to finish, then choose Open link.";
+    statusEl.textContent = "You opened a new Highbay link. Save or discard your edits, or wait for the save to finish, then choose Open link.";
     syncNoticeRegion();
-    document.getElementById("surla-pending-link")?.scrollIntoView({ block: "nearest" });
+    document.getElementById("highbay-pending-link")?.scrollIntoView({ block: "nearest" });
   });
 
   syncAllRegions();

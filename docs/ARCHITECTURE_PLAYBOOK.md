@@ -1,12 +1,12 @@
 # Golden Path Architecture & the Goa Design Suite
 
-**[← Back to README](../README.md)** · **[← How Surla Works](HOW_IT_WORKS.md)** · **[CLI & MCP Reference →](REFERENCE.md)**
+**[← Back to README](../README.md)** · **[← How Highbay Works](HOW_IT_WORKS.md)** · **[CLI & MCP Reference →](REFERENCE.md)**
 
 When coding agents build a platform from scratch without architectural guardrails, they default to fragile shortcuts: every service exposes ad-hoc HTTP JSON routes, every package calls LLM provider SDKs directly with no central rate limiting or cost tracking, `tenant_id` is passed inside LLM prompt arguments, and multi-step workflows run in fragile in-memory goroutines that lose state on deploy.
 
-Surla embeds a single-source-of-truth **Golden Path Playbook** ([`internal/goldenpath/GOLDEN_PATH.md`](../internal/goldenpath/GOLDEN_PATH.md)) and serves it as an MCP resource (`surla://golden-path`) to every agent on the project's team. The guide, the coding agent the user talks to, reads it before it writes the analysis it sends with `propose_change` or `revise_change`. The same resource ends with the decision component catalog for that analysis's optional `ui_composition`.
+Highbay embeds a single-source-of-truth **Golden Path Playbook** ([`internal/goldenpath/GOLDEN_PATH.md`](../internal/goldenpath/GOLDEN_PATH.md)) and serves it as an MCP resource (`highbay://golden-path`) to every agent on the project's team. The guide, the coding agent the user talks to, reads it before it writes the analysis it sends with `propose_change` or `revise_change`. The same resource ends with the decision component catalog for that analysis's optional `ui_composition`.
 
-This page has two readers. A platform author follows [the seven rules](#the-7-golden-path-rules) and [the tools behind them](#how-the-goa-design-suite-fits-together). A contributor to Surla finds [who owns what in Surla](#who-owns-what-in-surla).
+This page has two readers. A platform author follows [the seven rules](#the-7-golden-path-rules) and [the tools behind them](#how-the-goa-design-suite-fits-together). A contributor to Highbay finds [who owns what in Highbay](#who-owns-what-in-highbay).
 
 ---
 
@@ -59,35 +59,35 @@ A Golden Path platform is built with these tools:
 The team of coding agents that builds it runs on two more:
 
 - **[Chorus](https://github.com/goadesign/chorus)** — Lets coding agents and people talk in real time through channels and direct messages, with `0`-token background waiting (`chorus watch`). It also launches the project's agent panes in Herdr.
-- **[Herdr](https://herdr.dev/)** — An optional terminal workspace for side-by-side agents. Surla adopts the current guide's compatible space and pane and places workers beside it. Without Herdr, workers run in background processes.
+- **[Herdr](https://herdr.dev/)** — An optional terminal workspace for side-by-side agents. Highbay adopts the current guide's compatible space and pane and places workers beside it. Without Herdr, workers run in background processes.
 
 ---
 
-## Who owns what in Surla
+## Who owns what in Highbay
 
-One-time `surla up` registers the `surla stdio` MCP connection and `/surla`
-(`$surla`) skill with installed coding agents. The guide's first Surla tool
+One-time `hbay up` registers the `hbay stdio` MCP connection and `/highbay`
+(`$highbay`) skill with installed coding agents. The guide's first Highbay tool
 call in a project folder starts or attaches to that project's server (from
-here on, the server). Bare `surla` remains a browser-opening operator
+here on, the server). Bare `hbay` remains a browser-opening operator
 entrypoint. The server serves the views page in the user's browser and one
 HTTP and MCP endpoint to the project's team of coding agents:
 
-- **The guide** is the agent the user talks to. Working in its `.surla-draft` copy inside the project folder (never in the project folder itself), it writes the Story and the rest of the Go source in `design/` that describes the business's flows, evaluates that draft with `refresh_story`, and proposes changes. A flow is one path of who does what, from the event that starts it to its outcomes.
-- **The builder** writes the application code and asks Surla to verify a commit.
+- **The guide** is the agent the user talks to. Working in its `.highbay-draft` copy inside the project folder (never in the project folder itself), it writes the Story and the rest of the Go source in `design/` that describes the business's flows, evaluates that draft with `refresh_story`, and proposes changes. A flow is one path of who does what, from the event that starts it to its outcomes.
+- **The builder** writes the application code and asks Highbay to verify a commit.
 - **The test writer** writes the tests a build requires, in its own working copy of the project.
 
 Each change is saved as a Change Card: the record of the request, its open questions and the user's answers, the examples that become checks, the Story and the design source. Its `request_revision` identifies one exact saved revision. Only the user confirms a change, starts a build, approves a result and authorizes the merge operation. One table, `operationRoles` in [`operation_policy.go`](../internal/controlplane/operation_policy.go), says which caller may call each operation; HTTP, MCP and the tool list each caller sees all follow it.
 
 | Owner | Source | What it owns |
 | --- | --- | --- |
-| The `surla` command | `cmd/surla` | Global MCP/skill and companion setup, lazy stdio role binding, finding the project's private state folder, server startup and shutdown, authenticated CLI status, stored settings |
+| The `hbay` command | `cmd/hbay` | Global MCP/skill and companion setup, lazy stdio role binding, finding the project's private state folder, server startup and shutdown, authenticated CLI status, stored settings |
 | The server | `internal/project` | The project's identity and port, credentials and browser sessions, the team record, the Chorus roster, launch preferences, worker processes and observed role state |
 | The control plane | `internal/controlplane` | Change Cards, builds and assignments, the report checker, the verification plan, the live target and operation diagnostics |
-| The build working copies | `internal/testwriter` | The `.surla-build` and `.surla-tests` folders, the numbered `surla/build-<n>` and `surla/tests-<n>` branches, the required tests, the check of a report and the commit of accepted tests |
+| The build working copies | `internal/testwriter` | The `.highbay-build` and `.highbay-tests` folders, the numbered `highbay/build-<n>` and `highbay/tests-<n>` branches, the required tests, the check of a report and the commit of accepted tests |
 | Verification runs | `internal/verifyrun`, `internal/verify` | One folder per verification run (its run directory) and the processes that build, run and report it |
-| Herdr | outside Surla | Terminals, panes and spaces |
-| Chorus | outside Surla | Agent messaging and launch of role panes in Herdr |
-| The companion | `skills/herdr/surla` | A floating Herdr window reading project status and focusing panes or opening the browser; no browser-session credential |
+| Herdr | outside Highbay | Terminals, panes and spaces |
+| Chorus | outside Highbay | Agent messaging and launch of role panes in Herdr |
+| The companion | `skills/herdr/highbay` | A floating Herdr window reading project status and focusing panes or opening the browser; no browser-session credential |
 
 ### The server and its state
 
@@ -98,14 +98,14 @@ store. Team operations and build operations therefore always have their
 project owner; the server can run build workers in the background when Herdr is unavailable. An empty project folder and a team with no registered or running
 agents are valid states.
 
-A project is one physical folder. `surla` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, so its agents can reuse their connection settings. When `surla` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
+A project is one physical folder. `hbay` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, so its agents can reuse their connection settings. When `hbay` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
-When a guide first calls through `surla stdio`, or an operator runs `surla`:
+When a guide first calls through `hbay stdio`, or an operator runs `hbay`:
 
 1. A start lock lets one caller start the server at a time. The folder lock, an operating-system file lock on the Change Card folder that a running server holds for its whole life, is the only proof that a server is running.
-2. The CLI passes the state folder explicitly to `surla serve -state <dir>`. It starts a parentless Herdr terminal when `hc` is available or a detached process with a private startup log otherwise. Foreground `surla serve` uses the same explicit state folder.
-3. After binding its port, the server publishes a fresh management credential in a private record. `surla` reads that credential for each request, confirms that the answering server names the same project, folder and owner, and that the same build of `surla` started it (the server reports the SHA-256 of its executable, read when it started), and only then continues. `surla status` reads compatible servers and `surla stop` accepts a server of any build. Before the listener closes, the server revokes the credential and withdraws the record, even when accepting connections failed.
-4. If the server exits before answering, `surla` reads the last lines from the terminal or startup log and includes them in the error. It removes an exited server's startup terminal.
+2. The CLI passes the state folder explicitly to `hbay serve -state <dir>`. It starts a parentless Herdr terminal when `hc` is available or a detached process with a private startup log otherwise. Foreground `hbay serve` uses the same explicit state folder.
+3. After binding its port, the server publishes a fresh management credential in a private record. `hbay` reads that credential for each request, confirms that the answering server names the same project, folder and owner, and that the same build of `hbay` started it (the server reports the SHA-256 of its executable, read when it started), and only then continues. `hbay status` reads compatible servers and `hbay stop` accepts a server of any build. Before the listener closes, the server revokes the credential and withdraws the record, even when accepting connections failed.
+4. If the server exits before answering, `hbay` reads the last lines from the terminal or startup log and includes them in the error. It removes an exited server's startup terminal.
 
 The management credential lets the CLI read project status, attach a guide,
 stop the server and ask for a browser link. User decisions require a separate
@@ -113,13 +113,13 @@ browser session. The server issues a single-use link that expires after two
 minutes. The page exchanges it for a session held in memory in the server
 and the open page. Each agent authenticates with its role's credential file.
 
-Bare `surla` opens a fresh link after handing over the shell's model settings.
-`surla --print-link` prints the link and expiry instead. In `open_views`, the
+Bare `hbay` opens a fresh link after handing over the shell's model settings.
+`hbay --print-link` prints the link and expiry instead. In `open_views`, the
 control plane checks the guide or user role, then the project server mints
 the link and passes it directly to the browser opener. The operation returns
 only an opening result and a message.
 
-`surla status` reads the existing card-store lock and verifies the answering
+`hbay status` reads the existing card-store lock and verifies the answering
 server's identity using the management credential. The project server
 delegates the status read to the control plane, which selects the change and
 derives the stage from the saved build and verification evidence. It may
@@ -131,16 +131,16 @@ staged entries. It moves entries without replacing existing names, publishing
 `.git` last. On restart the persisted publication record lets the control
 plane verify already moved entries and finish an interrupted initialization.
 
-`surla verification set` and `surla promotion set` validate a settings file and copy it into the state folder. The server reads both at start, so a change applies when Surla is started again.
+`hbay verification set` and `hbay promotion set` validate a settings file and copy it into the state folder. The server reads both at start, so a change applies when Highbay is started again.
 
 ### The stdio connection and global setup
 
-`cmd/surla/setup.go` owns registration of the installed `surla stdio`
+`cmd/hbay/setup.go` owns registration of the installed `hbay stdio`
 executable and bundled skill in detected coding-agent configuration. It
 preserves unrelated settings and leaves identical content untouched. Setup
 also installs the floating Herdr companion after Herdr has created its app
-folder. On macOS it adds the free `cmd-alt-shift-s` shortcut in `keys.json`,
-without changing workspace layouts. `surla up` runs setup and starts Chorus
+folder. On macOS it adds the free `cmd-alt-shift-h` shortcut in `keys.json`,
+without changing workspace layouts. `hbay up` runs setup and starts Chorus
 when installed; the project server itself does not restart Chorus.
 
 The stdio server answers initialization, ping and catalogs from generated
@@ -154,14 +154,14 @@ forwarding has not been live-verified with real clients.
 Worker bindings require an existing server, matching role registration and
 credential; assignment validity is checked by the assignment operations.
 
-Role binding follows physical subtree containment: `.surla-build` and its
-children are builder-only, and `.surla-tests` and its children are
+Role binding follows physical subtree containment: `.highbay-build` and its
+children are builder-only, and `.highbay-tests` and its children are
 test-writer-only, including nested modules and leftover worker folders. A
 missing worker registration or credential never grants guide access.
 Generated schemas and the control plane's operation policy still enforce each caller's tools.
 
-The Herdr companion reads `surla status --json` for the shown local project
-and Herdr labels for pane focus. Its **Open Surla Window** action runs the ordinary
+The Herdr companion reads `hbay status --json` for the shown local project
+and Herdr labels for pane focus. Its **Open Highbay Window** action runs the ordinary
 browser-opening entrypoint. It holds no user credential and changes no
 shipped workspace layout.
 
@@ -177,7 +177,7 @@ browser's inline Build and Team controls use those options and submit the
 needed roles' choices. The project saves choices and dismissed recommendations;
 those preferences do not change role permissions or required assignments.
 
-`surla stdio` registers the current coding session as guide through the local
+`hbay stdio` registers the current coding session as guide through the local
 management `attach_guide` operation.
 The server checks the supplied terminal is a running model pane in a local
 tab with compatible project and team labels before adopting it. It keeps the
@@ -196,16 +196,16 @@ supervisor's assignment-attempt tracking.
 
 Without Herdr the supervisor starts finite worker invocations in dedicated
 process groups with the preserved launch environment. Workers use the globally
-registered `surla stdio` connection and their role credentials. The browser
+registered `hbay stdio` connection and their role credentials. The browser
 requires a supported non-interactive client and explicit permission to run
 without interactive prompts. The supervisor
 advances workers when a new assignment or verification result calls for
-work and waits while Surla checks a test report or runs
+work and waits while Highbay checks a test report or runs
 verification. During a server lifetime, each build allows three invocations
 per role and each invocation has a 30-minute deadline. The project server
 drains those groups before the control plane releases the card-store lock.
 
-For a Herdr team, the server watches each registered role's terminal through Herdr and whether Chorus reports a watcher for each agent: the wait through which the agent receives its messages. It keeps the terminal's state and reported status, the foreground program's arguments and the watcher facts, never screen text, titles or messages. Herdr sends a heartbeat every 15 seconds; when three are missed, every role is unknown until fresh snapshots arrive. Chorus answers are read only up to their agent list, at most 256 KiB, before any conversation data. The control plane gives the server a read-only callback that reports which worker roles have work on the open build and which unread assignment generations they owe; calling it never marks work read. Surla types nothing into a pane. It reminds a worker role that has work on the open build and owes an unread assignment with two tool calls posted to Chorus's `/mcp` endpoint, written as Chorus's dashboard writes them: `who` registers Surla's own handle in the team, then `send` hands the role one fixed direct message. The sender has its own client, bounded at 5 seconds per post; it fails a response longer than 2 MiB and decodes only whether each call failed. The supervisor alone keeps, in memory, which generations of an unread assignment it has already tried. [Team supervision](REFERENCE.md#team-supervision) gives the user's view of this.
+For a Herdr team, the server watches each registered role's terminal through Herdr and whether Chorus reports a watcher for each agent: the wait through which the agent receives its messages. It keeps the terminal's state and reported status, the foreground program's arguments and the watcher facts, never screen text, titles or messages. Herdr sends a heartbeat every 15 seconds; when three are missed, every role is unknown until fresh snapshots arrive. Chorus answers are read only up to their agent list, at most 256 KiB, before any conversation data. The control plane gives the server a read-only callback that reports which worker roles have work on the open build and which unread assignment generations they owe; calling it never marks work read. Highbay types nothing into a pane. It reminds a worker role that has work on the open build and owes an unread assignment with two tool calls posted to Chorus's `/mcp` endpoint, written as Chorus's dashboard writes them: `who` registers Highbay's own handle in the team, then `send` hands the role one fixed direct message. The sender has its own client, bounded at 5 seconds per post; it fails a response longer than 2 MiB and decodes only whether each call failed. The supervisor alone keeps, in memory, which generations of an unread assignment it has already tried. [Team supervision](REFERENCE.md#team-supervision) gives the user's view of this.
 
 ### Change Cards and builds
 
@@ -216,7 +216,7 @@ A build is the user's decision to build the agreed revision. The control plane s
 | Field | Meaning |
 | --- | --- |
 | `change_id`, `request_revision`, `started_at` | The change, the agreed revision the build started from, and when the user started the build |
-| `number`, `base` | The build's number `n` (`surla/build-<n>` and `surla/tests-<n>`) and the project folder's commit the build started from |
+| `number`, `base` | The build's number `n` (`highbay/build-<n>` and `highbay/tests-<n>`) and the project folder's commit the build started from |
 | `stories`, `design_source`, `go_mod`, `made_from` | The Story and design as agreed, the text of the `go.mod` the design was evaluated with, and the record of what the revision was made from (the project commit its draft started from and the versions of each design file), copied when the build started; later revisions do not change them |
 | `answers`, `examples`, `preserved_behaviors` | Each question with the answer the user confirmed, the confirmation examples and the preserved behaviors, as agreed, copied at the same time; the test writer, which may not read the change, receives them in its assignment |
 | `roles` | `builder_and_test_writer`, or `builder_only` when stored verification settings supply the tests |
@@ -229,8 +229,8 @@ When the user presses **Build this change** on the views page, `start_build`:
 
 1. checks that the caller is the project's owner, then takes the builder's copy turn and the test writer's working-copy turn without waiting; while another start, an assignment read or a report check holds a turn, the start is refused and nothing is saved;
 2. checks the agreed revision, checks open-build replacement (`previous_change_open` and `unfinished_build_open` with `replaces`), checks `drafted_before_drop` and `design_changed_outside`, numbers a new build (or keeps the unmerged, undropped open build's number and base), and checks the revision again;
-3. saves the open build in `build.json`, with the Story, design, answers, examples and preserved behaviors of the revision that second check read, creates any missing `.surla-build` (`surla/build-<n>`) and `.surla-tests` (`surla/tests-<n>`) working copies at the build's base commit without moving existing copies, and registers its roles with the server; when a copy cannot be made or the server stops first, the build stays saved, and building again makes the copy and registers the roles;
-4. releases the turns and asks the server to start the build's missing workers; each existing copy joins its build branch (`surla/build-<n>` or `surla/tests-<n>`), and `.surla-tests` receives the required tests, when its worker first reads the assignment.
+3. saves the open build in `build.json`, with the Story, design, answers, examples and preserved behaviors of the revision that second check read, creates any missing `.highbay-build` (`highbay/build-<n>`) and `.highbay-tests` (`highbay/tests-<n>`) working copies at the build's base commit without moving existing copies, and registers its roles with the server; when a copy cannot be made or the server stops first, the build stays saved, and building again makes the copy and registers the roles;
+4. releases the turns and asks the server to start the build's missing workers; each existing copy joins its build branch (`highbay/build-<n>` or `highbay/tests-<n>`), and `.highbay-tests` receives the required tests, when its worker first reads the assignment.
 
 The work under the turns has one five-minute limit; starting the agents has its own 45-second limit. Accepted work belongs to the server and survives the page closing. A build started with only the builder stays usable while stored verification settings supply its tests; when those settings are removed, the user builds again.
 
@@ -268,7 +268,7 @@ The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a
 
 ### The test writer's working copy and the report checker
 
-`internal/testwriter` owns the builder's and the test writer's working copies—linked Git working copies of the project at `.surla-build` on `surla/build-<n>` and `.surla-tests` on `surla/tests-<n>`—joining each to its build branch on the first assignment read, checking build-branch lineage, and preparing, checking and recording accepted tests as a commit on `surla/tests-<n>`. The control plane runs one report checker per project: it starts when the server binds the team and drains before the stores close. Two working-copy turns—the builder's copy turn (`ControlPlane.builderCopyTurn`) and the test writer's working-copy turn (`ControlPlane.workingCopyTurn`)—guard the working copies, and in-process locks are always taken in this order: the builder's copy turn, the working-copy turn, the report lock, the draft lock (`ControlPlane.draftMu`, which serializes the guide's draft and its made-from list), the card lock. A build start takes the builder's copy turn and then the working-copy turn and releases both after registering the roles, without writing tests; the test writer's marking assignment read and each report check hold the working-copy turn and write the required tests, and either can take minutes. The report lock (`ControlPlane.reportMu`) makes a newly arriving report wait while the checker confirms the build is the one it checked, records the accepted tests and saves the verdict. Git and the commands that build and run the test writer's code never run under the card lock. [Story flows and the tests a build requires](STORY_TEST_DESIGN.md) describes [the copy](STORY_TEST_DESIGN.md#the-test-writers-working-copy) and [the check and its findings](STORY_TEST_DESIGN.md#how-surla-judges-a-report).
+`internal/testwriter` owns the builder's and the test writer's working copies—linked Git working copies of the project at `.highbay-build` on `highbay/build-<n>` and `.highbay-tests` on `highbay/tests-<n>`—joining each to its build branch on the first assignment read, checking build-branch lineage, and preparing, checking and recording accepted tests as a commit on `highbay/tests-<n>`. The control plane runs one report checker per project: it starts when the server binds the team and drains before the stores close. Two working-copy turns—the builder's copy turn (`ControlPlane.builderCopyTurn`) and the test writer's working-copy turn (`ControlPlane.workingCopyTurn`)—guard the working copies, and in-process locks are always taken in this order: the builder's copy turn, the working-copy turn, the report lock, the draft lock (`ControlPlane.draftMu`, which serializes the guide's draft and its made-from list), the card lock. A build start takes the builder's copy turn and then the working-copy turn and releases both after registering the roles, without writing tests; the test writer's marking assignment read and each report check hold the working-copy turn and write the required tests, and either can take minutes. The report lock (`ControlPlane.reportMu`) makes a newly arriving report wait while the checker confirms the build is the one it checked, records the accepted tests and saves the verdict. Git and the commands that build and run the test writer's code never run under the card lock. [Story flows and the tests a build requires](STORY_TEST_DESIGN.md) describes [the copy](STORY_TEST_DESIGN.md#the-test-writers-working-copy) and [the check and its findings](STORY_TEST_DESIGN.md#how-highbay-judges-a-report).
 
 ### Verification runs and the live target
 
@@ -281,7 +281,7 @@ its tests commit in the same locked read and copies the agreed basis and
 statements into its immutable request. Approve reads that snapshot; it never
 substitutes today's card or newer report. Old-run absence and configured
 evaluators remain explicitly not recorded. These are writer statements, not
-Surla's judgment of assertion meaning; see
+Highbay's judgment of assertion meaning; see
 [the report contract](REFERENCE.md#report_tests_finished).
 
 One function, `testsChoice` in [`verification_plan.go`](../internal/controlplane/verification_plan.go), chooses which tests judge a change: the suite named in the stored verification settings, or the tests accepted for the change's build at its revision. Verification runs those tests, `approve_merge` requires the approved report to have run them, and a saved approval is shown only while they stay the same; `verificationPlan` builds a run's configuration from that choice. The builder names only the change, the revision and its commit.
@@ -311,7 +311,7 @@ The control plane runs at most one live target for an owned, confirmed change. `
 
 `internal/verifyrun` owns the live executor's process group and temporary directory under the Change Card folder. For written tests with a direct provider, `LaunchLive` passes the held settings over standard input rather than in the executor's starting environment. After preparation, the executor constructs the provider and serves a loopback model gateway; the accepted test program gets the gateway address and target key, without provider settings. The SDK constructor belongs to the command composition root, while `internal/verifyrun` owns gateway and process lifetime. A chosen gateway passes through, and evaluators in stored verification settings keep their existing provider-settings path. Gateway answers preserve structured model error types with server-authored messages instead of provider error text; the pinned Anthropic SDK's API-key precedence remains unchanged. See [model provider settings](REFERENCE.md#model-provider-settings) for that setting's limits.
 
-Surla sends prompt drafts to a running target with a key minted for it. An unexpected executor ending unbinds drafts and stops the entire group. Only after confirmed cleanup does the control plane retain one in-memory `ended` value containing the commit, ready time, observed-end time and fixed recovery message, without the process, key, provider settings or draft map. Failed cleanup keeps the target owned and `not_confirmed_stopped`. Explicit successful Stop or an accepted replacement clears the observation, and restarting the server loses it. Closing the control plane stops the target and gateway; an open model stream never delays that cleanup.
+Highbay sends prompt drafts to a running target with a key minted for it. An unexpected executor ending unbinds drafts and stops the entire group. Only after confirmed cleanup does the control plane retain one in-memory `ended` value containing the commit, ready time, observed-end time and fixed recovery message, without the process, key, provider settings or draft map. Failed cleanup keeps the target owned and `not_confirmed_stopped`. Explicit successful Stop or an accepted replacement clears the observation, and restarting the server loses it. Closing the control plane stops the target and gateway; an open model stream never delays that cleanup.
 
 The project composition root supplies one required `BuildCacheDir` in
 `controlplane.Options` whenever either test source is configured. It lives
@@ -320,7 +320,7 @@ argument through the internal supervisor, executor and live roles. Saved
 requests, live records and verification plans contain no cache path.
 `verify.Prepare` passes it as `candidate.BuildSpec.BuildCacheDir` for candidate
 and test-program compilation; `WorkDir` keeps only operation-owned scratch and
-staging. The standalone `surla verify` composition root instead supplies a cache
+staging. The standalone `hbay verify` composition root instead supplies a cache
 under its own work directory. The control-plane composition also supplies the
 project cache to its design evaluator, each fresh initialization generator and
 the test-report checker. Their scratch and outputs remain independently owned;
@@ -342,7 +342,7 @@ when reading cached package files, not compiled contents against selected
 source. Same-user code can plant a compiled package that a later build links
 into the candidate or test program, so its report can bind a binary the
 selected source would not produce. This joins the trusted module cache, toolchain, executable search path and
-Surla's files. Deleting the build cache forces recompilation but does not
+Highbay's files. Deleting the build cache forces recompilation but does not
 authenticate those other inputs.
 
 For Docker `check_project` and `update_dependencies`, the project composition
@@ -363,4 +363,4 @@ confine other same-user host processes.
 
 ### Operation diagnostics
 
-The control plane records each of its operations as an OpenTelemetry span and saves a bounded, safe view of each one in one history file, `traces.jsonl` in the Change Card folder. The history belongs to the project's owner: every caller (the user's page, the management credential and each agent) acts for that owner, and each record names its caller and the caller's kind, such as `user`, `management` or the agent's role. The server's composition root, `projectRuntime.serve` in [`project_server.go`](../cmd/surla/project_server.go), owns the tracer provider, and exports full spans over OTLP when an OTLP endpoint is set in the server's environment. The exported spans carry no added identity. The user's page reads that succeed or are refused, and its waiting read, are not saved, so the page's repeated reads do not fill the history. Spans that end after the control plane closes are not saved. [Operation diagnostics](REFERENCE.md#operation-diagnostics) gives the caller's view.
+The control plane records each of its operations as an OpenTelemetry span and saves a bounded, safe view of each one in one history file, `traces.jsonl` in the Change Card folder. The history belongs to the project's owner: every caller (the user's page, the management credential and each agent) acts for that owner, and each record names its caller and the caller's kind, such as `user`, `management` or the agent's role. The server's composition root, `projectRuntime.serve` in [`project_server.go`](../cmd/hbay/project_server.go), owns the tracer provider, and exports full spans over OTLP when an OTLP endpoint is set in the server's environment. The exported spans carry no added identity. The user's page reads that succeed or are refused, and its waiting read, are not saved, so the page's repeated reads do not fill the history. Spans that end after the control plane closes are not saved. [Operation diagnostics](REFERENCE.md#operation-diagnostics) gives the caller's view.

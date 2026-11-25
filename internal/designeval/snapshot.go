@@ -21,7 +21,7 @@ import (
 
 // reservedDir is the snapshot directory the evaluator owns; snapshots must not
 // use it.
-const reservedDir = "surla_designeval"
+const reservedDir = "highbay_designeval"
 
 var (
 	// ErrNotRegularFile marks a read refused because the path is not a

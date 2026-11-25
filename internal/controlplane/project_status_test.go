@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/verify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,12 +24,12 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, cards.close()) })
 	workspace := realTempDir(t)
 	const owner = "alice@example.com"
-	guide := &gensurla.TeamRoleState{
+	guide := &genhighbay.TeamRoleState{
 		Role: "guide", Handle: "guide-test", State: "needs_you", Attention: "question",
 		Watcher: "held", Assignment: "nothing_owed",
 	}
-	team := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{
-		Team: "test-project", HerdrMode: "attached", Roles: []*gensurla.TeamRoleState{guide},
+	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{
+		Team: "test-project", HerdrMode: "attached", Roles: []*genhighbay.TeamRoleState{guide},
 	}}
 	runsDir := realTempDir(t)
 	cp := &ControlPlane{
@@ -40,7 +40,7 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 		}},
 	}
 
-	check := func(stage, attention string, card *gensurla.ChangeCardResult) {
+	check := func(stage, attention string, card *genhighbay.ChangeCardResult) {
 		t.Helper()
 		status, err := cp.ProjectStatus(t.Context())
 		require.NoError(t, err)
@@ -112,9 +112,9 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 
 // saveStatusProposal writes an unconfirmed card under the indicated owner so
 // the callback's selection can be tested without invoking the guide flow.
-func saveStatusProposal(t *testing.T, cp *ControlPlane, owner, id string) *gensurla.ChangeCardResult {
+func saveStatusProposal(t *testing.T, cp *ControlPlane, owner, id string) *genhighbay.ChangeCardResult {
 	t.Helper()
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID: id, Status: StatusNeedsConfirmation,
 		Prompt: "Add a refund receipt.", Summary: "Add a refund receipt.",
 	}
@@ -132,7 +132,7 @@ func TestOpenViewsHandoffCopyReflectsOpenerCapabilities(t *testing.T) {
 	res, err := unconfigured.OpenViews(ctx)
 	require.NoError(t, err)
 	assert.False(t, res.Opened)
-	assert.Contains(t, res.Message, "Open Surla Window in the Herdr companion")
+	assert.Contains(t, res.Message, "Open Highbay Window in the Herdr companion")
 	assert.NotContains(t, res.Message, "brought it to the front")
 
 	failing := newControlPlane(t, Options{
@@ -141,7 +141,7 @@ func TestOpenViewsHandoffCopyReflectsOpenerCapabilities(t *testing.T) {
 	res, err = failing.OpenViews(ctx)
 	require.NoError(t, err)
 	assert.False(t, res.Opened)
-	assert.Contains(t, res.Message, "Open Surla Window in the Herdr companion")
+	assert.Contains(t, res.Message, "Open Highbay Window in the Herdr companion")
 	assert.NotContains(t, res.Message, "brought it to the front")
 
 	succeeding := newControlPlane(t, Options{
@@ -150,7 +150,7 @@ func TestOpenViewsHandoffCopyReflectsOpenerCapabilities(t *testing.T) {
 	res, err = succeeding.OpenViews(ctx)
 	require.NoError(t, err)
 	assert.True(t, res.Opened)
-	assert.Contains(t, res.Message, "Opened Surla views in the user's default browser.")
-	assert.Contains(t, res.Message, "Open Surla Window in the Herdr companion")
+	assert.Contains(t, res.Message, "Opened Highbay views in the user's default browser.")
+	assert.Contains(t, res.Message, "Open Highbay Window in the Herdr companion")
 	assert.NotContains(t, res.Message, "brought it to the front")
 }

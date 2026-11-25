@@ -1,7 +1,7 @@
-// Package targetprompt describes, from Surla's side, the one operation Surla
+// Package targetprompt describes, from Highbay's side, the one operation Highbay
 // calls on a live CP3 target to change a prompt's text. It is not part of the
-// surla API. The target declares the same method in its own design and owns
-// its implementation, its prompt state and its validation; Surla generates
+// highbay API. The target declares the same method in its own design and owns
+// its implementation, its prompt state and its validation; Highbay generates
 // only the client it uses from this design, so neither module depends on the
 // other. The contract is documented in docs/REFERENCE.md.
 package targetprompt
@@ -19,18 +19,18 @@ const nonBlankPattern = "[^ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u202
 
 var _ = API("targetprompt", func() {
 	Title("CP3 live target prompt operation")
-	Description("The operation a CP3 live target serves so Surla can replace a registered prompt's text while it runs.")
+	Description("The operation a CP3 live target serves so Highbay can replace a registered prompt's text while it runs.")
 	Version("1.0.0")
 })
 
-// LiveKey is the credential Surla mints for one live target and passes to it
+// LiveKey is the credential Highbay mints for one live target and passes to it
 // through its environment.
 var LiveKey = APIKeySecurity("live_key", func() {
-	Description("Key Surla minted for this live target and passed to it at start.")
+	Description("Key Highbay minted for this live target and passed to it at start.")
 })
 
 var _ = Service("prompts", func() {
-	Description("Prompt text a live target lets Surla replace. Each call replaces the text of one prompt the target registered, for every caller of that target process, until the process exits.")
+	Description("Prompt text a live target lets Highbay replace. Each call replaces the text of one prompt the target registered, for every caller of that target process, until the process exits.")
 	Error("unauthorized", String, "The key is missing or is not this target's key.")
 	Error("unknown_prompt", ErrorResult, "No prompt with this ID is registered.")
 	Error("invalid_prompt", ErrorResult, "The template does not render with the prompt's registered spec.")
@@ -56,7 +56,7 @@ var _ = Service("prompts", func() {
 				// class lists that whitespace set as literal characters, so Go,
 				// JavaScript and other regular expression engines agree on it.
 				Pattern(nonBlankPattern)
-				// The version comes from the target's own code. Surla keeps it
+				// The version comes from the target's own code. Highbay keeps it
 				// for as long as the target runs, shows it, and hashes it into
 				// the views page's waiting value, so it is bounded here, where
 				// the answer is decoded. A content digest such as

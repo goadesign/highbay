@@ -3,7 +3,7 @@ package acceptance
 import (
 	"testing"
 
-	genpayments "github.com/goadesign/surla/examples/orders-eval/gen/payments"
+	genpayments "github.com/goadesign/highbay/examples/orders-eval/gen/payments"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 const (
@@ -181,7 +181,7 @@ func fakeSuiteLive() int {
 	return 0
 }
 
-// liveHost acts as `surla serve`: it starts a live target under root, prints
+// liveHost acts as `hbay serve`: it starts a live target under root, prints
 // liveHostReady and the target's group once ready, and then blocks until it
 // is killed. A start error is printed and ends it.
 func liveHost(root string) int {
@@ -319,7 +319,7 @@ func TestLiveGivesTheTestProgramOnlyItsSourcesEnvironment(t *testing.T) {
 		{
 			name: "operator's evaluator", tests: verify.TestsEvaluator,
 			sees: []string{
-				"SURLA_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=ant-k", "ANTHROPIC_BASE_URL=https://gateway.invalid",
+				"HIGHBAY_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=ant-k", "ANTHROPIC_BASE_URL=https://gateway.invalid",
 				suite.LiveKeyEnv + "=secret-key",
 			},
 			doesNotSee: []string{"OPENAI_API_KEY", "ANTHROPIC_ADMIN_KEY"},
@@ -329,7 +329,7 @@ func TestLiveGivesTheTestProgramOnlyItsSourcesEnvironment(t *testing.T) {
 			sees: []string{
 				"PATH=" + os.Getenv("PATH"), suite.LiveKeyEnv + "=secret-key",
 			},
-			doesNotSee: []string{"SURLA_TEST_SERVER_VAR", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_ADMIN_KEY", verify.LiveModelProviderEnv, verify.LiveModelNameEnv, liveFakeEnv, "HOME"},
+			doesNotSee: []string{"HIGHBAY_TEST_SERVER_VAR", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_ADMIN_KEY", verify.LiveModelProviderEnv, verify.LiveModelNameEnv, liveFakeEnv, "HOME"},
 		},
 	}
 	for _, tc := range cases {
@@ -339,7 +339,7 @@ func TestLiveGivesTheTestProgramOnlyItsSourcesEnvironment(t *testing.T) {
 			self, err := os.Executable()
 			require.NoError(t, err)
 			env := append(os.Environ(),
-				"SURLA_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=inherited-k", "ANTHROPIC_ADMIN_KEY=inherited-admin", "OPENAI_API_KEY=oai-k",
+				"HIGHBAY_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=inherited-k", "ANTHROPIC_ADMIN_KEY=inherited-admin", "OPENAI_API_KEY=oai-k",
 				verify.LiveModelProviderEnv+"=anthropic", verify.LiveModelNameEnv+"=claude",
 			)
 			anthropic, err := modelsettings.New("anthropic", map[string]string{"ANTHROPIC_API_KEY": "ant-k", "ANTHROPIC_BASE_URL": "https://gateway.invalid"})
@@ -452,7 +452,7 @@ func TestLaunchLiveResolvesItsRoot(t *testing.T) {
 		// physicalRoot is the directory where the live target must be created.
 		physicalRoot string
 	}{
-		{"relative", ".surla/cards/live", filepath.Join(physicalBase, ".surla", "cards", "live")},
+		{"relative", ".highbay/cards/live", filepath.Join(physicalBase, ".highbay", "cards", "live")},
 		{"symlink", "alias/live", filepath.Join(physicalBase, "real-cards", "nested", "live")},
 		{"relative_parent", "alias/../live", filepath.Join(physicalBase, "real-cards", "live")},
 		{"absolute_parent", base + "/alias/../live", filepath.Join(physicalBase, "real-cards", "live")},

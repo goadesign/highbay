@@ -18,7 +18,7 @@ type (
 	// ContainerRunner runs Go commands against candidate source in Linux
 	// containers on the local Docker engine, using the docker command-line
 	// tool with direct argv and no shell. check_project and
-	// update_dependencies use it; it is the only way Surla runs candidate tests
+	// update_dependencies use it; it is the only way Highbay runs candidate tests
 	// in a container. A ContainerRunner holds no engine state: each operation
 	// calls Open, so a docker installed or started after the server started
 	// works without a restart.
@@ -62,7 +62,7 @@ type (
 		// a lost create reply can still be removed by name.
 		Name string
 		// Operation is the owning operation ID, recorded as the
-		// surla.check label.
+		// highbay.check label.
 		Operation string
 		// Network is "none" for running candidate tests, or "bridge" for
 		// module downloads.
@@ -100,7 +100,7 @@ const (
 	// Go itself selects and installs any newer toolchain a module requires.
 	CheckImage = "golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e"
 	// checkLabel labels every check container with its operation ID.
-	checkLabel = "surla.check"
+	checkLabel = "highbay.check"
 	// removeTimeout bounds the cleanup work a cancellation may still do: one
 	// docker rm -f, run with a fresh context so it survives the cancellation
 	// that triggered it, and the wait for the answer to a create already sent
@@ -256,7 +256,7 @@ func (e *Engine) Remove(name string) error {
 }
 
 // List returns the names of the containers, in every state, that carry the
-// surla.check label of operation op, from docker container ls --all filtered
+// highbay.check label of operation op, from docker container ls --all filtered
 // by that label. Like Remove it uses a fresh context bounded by
 // removeTimeout. A nil error means the listing completed; callers compare
 // the names exactly, and a name missing from them is a container the engine

@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,17 +36,17 @@ func TestMergedBuildReplayStartsFresh(t *testing.T) {
 			repo, project, cp, registered := reviewProject(t, opts)
 			card := buildableChange(t, cp, "replay")
 			user := asCaller("alice@example.com", CallerUser)
-			first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+			first, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 			})
 			require.NoError(t, err)
 			builder, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-				&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+				&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			assert.True(t, builder.Read)
 			if !configured {
 				writer, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter),
-					&gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+					&genhighbay.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
 				require.NoError(t, err)
 				assert.True(t, writer.Progress.Read)
 			}
@@ -61,24 +61,24 @@ func TestMergedBuildReplayStartsFresh(t *testing.T) {
 			candidate := productionBuildGit(t, builder.WorkingFolder, "rev-parse", "HEAD")
 			tests := original.Base
 			writeReplayPassedRun(t, cfg.RunsDir, card, original, candidate, tests, configured)
-			before, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+			before, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			beforeBuild, ok := before.Build.AsStarted()
 			require.True(t, ok)
-			assert.Equal(t, gensurla.BuildTakingKindPassed, beforeBuild.Taking.Kind())
+			assert.Equal(t, genhighbay.BuildTakingKindPassed, beforeBuild.Taking.Kind())
 			productionBuildGit(t, repo, "merge", "--no-edit", candidate)
 			writeWorkspaceFiles(t, project, map[string]string{"later.txt": "current branch after merge\n"})
 			productionBuildGit(t, repo, "add", "--", "later.txt")
 			productionBuildGit(t, repo, "commit", "--quiet", "-m", "Continue after merging")
 			current := productionBuildGit(t, repo, "rev-parse", "HEAD")
-			merged, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+			merged, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			mergedBuild, ok := merged.Build.AsStarted()
 			require.True(t, ok)
-			require.Equal(t, gensurla.BuildTakingKindMerged, mergedBuild.Taking.Kind())
+			require.Equal(t, genhighbay.BuildTakingKindMerged, mergedBuild.Taking.Kind())
 			assert.True(t, mergedBuild.InForce)
 			assert.False(t, merged.DraftedBeforeDrop)
-			next, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+			next, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 			})
 			require.NoError(t, err, "merged replay requires no replaces payload")
@@ -87,16 +87,16 @@ func TestMergedBuildReplayStartsFresh(t *testing.T) {
 			assert.False(t, next.Build.Builder.Read)
 			assert.False(t, next.Build.TestWriter.Read)
 			assert.Zero(t, next.Build.TestWriter.Report)
-			wantTests := gensurla.TestsKindAssigned
+			wantTests := genhighbay.TestsKindAssigned
 			if configured {
-				wantTests = gensurla.TestsKindNotUsed
+				wantTests = genhighbay.TestsKindNotUsed
 			}
 			assert.Equal(t, wantTests, next.Build.TestWriter.Tests.Kind())
-			public, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+			public, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			publicBuild, ok := public.Build.AsStarted()
 			require.True(t, ok)
-			assert.Equal(t, gensurla.BuildTakingKindBuilding, publicBuild.Taking.Kind(), "old pass does not carry to the new build")
+			assert.Equal(t, genhighbay.BuildTakingKindBuilding, publicBuild.Taking.Kind(), "old pass does not carry to the new build")
 			cp.mu.RLock()
 			saved, found, err := cp.cards.loadOpenBuild()
 			cp.mu.RUnlock()
@@ -106,13 +106,13 @@ func TestMergedBuildReplayStartsFresh(t *testing.T) {
 			assert.Equal(t, current, saved.Base)
 			assert.Equal(t, original.RequestRevision, saved.RequestRevision)
 			builder, err = cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-				&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+				&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			assert.Equal(t, testwriter.BuilderRole.Branch(saved.Number), productionBuildGit(t, builder.WorkingFolder, "branch", "--show-current"))
 			assert.Equal(t, current, productionBuildGit(t, builder.WorkingFolder, "rev-parse", "HEAD"))
 			if !configured {
 				writer, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter),
-					&gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+					&genhighbay.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
 				require.NoError(t, err)
 				assert.Equal(t, testwriter.TestsRole.Branch(saved.Number), productionBuildGit(t, writer.WorkingFolder, "branch", "--show-current"))
 				assert.Equal(t, current, productionBuildGit(t, writer.WorkingFolder, "rev-parse", "HEAD"))
@@ -125,7 +125,7 @@ func TestMergedBuildReplayStartsFresh(t *testing.T) {
 // writeReplayPassedRun seeds a well-formed historical pass for the real commits
 // and selected test source. It does not claim the candidate or tests were run.
 func writeReplayPassedRun(
-	t *testing.T, runs string, card *gensurla.ChangeCardResult, build buildFile,
+	t *testing.T, runs string, card *genhighbay.ChangeCardResult, build buildFile,
 	candidate, tests string, configured bool,
 ) {
 	t.Helper()

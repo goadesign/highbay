@@ -1,7 +1,7 @@
 # [[.Name]]
 
-A starter Goa / Goa-AI service created by `surla init` or the `init_project`
-MCP tool, with a starter evaluator suite that `surla verify` and `verify_change`
+A starter Goa / Goa-AI service created by `hbay init` or the `init_project`
+MCP tool, with a starter evaluator suite that `hbay verify` and `verify_change`
 can run against it.
 
 ## What is here
@@ -11,7 +11,7 @@ can run against it.
   price in cents. The agent can call `price` through its `lookup_price` tool.
   `override_prompt` (PUT /prompts/{prompt_id}) replaces the helper's system
   prompt text until the process exits; it requires the key in the
-  `SURLA_LIVE_TARGET_KEY` environment variable, which Surla sets for a live
+  `HIGHBAY_LIVE_TARGET_KEY` environment variable, which Highbay sets for a live
   target, and rejects every call without one. `key` is left optional in
   `design/design.go` so a missing `X-Live-Target-Key` header reaches
   `Service.APIKeyAuth` and returns `401` (`unauthorized`) rather than `400`
@@ -24,15 +24,15 @@ can run against it.
   (see "Change checkpoints" below).
 - `gen/` is generated from `design/`. The guide edits the next design in its
   draft and proposes a revision for you to adopt. The builder calls the
-  `generate_code` MCP tool on the Surla project server to write that agreed
+  `generate_code` MCP tool on the Highbay project server to write that agreed
   design into its working copy's `design/` and regenerate `gen/`; it edits
-  neither directory. An operator can run `surla gen`
+  neither directory. An operator can run `hbay gen`
   in this directory: it runs Goa's generator for this module with the
   module's own versions. Never edit `gen/`. Generation compiles the design only, so update the
   hand-written code in `internal/` and `cmd/` to match it; the builder then builds and tests
   the uncommitted files with `check_project`, as described in "Next steps".
   `AGENTS_QUICKSTART.md` is generated with it and maps the agent, its tools
-  and the generated packages for coding agents; it names the same Surla tools
+  and the generated packages for coding agents; it names the same Highbay tools
   as "Next steps" for generating, checking and verifying this project.
 - `internal/helper` is the agent's planner and `internal/service` implements the
   service. `Service.Ask` builds an in-memory runtime and store per question
@@ -43,7 +43,7 @@ can run against it.
   `Confirmation` (which pauses the run before the bound method's own
   authorization runs; the host can also deny unauthorized calls immediately
   when handling the suspension), build one runtime and store in `main` so
-  paused runs can be resumed, as Surla's `examples/orders` reference service
+  paused runs can be resumed, as Highbay's `examples/orders` reference service
   does.
 - `cmd/[[.Name]]` serves the API. The agent runs in memory and sends every
   model call to a goa-ai model gateway given with `-model-gateway host:port`;
@@ -64,26 +64,26 @@ can run against it.
     missing or wrong key and that the next question's model request carries the
     new prompt text.
 
-  Without stored verification settings, a live target uses the tests Surla
+  Without stored verification settings, a live target uses the tests Highbay
   accepted for that build. Their `--live` mode starts `[[.Name]]` for that
-  change, using the model chosen in the Live target view through Surla's model
+  change, using the model chosen in the Live target view through Highbay's model
   gateway, without receiving provider settings. A changed model choice applies
   to targets started afterwards; a running target keeps its model. Its program,
   `eval/gen/cmd/[[.Name]]-evals`, is generated with the rest of `eval/gen/`
   from `eval/design/` and calls `eval/acceptance`: its `Name`, `Hooks`,
   `New`, `Live` and `LiveThroughGateway`. When a build runs with a test
   writer (without stored verification settings), `eval/` (`eval/design/`
-  included) belongs to the test writer, and Surla regenerates `eval/gen/` when
+  included) belongs to the test writer, and Highbay regenerates `eval/gen/` when
   the writer reads an unread assignment and at each report; after changing `eval/design/`, the test
-  writer reports to have Surla generate it again or runs `surla gen -dir eval`
+  writer reports to have Highbay generate it again or runs `hbay gen -dir eval`
   first. If you edit `eval/design/` yourself
-  outside a build, regenerate its code with `surla gen -dir eval` (or have the
+  outside a build, regenerate its code with `hbay gen -dir eval` (or have the
   builder call `generate_code` with `target: "eval"`).
   The test writer runs every Go command with `GOWORK=off` and does not commit:
-  Surla commits the tests it accepts.
+  Highbay commits the tests it accepts.
   `eval/design/story_tests.go` lists the tests the Story requires, one
-  scenario per finished flow, such as `prices_cookie`. `surla init` wrote it
-  from `design/story.go`, and Surla writes it again from the agreed Story when
+  scenario per finished flow, such as `prices_cookie`. `hbay init` wrote it
+  from `design/story.go`, and Highbay writes it again from the agreed Story when
   the test writer reads an unread assignment and at each report; leave it as it is.
   Regenerating `eval/` keeps those tests. If you store verification settings
   for another suite, no build writes it again, and it is yours to keep or
@@ -97,19 +97,19 @@ could read that repository's files on this machine.
 
 ## Next steps
 
-If you created this project with `surla init`, make the first commit and start
-Surla in this directory:
+If you created this project with `hbay init`, make the first commit and start
+Highbay in this directory:
 
 ```sh
 git init
 git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen internal cmd eval
-git commit -m "Start [[.Name]] from surla init"
-surla
+git commit -m "Start [[.Name]] from hbay init"
+hbay
 ```
 
-`surla` starts this project's server, or attaches to it when it is already
+`hbay` starts this project's server, or attaches to it when it is already
 running, and opens the project's views page in your browser. If the guide
-created this project with `init_project`, the Surla project server has already
+created this project with `init_project`, the Highbay project server has already
 initialized the Git repository, created the initial commit (`commit` in
 `init_project`'s result) and bound itself to this directory (`dir`).
 
@@ -124,9 +124,9 @@ For each change:
    `propose_change`, or `revise_change` when the change is refined.
    You confirm it on the views page, which
    also shows its architecture preview (`preview_architecture`). Then you start
-   its build there: Surla gives the builder its assignment and, without stored
+   its build there: Highbay gives the builder its assignment and, without stored
    verification settings, adds a test writer, which writes the tests the
-   change's Story requires and reports them for Surla to check and accept.
+   change's Story requires and reports them for Highbay to check and accept.
 2. The builder reads its new assignment before working in its own project
    copy and stays on the branch checked out there. It runs `git status`;
    files left by earlier work must not be committed into this change. It
@@ -151,18 +151,18 @@ For each change:
 4. The builder commits on its own branch, then passes the new commit ID as `candidate_commit`
    with the confirmed change's `change_id` to `start_live_target`, and also
    its `request_revision` to `verify_change`. Without stored verification
-   settings, both use the tests Surla accepted for that build; choose a model
+   settings, both use the tests Highbay accepted for that build; choose a model
    in the Live target view before the builder starts a target.
 5. Without stored verification settings, `verify_change` is refused until
-   Surla has accepted the test writer's tests. When a verification passes, you
-   review its result and approve it on the views page; Surla merges and
+   Highbay has accepted the test writer's tests. When a verification passes, you
+   review its result and approve it on the views page; Highbay merges and
    deploys nothing.
 
 See the
-[MCP tools reference](https://github.com/goadesign/surla/blob/main/docs/REFERENCE.md#mcp-tools)
+[MCP tools reference](https://github.com/goadesign/highbay/blob/main/docs/REFERENCE.md#mcp-tools)
 for each tool's inputs and results.
 
-`surla verify` and `surla approve` are operator tools that check a commit
+`hbay verify` and `hbay approve` are operator tools that check a commit
 outside the server. To verify the current commit against the starter
 evaluator suite yourself:
 
@@ -170,23 +170,23 @@ evaluator suite yourself:
 VERIFY_DIR="$(mktemp -d)"
 WORK_DIR="$VERIFY_DIR/work"
 REPORT_DIR="$VERIFY_DIR/reports"
-surla verify \
+hbay verify \
   -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary [[.Name]]=./cmd/[[.Name]] \
   -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/[[.Name]]-evals \
   -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
 ```
 
-`surla verify` keeps `$WORK_DIR` after the run: it holds the clones, the
+`hbay verify` keeps `$WORK_DIR` after the run: it holds the clones, the
 built binaries, and the evaluator's private evidence, including each build's
 log and each step's output in `$WORK_DIR/evidence/`. `-report-dir "$REPORT_DIR"`
 always writes the full verification report outside the repository as
-`$REPORT_DIR/<digest>.json` (used by `surla approve`), while `-builder-view` hides holdout scenario names and checks
+`$REPORT_DIR/<digest>.json` (used by `hbay approve`), while `-builder-view` hides holdout scenario names and checks
 in the completed report JSON and summary line (if a run fails before writing a
 report, `stderr` prints operator setup/execution failure diagnostics). Do not
 share `$WORK_DIR`, `$REPORT_DIR`, or setup/execution failure output with coding
 agents that build the service.
 
-`surla verify` checks a commit. The builder runs the `check_project` loop in
+`hbay verify` checks a commit. The builder runs the `check_project` loop in
 "Next steps" above before it commits.
 
 ## Change checkpoints
@@ -214,6 +214,6 @@ the full candidate commit ID, then
 the builder writes the text into `internal/helper/planner.go`, runs
 `check_project`, commits, and calls `verify_change` with the new commit ID and
 the confirmed Change Card's `request_revision`. Without stored verification
-settings, wait for Surla to accept the build's tests and choose a model in
+settings, wait for Highbay to accept the build's tests and choose a model in
 the Live target view before starting the target. With stored settings, the
 operator's evaluator starts it without accepted test-writer tests.

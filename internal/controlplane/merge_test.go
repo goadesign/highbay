@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
@@ -31,7 +31,7 @@ type (
 		cp                  *ControlPlane
 		team                *mergeLifecycleTeam
 		ctx                 context.Context
-		payload             gensurla.MergeChangePayload
+		payload             genhighbay.MergeChangePayload
 		build               buildFile
 		repo, branch, suite string
 	}
@@ -58,7 +58,7 @@ func TestMergeChangeAppliesApprovedCommits(t *testing.T) {
 			f.write(t, ".claude/settings.json", "ignored user configuration\n")
 			f.team.onStop = func(context.Context) error {
 				// Reenter the read boundary to ensure the caller released c.mu.
-				_, err := f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
+				_, err := f.cp.GetBuild(f.ctx, &genhighbay.GetBuildPayload{ChangeID: f.payload.ChangeID})
 				require.NoError(t, err)
 				assert.Equal(t, f.payload.CandidateCommit, productionBuildGit(t, f.repo, "merge-base", "HEAD", f.payload.CandidateCommit))
 				if source == "written" {
@@ -388,14 +388,14 @@ func addMergeFixtureAttributes(t *testing.T, f *mergeFixture, suite bool, attrib
 func TestDropBuildStopsWorkersOnlyAfterSave(t *testing.T) {
 	f := newMergeFixture(t, "evaluator", "")
 	f.team.onStop = func(context.Context) error {
-		build, err := f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
+		build, err := f.cp.GetBuild(f.ctx, &genhighbay.GetBuildPayload{ChangeID: f.payload.ChangeID})
 		require.NoError(t, err)
 		started, ok := build.Build.AsStarted()
 		require.True(t, ok)
-		assert.Equal(t, gensurla.BuildTakingKindDropped, started.Taking.Kind())
+		assert.Equal(t, genhighbay.BuildTakingKindDropped, started.Taking.Kind())
 		return errors.New("worker teardown failed")
 	}
-	_, err := f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
+	_, err := f.cp.GetBuild(f.ctx, &genhighbay.GetBuildPayload{ChangeID: f.payload.ChangeID})
 	require.NoError(t, err)
 	assert.Empty(t, f.team.stopped)
 	staging := filepath.Join(f.cp.cards.dir, madeFromStagingFile)
@@ -407,7 +407,7 @@ func TestDropBuildStopsWorkersOnlyAfterSave(t *testing.T) {
 	_, err = f.cp.DropBuild(f.ctx, f.dropPayload())
 	require.NoError(t, err, "a teardown failure cannot undo the durable drop")
 	assert.Equal(t, []BuildIdentity{f.identity()}, f.team.stopped)
-	_, err = f.cp.GetBuild(f.ctx, &gensurla.GetBuildPayload{ChangeID: f.payload.ChangeID})
+	_, err = f.cp.GetBuild(f.ctx, &genhighbay.GetBuildPayload{ChangeID: f.payload.ChangeID})
 	require.NoError(t, err)
 	_, err = f.cp.MergeChange(f.ctx, &f.payload)
 	requireMergeRefusal(t, err, "not_approved", "open build")
@@ -416,8 +416,8 @@ func TestDropBuildStopsWorkersOnlyAfterSave(t *testing.T) {
 }
 
 // dropPayload names the open start the user saw.
-func (f *mergeFixture) dropPayload() *gensurla.DropBuildPayload {
-	return &gensurla.DropBuildPayload{
+func (f *mergeFixture) dropPayload() *genhighbay.DropBuildPayload {
+	return &genhighbay.DropBuildPayload{
 		ChangeID: f.payload.ChangeID, StartedAt: f.build.StartedAt.Format(time.RFC3339Nano),
 	}
 }
@@ -456,7 +456,7 @@ func newMergeFixture(t *testing.T, source, failure string) *mergeFixture {
 	}
 	productionBuildGit(t, f.repo, "add", "candidate.txt", "base.txt")
 	productionBuildGit(t, f.repo, "commit", "-m", "Build candidate")
-	f.payload = gensurla.MergeChangePayload{
+	f.payload = genhighbay.MergeChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		CandidateCommit: productionBuildGit(t, f.repo, "rev-parse", "HEAD"), ReportDigest: strings.Repeat("a", 64),
 	}
@@ -480,7 +480,7 @@ func newMergeFixture(t *testing.T, source, failure string) *mergeFixture {
 	}
 	productionBuildGit(t, f.repo, "switch", f.branch)
 	record := loadMetadataRecord(t, cp, card.ChangeID)
-	record.card.Approval = &gensurla.ApprovalItem{
+	record.card.Approval = &genhighbay.ApprovalItem{
 		ApprovedBy: opts.Team.Owner, CandidateCommit: f.payload.CandidateCommit, ReportDigest: f.payload.ReportDigest,
 		SuiteCommit: f.suite, SuiteID: "fixture", Environment: "sim", ScenarioCount: 1, Artifacts: map[string]string{},
 	}

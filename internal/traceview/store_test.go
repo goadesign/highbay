@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -157,7 +157,7 @@ func TestSafeRecordBoundsAndOriginalSpan(t *testing.T) {
 			stub.Attributes = []attribute.KeyValue{
 				attribute.String(SummaryAttribute, strings.Repeat("\x00", summaryBytes+delta)),
 			}
-			for _, key := range []string{"surla.change_id", "surla.run_id", "surla.check.op_id", "surla.check.passed", "surla.generation.target"} {
+			for _, key := range []string{"highbay.change_id", "highbay.run_id", "highbay.check.op_id", "highbay.check.passed", "highbay.generation.target"} {
 				stub.Attributes = append(stub.Attributes, attribute.String(key, strings.Repeat("\x00", valueBytes+delta)))
 			}
 			stub.Attributes = append(stub.Attributes, attribute.String("raw.secret", "/private/operator/key"))
@@ -261,8 +261,8 @@ func TestFailedCheckResultKeepsItsOriginalStatus(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, s.Close()) })
 	stub := tracetest.SpanStubFromReadOnlySpan(testSpan(1, codes.Unset))
-	stub.Name = "surla.controlplane.check_project"
-	stub.Attributes = append(stub.Attributes, attribute.Bool("surla.check.passed", false))
+	stub.Name = "highbay.controlplane.check_project"
+	stub.Attributes = append(stub.Attributes, attribute.Bool("highbay.check.passed", false))
 	original := stub.Snapshot()
 	require.NoError(t, s.Record("alice", "", "", original))
 	failed, err := s.List("alice", "error", 20, nil)
@@ -272,7 +272,7 @@ func TestFailedCheckResultKeepsItsOriginalStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, completed.Spans, 1)
 	assert.Equal(t, "unset", completed.Spans[0].Status)
-	assert.Equal(t, "false", completed.Spans[0].Attributes["surla.check.passed"])
+	assert.Equal(t, "false", completed.Spans[0].Attributes["highbay.check.passed"])
 	assert.Equal(t, codes.Unset, original.Status().Code)
 }
 
@@ -291,7 +291,7 @@ func testSpan(i int, code codes.Code) sdktrace.ReadOnlySpan {
 		StartTime: start,
 		EndTime:   start.Add(time.Millisecond),
 		Attributes: []attribute.KeyValue{
-			attribute.String("surla.change_id", "change-1"),
+			attribute.String("highbay.change_id", "change-1"),
 		},
 		Status: sdktrace.Status{Code: code, Description: "raw-error-secret"},
 		Events: []sdktrace.Event{{Name: "raw-event-secret"}},
@@ -299,7 +299,7 @@ func testSpan(i int, code codes.Code) sdktrace.ReadOnlySpan {
 }
 
 // spanNames keeps the assertions about chronological history easy to compare.
-func spanNames(spans []*gensurla.TraceSpan) []string {
+func spanNames(spans []*genhighbay.TraceSpan) []string {
 	names := make([]string, 0, len(spans))
 	for _, span := range spans {
 		names = append(names, span.Name)

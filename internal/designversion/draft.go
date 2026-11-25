@@ -18,11 +18,11 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // maxModuleFileBytes bounds the read of the draft's go.mod and of its go.sum,
-// files the guide writes, as Surla bounds its other reads of a go.mod or
+// files the guide writes, as Highbay bounds its other reads of a go.mod or
 // go.sum an agent can write: the tests check's dependency lists and the
 // project's test layout.
 const maxModuleFileBytes = 1 << 20

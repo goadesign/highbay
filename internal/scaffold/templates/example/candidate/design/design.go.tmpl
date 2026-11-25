@@ -1,6 +1,6 @@
 // Package design declares the [[.Name]] service: a public API, a pricing method,
 // a helper agent that answers price questions by calling the pricing method
-// as a tool, and the prompt operation Surla's live CP3 drafts call. goa gen generates the HTTP server, the agent's typed
+// as a tool, and the prompt operation Highbay's live CP3 drafts call. goa gen generates the HTTP server, the agent's typed
 // client and tool bindings, and the C4 model from this package.
 package design
 
@@ -14,10 +14,10 @@ var _ = API("[[.Name]]", func() {
 	Description("Answers price questions with an agent that looks prices up through a tool.")
 })
 
-// LiveKey is the key Surla mints for a live CP3 target and passes to the
+// LiveKey is the key Highbay mints for a live CP3 target and passes to the
 // [[.Name]] through its environment. Only override_prompt requires it.
 var LiveKey = APIKeySecurity("live_key", func() {
-	Description("Key Surla minted for this process and passed to it at start.")
+	Description("Key Highbay minted for this process and passed to it at start.")
 })
 
 // catalog is the toolset the helper agent may call.
@@ -66,7 +66,7 @@ var _ = Service("[[.Name]]", func() {
 	})
 
 	Method("override_prompt", func() {
-		Description("Replace the text of a registered prompt for every question this process answers, until it exits. Surla's draft_override calls it on a live CP3 target. The template must render with the prompt's registered spec, so text that does not render is rejected and the text in use stays the same.")
+		Description("Replace the text of a registered prompt for every question this process answers, until it exits. Highbay's draft_override calls it on a live CP3 target. The template must render with the prompt's registered spec, so text that does not render is rejected and the text in use stays the same.")
 		Security(LiveKey)
 		Error("unauthorized", String, "The key is missing or is not this process's key.")
 		Error("unknown_prompt", ErrorResult, "No prompt with this ID is registered.")

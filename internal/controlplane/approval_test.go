@@ -28,9 +28,9 @@ import (
 	"go.opentelemetry.io/otel/trace/embedded"
 	"go.opentelemetry.io/otel/trace/noop"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/verify"
 	"goa.design/goa-ai/eval"
 )
 
@@ -106,10 +106,10 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	bobCtx := WithPrincipal(context.Background(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
 	var commit string
-	analysis := &gensurla.CP1Analysis{
+	analysis := &genhighbay.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-		Examples: []*gensurla.CP1AnalysisExample{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+		Examples: []*genhighbay.CP1AnalysisExample{{
 			Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
@@ -122,7 +122,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 
 	// setup proposes a confirmed card and assembles a passing report bound to
 	// its revision and to spec.
-	setup := func(t *testing.T) (*ControlPlane, *promotionTargetStub, *gensurla.ChangeCardResult) {
+	setup := func(t *testing.T) (*ControlPlane, *promotionTargetStub, *genhighbay.ChangeCardResult) {
 		t.Helper()
 		cfg := verificationConfig(t)
 		cfg.Plan.SuiteCommit = spec.SuiteCommit
@@ -140,19 +140,19 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		target.report = passingReport(t, card.RequestRevision, commit, spec)
 		return cp, target, card
 	}
-	approveAt := func(ctx context.Context, cp *ControlPlane, revision, candidate, digest string) (*gensurla.ChangeCardResult, error) {
-		return cp.ApproveMerge(ctx, &gensurla.ApproveMergePayload{
+	approveAt := func(ctx context.Context, cp *ControlPlane, revision, candidate, digest string) (*genhighbay.ChangeCardResult, error) {
+		return cp.ApproveMerge(ctx, &genhighbay.ApproveMergePayload{
 			ChangeID: "chg", RequestRevision: revision, CandidateCommit: candidate, ReportDigest: digest,
 		})
 	}
-	approve := func(ctx context.Context, cp *ControlPlane, card *gensurla.ChangeCardResult, digest string) (*gensurla.ChangeCardResult, error) {
+	approve := func(ctx context.Context, cp *ControlPlane, card *genhighbay.ChangeCardResult, digest string) (*genhighbay.ChangeCardResult, error) {
 		return approveAt(ctx, cp, card.RequestRevision, commit, digest)
 	}
-	reconfirm := func(cp *ControlPlane, card *gensurla.ChangeCardResult, outcome string) (*gensurla.ChangeCardResult, error) {
+	reconfirm := func(cp *ControlPlane, card *genhighbay.ChangeCardResult, outcome string) (*genhighbay.ChangeCardResult, error) {
 		ex := *card.Examples[0]
 		ex.ExpectedOutcome = outcome
-		return cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
-			ChangeID: "chg", RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&ex},
+		return cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
+			ChangeID: "chg", RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: []*genhighbay.ExampleItem{&ex},
 		})
 	}
 
@@ -160,17 +160,17 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		cp, target, card := setup(t)
 		approved, err := approve(aliceCtx, cp, card, target.report.Digest)
 		require.NoError(t, err)
-		assert.Equal(t, &gensurla.ApprovalItem{
+		assert.Equal(t, &genhighbay.ApprovalItem{
 			ApprovedBy: "alice@example.com", ReportDigest: target.report.Digest, CandidateCommit: commit,
 			SuiteID: "orders_acceptance", SuiteCommit: "suite-1", Environment: "sim",
 			Artifacts: map[string]string{"orders": "d1"}, ScenarioCount: 2,
-			TestSource: gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+			TestSource: genhighbay.NewApprovalTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
 		}, approved.Approval)
 		assert.Nil(t, approved.UnverifiedApproval)
 		assert.Equal(t, card.RequestRevision, approved.RequestRevision, "approval is not part of the revision")
 		assert.Nil(t, card.Approval, "the card returned before approval is not changed")
 
-		read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+		read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, approved.Approval, read.Approval)
 		assert.Nil(t, read.UnverifiedApproval)
@@ -201,15 +201,15 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 
 		approved, err := approve(aliceCtx, cp, card, report.Digest)
 		require.NoError(t, err)
-		assert.Equal(t, &gensurla.ApprovalItem{
+		assert.Equal(t, &genhighbay.ApprovalItem{
 			ApprovedBy: "alice@example.com", ReportDigest: report.Digest, CandidateCommit: commit,
 			SuiteID: "orders_acceptance", SuiteCommit: "suite-1", Environment: "sim",
 			Artifacts: map[string]string{}, ScenarioCount: 2,
-			TestSource: gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+			TestSource: genhighbay.NewApprovalTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
 		}, approved.Approval)
 		assert.Nil(t, approved.UnverifiedApproval)
 
-		read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+		read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, approved.Approval, read.Approval)
 		assert.Nil(t, read.UnverifiedApproval)
@@ -258,7 +258,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 
 				tc.change(cp, target)
 
-				read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+				read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 				require.NoError(t, err)
 				assert.Nil(t, read.Approval, "get_change does not present a stale approval")
 				assert.Nil(t, read.UnverifiedApproval, "changed inputs are stale, not unverified")
@@ -272,7 +272,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 
 				// Restoring the approved inputs presents the saved approval again.
 				tc.restore(cp, target)
-				read, err = cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+				read, err = cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 				require.NoError(t, err)
 				assert.Equal(t, &saved, read.Approval)
 				assert.Nil(t, read.UnverifiedApproval)
@@ -285,7 +285,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		approved, err := approve(aliceCtx, cp, card, target.report.Digest)
 		require.NoError(t, err)
 		target.artifactsErr = errors.New("target runs prompt overrides no report covers")
-		read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+		read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Nil(t, read.Approval)
 		require.NotNil(t, read.UnverifiedApproval)
@@ -294,7 +294,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		assert.Contains(t, read.UnverifiedApproval.Reason, "in a folder named after the commit")
 		assert.Contains(t, read.UnverifiedApproval.Reason, "Check current approval")
 		assert.Contains(t, read.UnverifiedApproval.Reason, "Approve this result")
-		assert.Contains(t, read.UnverifiedApproval.Reason, "surla promotion remove")
+		assert.Contains(t, read.UnverifiedApproval.Reason, "hbay promotion remove")
 		assert.NotContains(t, read.UnverifiedApproval.Reason, "/")
 		assert.NotContains(t, read.UnverifiedApproval.Reason, "get_change")
 		assert.NotContains(t, read.UnverifiedApproval.Reason, "approve_merge")
@@ -310,7 +310,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	t.Run("a card without an approval never reads the target", func(t *testing.T) {
 		cp, target, _ := setup(t)
 		target.artifactsErr = errors.New("must not be called")
-		read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+		read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Nil(t, read.Approval)
 		assert.Nil(t, read.UnverifiedApproval)
@@ -322,9 +322,9 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		require.NoError(t, err)
 		reading, release := make(chan struct{}), make(chan struct{})
 		target.artifactsReading, target.artifactsRelease = reading, release
-		got := make(chan *gensurla.ChangeCardResult, 1)
+		got := make(chan *genhighbay.ChangeCardResult, 1)
 		go func() {
-			read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+			read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 			assert.NoError(t, err)
 			got <- read
 		}()
@@ -345,7 +345,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		require.NoError(t, err)
 		reading, release := make(chan struct{}), make(chan struct{})
 		target.artifactsReading, target.artifactsRelease = reading, release
-		got := make(chan *gensurla.ChangeCardResult, 1)
+		got := make(chan *genhighbay.ChangeCardResult, 1)
 		go func() {
 			same, err := reconfirm(cp, card, card.Examples[0].ExpectedOutcome)
 			assert.NoError(t, err)
@@ -375,7 +375,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		close(release)
 		require.NoError(t, <-errc, "the approval matched what was measured")
 
-		read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+		read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Nil(t, read.Approval, "a fresh read checks the changed target")
 	})
@@ -395,7 +395,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		close(target.release)
 		assert.ErrorContains(t, <-errc, "request_revision mismatch")
 
-		read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+		read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Nil(t, read.Approval)
 	})
@@ -416,10 +416,10 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 	})
 
 	t.Run("card still needs confirmation", func(t *testing.T) {
-		ambiguous := &gensurla.CP1Analysis{
+		ambiguous := &genhighbay.CP1Analysis{
 			Summary:     "Refunds up to $50 are instant.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{Question: "Is $50.00 itself instant?", Options: []string{"instant", "manager"}}},
-			Examples: []*gensurla.CP1AnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{Question: "Is $50.00 itself instant?", Options: []string{"instant", "manager"}}},
+			Examples: []*genhighbay.CP1AnalysisExample{{
 				Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -440,34 +440,34 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		name           string
 		ctx            context.Context
 		token          string
-		change         func(cp *ControlPlane, target *promotionTargetStub, card *gensurla.ChangeCardResult) string
+		change         func(cp *ControlPlane, target *promotionTargetStub, card *genhighbay.ChangeCardResult) string
 		wantErr        string
 		isStale        bool
 		wantHTTPStatus int
 	}{
-		{"caller does not own the card", bobCtx, "bob-token", func(_ *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
+		{"caller does not own the card", bobCtx, "bob-token", func(_ *ControlPlane, target *promotionTargetStub, _ *genhighbay.ChangeCardResult) string {
 			return target.report.Digest
 		}, "is not the owner", false, http.StatusForbidden},
-		{"target returns a different report", aliceCtx, "alice-token", func(_ *ControlPlane, _ *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
+		{"target returns a different report", aliceCtx, "alice-token", func(_ *ControlPlane, _ *promotionTargetStub, _ *genhighbay.ChangeCardResult) string {
 			return strings.Repeat("0", 64)
 		}, "returned report", false, http.StatusInternalServerError},
-		{"measured binary differs", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
+		{"measured binary differs", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, _ *genhighbay.ChangeCardResult) string {
 			target.artifacts = map[string]string{"orders": "rebuilt"}
 			return target.report.Digest
 		}, "publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings", true, http.StatusUnprocessableEntity},
-		{"report cannot be loaded", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
+		{"report cannot be loaded", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, _ *genhighbay.ChangeCardResult) string {
 			target.loadErr = errors.New("no report under that digest")
 			return target.report.Digest
 		}, "no report under that digest", false, http.StatusInternalServerError},
-		{"current artifacts cannot be measured", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
+		{"current artifacts cannot be measured", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, _ *genhighbay.ChangeCardResult) string {
 			target.artifactsErr = errors.New("open release directory for commit " + commit + ": no such file or directory: publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings")
 			return target.report.Digest
 		}, "publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings", false, http.StatusUnprocessableEntity},
-		{"chosen suite commit differs from report", aliceCtx, "alice-token", func(cp *ControlPlane, target *promotionTargetStub, _ *gensurla.ChangeCardResult) string {
+		{"chosen suite commit differs from report", aliceCtx, "alice-token", func(cp *ControlPlane, target *promotionTargetStub, _ *genhighbay.ChangeCardResult) string {
 			cp.verifier.(storedVerification).cfg.Plan.SuiteCommit = "suite-2"
 			return target.report.Digest
 		}, "the report ran the tests at suite-1; this project's stored verification settings name the suite at suite-2: the builder verifies the candidate again; then approve that run", false, http.StatusUnprocessableEntity},
-		{"report did not pass", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, card *gensurla.ChangeCardResult) string {
+		{"report did not pass", aliceCtx, "alice-token", func(_ *ControlPlane, target *promotionTargetStub, card *genhighbay.ChangeCardResult) string {
 			target.report = failingReport(t, card.RequestRevision, commit, spec)
 			return target.report.Digest
 		}, "did not pass", true, http.StatusUnprocessableEntity},
@@ -478,7 +478,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 			digest := c.change(cp, target, card)
 			_, err := approve(c.ctx, cp, card, digest)
 			require.ErrorContains(t, err, c.wantErr)
-			assert.NotContains(t, err.Error(), "/var/lib/surla/secret")
+			assert.NotContains(t, err.Error(), "/var/lib/highbay/secret")
 			assert.Equal(t, c.isStale, errors.Is(err, verify.ErrStaleReport))
 
 			handler := NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
@@ -498,9 +498,9 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 			assert.Equal(t, c.wantHTTPStatus, rec.Code)
-			assert.NotContains(t, rec.Body.String(), "/var/lib/surla/secret")
+			assert.NotContains(t, rec.Body.String(), "/var/lib/highbay/secret")
 
-			read, err := cp.GetChange(aliceCtx, &gensurla.GetChangePayload{ChangeID: "chg"})
+			read, err := cp.GetChange(aliceCtx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			assert.Nil(t, read.Approval)
 		})
@@ -513,7 +513,7 @@ func TestApproveMergeWithoutVerification(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	card := saveCard(t, cp, nil)
 	alice := asCaller("alice@example.com", CallerUser)
-	payload := &gensurla.ApproveMergePayload{
+	payload := &genhighbay.ApproveMergePayload{
 		ChangeID:        card.ChangeID,
 		RequestRevision: card.RequestRevision,
 		CandidateCommit: strings.Repeat("a", 40),
@@ -539,7 +539,7 @@ func TestApproveMergeWithoutVerification(t *testing.T) {
 	assert.Equal(t, http.StatusNotImplemented, response.Code)
 	assert.Contains(t, response.Body.String(), "verification is not configured")
 
-	read, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	read, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	assert.Nil(t, read.Approval)
 }
@@ -566,14 +566,14 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 		wantRefusal    string
 		wantHTTPStatus int
 		wantStep       func(revision string) string
-		wantSource     gensurla.ApprovalTestSource
+		wantSource     genhighbay.ApprovalTestSource
 	}{
 		{
 			name:         "written tests at accepted commit approves",
 			startBuild:   true,
 			tw:           &testWriterAssignment{State: testsAccepted, Read: true, Findings: []string{}, Commit: commitT, CheckedAt: time.Now()},
 			reportCommit: commitT,
-			wantSource:   gensurla.NewApprovalTestSourceWrittenTests(&gensurla.AgentWrittenTests{Commit: commitT, Notice: writtenTestsNotice}),
+			wantSource:   genhighbay.NewApprovalTestSourceWrittenTests(&genhighbay.AgentWrittenTests{Commit: commitT, Notice: writtenTestsNotice}),
 		},
 		{
 			name:           "written tests report at another commit is refused",
@@ -602,7 +602,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 			wantRefusal:    "tests_not_accepted",
 			wantHTTPStatus: http.StatusConflict,
 			wantStep: func(string) string {
-				return "the tests of this build are not accepted; their state is assigned: the test writer writes the required tests and reports them finished; the builder verifies again once Surla accepts them"
+				return "the tests of this build are not accepted; their state is assigned: the test writer writes the required tests and reports them finished; the builder verifies again once Highbay accepts them"
 			},
 		},
 		{
@@ -613,7 +613,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 			wantRefusal:    "tests_not_accepted",
 			wantHTTPStatus: http.StatusConflict,
 			wantStep: func(string) string {
-				return "the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; the builder verifies again after its verdict"
+				return "the tests of this build are not accepted; their state is reported: Highbay is checking the test writer's report; the builder verifies again after its verdict"
 			},
 		},
 		{
@@ -624,7 +624,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 			wantRefusal:    "tests_not_accepted",
 			wantHTTPStatus: http.StatusConflict,
 			wantStep: func(string) string {
-				return "the tests of this build are not accepted; their state is needs changes: the test writer fixes Surla's findings and reports again; the builder verifies again once Surla accepts them"
+				return "the tests of this build are not accepted; their state is needs changes: the test writer fixes Highbay's findings and reports again; the builder verifies again once Highbay accepts them"
 			},
 		},
 		{
@@ -638,14 +638,14 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 			wantRefusal:    "tests_not_accepted",
 			wantHTTPStatus: http.StatusConflict,
 			wantStep: func(string) string {
-				return "the tests of this build are not accepted; their state is could not run: Surla's check could not run (git could not write the tests branch); the user's step: Free disk space, then report again."
+				return "the tests of this build are not accepted; their state is could not run: Highbay's check could not run (git could not write the tests branch); the user's step: Free disk space, then report again."
 			},
 		},
 		{
 			name:         "stored evaluator at configured commit approves",
 			stored:       true,
 			reportCommit: commitT,
-			wantSource:   gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{}),
+			wantSource:   genhighbay.NewApprovalTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{}),
 		},
 		{
 			name:           "stored evaluator report at another commit is refused",
@@ -666,7 +666,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 				opts := Options{
 					WorkspaceDir:    t.TempDir(),
 					RunsDir:         t.TempDir(),
-					SurlaVersion:    testSurlaVersion,
+					HighbayVersion:  testHighbayVersion,
 					PromotionTarget: target,
 				}
 				if tc.stored {
@@ -689,7 +689,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 					saveStoredBuildFixture(t, cp, card)
 				}
 				if tc.startBuild {
-					_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+					_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 					require.NoError(t, err)
 				}
 				if tc.tw != nil {
@@ -735,9 +735,9 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 				if transport == "http" {
 					status, raw := httpCall(t, srv.URL, "user", http.MethodPost, "/changes/approve", reqBody)
 					require.Equal(t, http.StatusOK, status, raw)
-					decoded, err := gensurla.DecodeChangeCardResult([]byte(raw))
+					decoded, err := genhighbay.DecodeChangeCardResult([]byte(raw))
 					require.NoError(t, err)
-					assert.Equal(t, &gensurla.ApprovalItem{
+					assert.Equal(t, &genhighbay.ApprovalItem{
 						ApprovedBy: "alice@example.com", ReportDigest: target.report.Digest,
 						CandidateCommit: candidate, SuiteID: "shop_acceptance",
 						SuiteCommit: commitT, Environment: "written-env",
@@ -747,9 +747,9 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 				} else {
 					failure, structured := mcpToolCall(t, srv.URL, "user", "approve_merge", reqBody)
 					require.Empty(t, failure)
-					decoded, err := gensurla.DecodeChangeCardResult(structured)
+					decoded, err := genhighbay.DecodeChangeCardResult(structured)
 					require.NoError(t, err)
-					assert.Equal(t, &gensurla.ApprovalItem{
+					assert.Equal(t, &genhighbay.ApprovalItem{
 						ApprovedBy: "alice@example.com", ReportDigest: target.report.Digest,
 						CandidateCommit: candidate, SuiteID: "shop_acceptance",
 						SuiteCommit: commitT, Environment: "written-env",
@@ -764,7 +764,7 @@ func TestApproveMergeChecksTheChosenTestsCommit(t *testing.T) {
 
 // TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch verifies Proof clause 3:
 // an approval recorded for written tests at T is returned while T is accepted,
-// hidden when the test writer reports again, hidden when Surla accepts U != T,
+// hidden when the test writer reports again, hidden when Highbay accepts U != T,
 // and returned again after a rebuild whose tests are accepted at T again.
 func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	prevProvider := otel.GetTracerProvider()
@@ -781,30 +781,30 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    t.TempDir(),
 		RunsDir:         t.TempDir(),
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", commitT)
 	candidate := commitBuilderCandidateFixture(t, cp, card)
 
 	spec := reportSpec{SuiteID: "shop_acceptance", SuiteCommit: commitT, Environment: "sim", Artifacts: maps.Clone(artifacts)}
 	target.report = passingReport(t, card.RequestRevision, candidate, spec)
-	approved, err := cp.ApproveMerge(user, &gensurla.ApproveMergePayload{
+	approved, err := cp.ApproveMerge(user, &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, approved.Approval)
-	assert.Equal(t, gensurla.NewApprovalTestSourceWrittenTests(&gensurla.AgentWrittenTests{Commit: commitT, Notice: writtenTestsNotice}), approved.Approval.TestSource)
+	assert.Equal(t, genhighbay.NewApprovalTestSourceWrittenTests(&genhighbay.AgentWrittenTests{Commit: commitT, Notice: writtenTestsNotice}), approved.Approval.TestSource)
 
 	// 1. Report again -> hidden.
 	recorder.reset()
 	saveTestWriter(t, cp, "chg", testWriterAssignment{State: testsReported, Read: true, Findings: []string{}})
-	read, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err := cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, read.Approval, "reporting again hides the approval until judged")
 	assert.Nil(t, read.UnverifiedApproval)
@@ -812,12 +812,12 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	require.Len(t, spans, 1)
 	require.Len(t, spans[0].events, 1)
 	assert.Equal(t, "approval.hidden_tests_changed", spans[0].events[0].name)
-	assert.Contains(t, spans[0].events[0].attrs, attribute.String("surla.change_id", "chg"))
-	assert.Contains(t, spans[0].events[0].attrs, attribute.String("surla.suite_commit", commitT))
+	assert.Contains(t, spans[0].events[0].attrs, attribute.String("highbay.change_id", "chg"))
+	assert.Contains(t, spans[0].events[0].attrs, attribute.String("highbay.suite_commit", commitT))
 
 	// 2. Accept U -> hidden.
 	acceptTests(t, cp, "chg", commitU)
-	read, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err = cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, read.Approval, "accepting another commit hides the approval")
 	assert.Nil(t, read.UnverifiedApproval)
@@ -825,11 +825,11 @@ func TestSavedApprovalStaysValidOnlyWhileChosenTestsMatch(t *testing.T) {
 	// 3. Rebuild and accept T again -> returned.
 	_, err = startBuildAgain(t, cp, user, "chg", card.RequestRevision)
 	require.NoError(t, err)
-	read, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err = cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, read.Approval, "hidden while the rebuilt tests are not yet accepted")
 	acceptTests(t, cp, "chg", commitT)
-	read, err = cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err = cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, approved.Approval, read.Approval, "accepting the same commit again restores the approval")
 }
@@ -852,13 +852,13 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    t.TempDir(),
 		RunsDir:         t.TempDir(),
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: t.TempDir(), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 		PromotionTarget: target,
 	})
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
 	user := asCaller("alice@example.com", CallerUser)
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", commitT)
 	candidate := commitBuilderCandidateFixture(t, cp, card)
@@ -868,7 +868,7 @@ func TestApproveMergeRejectsAcceptanceChangedDuringReportLoad(t *testing.T) {
 
 	errc := make(chan error, 1)
 	go func() {
-		_, err := cp.ApproveMerge(user, &gensurla.ApproveMergePayload{
+		_, err := cp.ApproveMerge(user, &genhighbay.ApproveMergePayload{
 			ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate, ReportDigest: target.report.Digest,
 		})
 		errc <- err
@@ -899,12 +899,12 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	t.Cleanup(func() { otel.SetTracerProvider(prevProvider) })
 
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	const secretHostPath = "/var/lib/surla/secret-releases/0123456789abcdef0123456789abcdef01234567/orders"
+	const secretHostPath = "/var/lib/highbay/secret-releases/0123456789abcdef0123456789abcdef01234567/orders"
 
-	analysis := &gensurla.CP1Analysis{
+	analysis := &genhighbay.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-		Examples: []*gensurla.CP1AnalysisExample{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+		Examples: []*genhighbay.CP1AnalysisExample{{
 			Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
@@ -926,20 +926,20 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	}))
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 
-	decodeWireCard := func(t *testing.T, raw []byte) *gensurla.ChangeCardResult {
+	decodeWireCard := func(t *testing.T, raw []byte) *genhighbay.ChangeCardResult {
 		t.Helper()
-		card, err := gensurla.DecodeChangeCardResult(raw)
+		card, err := genhighbay.DecodeChangeCardResult(raw)
 		require.NoError(t, err)
-		return &gensurla.ChangeCardResult{
+		return &genhighbay.ChangeCardResult{
 			ChangeID:           card.ChangeID,
 			RequestRevision:    card.RequestRevision,
 			Approval:           card.Approval,
 			UnverifiedApproval: card.UnverifiedApproval,
 		}
 	}
-	wireExamples := func(card *gensurla.ChangeCardResult) []map[string]any {
+	wireExamples := func(card *genhighbay.ChangeCardResult) []map[string]any {
 		out := make([]map[string]any, 0, len(card.Examples))
 		for _, ex := range card.Examples {
 			out = append(out, map[string]any{
@@ -952,7 +952,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		}
 		return out
 	}
-	httpGetChange := func(t *testing.T, url string) *gensurla.ChangeCardResult {
+	httpGetChange := func(t *testing.T, url string) *genhighbay.ChangeCardResult {
 		t.Helper()
 		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url+"/changes/chg", nil)
 		require.NoError(t, err)
@@ -966,7 +966,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		require.NoError(t, err)
 		return decodeWireCard(t, buf.Bytes())
 	}
-	httpConfirmNoop := func(t *testing.T, url string, card *gensurla.ChangeCardResult) *gensurla.ChangeCardResult {
+	httpConfirmNoop := func(t *testing.T, url string, card *genhighbay.ChangeCardResult) *genhighbay.ChangeCardResult {
 		t.Helper()
 		body, err := json.Marshal(map[string]any{
 			"change_id":        "chg",
@@ -988,7 +988,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		require.NoError(t, err)
 		return decodeWireCard(t, buf.Bytes())
 	}
-	mcpCallCard := func(t *testing.T, a *genmcpadapter.MCPAdapter, name string, args map[string]any) *gensurla.ChangeCardResult {
+	mcpCallCard := func(t *testing.T, a *genmcpadapter.MCPAdapter, name string, args map[string]any) *genhighbay.ChangeCardResult {
 		t.Helper()
 		rawArgs, err := json.Marshal(args)
 		require.NoError(t, err)
@@ -1006,7 +1006,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	card = attachBuildSnapshot(t, cp, card.ChangeID)
 	card = mustConfirmNoop(t, cp, aliceCtx, card)
 	saveStoredBuildFixture(t, cp, card)
-	for _, got := range []*gensurla.ChangeCardResult{
+	for _, got := range []*genhighbay.ChangeCardResult{
 		mustGetChange(t, cp, aliceCtx, "chg"),
 		mustConfirmNoop(t, cp, aliceCtx, card),
 		httpGetChange(t, srv.URL),
@@ -1021,12 +1021,12 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	// State 2: current approval.
 	commit := commitBuilderCandidateFixture(t, cp, card)
 	target.report = passingReport(t, card.RequestRevision, commit, spec)
-	approved, err := cp.ApproveMerge(aliceCtx, &gensurla.ApproveMergePayload{
+	approved, err := cp.ApproveMerge(aliceCtx, &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: commit, ReportDigest: target.report.Digest,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, approved.Approval)
-	for _, got := range []*gensurla.ChangeCardResult{
+	for _, got := range []*genhighbay.ChangeCardResult{
 		mustGetChange(t, cp, aliceCtx, "chg"),
 		mustConfirmNoop(t, cp, aliceCtx, card),
 		httpGetChange(t, srv.URL),
@@ -1040,7 +1040,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 
 	// State 3: changed inputs.
 	target.artifacts = map[string]string{"orders": "d2"}
-	for _, got := range []*gensurla.ChangeCardResult{
+	for _, got := range []*genhighbay.ChangeCardResult{
 		mustGetChange(t, cp, aliceCtx, "chg"),
 		mustConfirmNoop(t, cp, aliceCtx, card),
 		httpGetChange(t, srv.URL),
@@ -1056,7 +1056,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	recorder.reset()
 	target.artifacts = maps.Clone(spec.Artifacts)
 	target.artifactsErr = errors.New("open " + secretHostPath + ": no such file or directory")
-	for _, got := range []*gensurla.ChangeCardResult{
+	for _, got := range []*genhighbay.ChangeCardResult{
 		mustGetChange(t, cp, aliceCtx, "chg"),
 		mustConfirmNoop(t, cp, aliceCtx, card),
 		httpGetChange(t, srv.URL),
@@ -1071,12 +1071,12 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		assert.Contains(t, got.UnverifiedApproval.Reason, "in a folder named after the commit")
 		assert.Contains(t, got.UnverifiedApproval.Reason, "Check current approval")
 		assert.Contains(t, got.UnverifiedApproval.Reason, "Approve this result")
-		assert.Contains(t, got.UnverifiedApproval.Reason, "surla promotion remove")
+		assert.Contains(t, got.UnverifiedApproval.Reason, "hbay promotion remove")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, "get_change")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, "approve_merge")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, "/")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, secretHostPath, "transport response must not leak host filesystem paths")
-		assert.NotContains(t, got.UnverifiedApproval.Reason, "/var/lib/surla")
+		assert.NotContains(t, got.UnverifiedApproval.Reason, "/var/lib/highbay")
 	}
 	spans := recorder.matching("controlplane.check_approval")
 	require.Len(t, spans, 6, "each of the 6 reads must emit a controlplane.check_approval span")
@@ -1086,11 +1086,11 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		assert.Contains(t, sp.statusDesc, secretHostPath)
 		require.Len(t, sp.errors, 1)
 		assert.Contains(t, sp.errors[0].Error(), secretHostPath)
-		assert.Contains(t, sp.attrs, attribute.String("surla.change_id", "chg"))
-		assert.Contains(t, sp.attrs, attribute.String("surla.candidate_commit", commit))
+		assert.Contains(t, sp.attrs, attribute.String("highbay.change_id", "chg"))
+		assert.Contains(t, sp.attrs, attribute.String("highbay.candidate_commit", commit))
 	}
 
-	// State 5: absent target (server restarted after `surla promotion remove`):
+	// State 5: absent target (server restarted after `hbay promotion remove`):
 	// without promotion settings, the saved approval remains valid while the
 	// chosen tests' commit still matches.
 	require.NoError(t, cp.Close())
@@ -1100,8 +1100,8 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 	})
 	srvNoTarget := httptest.NewServer(NewHTTPHandler(cpNoTarget, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srvNoTarget.Close)
-	adapterNoTarget := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cpNoTarget), nil)
-	for _, got := range []*gensurla.ChangeCardResult{
+	adapterNoTarget := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cpNoTarget), nil)
+	for _, got := range []*genhighbay.ChangeCardResult{
 		mustGetChange(t, cpNoTarget, aliceCtx, "chg"),
 		mustConfirmNoop(t, cpNoTarget, aliceCtx, card),
 		httpGetChange(t, srvNoTarget.URL),
@@ -1221,16 +1221,16 @@ func (s *recordedSpan) End(_ ...trace.SpanEndOption) {
 	s.ended = true
 }
 
-func mustGetChange(t *testing.T, cp *ControlPlane, ctx context.Context, changeID string) *gensurla.ChangeCardResult {
+func mustGetChange(t *testing.T, cp *ControlPlane, ctx context.Context, changeID string) *genhighbay.ChangeCardResult {
 	t.Helper()
-	got, err := cp.GetChange(ctx, &gensurla.GetChangePayload{ChangeID: changeID})
+	got, err := cp.GetChange(ctx, &genhighbay.GetChangePayload{ChangeID: changeID})
 	require.NoError(t, err)
 	return got
 }
 
-func mustConfirmNoop(t *testing.T, cp *ControlPlane, ctx context.Context, card *gensurla.ChangeCardResult) *gensurla.ChangeCardResult {
+func mustConfirmNoop(t *testing.T, cp *ControlPlane, ctx context.Context, card *genhighbay.ChangeCardResult) *genhighbay.ChangeCardResult {
 	t.Helper()
-	got, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{
+	got, err := cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{
 		ChangeID:        card.ChangeID,
 		RequestRevision: card.RequestRevision,
 		Answers:         map[string]string{},

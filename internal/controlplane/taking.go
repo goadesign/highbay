@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // eligibleBuildRuns returns every pass belonging to this particular start, newest first.

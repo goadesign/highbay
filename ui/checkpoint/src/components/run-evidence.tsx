@@ -30,7 +30,7 @@ export function RunEvidenceLimits({ id, run, review }: {
     .map((flow) => ({ story: story.name, flow }))) ?? [];
   const judged = coverage?.state === "recorded"
     ? coverage.examples.filter((example) => example.verification_kind === "model_judged") : [];
-  return <section id={id} className="surla-approval-exclusions" aria-labelledby={id + "-title"}>
+  return <section id={id} className="highbay-approval-exclusions" aria-labelledby={id + "-title"}>
     <h3 id={id + "-title"}>What this run does not establish</h3>
     {drafts.length > 0 ? <><p>These draft flows were excluded from the required tests:</p>
       <ul>{drafts.map(({ story, flow }) => <li key={JSON.stringify([story, flow.key])}>

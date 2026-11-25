@@ -59,8 +59,8 @@ export function WorkspaceFrame(props: WorkspaceFrameProps) {
     // layout-free DOM harness exercises the separate interaction contract.
     if (typeof ResizeObserver === "undefined") return;
     const measure = () => {
-      document.documentElement.style.setProperty("--surla-frame-height", `${frame.current?.getBoundingClientRect().height ?? 0}px`);
-      document.documentElement.style.setProperty("--surla-next-height", `${next.current?.getBoundingClientRect().height ?? 0}px`);
+      document.documentElement.style.setProperty("--highbay-frame-height", `${frame.current?.getBoundingClientRect().height ?? 0}px`);
+      document.documentElement.style.setProperty("--highbay-next-height", `${next.current?.getBoundingClientRect().height ?? 0}px`);
     };
     const observer = new ResizeObserver(measure);
     if (frame.current !== null) observer.observe(frame.current);
@@ -81,39 +81,39 @@ export function WorkspaceFrame(props: WorkspaceFrameProps) {
   }
 
   const activeReference = props.diagnosticsOpen ? "Diagnostics" : props.references.find((item) => item.active)?.label;
-  return <div className="surla-fixed-frame" ref={frame}>
-    <div className="surla-frame-where">
-      <h1 className="surla-frame-project"><span>Surla</span><span aria-hidden="true">/</span>{props.project}</h1>
-      {props.journey.length > 0 ? <div className="surla-frame-journey" role="group" aria-label="Change journey">
+  return <div className="highbay-fixed-frame" ref={frame}>
+    <div className="highbay-frame-where">
+      <h1 className="highbay-frame-project"><span>Highbay</span><span aria-hidden="true">/</span>{props.project}</h1>
+      {props.journey.length > 0 ? <div className="highbay-frame-journey" role="group" aria-label="Change journey">
         {props.journey.map((step) => <Button key={step.id} id={step.id}
           aria-current={step.active ? "step" : undefined} disabled={step.disabled}
           onClick={step.onClick}>{step.label}</Button>)}
       </div> : null}
-      <details className="surla-frame-project-menu" ref={inspect}>
+      <details className="highbay-frame-project-menu" ref={inspect}>
         <summary ref={inspectToggle} data-active={activeReference !== undefined ? "true" : undefined}>
           {activeReference === undefined ? "Inspect" : "Inspect · " + activeReference}
         </summary>
-        <div className="surla-frame-references" role="group" aria-label="Project references">
+        <div className="highbay-frame-references" role="group" aria-label="Project references">
           {props.references.map((item) => <Button key={item.id} id={item.id}
             aria-current={item.active ? "page" : undefined} disabled={item.disabled}
             onClick={() => selectReference(item.onClick)}>{item.label}</Button>)}
-          <Button id="surla-trace-drawer-toggle" aria-expanded={props.diagnosticsOpen}
-            aria-controls="surla-trace-drawer" onClick={() => selectReference(props.onToggleDiagnostics)}>
+          <Button id="highbay-trace-drawer-toggle" aria-expanded={props.diagnosticsOpen}
+            aria-controls="highbay-trace-drawer" onClick={() => selectReference(props.onToggleDiagnostics)}>
             Diagnostics
           </Button>
         </div>
       </details>
     </div>
-    {props.showSlots ? <dl className="surla-frame-slots">
-      {props.agreed !== null ? <div className="surla-frame-agreed"><dt>Agreed</dt><dd>
-        <span className="surla-frame-summary">{props.agreed}</span>
-        {props.onReadFullSummary !== null ? <Button id="surla-read-full-summary"
+    {props.showSlots ? <dl className="highbay-frame-slots">
+      {props.agreed !== null ? <div className="highbay-frame-agreed"><dt>Agreed</dt><dd>
+        <span className="highbay-frame-summary">{props.agreed}</span>
+        {props.onReadFullSummary !== null ? <Button id="highbay-read-full-summary"
           onClick={props.onReadFullSummary}>Read full summary</Button> : null}
       </dd></div> : null}
-      <div className="surla-frame-attention"><dt>Needs you</dt><dd>{props.attention}</dd></div>
-      <div className="surla-frame-next" id="surla-frame-next" ref={next}><dt>Next</dt><dd>{props.next}</dd></div>
+      <div className="highbay-frame-attention"><dt>Needs you</dt><dd>{props.attention}</dd></div>
+      <div className="highbay-frame-next" id="highbay-frame-next" ref={next}><dt>Next</dt><dd>{props.next}</dd></div>
     </dl> : null}
-    {props.details !== null ? <details className="surla-frame-context">
+    {props.details !== null ? <details className="highbay-frame-context">
       <summary>Current view details</summary>{props.details}
     </details> : null}
   </div>;

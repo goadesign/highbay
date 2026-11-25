@@ -41,8 +41,8 @@ export function AgentPickerView({
   const installed = options ?? [];
   const supported = installed.filter((option) => !headless || option.headless_supported);
   return (
-    <section id={idPrefix} className="surla-agent-picker" aria-labelledby={idPrefix + "-title"} aria-busy={loading}>
-      <div className="surla-region-header">
+    <section id={idPrefix} className="highbay-agent-picker" aria-labelledby={idPrefix + "-title"} aria-busy={loading}>
+      <div className="highbay-region-header">
         <h3 id={idPrefix + "-title"}>Choose workers</h3>
         <Button id={idPrefix + "-refresh"} disabled={disabled || loading} onClick={onRefresh}>
           {error !== null ? "Retry agent discovery" : "Refresh installed agents"}
@@ -67,7 +67,7 @@ export function AgentPickerView({
       ))}
       {headless && roles.length > 0 ? <div id={idPrefix + "-background"}>
         <p id={idPrefix + "-background-note"}>
-          Herdr is unavailable. Surla will run these workers in the background on this computer,
+          Herdr is unavailable. Highbay will run these workers in the background on this computer,
           with your access to files and the network. They cannot ask for permission in an interactive pane.
           Enable each available permission switch above before starting workers.
         </p>
@@ -103,10 +103,10 @@ function WorkerFields({
   return (
     <fieldset id={idPrefix} disabled={disabled}>
       <legend>{roleLabels[role]}</legend>
-      <div className="surla-field-row">
-        <label className="surla-field-label" htmlFor={idPrefix + "-client"}>
+      <div className="highbay-field-row">
+        <label className="highbay-field-label" htmlFor={idPrefix + "-client"}>
           Coding agent
-          <select id={idPrefix + "-client"} className="surla-input" value={choice === undefined ? "" : optionKey(choice)}
+          <select id={idPrefix + "-client"} className="highbay-input" value={choice === undefined ? "" : optionKey(choice)}
             aria-describedby={choiceError !== null ? idPrefix + "-choice-error" : undefined}
             onChange={(event) => {
               const selected = options.find((candidate) => optionKey(candidate) === event.currentTarget.value);
@@ -125,18 +125,18 @@ function WorkerFields({
             </option>)}
           </select>
         </label>
-        {choice !== undefined && option?.model_supported ? <label className="surla-field-label" htmlFor={idPrefix + "-model"}>
+        {choice !== undefined && option?.model_supported ? <label className="highbay-field-label" htmlFor={idPrefix + "-model"}>
           Model
-          <input id={idPrefix + "-model"} className="surla-input" type="text" list={idPrefix + "-models"}
+          <input id={idPrefix + "-model"} className="highbay-input" type="text" list={idPrefix + "-models"}
             value={choice.model ?? ""} placeholder="Client default" disabled={unavailable}
             aria-describedby={idPrefix + "-model-note" + (choiceError !== null ? " " + idPrefix + "-choice-error" : "")}
             onChange={(event) => changeChoice({ ...choice, model: event.currentTarget.value || undefined })} />
           <datalist id={idPrefix + "-models"}>{option.models.map((model) => <option key={model} value={model} />)}</datalist>
           <span id={idPrefix + "-model-note"}>Choose a suggestion or enter a custom model ID.</span>
         </label> : null}
-        {choice !== undefined && option?.thinking_supported ? <label className="surla-field-label" htmlFor={idPrefix + "-thinking"}>
+        {choice !== undefined && option?.thinking_supported ? <label className="highbay-field-label" htmlFor={idPrefix + "-thinking"}>
           Reasoning effort
-          <select id={idPrefix + "-thinking"} className="surla-input" value={choice.thinking ?? ""} disabled={unavailable}
+          <select id={idPrefix + "-thinking"} className="highbay-input" value={choice.thinking ?? ""} disabled={unavailable}
             onChange={(event) => changeChoice({ ...choice, thinking: event.currentTarget.value || undefined })}>
             <option value="">Client default</option>
             {choice.thinking !== undefined && !option.efforts.includes(choice.thinking)
@@ -159,25 +159,25 @@ function WorkerFields({
           <input id={idPrefix + "-yolo"} type="checkbox" checked={choice.yolo} disabled={unavailable}
             aria-describedby={idPrefix + "-trust-note" + (option.yolo_effect !== undefined ? " " + idPrefix + "-yolo-effect" : "")}
             onChange={(event) => changeChoice({ ...choice, yolo: event.currentTarget.checked })} />{" "}
-          Skip permission prompts (YOLO)<span className="surla-visually-hidden"> for {roleLabels[role]}</span>
+          Skip permission prompts (YOLO)<span className="highbay-visually-hidden"> for {roleLabels[role]}</span>
         </label>
         {option.yolo_effect !== undefined ? <p id={idPrefix + "-yolo-effect"}>{option.yolo_effect}</p> : null}
         <p id={idPrefix + "-trust-note"}>
-          Surla sets missing folder trust for supported coding agents. If a folder is explicitly untrusted, review that setting before starting.
+          Highbay sets missing folder trust for supported coding agents. If a folder is explicitly untrusted, review that setting before starting.
         </p>
         {headless && !choice.yolo ? <p>Enable this permission switch to run this worker in the background.</p> : null}
       </div> : null}
       {choice !== undefined && option !== undefined && !option.yolo_supported ? <p>
-        This client uses configured permissions; no separate Surla YOLO switch is available.
+        This client uses configured permissions; no separate Highbay YOLO switch is available.
         {headless ? " Those permissions must allow unattended work." : null}
         {choice.yolo ? <> The previous permission switch is unsupported.{" "}
           <Button disabled={unavailable} onClick={() => changeChoice({ ...choice, yolo: false })}>Use configured permissions</Button>
         </> : null}
       </p> : null}
-      {choice !== undefined ? <details className="surla-details">
+      {choice !== undefined ? <details className="highbay-details">
         <summary>{roleLabels[role]} program details</summary>
-        <p className="surla-live-wrap">Client: <code>{choice.client}</code><br />Program: <code>{choice.program}</code></p>
-        {option === undefined && choice.model !== undefined ? <p className="surla-live-wrap">Previous model: <code>{choice.model}</code></p> : null}
+        <p className="highbay-live-wrap">Client: <code>{choice.client}</code><br />Program: <code>{choice.program}</code></p>
+        {option === undefined && choice.model !== undefined ? <p className="highbay-live-wrap">Previous model: <code>{choice.model}</code></p> : null}
         {option === undefined && choice.thinking !== undefined ? <p>Previous reasoning effort: <code>{choice.thinking}</code></p> : null}
         {option === undefined ? <p>Previous permission switch: {choice.yolo ? "enabled" : "disabled"}.</p> : null}
       </details> : null}

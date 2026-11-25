@@ -28,7 +28,7 @@ const VIOLATION_COLLECTOR =
   "(" +
   function collect() {
     const seen = [];
-    Object.defineProperty(window, "__surlaViolations", { value: seen });
+    Object.defineProperty(window, "__highbayViolations", { value: seen });
     document.addEventListener("securitypolicyviolation", (event) => {
       seen.push({
         effective_directive: event.effectiveDirective,
@@ -406,7 +406,7 @@ async function settle(tab, select, min, stillOpen = () => false) {
 // violationsSince returns the securitypolicyviolation reports of tab's page
 // after the first count, once there are more than count.
 function violationsSince(tab, count) {
-  return until(tab, "window.__surlaViolations.length > " + count + " ? window.__surlaViolations.slice(" + count + ") : null");
+  return until(tab, "window.__highbayViolations.length > " + count + " ? window.__highbayViolations.slice(" + count + ") : null");
 }
 
 // frameView reads what one frame of tab shows through sessionId, in an
@@ -416,12 +416,12 @@ async function frameView(tab, frameId, sessionId) {
   try {
     const { executionContextId } = await tab.dt.send(
       "Page.createIsolatedWorld",
-      { frameId, worldName: "surla-browser-test" },
+      { frameId, worldName: "highbay-browser-test" },
       sessionId
     );
     return await evaluate(
       tab,
-      "({ href: location.href, origin: location.origin, has_views_root: document.getElementById('surla-checkpoint-root') !== null, text: (document.body ? document.body.innerText : '').slice(0, 300) })",
+      "({ href: location.href, origin: location.origin, has_views_root: document.getElementById('highbay-checkpoint-root') !== null, text: (document.body ? document.body.innerText : '').slice(0, 300) })",
       sessionId,
       executionContextId
     );
@@ -472,15 +472,15 @@ async function phoneView(tab, selector) {
   const measured = await evaluate(tab, "(" + function measure(selector) {
     const region = document.querySelector(selector);
     const visible = (node) => node.getClientRects().length > 0;
-    const relevant = [document.getElementById("surla-team-attention"), region].filter(Boolean);
+    const relevant = [document.getElementById("highbay-team-attention"), region].filter(Boolean);
     const nodes = relevant.flatMap((node) => [node, ...node.querySelectorAll("*")]).filter(visible);
     return {
       found: region !== null,
       document_scroll_width: document.documentElement.scrollWidth,
       viewport_width: document.documentElement.clientWidth,
       viewport_height: window.innerHeight,
-      attention_roles: Array.from(document.querySelectorAll("#surla-team-attention > div"), (node) => node.id.replace("surla-team-attention-", "")),
-      role_states: Array.from(document.querySelectorAll("#surla-team-roles > li"), (node) => node.dataset.state),
+      attention_roles: Array.from(document.querySelectorAll("#highbay-team-attention > div"), (node) => node.id.replace("highbay-team-attention-", "")),
+      role_states: Array.from(document.querySelectorAll("#highbay-team-roles > li"), (node) => node.dataset.state),
       controls: nodes.filter((node) => node.matches("button") && !node.disabled).map((node) => node.id),
       overflowing: nodes.filter((node) => {
         // Fully clipped accessibility text can exceed its own box without widening the page.
@@ -504,46 +504,46 @@ async function phoneView(tab, selector) {
 // phoneScenario reuses the same real page, server and DevTools connection.
 async function phoneScenario(input, facts, views) {
   await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 800, deviceScaleFactor: 1, mobile: true }, views.sessionId);
-  await evaluate(views, "document.getElementById('surla-nav-team').click(), true");
-  await until(views, "document.querySelectorAll('#surla-team-roles > li[data-state=needs_you]').length === 3");
-  await evaluate(views, "document.querySelectorAll('#surla-team-stage details').forEach((node) => { node.open = true; }), true");
-  facts.phone = { team: await phoneView(views, "#surla-team-stage") };
-  await evaluate(views, "document.getElementById('surla-nav-changes').click(), true");
-  await until(views, "document.getElementById('surla-open-change-phone-build') !== null");
-  await evaluate(views, "document.getElementById('surla-open-change-phone-build').click(), true");
-  const blockedBuild = await until(views, "document.querySelector('#surla-build-test-writer[data-state=could_not_run]') !== null && document.getElementById('surla-build-again')?.disabled === false");
+  await evaluate(views, "document.getElementById('highbay-nav-team').click(), true");
+  await until(views, "document.querySelectorAll('#highbay-team-roles > li[data-state=needs_you]').length === 3");
+  await evaluate(views, "document.querySelectorAll('#highbay-team-stage details').forEach((node) => { node.open = true; }), true");
+  facts.phone = { team: await phoneView(views, "#highbay-team-stage") };
+  await evaluate(views, "document.getElementById('highbay-nav-changes').click(), true");
+  await until(views, "document.getElementById('highbay-open-change-phone-build') !== null");
+  await evaluate(views, "document.getElementById('highbay-open-change-phone-build').click(), true");
+  const blockedBuild = await until(views, "document.querySelector('#highbay-build-test-writer[data-state=could_not_run]') !== null && document.getElementById('highbay-build-again')?.disabled === false");
   if (blockedBuild.timed_out) throw new Error("the recorded build verdict did not render");
-  await evaluate(views, "document.getElementById('surla-build-details').open = true");
-  facts.phone.build = await phoneView(views, "#surla-build-section");
-  await evaluate(views, "document.getElementById('surla-build-again').focus(), true");
+  await evaluate(views, "document.getElementById('highbay-build-details').open = true");
+  facts.phone.build = await phoneView(views, "#highbay-build-section");
+  await evaluate(views, "document.getElementById('highbay-build-again').focus(), true");
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
-  const question = await until(views, "document.getElementById('surla-build-question')?.contains(document.activeElement)");
+  const question = await until(views, "document.getElementById('highbay-build-question')?.contains(document.activeElement)");
   facts.phone.confirmation_opened = !question.timed_out;
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
-  const cancelled = await until(views, "document.getElementById('surla-build-question') === null && document.activeElement?.id === 'surla-build-again'");
+  const cancelled = await until(views, "document.getElementById('highbay-build-question') === null && document.activeElement?.id === 'highbay-build-again'");
   facts.phone.confirmation_cancelled = !cancelled.timed_out;
-  await evaluate(views, "document.getElementById('surla-nav-changes').click(), true");
-  await until(views, "document.getElementById('surla-open-change-phone-findings') !== null");
-  await evaluate(views, "document.getElementById('surla-open-change-phone-findings').click(), true");
-  const findings = await until(views, "document.querySelectorAll('#surla-build-findings li').length === 4 && document.querySelector('#surla-build-findings summary') !== null");
+  await evaluate(views, "document.getElementById('highbay-nav-changes').click(), true");
+  await until(views, "document.getElementById('highbay-open-change-phone-findings') !== null");
+  await evaluate(views, "document.getElementById('highbay-open-change-phone-findings').click(), true");
+  const findings = await until(views, "document.querySelectorAll('#highbay-build-findings li').length === 4 && document.querySelector('#highbay-build-findings summary') !== null");
   if (findings.timed_out) throw new Error("the user findings did not render");
   // Findings initially open. Close and reopen them with native keyboard
   // activation so the test observes the disclosure's actual initial state.
-  await evaluate(views, "document.querySelector('#surla-build-findings summary').focus(), true");
+  await evaluate(views, "document.querySelector('#highbay-build-findings summary').focus(), true");
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
-  const collapsed = await until(views, "document.querySelector('#surla-build-findings details').open === false");
+  const collapsed = await until(views, "document.querySelector('#highbay-build-findings details').open === false");
   if (collapsed.timed_out) throw new Error("Enter did not close the findings disclosure");
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
-  const expanded = await until(views, "document.querySelector('#surla-build-findings details').open === true");
+  const expanded = await until(views, "document.querySelector('#highbay-build-findings details').open === true");
   facts.phone.findings_disclosure_opened = !expanded.timed_out;
-  await evaluate(views, "document.getElementById('surla-build-details').open = true");
-  facts.phone.findings = await phoneView(views, "#surla-build-section");
-  facts.phone.rendered_findings = await evaluate(views, "Array.from(document.querySelectorAll('#surla-build-findings li'), (node) => node.textContent)");
-  facts.phone.findings_wrapped = await evaluate(views, "Array.from(document.querySelectorAll('#surla-build-findings li')).every((node) => { const range = document.createRange(); range.selectNodeContents(node); return new Set(Array.from(range.getClientRects(), (box) => box.top)).size > 1; })");
+  await evaluate(views, "document.getElementById('highbay-build-details').open = true");
+  facts.phone.findings = await phoneView(views, "#highbay-build-section");
+  facts.phone.rendered_findings = await evaluate(views, "Array.from(document.querySelectorAll('#highbay-build-findings li'), (node) => node.textContent)");
+  facts.phone.findings_wrapped = await evaluate(views, "Array.from(document.querySelectorAll('#highbay-build-findings li')).every((node) => { const range = document.createRange(); range.selectNodeContents(node); return new Set(Array.from(range.getClientRects(), (box) => box.top)).size > 1; })");
   // Read only the controlled fixture responses through the existing DevTools
   // connection. The findings request is the page's own authenticated user read.
   const findingRequests = views.requests.filter(to(input.origin, "GET", "/changes/phone-findings/build/findings"));
@@ -569,9 +569,9 @@ async function phoneScenario(input, facts, views) {
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
   const takingState = input.taking_state === "replay" ? "merged" : input.taking_state === "dropped_stale" ? "dropped" : input.taking_state;
-  const ready = await until(views, "document.querySelector('#surla-build-taking[data-state=" + takingState + "]') !== null");
+  const ready = await until(views, "document.querySelector('#highbay-build-taking[data-state=" + takingState + "]') !== null");
   if (ready.timed_out) {
-    const state = await evaluate(views, "({ state: document.getElementById('surla-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
+    const state = await evaluate(views, "({ state: document.getElementById('highbay-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
     throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
       JSON.stringify(views.requests.filter(to(input.origin, "GET", "/changes/taking-layout/build")).map((request) => ({ status: request.status, failure: request.failure }))));
   }
@@ -581,37 +581,37 @@ async function takingScenario(input, facts, views) {
       width, height, deviceScaleFactor: 1, mobile: width < 600,
     }, views.sessionId);
     await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-    const trigger = input.taking_state === "passed" ? "surla-build-drop" : ["building", "replay"].includes(input.taking_state) ? "surla-build-again" : null;
+    const trigger = input.taking_state === "passed" ? "highbay-build-drop" : ["building", "replay"].includes(input.taking_state) ? "highbay-build-again" : null;
     let opened = { timed_out: false };
     if (trigger !== null) {
       await evaluate(views, "document.getElementById('" + trigger + "').focus(), true");
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", unmodifiedText: "\r" }, views.sessionId);
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
-      const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
+      const question = input.taking_state === "passed" ? "highbay-build-drop-question" : "highbay-build-question";
       opened = await until(views, "document.getElementById('" + question + "')?.contains(document.activeElement)");
     }
     const measured = await evaluate(views, "(" + function measure() {
-      const region = document.getElementById("surla-build-section");
+      const region = document.getElementById("highbay-build-section");
       return {
         width: window.innerWidth,
         document_width: document.documentElement.scrollWidth,
-        commands: Array.from(region.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
-        commands_usable: Array.from(region.querySelectorAll(".surla-build-merge pre")).every((node) => {
+        commands: Array.from(region.querySelectorAll(".highbay-build-merge pre"), (node) => node.textContent),
+        commands_usable: Array.from(region.querySelectorAll(".highbay-build-merge pre")).every((node) => {
           const style = getComputedStyle(node);
           node.focus();
           return style.whiteSpace === "pre" && ["auto", "scroll"].includes(style.overflowX) &&
             node.tabIndex === 0 && document.activeElement === node && node.getAttribute("role") === "region" && node.getAttribute("aria-label");
         }),
-        explanation: document.getElementById("surla-build-confirm-explanation")?.textContent.includes("nothing confines them") === true ||
-          (document.getElementById("surla-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
-          document.getElementById("surla-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("surla-build-start-explanation") === true),
-        no_start: document.getElementById("surla-build-start") === null,
-        enabling_step: document.getElementById("surla-build-enabling-step")?.textContent.includes("This agreement was drafted before a build was dropped") === true && document.getElementById("surla-build-again") === null,
+        explanation: document.getElementById("highbay-build-confirm-explanation")?.textContent.includes("nothing confines them") === true ||
+          (document.getElementById("highbay-build-start-explanation")?.textContent.includes("nothing confines them") === true &&
+          document.getElementById("highbay-build-start")?.getAttribute("aria-describedby")?.split(/\s+/).includes("highbay-build-start-explanation") === true),
+        no_start: document.getElementById("highbay-build-start") === null,
+        enabling_step: document.getElementById("highbay-build-enabling-step")?.textContent.includes("This agreement was drafted before a build was dropped") === true && document.getElementById("highbay-build-again") === null,
         rewrite_warning: region.textContent.includes("commit where this build started") && region.textContent.includes("these merges bring that history back"),
         overflowing: [document.documentElement, region, ...region.querySelectorAll("*")].filter((node) => {
           if (node === document.documentElement) return node.scrollWidth > node.clientWidth;
           // Exact command lines intentionally scroll inside their focusable pre.
-          if (!node.getClientRects().length || node.closest(".surla-build-merge pre")) return false;
+          if (!node.getClientRects().length || node.closest(".highbay-build-merge pre")) return false;
           // Measure visible descendants here. The document check still catches page widening.
           if (getComputedStyle(node).clipPath === "inset(50%)") return false;
           const box = node.getBoundingClientRect();
@@ -620,14 +620,14 @@ async function takingScenario(input, facts, views) {
       };
     }.toString() + ")()");
     measured.question_focused = !opened.timed_out;
-    if (trigger !== null) await evaluate(views, "document.getElementById('" + (input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question") + "').focus(), true");
+    if (trigger !== null) await evaluate(views, "document.getElementById('" + (input.taking_state === "passed" ? "highbay-build-drop-question" : "highbay-build-question") + "').focus(), true");
     const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
     measured.screenshot = require("node:path").join(input.capture_directory, input.taking_state + "-" + name + ".png");
     fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
     if (trigger !== null) {
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
-      const question = input.taking_state === "passed" ? "surla-build-drop-question" : "surla-build-question";
+      const question = input.taking_state === "passed" ? "highbay-build-drop-question" : "highbay-build-question";
       const canceled = await until(views, "document.getElementById('" + question + "') === null && document.activeElement?.id === '" + trigger + "'");
       measured.question_cancelled = !canceled.timed_out;
     }
@@ -642,20 +642,20 @@ async function experienceScenario(input, facts, views) {
   const [width, height] = variant === "phone" ? [375, 800] : variant === "reflow" ? [640, 450] : [1280, 900];
   await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 }, views.sessionId);
   await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: variant === "dark" ? "dark" : "light" }] }, views.sessionId);
-  await until(views, "document.getElementById('surla-nav-build') !== null");
+  await until(views, "document.getElementById('highbay-nav-build') !== null");
   const merge = ["merge", "build_merge", "merge_conflict", "dirty_worktree"].includes(input.experience);
-  const mergeId = input.experience === "build_merge" ? "surla-build-merge" : "surla-cp5-merge";
-  await evaluate(views, "document.getElementById('surla-nav-" + (merge && input.experience !== "build_merge" ? "cp5" : "build") + "').click(), true");
-  const root = merge && input.experience !== "build_merge" ? "surla-approval-stage" : "surla-build-section";
-  const prefix = "surla-build-agents";
+  const mergeId = input.experience === "build_merge" ? "highbay-build-merge" : "highbay-cp5-merge";
+  await evaluate(views, "document.getElementById('highbay-nav-" + (merge && input.experience !== "build_merge" ? "cp5" : "build") + "').click(), true");
+  const root = merge && input.experience !== "build_merge" ? "highbay-approval-stage" : "highbay-build-section";
+  const prefix = "highbay-build-agents";
   if (input.experience === "build_merge") {
-    const available = await until(views, "Array.from(document.querySelectorAll('#surla-frame-next button')).some((node) => node.textContent === 'Check current approval') || document.getElementById('surla-build-merge')?.disabled === false");
+    const available = await until(views, "Array.from(document.querySelectorAll('#highbay-frame-next button')).some((node) => node.textContent === 'Check current approval') || document.getElementById('highbay-build-merge')?.disabled === false");
     if (available.timed_out) throw new Error("Build did not offer its exact approved merge state");
-    await evaluate(views, "Array.from(document.querySelectorAll('#surla-frame-next button')).find((node) => node.textContent === 'Check current approval')?.click(), true");
+    await evaluate(views, "Array.from(document.querySelectorAll('#highbay-frame-next button')).find((node) => node.textContent === 'Check current approval')?.click(), true");
   }
   let ready = await until(views, merge
     ? "document.getElementById('" + mergeId + "')?.disabled === false"
-    : "document.getElementById('surla-build-agents-builder-client')?.value.length > 0");
+    : "document.getElementById('highbay-build-agents-builder-client')?.value.length > 0");
   if (ready.timed_out) throw new Error("experience did not load: " + await evaluate(views, "document.body.innerText.slice(0, 6500)"));
   const measured = { name: variant, background_gated: true, draft_preserved: true, notice_dismissed: true, client_changed: true,
     initial_clients: [], manual_secondary: true, merge_count: 0, action_text: "", action_recovered: true };
@@ -664,55 +664,55 @@ async function experienceScenario(input, facts, views) {
     measured.initial_clients = await evaluate(views, "Array.from(document.querySelectorAll('#" + prefix + " select[id$=-client]'), (node) => JSON.parse(node.value)[0])");
     if (["picker", "headless", "builder_only"].includes(input.experience)) {
       await evaluate(views, "(" + function changeClient() {
-        const client = document.getElementById("surla-build-agents-builder-client");
+        const client = document.getElementById("highbay-build-agents-builder-client");
         client.value = JSON.stringify(["claude", "/fixture/claude"]);
         client.dispatchEvent(new Event("change", { bubbles: true }));
       }.toString() + ")()");
-      ready = await until(views, "document.getElementById('surla-build-agents-builder-client').value === JSON.stringify(['claude', '/fixture/claude'])");
+      ready = await until(views, "document.getElementById('highbay-build-agents-builder-client').value === JSON.stringify(['claude', '/fixture/claude'])");
       measured.client_changed = !ready.timed_out;
       await evaluate(views, "(" + function restoreClient() {
-        const client = document.getElementById("surla-build-agents-builder-client");
+        const client = document.getElementById("highbay-build-agents-builder-client");
         client.value = JSON.stringify(["codex", "/fixture/codex"]);
         client.dispatchEvent(new Event("change", { bubbles: true }));
       }.toString() + ")()");
-      await until(views, "document.getElementById('surla-build-agents-builder-client').value === JSON.stringify(['codex', '/fixture/codex'])");
+      await until(views, "document.getElementById('highbay-build-agents-builder-client').value === JSON.stringify(['codex', '/fixture/codex'])");
     }
     await evaluate(views, "(" + function setDraft() {
-      const model = document.getElementById("surla-build-agents-builder-model");
+      const model = document.getElementById("highbay-build-agents-builder-model");
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(model, "custom/browser-model");
       model.dispatchEvent(new Event("input", { bubbles: true }));
-      const effort = document.getElementById("surla-build-agents-builder-thinking");
+      const effort = document.getElementById("highbay-build-agents-builder-thinking");
       if (effort) { effort.value = "high"; effort.dispatchEvent(new Event("change", { bubbles: true })); }
     }.toString() + ")()");
-    await evaluate(views, "document.getElementById('surla-build-agents-refresh').click(), true");
-    await until(views, "document.getElementById('surla-build-agents-refresh')?.disabled === false");
+    await evaluate(views, "document.getElementById('highbay-build-agents-refresh').click(), true");
+    await until(views, "document.getElementById('highbay-build-agents-refresh')?.disabled === false");
     if (input.experience === "headless" || input.experience === "configured_permissions") {
-      measured.background_gated = await evaluate(views, "document.getElementById('surla-build-again')?.disabled === true");
-      await evaluate(views, "document.querySelectorAll('#surla-build-agents input[id$=-yolo]').forEach((node) => node.click()), true");
-      measured.background_gated &&= await evaluate(views, "document.getElementById('surla-build-again')?.disabled === true");
-      await evaluate(views, "document.getElementById('surla-build-agents-background-consent').click(), true");
-      const enabled = await until(views, "document.getElementById('surla-build-again')?.disabled === false");
+      measured.background_gated = await evaluate(views, "document.getElementById('highbay-build-again')?.disabled === true");
+      await evaluate(views, "document.querySelectorAll('#highbay-build-agents input[id$=-yolo]').forEach((node) => node.click()), true");
+      measured.background_gated &&= await evaluate(views, "document.getElementById('highbay-build-again')?.disabled === true");
+      await evaluate(views, "document.getElementById('highbay-build-agents-background-consent').click(), true");
+      const enabled = await until(views, "document.getElementById('highbay-build-again')?.disabled === false");
       measured.background_gated &&= !enabled.timed_out;
     }
-    await evaluate(views, "document.getElementById('surla-nav-team').click(), true");
-    ready = await until(views, "document.getElementById('surla-team-agents-builder-model') !== null");
+    await evaluate(views, "document.getElementById('highbay-nav-team').click(), true");
+    ready = await until(views, "document.getElementById('highbay-team-agents-builder-model') !== null");
     if (ready.timed_out) throw new Error("Team picker did not load");
-    measured.draft_preserved = await evaluate(views, "document.getElementById('surla-team-agents-builder-model').value === 'custom/browser-model'");
+    measured.draft_preserved = await evaluate(views, "document.getElementById('highbay-team-agents-builder-model').value === 'custom/browser-model'");
     if (input.experience === "single") {
-      await evaluate(views, "document.getElementById('surla-team-agents-notice-single_agent_family-dismiss').click(), true");
-      ready = await until(views, "document.getElementById('surla-team-agents-notice-single_agent_family') === null");
+      await evaluate(views, "document.getElementById('highbay-team-agents-notice-single_agent_family-dismiss').click(), true");
+      ready = await until(views, "document.getElementById('highbay-team-agents-notice-single_agent_family') === null");
       measured.notice_dismissed = !ready.timed_out;
-      await evaluate(views, "document.getElementById('surla-team-refresh').click(), true");
-      await until(views, "document.getElementById('surla-team-refresh')?.disabled === false");
-      measured.notice_dismissed &&= await evaluate(views, "document.getElementById('surla-team-agents-notice-single_agent_family') === null");
+      await evaluate(views, "document.getElementById('highbay-team-refresh').click(), true");
+      await until(views, "document.getElementById('highbay-team-refresh')?.disabled === false");
+      measured.notice_dismissed &&= await evaluate(views, "document.getElementById('highbay-team-agents-notice-single_agent_family') === null");
     }
     measured.no_auto_launch &&= !views.requests.some((r) => r.method === "POST" && /\/(build|agents|merge)$/.test(new URL(r.url).pathname));
-    await evaluate(views, "document.getElementById('surla-team-start').click(), true");
-    ready = await until(views, "document.getElementById('surla-team-start-receipt') !== null");
+    await evaluate(views, "document.getElementById('highbay-team-start').click(), true");
+    ready = await until(views, "document.getElementById('highbay-team-start-receipt') !== null");
     if (ready.timed_out) throw new Error("explicit Team launch did not return a receipt");
-    await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
-    await until(views, "document.getElementById('surla-build-agents-builder-model') !== null");
-    measured.draft_preserved &&= await evaluate(views, "document.getElementById('surla-build-agents-builder-model').value === 'custom/browser-model'");
+    await evaluate(views, "document.getElementById('highbay-nav-build').click(), true");
+    await until(views, "document.getElementById('highbay-build-agents-builder-model') !== null");
+    measured.draft_preserved &&= await evaluate(views, "document.getElementById('highbay-build-agents-builder-model').value === 'custom/browser-model'");
   } else {
     measured.merge_count = await evaluate(views, "document.querySelectorAll('#" + mergeId + "').length");
     measured.manual_secondary = await evaluate(views, "Array.from(document.querySelectorAll('#" + root + " details')).some((node) => node.querySelector('summary')?.textContent === 'Manual merge instructions' && !node.open)");
@@ -727,8 +727,8 @@ async function experienceScenario(input, facts, views) {
     await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
     const active = await evaluate(views, "({ id: document.activeElement?.id ?? '', visible: (() => { const style = getComputedStyle(document.activeElement); return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2; })() })");
     if (!keyboard.includes(active.id)) keyboard.push(active.id);
-    if (active.id === (merge ? mergeId : "surla-build-agents-builder-client")) focusVisible = active.visible;
-    if (active.id === (merge ? mergeId : "surla-build-again")) break;
+    if (active.id === (merge ? mergeId : "highbay-build-agents-builder-client")) focusVisible = active.visible;
+    if (active.id === (merge ? mergeId : "highbay-build-again")) break;
   }
   measured.keyboard_controls = keyboard;
   measured.focus_visible = focusVisible;
@@ -738,7 +738,7 @@ async function experienceScenario(input, facts, views) {
     return { width: document.documentElement.clientWidth, document_width: document.documentElement.scrollWidth,
       controls_fit: controls.every((node) => { const box = node.getBoundingClientRect(); return box.width > 0 && box.left >= -1 && box.right <= document.documentElement.clientWidth + 1; }) };
   }.toString() + ")(" + JSON.stringify(root) + ")"));
-  await evaluate(views, "document.getElementById('" + (merge ? mergeId : "surla-build-agents") + "').scrollIntoView({block: 'center'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  await evaluate(views, "document.getElementById('" + (merge ? mergeId : "highbay-build-agents") + "').scrollIntoView({block: 'center'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   measured.screenshot = require("node:path").join(input.capture_directory, input.experience + "-" + variant + ".png");
   const capture = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
   fs.writeFileSync(measured.screenshot, Buffer.from(capture.data, "base64"));
@@ -757,7 +757,7 @@ async function experienceScenario(input, facts, views) {
     }.toString() + ")(" + JSON.stringify(root) + ")");
     await evaluate(views, "Array.from(document.querySelectorAll('#" + root + " details')).find((node) => node.querySelector('summary')?.textContent === 'Manual merge instructions').open = false, true");
     await evaluate(views, "document.getElementById('" + mergeId + "').click(), true");
-    const feedback = input.experience === "build_merge" ? "surla-build-merge-feedback" : "surla-cp5-merge-feedback";
+    const feedback = input.experience === "build_merge" ? "highbay-build-merge-feedback" : "highbay-cp5-merge-feedback";
     const refused = !["merge", "build_merge"].includes(input.experience);
     ready = await until(views, !refused
       ? "document.getElementById('" + mergeId + "') === null && document.body.innerText.includes('feature/orders') && document.body.innerText.includes('3333333') && /(?:approved build|verified commits) (?:is|are) merged/.test(document.body.innerText)"
@@ -778,11 +778,11 @@ async function experienceScenario(input, facts, views) {
       measured.action_recovered &&= !ready.timed_out;
     }
   } else {
-    await evaluate(views, "document.getElementById('surla-build-again').click(), true");
-    ready = await until(views, "document.getElementById('surla-build-confirm')?.disabled === false");
+    await evaluate(views, "document.getElementById('highbay-build-again').click(), true");
+    ready = await until(views, "document.getElementById('highbay-build-confirm')?.disabled === false");
     if (ready.timed_out) throw new Error("explicit Build confirmation did not open");
-    await evaluate(views, "document.getElementById('surla-build-confirm').click(), true");
-    ready = await until(views, "document.getElementById('surla-build-start-receipts') !== null");
+    await evaluate(views, "document.getElementById('highbay-build-confirm').click(), true");
+    ready = await until(views, "document.getElementById('highbay-build-start-receipts') !== null");
     if (ready.timed_out) throw new Error("explicit Build launch did not return a receipt");
   }
   facts.experience = [measured];
@@ -792,12 +792,12 @@ async function experienceScenario(input, facts, views) {
 // fixtures. The separate served-page tests exercise real approval persistence.
 async function approvalScenario(input, facts, views) {
   await views.dt.send("Page.bringToFront", {}, views.sessionId);
-  let ready = await until(views, "document.getElementById('surla-nav-cp5') !== null");
+  let ready = await until(views, "document.getElementById('highbay-nav-cp5') !== null");
   if (ready.timed_out) throw new Error("approval navigation did not load");
-  await evaluate(views, "document.getElementById('surla-nav-cp5').click(), true");
-  ready = await until(views, "document.getElementById('surla-approval-stage') !== null && document.querySelector('.surla-flow-evidence tbody tr') !== null && !document.getElementById('surla-cp5-observation-status')");
+  await evaluate(views, "document.getElementById('highbay-nav-cp5').click(), true");
+  ready = await until(views, "document.getElementById('highbay-approval-stage') !== null && document.querySelector('.highbay-flow-evidence tbody tr') !== null && !document.getElementById('highbay-cp5-observation-status')");
   if (ready.timed_out) throw new Error("approval evidence did not settle: " + JSON.stringify({
-    page: await evaluate(views, "({ hidden: document.hidden, visibility: document.visibilityState, disabled: document.getElementById('surla-cp5-approve')?.disabled, text: document.body.innerText.slice(0, 5000) })"),
+    page: await evaluate(views, "({ hidden: document.hidden, visibility: document.visibilityState, disabled: document.getElementById('highbay-cp5-approve')?.disabled, text: document.body.innerText.slice(0, 5000) })"),
     requests: views.requests.filter((r) => r.method === "GET").map((r) => ({ url: r.url, status: r.status, failure: r.failure })),
     console: views.console,
   }));
@@ -809,15 +809,15 @@ async function approvalScenario(input, facts, views) {
     await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
     let coverageLinked = false;
     if (input.approval_state === "current") {
-      await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
-      const buildReady = await until(views, "document.getElementById('surla-build-coverage') !== null");
+      await evaluate(views, "document.getElementById('highbay-nav-build').click(), true");
+      const buildReady = await until(views, "document.getElementById('highbay-build-coverage') !== null");
       if (buildReady.timed_out) throw new Error("accepted Build coverage did not appear");
       await evaluate(views, "(" + function revealBuildCoverage() {
-        for (let parent = document.getElementById("surla-build-coverage").parentElement; parent; parent = parent.parentElement) {
+        for (let parent = document.getElementById("highbay-build-coverage").parentElement; parent; parent = parent.parentElement) {
           if (parent.tagName === "DETAILS") parent.open = true;
         }
       }.toString() + ")()");
-      const buildVisible = await until(views, "document.getElementById('surla-build-coverage').getBoundingClientRect().height > 0");
+      const buildVisible = await until(views, "document.getElementById('highbay-build-coverage').getBoundingClientRect().height > 0");
       if (buildVisible.timed_out) throw new Error("accepted Build coverage stayed hidden");
       const coverageFacts = function coverageFacts(id) {
         const section = document.getElementById(id);
@@ -827,31 +827,31 @@ async function approvalScenario(input, facts, views) {
           explanations: Array.from(section.querySelectorAll('li > p:last-child'), (node) => node.textContent),
         };
       };
-      const builtCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-build-coverage')");
+      const builtCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('highbay-build-coverage')");
       if (name === "desktop" || name === "phone") {
-        await evaluate(views, "document.getElementById('surla-build-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        await evaluate(views, "document.getElementById('highbay-build-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
         const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
         fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-build-coverage.png"), Buffer.from(shown.data, "base64"));
       }
-      await evaluate(views, "document.getElementById('surla-nav-cp4').click(), true");
-      const checked = await until(views, "document.getElementById('surla-cp4-coverage') !== null && !document.getElementById('surla-cp4-verification').hasAttribute('aria-busy')");
+      await evaluate(views, "document.getElementById('highbay-nav-cp4').click(), true");
+      const checked = await until(views, "document.getElementById('highbay-cp4-coverage') !== null && !document.getElementById('highbay-cp4-verification').hasAttribute('aria-busy')");
       if (checked.timed_out) throw new Error("Check did not load the selected run's saved coverage");
-      const checkedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-cp4-coverage')");
+      const checkedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('highbay-cp4-coverage')");
       if (JSON.stringify(builtCoverage) !== JSON.stringify(checkedCoverage)) {
         throw new Error("Check changed the build's recorded coverage statements");
       }
-      const checkedLimits = await evaluate(views, "document.getElementById('surla-cp4-evidence-limits').textContent");
+      const checkedLimits = await evaluate(views, "document.getElementById('highbay-cp4-evidence-limits').textContent");
       if (!/no separate.*check_project.*attached/i.test(checkedLimits)) {
         throw new Error("Check lost the separate builder-check evidence limit");
       }
-      await evaluate(views, "document.getElementById('surla-nav-cp5').click(), true");
-      const reviewed = await until(views, "document.getElementById('surla-approval-coverage') !== null && !document.getElementById('surla-cp5-observation-status')");
+      await evaluate(views, "document.getElementById('highbay-nav-cp5').click(), true");
+      const reviewed = await until(views, "document.getElementById('highbay-approval-coverage') !== null && !document.getElementById('highbay-cp5-observation-status')");
       if (reviewed.timed_out) throw new Error("recorded approval coverage did not appear");
-      const recordedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('surla-approval-coverage')");
+      const recordedCoverage = await evaluate(views, "(" + coverageFacts.toString() + ")('highbay-approval-coverage')");
       coverageLinked = builtCoverage.requirements.length > 0 && builtCoverage.scenarios.length > 0 &&
         JSON.stringify(builtCoverage) === JSON.stringify(recordedCoverage);
       if (name === "desktop" || name === "phone") {
-        await evaluate(views, "document.getElementById('surla-approval-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        await evaluate(views, "document.getElementById('highbay-approval-coverage').scrollIntoView({block: 'start'}), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
         const shown = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
         fs.writeFileSync(require("node:path").join(input.capture_directory, "current-" + name + "-approval-coverage.png"), Buffer.from(shown.data, "base64"));
       }
@@ -863,7 +863,7 @@ async function approvalScenario(input, facts, views) {
     const settled = await until(views, "document.getAnimations().every((animation) => animation.effect?.getTiming().iterations === Infinity || animation.playState !== 'running')");
     if (settled.timed_out) throw new Error("approval colors did not settle at " + name);
     const primaryAtRest = await evaluate(views, "(" + function measureRestingAction() {
-      const action = document.getElementById("surla-cp5-approve");
+      const action = document.getElementById("highbay-cp5-approve");
       if (action === null) return true;
       document.activeElement?.blur();
       const probe = document.createElement("span");
@@ -882,32 +882,32 @@ async function approvalScenario(input, facts, views) {
     }
     let reached = false;
     if (input.approval_state === "current") {
-      await evaluate(views, "document.querySelector('.surla-skip-link').focus(), true");
+      await evaluate(views, "document.querySelector('.highbay-skip-link').focus(), true");
       for (let step = 0; step < 24; step++) {
         await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
         await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
-        reached = await evaluate(views, "document.activeElement?.id === 'surla-cp5-approve'");
+        reached = await evaluate(views, "document.activeElement?.id === 'highbay-cp5-approve'");
         if (reached) break;
       }
     }
     const measured = await evaluate(views, "(" + function measureApproval() {
-      const stage = document.getElementById("surla-approval-stage");
-      const action = document.getElementById("surla-cp5-approve");
-      const footer = document.getElementById("surla-frame-next");
+      const stage = document.getElementById("highbay-approval-stage");
+      const action = document.getElementById("highbay-cp5-approve");
+      const footer = document.getElementById("highbay-frame-next");
       const phone = matchMedia("(max-width: 720px)").matches;
       const style = action ? getComputedStyle(action) : null;
       const padding = parseFloat(getComputedStyle(document.body).paddingBottom);
       return {
         width: document.documentElement.clientWidth,
         document_width: document.documentElement.scrollWidth,
-        heading: document.getElementById("surla-cp5-title").textContent,
-        finished_flows: stage.querySelectorAll(".surla-flow-evidence tbody tr").length,
-        draft_visible: stage.querySelector(".surla-approval-exclusions").textContent.includes("Draft, no required test"),
-        approve_count: document.querySelectorAll("#surla-cp5-approve").length,
+        heading: document.getElementById("highbay-cp5-title").textContent,
+        finished_flows: stage.querySelectorAll(".highbay-flow-evidence tbody tr").length,
+        draft_visible: stage.querySelector(".highbay-approval-exclusions").textContent.includes("Draft, no required test"),
+        approve_count: document.querySelectorAll("#highbay-cp5-approve").length,
         approve_in_next: action !== null && footer.contains(action),
         approve_enabled: action !== null && !action.disabled,
         focus_visible: action !== null && document.activeElement === action && style.outlineStyle !== "none" && parseFloat(style.outlineWidth) >= 2,
-        commands: Array.from(stage.querySelectorAll(".surla-build-merge pre"), (node) => node.textContent),
+        commands: Array.from(stage.querySelectorAll(".highbay-build-merge pre"), (node) => node.textContent),
         footer_reserved: !phone || getComputedStyle(footer).position !== "fixed" || padding >= footer.getBoundingClientRect().height,
         overflowing: [stage, ...stage.querySelectorAll("*"), footer].filter((node) => {
           if (!node.getClientRects().length || node.closest("pre") || getComputedStyle(node).clipPath === "inset(50%)") return false;
@@ -927,10 +927,10 @@ async function approvalScenario(input, facts, views) {
     if (name === "phone" && input.approval_state === "current") {
       for (let row = 0; row < measured.finished_flows; row++) {
         const readable = await evaluate(views, "(" + async function inspectFlow(index) {
-          const row = document.querySelectorAll(".surla-flow-evidence tbody tr")[index];
+          const row = document.querySelectorAll(".highbay-flow-evidence tbody tr")[index];
           row.scrollIntoView({ block: "center" });
           await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const footer = document.getElementById("surla-frame-next").getBoundingClientRect();
+          const footer = document.getElementById("highbay-frame-next").getBoundingClientRect();
           return Array.from(row.children).every((cell) => {
             const box = cell.getBoundingClientRect();
             return box.top >= 0 && box.bottom <= footer.top;
@@ -948,11 +948,11 @@ async function approvalScenario(input, facts, views) {
 // testReviewScenario measures the saved build's requirements beside its findings.
 async function testReviewScenario(input, facts, views) {
   await views.dt.send("Page.bringToFront", {}, views.sessionId);
-  const ready = await until(views, "document.getElementById('surla-nav-build') !== null && document.getElementById('surla-build-test-writer') !== null");
+  const ready = await until(views, "document.getElementById('highbay-nav-build') !== null && document.getElementById('highbay-build-test-writer') !== null");
   if (ready.timed_out) throw new Error("test review did not load");
-  await evaluate(views, "document.getElementById('surla-nav-build').click(), true");
+  await evaluate(views, "document.getElementById('highbay-nav-build').click(), true");
   if (["needs_changes", "stale"].includes(input.test_review_state)) {
-    const findings = await until(views, "document.querySelector('.surla-build-finding-text') !== null");
+    const findings = await until(views, "document.querySelector('.highbay-build-finding-text') !== null");
     if (findings.timed_out) throw new Error("test findings did not load");
   }
   facts.test_review = [];
@@ -962,12 +962,12 @@ async function testReviewScenario(input, facts, views) {
     await views.dt.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: name === "dark" ? "dark" : "light" }] }, views.sessionId);
     await evaluate(views, "window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     const measured = await evaluate(views, "(" + function measureTestReview() {
-      const next = document.getElementById("surla-frame-next");
-      const region = document.querySelector(".surla-build-finding-text");
+      const next = document.getElementById("highbay-frame-next");
+      const region = document.querySelector(".highbay-build-finding-text");
       const box = region?.getBoundingClientRect();
       const phone = matchMedia("(max-width: 720px)").matches;
       return { width: innerWidth, document_width: document.documentElement.scrollWidth,
-        required_tests: document.querySelectorAll("#surla-build-required-tests > li").length,
+        required_tests: document.querySelectorAll("#highbay-build-required-tests > li").length,
         next: next?.innerText, next_controls: next?.querySelectorAll("button").length,
         next_inline: getComputedStyle(next).position !== "fixed",
         findings_visible: region !== null && box.width > 0,
@@ -981,7 +981,7 @@ async function testReviewScenario(input, facts, views) {
       for (let attempt = 0; attempt < 100; attempt++) {
         await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
         await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
-        if (await evaluate(views, "document.activeElement?.classList.contains('surla-build-finding-text')")) {
+        if (await evaluate(views, "document.activeElement?.classList.contains('highbay-build-finding-text')")) {
           measured.keyboard_reachable = true;
           break;
         }
@@ -999,18 +999,18 @@ async function testReviewScenario(input, facts, views) {
 // agreementScenario measures one long saved summary and its existing reading
 // destination, using native Tab/Enter defaults and one browser for both widths.
 async function agreementScenario(input, facts, views) {
-  const ready = await until(views, "document.getElementById('surla-confirm-submit') !== null");
+  const ready = await until(views, "document.getElementById('highbay-confirm-submit') !== null");
   if (ready.timed_out) throw new Error("agreement form did not load");
-  if (await evaluate(views, "document.getElementById('surla-read-full-summary') !== null")) {
+  if (await evaluate(views, "document.getElementById('highbay-read-full-summary') !== null")) {
     throw new Error("unconfirmed proposal offers an agreed summary");
   }
-  await evaluate(views, "document.getElementById('surla-confirm-submit').click(), true");
-  const confirmed = await until(views, "document.getElementById('surla-read-full-summary') !== null");
+  await evaluate(views, "document.getElementById('highbay-confirm-submit').click(), true");
+  const confirmed = await until(views, "document.getElementById('highbay-read-full-summary') !== null");
   if (confirmed.timed_out) throw new Error("confirmation did not expose summary reading");
   facts.agreement = [];
   for (const [name, width, height] of [["desktop", 1280, 900], ["phone", 390, 844]]) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 }, views.sessionId);
-    await evaluate(views, "document.getElementById('surla-nav-cp1').click(), document.getElementById('surla-refine-agreement').open = true, true");
+    await evaluate(views, "document.getElementById('highbay-nav-cp1').click(), document.getElementById('highbay-refine-agreement').open = true, true");
     await evaluate(views, "(" + function focusDraft() {
       const field = document.querySelector('textarea[data-field="expected_outcome"]');
       field.focus();
@@ -1018,9 +1018,9 @@ async function agreementScenario(input, facts, views) {
       return true;
     }.toString() + ")()");
     await views.dt.send("Input.insertText", { text: "Unsaved example for " + name }, views.sessionId);
-    await evaluate(views, "document.getElementById('surla-agreement-details').open = false, document.getElementById('surla-nav-changes').click(), window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    await evaluate(views, "document.getElementById('highbay-agreement-details').open = false, document.getElementById('highbay-nav-changes').click(), window.scrollTo(0, 0), new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     const measured = await evaluate(views, "(" + function measurePreview() {
-      const preview = document.querySelector('.surla-frame-summary');
+      const preview = document.querySelector('.highbay-frame-summary');
       return {
         width: document.documentElement.clientWidth,
         document_width: document.documentElement.scrollWidth,
@@ -1033,16 +1033,16 @@ async function agreementScenario(input, facts, views) {
     measured.preview_screenshot = require("node:path").join(input.capture_directory, name + "-summary-preview.png");
     const preview = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
     fs.writeFileSync(measured.preview_screenshot, Buffer.from(preview.data, "base64"));
-    await evaluate(views, "document.querySelector('.surla-skip-link').focus(), true");
+    await evaluate(views, "document.querySelector('.highbay-skip-link').focus(), true");
     measured.keyboard_reachable = false;
     for (let step = 0; step < 32; step++) {
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
       await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 }, views.sessionId);
-      measured.keyboard_reachable = await evaluate(views, "document.activeElement?.id === 'surla-read-full-summary'");
+      measured.keyboard_reachable = await evaluate(views, "document.activeElement?.id === 'highbay-read-full-summary'");
       if (measured.keyboard_reachable) break;
     }
     measured.focus_visible = await evaluate(views, "(" + function focusVisible() {
-      const style = getComputedStyle(document.getElementById('surla-read-full-summary'));
+      const style = getComputedStyle(document.getElementById('highbay-read-full-summary'));
       return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
     }.toString() + ")()");
     if (!measured.keyboard_reachable) throw new Error("Read full summary is unreachable by keyboard at " + name);
@@ -1050,12 +1050,12 @@ async function agreementScenario(input, facts, views) {
     await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, views.sessionId);
     await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     Object.assign(measured, await evaluate(views, "(" + function measureSummary(draft) {
-      const summary = document.getElementById('surla-agreement-summary');
+      const summary = document.getElementById('highbay-agreement-summary');
       const box = summary.getBoundingClientRect();
-      const frame = document.getElementById('surla-checkpoint-nav');
+      const frame = document.getElementById('highbay-checkpoint-nav');
       return {
         full_text: summary.textContent,
-        details_open: document.getElementById('surla-agreement-details').open,
+        details_open: document.getElementById('highbay-agreement-details').open,
         summary_focused: document.activeElement === summary,
         summary_visible: box.top >= (getComputedStyle(frame).position === 'sticky' ? frame.getBoundingClientRect().bottom : 0) && box.top < innerHeight,
         draft_preserved: document.querySelector('textarea[data-field="expected_outcome"]').value === draft,
@@ -1065,11 +1065,11 @@ async function agreementScenario(input, facts, views) {
     const reading = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
     fs.writeFileSync(measured.summary_screenshot, Buffer.from(reading.data, "base64"));
     const end = await evaluate(views, "(" + async function reachSummaryEnd() {
-      const summary = document.getElementById('surla-agreement-summary');
+      const summary = document.getElementById('highbay-agreement-summary');
       summary.scrollIntoView({ block: 'end' });
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const box = summary.getBoundingClientRect();
-      const footer = document.getElementById('surla-frame-next');
+      const footer = document.getElementById('highbay-frame-next');
       const bottom = getComputedStyle(footer).position === 'fixed' ? footer.getBoundingClientRect().top : innerHeight;
       return { end: box.bottom, bottom, scrollY, overflow: getComputedStyle(summary).overflowY };
     }.toString() + ")()");
@@ -1104,7 +1104,7 @@ async function onboardingScenario(input, views) {
       await requireView("document.documentElement.scrollWidth <= document.documentElement.clientWidth",
         view + " widened the page at " + variant);
       if (width < 600) {
-        await requireView("document.querySelector('.surla-frame-project-menu > summary').getBoundingClientRect().height >= 44",
+        await requireView("document.querySelector('.highbay-frame-project-menu > summary').getBoundingClientRect().height >= 44",
           "Inspect's phone target is too small");
       }
       const screenshot = await views.dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true }, views.sessionId);
@@ -1112,32 +1112,32 @@ async function onboardingScenario(input, views) {
     }
   };
 
-  await requireView("document.querySelector('.surla-welcome-card h2')?.textContent.includes('Describe what you want to build') && !document.querySelector('.surla-frame-slots, .surla-frame-journey, .surla-frame-context')",
+  await requireView("document.querySelector('.highbay-welcome-card h2')?.textContent.includes('Describe what you want to build') && !document.querySelector('.highbay-frame-slots, .highbay-frame-journey, .highbay-frame-context')",
     "the connected empty project did not settle on the welcome card");
   await capture("welcome");
-  await evaluate(views, "document.querySelector('.surla-frame-project-menu > summary').focus(), true");
+  await evaluate(views, "document.querySelector('.highbay-frame-project-menu > summary').focus(), true");
   await press("Enter", 13);
-  await requireView("document.querySelector('.surla-frame-project-menu').open", "Enter did not open Inspect");
+  await requireView("document.querySelector('.highbay-frame-project-menu').open", "Enter did not open Inspect");
   await press("Tab", 9);
-  await requireView("document.activeElement.id === 'surla-nav-team'", "Tab did not reach Team in Inspect");
+  await requireView("document.activeElement.id === 'highbay-nav-team'", "Tab did not reach Team in Inspect");
   await press("Escape", 27);
-  const escaped = await evaluate(views, "({ open: document.querySelector('.surla-frame-project-menu').open, summaryFocused: document.activeElement.matches('.surla-frame-project-menu > summary'), focused: document.activeElement?.id || document.activeElement?.tagName })");
+  const escaped = await evaluate(views, "({ open: document.querySelector('.highbay-frame-project-menu').open, summaryFocused: document.activeElement.matches('.highbay-frame-project-menu > summary'), focused: document.activeElement?.id || document.activeElement?.tagName })");
   if (escaped.open || !escaped.summaryFocused) {
     throw new Error("Escape did not dismiss Inspect and restore focus: " + JSON.stringify(escaped));
   }
   await press("Enter", 13);
-  const point = await evaluate(views, "(() => { const box = document.querySelector('.surla-welcome-card h2').getBoundingClientRect(); return {x: box.left + 10, y: box.top + 10}; })()");
+  const point = await evaluate(views, "(() => { const box = document.querySelector('.highbay-welcome-card h2').getBoundingClientRect(); return {x: box.left + 10, y: box.top + 10}; })()");
   await views.dt.send("Input.dispatchMouseEvent", { ...point, type: "mousePressed", button: "left", clickCount: 1 }, views.sessionId);
   await views.dt.send("Input.dispatchMouseEvent", { ...point, type: "mouseReleased", button: "left", clickCount: 1 }, views.sessionId);
-  await requireView("!document.querySelector('.surla-frame-project-menu').open", "outside pointer press did not dismiss Inspect");
-  await evaluate(views, "document.querySelector('.surla-frame-project-menu > summary').focus(), true");
+  await requireView("!document.querySelector('.highbay-frame-project-menu').open", "outside pointer press did not dismiss Inspect");
+  await evaluate(views, "document.querySelector('.highbay-frame-project-menu > summary').focus(), true");
   await press("Enter", 13);
   await press("Tab", 9);
   await press("Enter", 13);
-  await requireView("document.querySelector('.surla-frame-project-menu > summary').textContent === 'Inspect · Team' && !document.querySelector('.surla-frame-project-menu').open",
+  await requireView("document.querySelector('.highbay-frame-project-menu > summary').textContent === 'Inspect · Team' && !document.querySelector('.highbay-frame-project-menu').open",
     "choosing Team did not close Inspect and name the current view");
-  await evaluate(views, "document.getElementById('surla-nav-changes').click(), true");
-  await requireView("Boolean(document.querySelector('.surla-welcome-card'))", "returning from Team did not show the welcome card");
+  await evaluate(views, "document.getElementById('highbay-nav-changes').click(), true");
+  await requireView("Boolean(document.querySelector('.highbay-welcome-card'))", "returning from Team did not show the welcome card");
 
   const proposed = await fetch(input.origin + "/changes/propose", {
     method: "POST",
@@ -1145,28 +1145,28 @@ async function onboardingScenario(input, views) {
     body: JSON.stringify(input.onboarding.proposal),
   });
   if (!proposed.ok) throw new Error("fixture proposal was refused with HTTP " + proposed.status);
-  const opened = await until(views, "Boolean(document.querySelector('#surla-openui-workspace .shadcn-choice-group') && document.querySelector('#surla-cp1-form-card .shadcn-choice-group'))");
+  const opened = await until(views, "Boolean(document.querySelector('#highbay-openui-workspace .shadcn-choice-group') && document.querySelector('#highbay-cp1-form-card .shadcn-choice-group'))");
   if (opened.timed_out) {
     const displayed = await evaluate(views, "document.body.innerText.slice(0, 1800)");
     throw new Error("the first proposal did not open both its decision aid and its remaining question: " + displayed);
   }
   await capture("agree");
 
-  await evaluate(views, "document.getElementById('surla-cp1-next-question').focus(), true");
+  await evaluate(views, "document.getElementById('highbay-cp1-next-question').focus(), true");
   await press("Enter", 13);
   await requireView("document.activeElement.dataset.openuiAmbiguityId === 'refund-rules-ambiguity-01'", "Next did not focus the first question in OpenUI");
-  await requireView("document.activeElement.getBoundingClientRect().bottom <= document.getElementById('surla-frame-next').getBoundingClientRect().top",
+  await requireView("document.activeElement.getBoundingClientRect().bottom <= document.getElementById('highbay-frame-next').getBoundingClientRect().top",
     "the fixed Next action covered the focused answer on the phone");
   await press("ArrowDown", 40);
   await requireView("document.activeElement.getAttribute('aria-pressed') === 'true' && document.activeElement.tabIndex === 0 && document.activeElement.dataset.openuiOption.includes('full amount')",
     "arrow navigation did not focus and select the next option");
   await press("Tab", 9);
   await requireView("!document.activeElement.dataset.openuiAmbiguityId", "Tab stayed inside a single question's options");
-  await evaluate(views, "document.getElementById('surla-cp1-next-question').focus(), true");
+  await evaluate(views, "document.getElementById('highbay-cp1-next-question').focus(), true");
   await press("Enter", 13);
   await requireView("document.activeElement.dataset.ambiguityId === 'refund-rules-ambiguity-02'", "Next did not advance to the fixed question");
   await press("Enter", 13);
-  await requireView("document.getElementById('surla-cp1-next-confirm')?.disabled === false", "Next did not offer confirmation after the last answer");
+  await requireView("document.getElementById('highbay-cp1-next-confirm')?.disabled === false", "Next did not offer confirmation after the last answer");
 }
 
 async function main(input, facts) {
@@ -1177,12 +1177,12 @@ async function main(input, facts) {
     const server = (r) => r.url.startsWith(input.origin + "/");
     const longPoll = (r) => new URL(r.url).pathname === "/change-updates";
 
-    // (a) Open the page with the link, as `surla` opens it.
+    // (a) Open the page with the link, as `hbay` opens it.
     const views = await openTab(dt);
     await navigate(views, input.origin + "/views#link=" + input.link);
     const listed = await until(
       views,
-      "(() => { const ids = Array.from(document.querySelectorAll('#surla-change-list [data-change-id]'), (item) => item.dataset.changeId); return ids.length >= " +
+      "(() => { const ids = Array.from(document.querySelectorAll('#highbay-change-list [data-change-id]'), (item) => item.dataset.changeId); return ids.length >= " +
         input.change_ids.length +
         " ? ids : null; })()"
     );
@@ -1247,14 +1247,14 @@ async function main(input, facts) {
     facts.views.storage.browser_cookies = (await dt.send("Storage.getCookies", {})).cookies.length;
 
     // (d) The page's policy: its own load, an injected inline script, a fetch to another origin.
-    facts.views.load_violations = await evaluate(views, "window.__surlaViolations.slice()");
+    facts.views.load_violations = await evaluate(views, "window.__highbayViolations.slice()");
     let count = facts.views.load_violations.length;
     await evaluate(
       views,
-      "(() => { const s = document.createElement('script'); s.textContent = 'window.__surlaInjectedRan = true;'; document.body.appendChild(s); return true; })()"
+      "(() => { const s = document.createElement('script'); s.textContent = 'window.__highbayInjectedRan = true;'; document.body.appendChild(s); return true; })()"
     );
     const injected = await violationsSince(views, count);
-    facts.views.injected_script_ran = await evaluate(views, "window.__surlaInjectedRan === true");
+    facts.views.injected_script_ran = await evaluate(views, "window.__highbayInjectedRan === true");
     facts.views.injected_violations = injected.value || [];
     count += facts.views.injected_violations.length;
     const probe = input.same_site_origin + "/csp-probe";
@@ -1335,14 +1335,14 @@ async function main(input, facts) {
     // (h) Open the change saved with a Story, then its Story stage, and
     // measure the long flow's row of steps once the page has made it a tab
     // stop, which it does when it measures that the row overflows.
-    const beforeStory = await evaluate(views, "window.__surlaViolations.length");
-    await evaluate(views, "document.getElementById(" + JSON.stringify("surla-open-change-" + input.story_change_id) + ").click(), true");
-    await until(views, "(document.getElementById('surla-cp1-editor') || { dataset: {} }).dataset.changeId === " + JSON.stringify(input.story_change_id));
-    await evaluate(views, "document.getElementById('surla-nav-story').click(), true");
+    const beforeStory = await evaluate(views, "window.__highbayViolations.length");
+    await evaluate(views, "document.getElementById(" + JSON.stringify("highbay-open-change-" + input.story_change_id) + ").click(), true");
+    await until(views, "(document.getElementById('highbay-cp1-editor') || { dataset: {} }).dataset.changeId === " + JSON.stringify(input.story_change_id));
+    await evaluate(views, "document.getElementById('highbay-nav-story').click(), true");
     const row =
-      "document.querySelector('#surla-story-change .surla-story-flow[data-flow-key=" +
+      "document.querySelector('#highbay-story-change .highbay-story-flow[data-flow-key=" +
       JSON.stringify(input.story_flow) +
-      "] .surla-story-steps')";
+      "] .highbay-story-steps')";
     const shown = await until(views, row + " !== null");
     const tabStop = await until(views, "(" + row + " || {}).tabIndex === 0");
     facts.story = shown.timed_out
@@ -1352,14 +1352,14 @@ async function main(input, facts) {
           "(() => { const row = " +
             row +
             "; const start = row.scrollLeft; row.scrollLeft = row.scrollWidth; const scrolled = row.scrollLeft; row.scrollLeft = start;" +
-            " return { found: true, steps: row.querySelectorAll('.surla-story-step').length, tab_index: row.tabIndex," +
+            " return { found: true, steps: row.querySelectorAll('.highbay-story-step').length, tab_index: row.tabIndex," +
             " overflow_x: getComputedStyle(row).overflowX, row_scroll_width: row.scrollWidth, row_client_width: row.clientWidth," +
             " scrolled_to: scrolled, row_right: row.getBoundingClientRect().right," +
-            " stage_right: document.getElementById('surla-story-stage').getBoundingClientRect().right," +
+            " stage_right: document.getElementById('highbay-story-stage').getBoundingClientRect().right," +
             " document_scroll_width: document.documentElement.scrollWidth, viewport_width: document.documentElement.clientWidth }; })()"
         );
     facts.story.tab_stop_timed_out = tabStop.timed_out;
-    facts.story.violations = await evaluate(views, "window.__surlaViolations.slice(" + beforeStory + ")");
+    facts.story.violations = await evaluate(views, "window.__highbayViolations.slice(" + beforeStory + ")");
 
     // (i) Open the Live target view at a phone's width and measure which
     // model form fields are displayed and whether anything widens the page.
@@ -1367,18 +1367,18 @@ async function main(input, facts) {
       views.dt.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 800, deviceScaleFactor: 1, mobile: true }, views.sessionId),
       "narrow the viewport"
     );
-    await evaluate(views, "document.getElementById('surla-nav-live').click(), true");
+    await evaluate(views, "document.getElementById('highbay-nav-live').click(), true");
     const liveShown = await until(
       views,
-      "document.getElementById('surla-model-form') !== null && (document.getElementById('surla-live-target') || { dataset: {} }).dataset.state !== 'unread'"
+      "document.getElementById('highbay-model-form') !== null && (document.getElementById('highbay-live-target') || { dataset: {} }).dataset.state !== 'unread'"
     );
     facts.live = liveShown.timed_out
       ? { found: false }
       : await evaluate(
           views,
-          "(() => ({ found: true, live_state: document.getElementById('surla-live-target').dataset.state," +
-            " direct_display: getComputedStyle(document.getElementById('surla-model-direct-fields')).display," +
-            " gateway_display: getComputedStyle(document.getElementById('surla-model-gateway-fields')).display," +
+          "(() => ({ found: true, live_state: document.getElementById('highbay-live-target').dataset.state," +
+            " direct_display: getComputedStyle(document.getElementById('highbay-model-direct-fields')).display," +
+            " gateway_display: getComputedStyle(document.getElementById('highbay-model-gateway-fields')).display," +
             " document_scroll_width: document.documentElement.scrollWidth, viewport_width: document.documentElement.clientWidth }))()"
         );
     await withDeadline(views.dt.send("Emulation.clearDeviceMetricsOverride", {}, views.sessionId), "restore the viewport");
@@ -1386,7 +1386,7 @@ async function main(input, facts) {
     // (g) Reload the views page.
     const beforeReload = views.requests.length;
     await reload(views);
-    const signedOut = await until(views, "(document.getElementById('surla-signed-out') || {}).textContent");
+    const signedOut = await until(views, "(document.getElementById('highbay-signed-out') || {}).textContent");
     const shownAfterReload = views.requests.slice(beforeReload).map((r) => r.id);
     const probeURL = input.origin + "/change-updates?since=after-reload";
     const status = await evaluate(views, "fetch(" + JSON.stringify(probeURL) + ").then((r) => r.status, (e) => 'refused: ' + e.message)");
@@ -1413,27 +1413,27 @@ async function main(input, facts) {
     );
     let fresh = await mint();
     let since = views.requests.length;
-    await evaluate(views, "window.__surlaOldDocument = true");
+    await evaluate(views, "window.__highbayOldDocument = true");
     let loaded = expectReload();
     await dt.send("Page.navigate", { url: input.origin + "/views#link=" + fresh }, views.sessionId);
     await loaded;
-    await until(views, "document.getElementById('surla-change-list')");
+    await until(views, "document.getElementById('highbay-change-list')");
     await settle(views, to(input.origin, "POST", "/project/browser-session"), 2);
     facts.link_recovery = {
-      clean_reload: await evaluate(views, "window.__surlaOldDocument === undefined && location.hash === ''"),
+      clean_reload: await evaluate(views, "window.__highbayOldDocument === undefined && location.hash === ''"),
       clean_requests: views.requests.slice(since).filter(server).map((r) => ({ ...r })),
       notice_widths: [], notice_fits: [], notice_visible: [], link_announced: [], edit_visible: [],
     };
-    await evaluate(views, "document.getElementById('surla-open-change-chg-refunds').click()");
+    await evaluate(views, "document.getElementById('highbay-open-change-chg-refunds').click()");
     await until(views, "document.querySelector('textarea[data-field=expected_outcome]')");
     await evaluate(views, "document.querySelector('textarea[data-field=expected_outcome]').focus()");
     await dt.send("Input.insertText", { text: "Unsent replacement-link edit" }, views.sessionId);
-    await evaluate(views, "document.querySelector('textarea[data-field=expected_outcome]').setSelectionRange(2, 8), window.__surlaOldDocument = true");
+    await evaluate(views, "document.querySelector('textarea[data-field=expected_outcome]').setSelectionRange(2, 8), window.__highbayOldDocument = true");
     fresh = await mint();
     since = views.requests.length;
     await dt.send("Page.navigate", { url: input.origin + "/views#link=" + fresh }, views.sessionId);
-    await until(views, "document.getElementById('surla-pending-link') && location.hash === ''");
-    facts.link_recovery.deferred = await evaluate(views, "window.__surlaOldDocument === true && document.getElementById('surla-open-pending-link').disabled");
+    await until(views, "document.getElementById('highbay-pending-link') && location.hash === ''");
+    facts.link_recovery.deferred = await evaluate(views, "window.__highbayOldDocument === true && document.getElementById('highbay-open-pending-link').disabled");
     facts.link_recovery.draft_preserved = await evaluate(views, "(() => { const field = document.querySelector('textarea[data-field=expected_outcome]'); return field.value.includes('Unsent replacement-link edit') && document.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8; })()");
     facts.link_recovery.no_early_exchange = !views.requests.slice(since).some(to(input.origin, "POST", "/project/browser-session"));
     await dt.send("Target.activateTarget", { targetId: views.targetId });
@@ -1445,30 +1445,30 @@ async function main(input, facts) {
       facts.link_recovery.edit_visible.push(await evaluate(views, "(() => { const box = document.activeElement.getBoundingClientRect(); return box.top >= 0 && box.bottom <= innerHeight; })()"));
       fresh = await mint();
       await dt.send("Page.navigate", { url: input.origin + "/views#link=" + fresh }, views.sessionId);
-      await until(views, "document.getElementById('surla-pending-link') && location.hash === ''");
+      await until(views, "document.getElementById('highbay-pending-link') && location.hash === ''");
       await evaluate(views, "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
       facts.link_recovery.notice_widths.push(width);
-      facts.link_recovery.notice_fits.push(await evaluate(views, "(() => { const notice = document.getElementById('surla-pending-link').getBoundingClientRect(); const button = document.getElementById('surla-open-pending-link').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && button.left >= notice.left && button.right <= notice.right; })()"));
-      facts.link_recovery.notice_visible.push(await evaluate(views, "(() => { const box = document.getElementById('surla-pending-link').getBoundingClientRect(); const nav = document.getElementById('surla-checkpoint-nav'); const top = getComputedStyle(nav).position === 'sticky' ? nav.getBoundingClientRect().bottom : 0; const field = document.querySelector('textarea[data-field=expected_outcome]'); return box.top >= top && box.bottom <= innerHeight && document.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8; })()"));
-      facts.link_recovery.link_announced.push(await evaluate(views, "document.getElementById('surla-checkpoint-status').textContent.includes('You opened a new Surla link')"));
+      facts.link_recovery.notice_fits.push(await evaluate(views, "(() => { const notice = document.getElementById('highbay-pending-link').getBoundingClientRect(); const button = document.getElementById('highbay-open-pending-link').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && button.left >= notice.left && button.right <= notice.right; })()"));
+      facts.link_recovery.notice_visible.push(await evaluate(views, "(() => { const box = document.getElementById('highbay-pending-link').getBoundingClientRect(); const nav = document.getElementById('highbay-checkpoint-nav'); const top = getComputedStyle(nav).position === 'sticky' ? nav.getBoundingClientRect().bottom : 0; const field = document.querySelector('textarea[data-field=expected_outcome]'); return box.top >= top && box.bottom <= innerHeight && document.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8; })()"));
+      facts.link_recovery.link_announced.push(await evaluate(views, "document.getElementById('highbay-checkpoint-status').textContent.includes('You opened a new Highbay link')"));
       const screenshot = await dt.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, views.sessionId);
       fs.writeFileSync(require("node:path").join(input.capture_directory, "pending-link-" + width + ".png"), Buffer.from(screenshot.data, "base64"));
     }
-    await evaluate(views, "document.getElementById('surla-discard-draft').click()");
-    await until(views, "!document.getElementById('surla-open-pending-link').disabled");
+    await evaluate(views, "document.getElementById('highbay-discard-draft').click()");
+    await until(views, "!document.getElementById('highbay-open-pending-link').disabled");
     since = views.requests.length;
     loaded = expectReload();
-    await evaluate(views, "document.getElementById('surla-open-pending-link').click()");
+    await evaluate(views, "document.getElementById('highbay-open-pending-link').click()");
     await loaded;
-    await until(views, "document.getElementById('surla-change-list')");
+    await until(views, "document.getElementById('highbay-change-list')");
     await settle(views, to(input.origin, "POST", "/project/browser-session"), 3);
-    facts.link_recovery.resolved_reload = await evaluate(views, "window.__surlaOldDocument === undefined && location.hash === ''");
+    facts.link_recovery.resolved_reload = await evaluate(views, "window.__highbayOldDocument === undefined && location.hash === ''");
     facts.link_recovery.resolved_requests = views.requests.slice(since).filter(server).map((r) => ({ ...r }));
     loaded = expectReload();
     await dt.send("Page.navigate", { url: input.origin + "/views#link=" + input.link }, views.sessionId);
     await loaded;
-    await until(views, "document.getElementById('surla-link-used')");
-    facts.link_recovery.used_link_reported = await evaluate(views, "location.hash === '' && document.getElementById('surla-link-used').textContent.includes('already used')");
+    await until(views, "document.getElementById('highbay-link-used')");
+    facts.link_recovery.used_link_reported = await evaluate(views, "location.hash === '' && document.getElementById('highbay-link-used').textContent.includes('already used')");
     facts.views.console = views.console;
   } finally {
     dt.close();

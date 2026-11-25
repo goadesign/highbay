@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"testing"
 
-	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbayclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +50,7 @@ var _ = m.Design("Architecture", "Scoped relationships", func() {
 			apiCount := 0
 			componentID := ""
 			for _, node := range result.Containers {
-				require.NoError(t, gensurlaclient.ValidateC4ContainerItemResponseBody(&gensurlaclient.C4ContainerItemResponseBody{
+				require.NoError(t, genhighbayclient.ValidateC4ContainerItemResponseBody(&genhighbayclient.C4ContainerItemResponseBody{
 					ID:          &node.ID,
 					Name:        &node.Name,
 					Kind:        &node.Kind,

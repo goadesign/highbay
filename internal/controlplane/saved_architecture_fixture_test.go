@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // seedArchitectureRefreshForTest binds authored architectureTestDesign facts to
@@ -16,7 +16,7 @@ import (
 // them; no caller bypasses the card's persistence or revision checks.
 func seedArchitectureRefreshForTest(
 	t *testing.T, cp *ControlPlane, caller context.Context, systemName string,
-) *gensurla.StoryRefreshResult {
+) *genhighbay.StoryRefreshResult {
 	t.Helper()
 	principal, ok := PrincipalFromContext(caller)
 	require.True(t, ok, "the saved refresh belongs to an authenticated caller")
@@ -41,19 +41,19 @@ func architectureSnapshotForTest(digest, systemName string) *savedArchitecture {
 	agentID := "agent:" + systemName + ".refund_agent"
 	return &savedArchitecture{
 		DesignDigest: digest, SystemName: systemName,
-		Containers: []*gensurla.C4ContainerItem{
+		Containers: []*genhighbay.C4ContainerItem{
 			{ID: serviceID, Name: systemName, Kind: "service", Description: "Public Orders HTTP and MCP service"},
 			{ID: "toolset:refund_tools", Name: "refund_tools", Kind: "toolset", Description: "Order lookup and payment refund tools"},
 			{ID: agentID, Name: "refund_agent", Kind: "agent", Description: "Executes durable order refund workflows"},
 		},
-		Edges: []*gensurla.C4EdgeItem{
+		Edges: []*genhighbay.C4EdgeItem{
 			{FromID: serviceID, ToID: agentID, Protocol: "Goa-AI Agent Workflow"},
 			{FromID: agentID, ToID: "toolset:refund_tools", Protocol: "Goa-AI Toolset"},
 		},
-		AgentPolicies: []*gensurla.AgentPolicyItem{{
+		AgentPolicies: []*genhighbay.AgentPolicyItem{{
 			AgentID: agentID, MaxExecutionSeconds: 120, MaxToolCalls: 6, MaxRecoveryTurns: 2,
 		}},
-		Tools: []*gensurla.ToolContractItem{{
+		Tools: []*genhighbay.ToolContractItem{{
 			ID: systemName + ".refund_agent/refund_tools.issue_refund", Toolset: systemName + ".refund_tools",
 			Name: "issue_refund", Description: "Issue a payment refund",
 			ArgsSchema:     "{\n          \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"order_id\": {\n              \"type\": \"string\"\n            }\n          },\n          \"required\": [\n            \"order_id\"\n          ],\n          \"type\": \"object\"\n        }",

@@ -15,9 +15,9 @@
 // the run.
 //
 // Start, called by the API, takes the lock before it writes request.json and
-// hands the locked file to `surla verify-run supervise <dir> <build-cache-dir>`, a new session
+// hands the locked file to `hbay verify-run supervise <dir> <build-cache-dir>`, a new session
 // that keeps the lock for its whole life. The supervisor starts
-// `surla verify-run execute <dir> <build-cache-dir>` as the leader of a new process group, so
+// `hbay verify-run execute <dir> <build-cache-dir>` as the leader of a new process group, so
 // the builds, the evaluator suite and the candidates it runs all stay in that
 // one group. When the executor ends, for any reason, the supervisor kills the
 // group, waits until it is empty, and only then writes result.json. If the
@@ -50,9 +50,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/procgroup"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 type (
@@ -69,7 +69,7 @@ type (
 		AcceptedAt time.Time `json:"accepted_at"`
 		// Timeout is how long the run may take before its supervisor stops it
 		// and records it as interrupted. Zero means the run has no time limit,
-		// as for surla verify unless -timeout is given; verify_change always
+		// as for hbay verify unless -timeout is given; verify_change always
 		// sets the operator's limit.
 		Timeout time.Duration `json:"timeout"`
 		// Plan is the complete verification plan: the operator's candidate
@@ -97,7 +97,7 @@ type (
 		Summary string `json:"summary,omitempty"`
 		// PartialReportDigest names, for an interrupted run, the report the
 		// suite saved while it was being stopped, if it saved one. Such a
-		// report never passes; surla verify prints it as evidence, and
+		// report never passes; hbay verify prints it as evidence, and
 		// get_verification never returns it.
 		PartialReportDigest string `json:"partial_report_digest,omitempty"`
 	}
@@ -214,7 +214,7 @@ func NewRunID() string {
 
 // Start accepts req under root and starts its supervisor, then returns the
 // supervisor's PID without waiting for the run. command is the argument list
-// that runs this program, such as the path of the surla executable; Start
+// that runs this program, such as the path of the hbay executable; Start
 // appends "verify-run supervise <dir> <build-cache-dir>". The supervisor gets this process's
 // environment plus settings, the provider request settings the run's test
 // program may use; they pass to the executor only through the environment,
@@ -306,7 +306,7 @@ func Start(
 	return cmd.Process.Pid, nil
 }
 
-// Supervise runs as `surla verify-run supervise <dir> <build-cache-dir>`. It holds the run lock
+// Supervise runs as `hbay verify-run supervise <dir> <build-cache-dir>`. It holds the run lock
 // it inherited on descriptor 3, starts the executor as the leader of a new
 // process group with the read end of a control pipe on its descriptor 3, and
 // waits for it. SIGTERM, SIGINT or SIGHUP cancels the run, and the request's
@@ -388,7 +388,7 @@ func Supervise(dir string, command []string, buildCacheDir string) error {
 	return writeJSON(dir, resultFile, result)
 }
 
-// Execute runs as `surla verify-run execute <dir> <build-cache-dir>`, the leader of the run's
+// Execute runs as `hbay verify-run execute <dir> <build-cache-dir>`, the leader of the run's
 // process group. It watches the control pipe on descriptor 3 and kills its
 // whole group when the supervisor dies. It then takes every provider family
 // out of its own process (takeProviderFamilies), so the run's preparation

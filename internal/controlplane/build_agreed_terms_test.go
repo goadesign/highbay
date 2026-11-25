@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestTestWriterAssignmentHoldsTheAgreedTerms confirms a change with two
@@ -24,13 +24,13 @@ import (
 func TestTestWriterAssignmentHoldsTheAgreedTerms(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
-	wantAnswers := []*gensurla.ConfirmedAnswer{
+	wantAnswers := []*genhighbay.ConfirmedAnswer{
 		{ID: "chg-ambiguity-01", Question: "Does the limit include tax?", Answer: "without_tax"},
 		{ID: "chg-ambiguity-02", Question: "Where does an instant refund go?", Answer: "original_payment"},
 	}
-	wantExamples := []*gensurla.ExampleItem{
+	wantExamples := []*genhighbay.ExampleItem{
 		{
 			ID: agreed.Examples[0].ID, Scenario: "Refund at the limit", InputSummary: "Order total $50.00 before tax",
 			ExpectedOutcome: "Instant refund to the original card", VerificationKind: "deterministic",
@@ -44,7 +44,7 @@ func TestTestWriterAssignmentHoldsTheAgreedTerms(t *testing.T) {
 	require.Equal(t, wantExamples, agreed.Examples, "the user confirmed the edited and the added example")
 	require.Equal(t, wantPreserved, agreed.PreservedBehaviors)
 
-	var proposal *gensurla.ProposedRevisionItem
+	var proposal *genhighbay.ProposedRevisionItem
 	steps := []struct {
 		name    string
 		step    func(t *testing.T)
@@ -68,7 +68,7 @@ func TestTestWriterAssignmentHoldsTheAgreedTerms(t *testing.T) {
 	for _, s := range steps {
 		t.Run(s.name, func(t *testing.T) {
 			s.step(t)
-			assignment, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			assignment, err := cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			assert.Equal(t, agreed.RequestRevision, assignment.RequestRevision)
 			assert.Equal(t, s.inForce, assignment.InForce)
@@ -83,21 +83,21 @@ func TestTestWriterAssignmentHoldsTheAgreedTerms(t *testing.T) {
 // questions and preserved behaviors: the loaded build equals the saved one,
 // and empty lists stay empty rather than absent.
 func TestBuildFileKeepsTheAgreedTerms(t *testing.T) {
-	example := &gensurla.ExampleItem{
+	example := &genhighbay.ExampleItem{
 		ID: "check_01", Scenario: "Refund at the limit", InputSummary: "Order total $50.00 before tax",
 		ExpectedOutcome: "Instant refund to the original card", VerificationKind: "deterministic",
 	}
 	cases := []struct {
 		name      string
-		answers   []*gensurla.ConfirmedAnswer
+		answers   []*genhighbay.ConfirmedAnswer
 		preserved []string
 	}{
 		{
 			name:      "answered questions and preserved behaviors",
-			answers:   []*gensurla.ConfirmedAnswer{{ID: "chg-ambiguity-01", Question: "Does the limit include tax?", Answer: "without_tax"}},
+			answers:   []*genhighbay.ConfirmedAnswer{{ID: "chg-ambiguity-01", Question: "Does the limit include tax?", Answer: "without_tax"}},
 			preserved: []string{"Cross-tenant order lookups return 404 Not Found."},
 		},
-		{name: "no questions and no preserved behaviors", answers: []*gensurla.ConfirmedAnswer{}, preserved: []string{}},
+		{name: "no questions and no preserved behaviors", answers: []*genhighbay.ConfirmedAnswer{}, preserved: []string{}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestBuildFileKeepsTheAgreedTerms(t *testing.T) {
 			saved.ChangeID, saved.RequestRevision = "chg", "revision"
 			saved.Stories = refundStory("Refund over the limit")
 			saved.DesignSource = `{"design/design.go":"package design\n"}`
-			saved.Answers, saved.Examples, saved.PreservedBehaviors = tc.answers, []*gensurla.ExampleItem{example}, tc.preserved
+			saved.Answers, saved.Examples, saved.PreservedBehaviors = tc.answers, []*genhighbay.ExampleItem{example}, tc.preserved
 			saved.TestWriter.Findings = []string{}
 			require.NoError(t, cp.cards.saveOpenBuild(saved))
 			loaded, found, err := cp.cards.loadOpenBuild()
@@ -129,14 +129,14 @@ func TestBuildFileKeepsTheAgreedTerms(t *testing.T) {
 func TestOnlyTheTestWriterReadsTheAgreedTerms(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
-	endpoints := gensurla.NewEndpoints(cp)
+	endpoints := genhighbay.NewEndpoints(cp)
 	applyOperationPolicy(endpoints, cp.tracer("test"))
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerManagement, CallerTestWriter} {
 		t.Run(string(kind), func(t *testing.T) {
 			before := readBuildFile(t, cp, "chg")
-			result, err := endpoints.GetTestWriterAssignment(asCaller(agreedOwner, kind), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			result, err := endpoints.GetTestWriterAssignment(asCaller(agreedOwner, kind), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			if kind != CallerTestWriter {
 				assertRefused(t, err, "forbidden")
 				assert.Nil(t, result)
@@ -144,7 +144,7 @@ func TestOnlyTheTestWriterReadsTheAgreedTerms(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assignment, ok := result.(*gensurla.TestWriterAssignment)
+			assignment, ok := result.(*genhighbay.TestWriterAssignment)
 			require.True(t, ok)
 			assert.Equal(t, agreed.Examples, assignment.Examples)
 		})
@@ -152,7 +152,7 @@ func TestOnlyTheTestWriterReadsTheAgreedTerms(t *testing.T) {
 }
 
 // TestBuildWithoutAgreedTermsAsksToBuildAgain writes a test-writer build file
-// without the agreed terms, as Surla saved builds before it kept them. The
+// without the agreed terms, as Highbay saved builds before it kept them. The
 // file still decodes, so the build reads and lists, but the test writer's assignment is refused with the step to
 // build again, recording no read; building again gives the terms.
 func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
@@ -177,14 +177,14 @@ func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Assignments, 1)
 	before := readBuildFile(t, cp, "chg")
-	_, err = cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the user builds this change again on the views page")
 	assert.Equal(t, before, readBuildFile(t, cp, "chg"), "a refused read records nothing")
 
 	_, err = startBuildAgain(t, cp, agreedUser, "chg", agreed.RequestRevision)
 	require.NoError(t, err)
-	assignment, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assignment, err := cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, agreed.Examples, assignment.Examples)
 }
@@ -193,9 +193,9 @@ func TestBuildWithoutAgreedTermsAsksToBuildAgain(t *testing.T) {
 // example and two preserved behaviors, then confirms it as the user with an
 // answer to each question, the example edited and one example added. It
 // returns the confirmed card.
-func confirmAgreedTerms(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
+func confirmAgreedTerms(t *testing.T, cp *ControlPlane, changeID string) *genhighbay.ChangeCardResult {
 	t.Helper()
-	analysis := refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion(), &gensurla.CP1AnalysisAmbiguity{
+	analysis := refundAnalysis("Refunds up to $50 are instant.", refundTaxQuestion(), &genhighbay.CP1AnalysisAmbiguity{
 		Question: "Where does an instant refund go?", Options: []string{"original_payment", "store_credit"},
 	})
 	analysis.PreservedBehaviors = append(analysis.PreservedBehaviors, "Refunds of gift cards stay manual.")
@@ -206,13 +206,13 @@ func confirmAgreedTerms(t *testing.T, cp *ControlPlane, changeID string) *gensur
 	edited := *proposed.Examples[0]
 	edited.InputSummary = "Order total $50.00 before tax"
 	edited.ExpectedOutcome = "Instant refund to the original card"
-	confirmed, err := cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{
 			proposed.Ambiguities[0].ID: "without_tax",
 			proposed.Ambiguities[1].ID: "original_payment",
 		},
-		Examples: []*gensurla.ExampleItem{&edited, {
+		Examples: []*genhighbay.ExampleItem{&edited, {
 			ID: "refund_over_limit", Scenario: "Refund just over the limit", InputSummary: "Order total $50.01 before tax",
 			ExpectedOutcome: "The refund waits for a manager", VerificationKind: "deterministic",
 		}},

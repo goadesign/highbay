@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestViewsPageProofPresentsOneSavedVerdict keeps report verdicts independent
@@ -22,16 +22,16 @@ func TestViewsPageProofPresentsOneSavedVerdict(t *testing.T) {
 		passed        bool
 		suiteFailed   bool
 		inputsCurrent bool
-		counts        gensurla.VerificationCounts
-		scenarios     []*gensurla.VerificationScenario
+		counts        genhighbay.VerificationCounts
+		scenarios     []*genhighbay.VerificationScenario
 		heading       string
 		showCounts    bool
 	}{
 		{
 			name: "current pass", passed: true, inputsCurrent: true,
-			counts: gensurla.VerificationCounts{Required: 1, Passed: 1},
-			scenarios: []*gensurla.VerificationScenario{
-				{ID: "holdout-1", Outcome: "passed", Checks: []*gensurla.VerificationCheck{
+			counts: genhighbay.VerificationCounts{Required: 1, Passed: 1},
+			scenarios: []*genhighbay.VerificationScenario{
+				{ID: "holdout-1", Outcome: "passed", Checks: []*genhighbay.VerificationCheck{
 					{Name: "A visible scenario may use this name", Passed: true},
 				}},
 			},
@@ -39,24 +39,24 @@ func TestViewsPageProofPresentsOneSavedVerdict(t *testing.T) {
 		},
 		{
 			name: "historical pass", passed: true,
-			counts:    gensurla.VerificationCounts{Required: 1, Passed: 1},
-			scenarios: []*gensurla.VerificationScenario{{ID: "visible-check", Outcome: "passed"}},
+			counts:    genhighbay.VerificationCounts{Required: 1, Passed: 1},
+			scenarios: []*genhighbay.VerificationScenario{{ID: "visible-check", Outcome: "passed"}},
 			heading:   "The check passed: 1 of 1 scenarios.",
 		},
 		{
 			name: "suite failure despite passed scenarios", suiteFailed: true, inputsCurrent: true,
-			counts:    gensurla.VerificationCounts{Required: 1, Passed: 1},
-			scenarios: []*gensurla.VerificationScenario{{ID: "visible-check", Outcome: "passed"}},
+			counts:    genhighbay.VerificationCounts{Required: 1, Passed: 1},
+			scenarios: []*genhighbay.VerificationScenario{{ID: "visible-check", Outcome: "passed"}},
 			heading:   "The check did not pass: 1 of 1 scenarios passed.", showCounts: true,
 		},
 		{
 			name: "all outcome kinds", inputsCurrent: true,
-			counts: gensurla.VerificationCounts{
+			counts: genhighbay.VerificationCounts{
 				Required: 4, Passed: 1, Failed: 1, NotRun: 1, HarnessError: 1,
 			},
-			scenarios: []*gensurla.VerificationScenario{
+			scenarios: []*genhighbay.VerificationScenario{
 				{ID: "passed-check", Outcome: "passed"},
-				{ID: "failed-check", Outcome: "failed", Checks: []*gensurla.VerificationCheck{
+				{ID: "failed-check", Outcome: "failed", Checks: []*genhighbay.VerificationCheck{
 					{Name: "Expected result", Passed: false, Diagnostic: &diagnostic},
 				}},
 				{ID: "missing-check", Outcome: "not_run"},
@@ -76,7 +76,7 @@ func TestViewsPageProofPresentsOneSavedVerdict(t *testing.T) {
 			})
 			proposed := mustPropose(t, cp, guide, "chg-proof-presentation",
 				"Route refunds to a manager.", refundAnalysis("Route refunds to a manager."))
-			card, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+			card, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 				ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 				Answers: map[string]string{}, Examples: proposed.Examples,
 			})
@@ -84,12 +84,12 @@ func TestViewsPageProofPresentsOneSavedVerdict(t *testing.T) {
 			run := passedRun(card, "11111111-1111-4111-8111-111111111111",
 				strings.Repeat("1", 40), strings.Repeat("3", 64))
 			run.InputsCurrent = tc.inputsCurrent
-			run.TestSource = gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{
+			run.TestSource = genhighbay.NewTestSourceWrittenTests(&genhighbay.AgentWrittenTests{
 				Commit: run.SuiteCommit, Notice: writtenTestsNotice,
 			})
-			run.State = gensurla.NewStateCompleted(&gensurla.VerificationCompleted{
+			run.State = genhighbay.NewStateCompleted(&genhighbay.VerificationCompleted{
 				SuiteID: "accepted_checks", Environment: "sim",
-				Report: &gensurla.BuilderVerificationReport{
+				Report: &genhighbay.BuilderVerificationReport{
 					ReportDigest: strings.Repeat("3", 64), Passed: tc.passed,
 					SuiteFailed: tc.suiteFailed, Counts: &tc.counts, Scenarios: tc.scenarios,
 				},
@@ -98,37 +98,37 @@ func TestViewsPageProofPresentsOneSavedVerdict(t *testing.T) {
 			svc.set(run)
 			svc.list(card.ChangeID, run.RunID)
 			ps := startPageServer(t, svc)
-			wireRun, err := gensurla.EncodeVerificationStatusResult(run)
+			wireRun, err := genhighbay.EncodeVerificationStatusResult(run)
 			require.NoError(t, err)
 			runPageScript(t, ps, map[string]any{
 				"change": card.ChangeID, "run": json.RawMessage(wireRun), "heading": tc.heading,
 				"showCounts": tc.showCounts, "notice": writtenTestsNotice,
 			}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor").dataset.changeId === input.change, "the change did not open");
-page.$("#surla-nav-cp4").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run.run_id, "the saved run did not open");
-expect(page.text("#surla-cp4-title") === input.heading, "the saved verdict or denominator changed");
-const notice = page.$("#surla-cp4-test-source");
+await until(() => page.$("#highbay-cp1-editor").dataset.changeId === input.change, "the change did not open");
+page.$("#highbay-nav-cp4").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run.run_id, "the saved run did not open");
+expect(page.text("#highbay-cp4-title") === input.heading, "the saved verdict or denominator changed");
+const notice = page.$("#highbay-cp4-test-source");
 expect(notice && notice.tagName === "P" && notice.textContent === input.notice, "the source notice is not neutral and intact");
 expect(notice.textContent.includes("not isolated from the builder"), "the source notice lost its non-isolation meaning");
-expect(!page.$("#surla-cp4-run-list"), "a singleton run acquired a selector");
+expect(!page.$("#highbay-cp4-run-list"), "a singleton run acquired a selector");
 expect(Boolean(page.$('[aria-label="Scenario outcome counts"]')) === input.showCounts, "detailed counts are shown in the wrong state");
-expect(!page.text("#surla-cp4-verification").includes("Unseen audit scenarios"), "a scenario ID was treated as a hidden-scenario flag");
-const started = page.$("#surla-cp4-started time");
+expect(!page.text("#highbay-cp4-verification").includes("Unseen audit scenarios"), "a scenario ID was treated as a hidden-scenario flag");
+const started = page.$("#highbay-cp4-started time");
 expect(started && started.dateTime === input.run.accepted_at, "the visible start time lost the accepted timestamp");
-expect(page.text("#surla-cp4-started").startsWith("Check started "), "request acceptance is not labelled as a check start");
+expect(page.text("#highbay-cp4-started").startsWith("Check started "), "request acceptance is not labelled as a check start");
 expect(!started.textContent.includes("T12:34:56"), "the start time is still raw ISO in the reading path");
-expect(page.$$("#surla-cp4-details time").some((time) => time.textContent === input.run.accepted_at), "the exact ISO start disappeared from Details");
-await until(() => page.text("#surla-cp4-inputs").includes(input.run.inputs_current ? "This result matches" : "does not match"), "the selected run's current-input fact is missing");
+expect(page.$$("#highbay-cp4-details time").some((time) => time.textContent === input.run.accepted_at), "the exact ISO start disappeared from Details");
+await until(() => page.text("#highbay-cp4-inputs").includes(input.run.inputs_current ? "This result matches" : "does not match"), "the selected run's current-input fact is missing");
 const report = input.run.state.value.report;
-const outcomes = page.$$(".surla-verification-scenarios > li");
+const outcomes = page.$$(".highbay-verification-scenarios > li");
 expect(outcomes.length === report.scenarios.length, "the declared scenario denominator was truncated");
 for (let index = 0; index < outcomes.length; index++) {
   expect(outcomes[index].textContent.includes(report.scenarios[index].id), "a received scenario disappeared or changed order");
 }
 if (report.suite_failed) {
-  expect(page.text("#surla-cp4-verification").includes("The evaluation failed or ended unexpectedly."), "suite failure context disappeared");
+  expect(page.text("#highbay-cp4-verification").includes("The evaluation failed or ended unexpectedly."), "suite failure context disappeared");
 }
 if (report.counts.failed) {
   expect(outcomes[1].textContent.includes("The result differed."), "failure diagnostics disappeared");

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 type (

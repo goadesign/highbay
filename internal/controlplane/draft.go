@@ -16,9 +16,9 @@ import (
 	"strconv"
 	"strings"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/designversion"
 )
 
 // committedDesignCanonicalError preserves a failed canonicalization's actual
@@ -32,11 +32,11 @@ type committedDesignCanonicalError struct {
 
 const (
 	// draftFolderName is the guide's module, outside the project's Git files.
-	draftFolderName = ".surla-draft"
+	draftFolderName = ".highbay-draft"
 	// draftStagingName is owned only when its first-written marker identifies it.
-	draftStagingName = ".surla-draft-staging"
-	// draftMarkerPrefix distinguishes Surla's folders from unrelated user files.
-	draftMarkerPrefix = "# surla draft "
+	draftStagingName = ".highbay-draft-staging"
+	// draftMarkerPrefix distinguishes Highbay's folders from unrelated user files.
+	draftMarkerPrefix = "# highbay draft "
 )
 
 // errCommittedDesignNotRegular marks a committed design path that is a link
@@ -59,7 +59,7 @@ func (c *ControlPlane) readDraftSnapshot(
 		files, readErr = designversion.ReadDraft(filepath.Join(wsDir, draftFolderName), draft)
 		saved = list
 		if readErr != nil {
-			return gensurla.MakeUnprocessable(readErr)
+			return genhighbay.MakeUnprocessable(readErr)
 		}
 		return nil
 	})
@@ -76,10 +76,10 @@ func (c *ControlPlane) withDraftSnapshot(
 	c.workspaceMu.RLock()
 	defer c.workspaceMu.RUnlock()
 	if c.serverCtx.Err() != nil {
-		return gensurla.MakeUnavailable(errors.New("the control plane is shutting down"))
+		return genhighbay.MakeUnavailable(errors.New("the control plane is shutting down"))
 	}
 	if c.activeWorkspaceDir != wsDir || c.boundWorkspaceDev != wsDev || c.boundWorkspaceIno != wsIno {
-		return gensurla.MakeUnprocessable(errors.New("bound workspace changed; call refresh_story again"))
+		return genhighbay.MakeUnprocessable(errors.New("bound workspace changed; call refresh_story again"))
 	}
 	c.draftMu.Lock()
 	defer c.draftMu.Unlock()
@@ -98,12 +98,12 @@ func (c *ControlPlane) withDraftSnapshot(
 	draft, err := openDraftFolder(project, draftFolderName)
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !missing {
-		return gensurla.MakeUnprocessable(err)
+		return genhighbay.MakeUnprocessable(err)
 	}
 	if draft != nil && !exists {
 		// Publication always saves provenance before the folder rename. Without
 		// that record, even a marker cannot establish ownership of this folder.
-		refusal := gensurla.MakeUnprocessable(errors.New("The draft folder already exists but this project's draft provenance is missing. Preserve it by moving .surla-draft aside, or restore this project's draft records, then call refresh_story again."))
+		refusal := genhighbay.MakeUnprocessable(errors.New("The draft folder already exists but this project's draft provenance is missing. Preserve it by moving .highbay-draft aside, or restore this project's draft records, then call refresh_story again."))
 		return errors.Join(refusal, draft.Close())
 	}
 	remake := missing || !exists
@@ -147,7 +147,7 @@ func (c *ControlPlane) withDraftSnapshot(
 			}
 		}
 		if err := errors.Join(readErr, draft.Close()); err != nil {
-			return gensurla.MakeUnprocessable(err)
+			return genhighbay.MakeUnprocessable(err)
 		}
 	}
 	if remake {
@@ -174,7 +174,7 @@ func (c *ControlPlane) withDraftSnapshot(
 			}
 			c.draftMu.Lock()
 			if err != nil {
-				return gensurla.MakeUnprocessable(err)
+				return genhighbay.MakeUnprocessable(err)
 			}
 			// The open root still names the original inode even if its path
 			// was replaced while Git resolved that path. Check the binding again
@@ -192,22 +192,22 @@ func (c *ControlPlane) withDraftSnapshot(
 			}
 			sameDraft, err := draftStateMatches(project, draftInfo, marker, markerMissing)
 			if err != nil {
-				return gensurla.MakeUnprocessable(err)
+				return genhighbay.MakeUnprocessable(err)
 			}
 			if currentExists != exists || exists && !reflect.DeepEqual(current, list) || !sameDraft {
-				return gensurla.MakeUnprocessable(errors.New(
+				return genhighbay.MakeUnprocessable(errors.New(
 					"draft or design provenance changed while reading the project's commit; call refresh_story again",
 				))
 			}
 		}
 		if err := c.makeDraft(wsDir, project, &list, restored, fromProject, commit, committed,
 			draftInfo, markerMissing); err != nil {
-			return gensurla.MakeUnprocessable(err)
+			return genhighbay.MakeUnprocessable(err)
 		}
 	}
 	draft, err = openDraftFolder(project, draftFolderName)
 	if err != nil {
-		return gensurla.MakeUnprocessable(err)
+		return genhighbay.MakeUnprocessable(err)
 	}
 	return errors.Join(use(project, draft, list), draft.Close())
 }
@@ -501,7 +501,7 @@ func draftMarkerStart(marker string) (uint64, error) {
 	value, found := strings.CutPrefix(line, draftMarkerPrefix)
 	start, err := strconv.ParseUint(value, 10, 64)
 	if !found || err != nil || start == 0 {
-		return 0, errors.New("draft .gitignore has no Surla draft marker; the folder was left unchanged")
+		return 0, errors.New("draft .gitignore has no Highbay draft marker; the folder was left unchanged")
 	}
 	return start, nil
 }
@@ -519,12 +519,12 @@ func removeUnmarkedDroppedDraft(project *os.Root, before fs.FileInfo) error {
 		return err
 	}
 	if !os.SameFile(before, info) || !errors.Is(markerErr, fs.ErrNotExist) {
-		return gensurla.MakeUnprocessable(errors.New("draft changed before its remake; call refresh_story again"))
+		return genhighbay.MakeUnprocessable(errors.New("draft changed before its remake; call refresh_story again"))
 	}
 	return project.RemoveAll(draftFolderName)
 }
 
-// removeOwnedDraft removes only a real folder with Surla's first-written
+// removeOwnedDraft removes only a real folder with Highbay's first-written
 // marker. An unrelated directory, link or special file is never replaced.
 func removeOwnedDraft(project *os.Root, name string) error {
 	root, err := openDraftFolder(project, name)

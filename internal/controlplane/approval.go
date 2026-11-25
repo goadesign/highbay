@@ -14,10 +14,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // approvalInputs is the owned build/test selection before unlocked report work.
@@ -61,8 +61,8 @@ type approvalChecks struct {
 // or deployed.
 func (c *ControlPlane) ApproveMerge(
 	ctx context.Context,
-	p *gensurla.ApproveMergePayload,
-) (*gensurla.ChangeCardResult, error) {
+	p *genhighbay.ApproveMergePayload,
+) (*genhighbay.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -91,7 +91,7 @@ func (c *ControlPlane) ApproveMerge(
 	}
 
 	approved := *record.card
-	approved.Approval = &gensurla.ApprovalItem{
+	approved.Approval = &genhighbay.ApprovalItem{
 		ApprovedBy:      principal.ID,
 		ReportDigest:    report.Digest,
 		CandidateCommit: p.CandidateCommit,
@@ -116,7 +116,7 @@ func (c *ControlPlane) ApproveMerge(
 
 // readApprovalInputs checks ownership and the agreed build/test selection once.
 func (c *ControlPlane) readApprovalInputs(
-	ctx context.Context, principal Principal, p *gensurla.ApproveMergePayload,
+	ctx context.Context, principal Principal, p *genhighbay.ApproveMergePayload,
 ) (approvalInputs, error) {
 	target, err := c.resolvePromotion(ctx)
 	if err != nil {
@@ -145,20 +145,20 @@ func (c *ControlPlane) readApprovalInputs(
 		return approvalInputs{}, err
 	}
 	if !exists {
-		return approvalInputs{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return approvalInputs{}, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return approvalInputs{}, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return approvalInputs{}, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	if record.card.Status != StatusConfirmed {
-		return approvalInputs{}, gensurla.MakeConflict(fmt.Errorf(
+		return approvalInputs{}, genhighbay.MakeConflict(fmt.Errorf(
 			"change_id %q must be confirmed before approval (status %q)",
 			p.ChangeID,
 			record.card.Status,
 		))
 	}
 	if record.card.RequestRevision != p.RequestRevision {
-		return approvalInputs{}, gensurla.MakeConflict(fmt.Errorf(
+		return approvalInputs{}, genhighbay.MakeConflict(fmt.Errorf(
 			"request_revision mismatch for %q: got %q, want %q",
 			p.ChangeID,
 			p.RequestRevision,
@@ -191,7 +191,7 @@ func (c *ControlPlane) loadApprovalReport(
 	} else {
 		runs := verifierRuns(c.verifier)
 		if runs == nil {
-			return verify.Report{}, gensurla.MakeNotImplemented(errVerificationUnavailable)
+			return verify.Report{}, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 		}
 		report, err = verifyrun.LoadReport(runs.Plan.ReportDir, digest)
 	}
@@ -204,7 +204,7 @@ func (c *ControlPlane) loadApprovalReport(
 // checkApprovalReport is the shared promotion and candidate preflight used by
 // review_verification and approve_merge before their locked rechecks.
 func (c *ControlPlane) checkApprovalReport(
-	ctx context.Context, p *gensurla.ApproveMergePayload, inputs approvalInputs, report verify.Report,
+	ctx context.Context, p *genhighbay.ApproveMergePayload, inputs approvalInputs, report verify.Report,
 ) (approvalChecks, error) {
 	target, build, testsCommit, source := inputs.target, inputs.build, inputs.testsCommit, inputs.source
 
@@ -213,13 +213,13 @@ func (c *ControlPlane) checkApprovalReport(
 	}
 	if report.Binding.SuiteCommit != testsCommit {
 		if source == verify.TestsEvaluator {
-			return approvalChecks{}, gensurla.MakeUnprocessable(fmt.Errorf(
+			return approvalChecks{}, genhighbay.MakeUnprocessable(fmt.Errorf(
 				"the report ran the tests at %s; this project's stored verification settings name the suite at %s: the builder verifies the candidate again; then approve that run",
 				report.Binding.SuiteCommit,
 				testsCommit,
 			))
 		}
-		return approvalChecks{}, gensurla.MakeUnprocessable(fmt.Errorf(
+		return approvalChecks{}, genhighbay.MakeUnprocessable(fmt.Errorf(
 			"the report ran the tests at %s; the tests accepted for revision %s are at %s: the builder verifies the candidate again; then approve that run",
 			report.Binding.SuiteCommit,
 			p.RequestRevision,
@@ -231,7 +231,7 @@ func (c *ControlPlane) checkApprovalReport(
 	if target != nil {
 		artifacts, err := target.CurrentArtifacts(ctx, p.CandidateCommit)
 		if err != nil {
-			return approvalChecks{}, gensurla.MakeUnprocessable(err)
+			return approvalChecks{}, genhighbay.MakeUnprocessable(err)
 		}
 		expectedArtifacts = artifacts
 		if cloned := maps.Clone(artifacts); cloned != nil {
@@ -249,12 +249,12 @@ func (c *ControlPlane) checkApprovalReport(
 	if err := verify.Approve(current, report); err != nil {
 		if errors.Is(err, verify.ErrStaleReport) {
 			if target != nil && !maps.Equal(expectedArtifacts, report.Binding.Artifacts) {
-				return approvalChecks{}, gensurla.MakeUnprocessable(fmt.Errorf(
+				return approvalChecks{}, genhighbay.MakeUnprocessable(fmt.Errorf(
 					"%w: publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings",
 					err,
 				))
 			}
-			return approvalChecks{}, gensurla.MakeUnprocessable(err)
+			return approvalChecks{}, genhighbay.MakeUnprocessable(err)
 		}
 		return approvalChecks{}, err
 	}
@@ -273,7 +273,7 @@ func (c *ControlPlane) checkApprovalReport(
 // recheckApproval rejects changes during external reads. The caller holds c.mu;
 // approval writes keep that lock until persistence, while reviews only observe.
 func (c *ControlPlane) recheckApproval(
-	principal Principal, p *gensurla.ApproveMergePayload, inputs approvalInputs, checked approvalChecks,
+	principal Principal, p *genhighbay.ApproveMergePayload, inputs approvalInputs, checked approvalChecks,
 ) (storedChangeCard, verify.TestsSource, error) {
 	build, testsCommit, candidateErr := inputs.build, inputs.testsCommit, checked.candidateErr
 
@@ -282,17 +282,17 @@ func (c *ControlPlane) recheckApproval(
 		return storedChangeCard{}, "", err
 	}
 	if !exists {
-		return storedChangeCard{}, "", gensurla.MakeNotFound(fmt.Errorf("change card %q is no longer saved", p.ChangeID))
+		return storedChangeCard{}, "", genhighbay.MakeNotFound(fmt.Errorf("change card %q is no longer saved", p.ChangeID))
 	}
 	if record.card.Status != StatusConfirmed {
-		return storedChangeCard{}, "", gensurla.MakeConflict(fmt.Errorf(
+		return storedChangeCard{}, "", genhighbay.MakeConflict(fmt.Errorf(
 			"change_id %q must be confirmed before approval (status %q)",
 			p.ChangeID,
 			record.card.Status,
 		))
 	}
 	if record.card.RequestRevision != p.RequestRevision {
-		return storedChangeCard{}, "", gensurla.MakeConflict(fmt.Errorf(
+		return storedChangeCard{}, "", genhighbay.MakeConflict(fmt.Errorf(
 			"request_revision mismatch for %q: got %q, want %q",
 			p.ChangeID,
 			p.RequestRevision,
@@ -305,7 +305,7 @@ func (c *ControlPlane) recheckApproval(
 	}
 	if nowBuild.file.Number != build.file.Number ||
 		!nowBuild.file.StartedAt.Equal(build.file.StartedAt) {
-		return storedChangeCard{}, "", gensurla.MakeConflict(errors.New("the open build changed while approving: verify the current build, then approve its run"))
+		return storedChangeCard{}, "", genhighbay.MakeConflict(errors.New("the open build changed while approving: verify the current build, then approve its run"))
 	}
 	// A drop can change the recorded branch tips while Git reads them. Its
 	// current stop instruction wins over a semantic refusal of the old build.
@@ -314,7 +314,7 @@ func (c *ControlPlane) recheckApproval(
 	}
 	selection, err := c.testsChoice(principal, p.ChangeID, p.RequestRevision)
 	if err != nil || selection.commit != testsCommit {
-		return storedChangeCard{}, "", gensurla.MakeConflict(errors.New("the accepted tests changed while approving: approve again"))
+		return storedChangeCard{}, "", genhighbay.MakeConflict(errors.New("the accepted tests changed while approving: approve again"))
 	}
 	return record, selection.source, nil
 }
@@ -352,7 +352,7 @@ func (c *ControlPlane) recheckApproval(
 func (c *ControlPlane) currentCard(
 	ctx context.Context,
 	record storedChangeCard,
-) (*gensurla.ChangeCardResult, error) {
+) (*genhighbay.ChangeCardResult, error) {
 	return c.currentCardWithPromotion(ctx, record, c.resolvePromotion)
 }
 
@@ -360,7 +360,7 @@ func (c *ControlPlane) currentCard(
 // already holds. It does not reacquire workspaceMu while a writer may wait.
 func (c *ControlPlane) currentCardAt(
 	ctx context.Context, record storedChangeCard, workspace string,
-) (*gensurla.ChangeCardResult, error) {
+) (*genhighbay.ChangeCardResult, error) {
 	return c.currentCardWithPromotion(ctx, record, func(ctx context.Context) (PromotionTarget, error) {
 		return c.resolvePromotionAt(ctx, workspace)
 	})
@@ -370,18 +370,18 @@ func (c *ControlPlane) currentCardAt(
 // lifetime. Promotion I/O runs without holding c.mu.
 func (c *ControlPlane) currentCardWithPromotion(
 	ctx context.Context, record storedChangeCard, resolve func(context.Context) (PromotionTarget, error),
-) (*gensurla.ChangeCardResult, error) {
+) (*genhighbay.ChangeCardResult, error) {
 	card := record.card
 	saved := card.Approval
 	if saved == nil {
 		return card, nil
 	}
-	ctx, span := c.tracer("github.com/goadesign/surla/internal/controlplane").Start(
+	ctx, span := c.tracer("github.com/goadesign/highbay/internal/controlplane").Start(
 		ctx,
 		"controlplane.check_approval",
 		trace.WithAttributes(
-			attribute.String("surla.change_id", card.ChangeID),
-			attribute.String("surla.candidate_commit", saved.CandidateCommit),
+			attribute.String("highbay.change_id", card.ChangeID),
+			attribute.String("highbay.candidate_commit", saved.CandidateCommit),
 		),
 	)
 	defer span.End()
@@ -395,8 +395,8 @@ func (c *ControlPlane) currentCardWithPromotion(
 		span.AddEvent(
 			"approval.hidden_tests_changed",
 			trace.WithAttributes(
-				attribute.String("surla.change_id", card.ChangeID),
-				attribute.String("surla.suite_commit", saved.SuiteCommit),
+				attribute.String("highbay.change_id", card.ChangeID),
+				attribute.String("highbay.suite_commit", saved.SuiteCommit),
 			),
 		)
 		stale := *card
@@ -422,10 +422,10 @@ func (c *ControlPlane) currentCardWithPromotion(
 		span.SetStatus(codes.Error, err.Error())
 		unverified := *card
 		unverified.Approval = nil
-		unverified.UnverifiedApproval = &gensurla.UnverifiedApprovalItem{
+		unverified.UnverifiedApproval = &genhighbay.UnverifiedApprovalItem{
 			Approval: &a,
 			Reason: fmt.Sprintf(
-				"Saved approval for candidate commit %s could not be verified because the release binaries could not be read. Publish the binaries the run built into the release folder that the promotion settings name, in a folder named after the commit, and press Check current approval; or remove the promotion settings with surla promotion remove and restart Surla; or press Approve this result on a newly verified run.",
+				"Saved approval for candidate commit %s could not be verified because the release binaries could not be read. Publish the binaries the run built into the release folder that the promotion settings name, in a folder named after the commit, and press Check current approval; or remove the promotion settings with hbay promotion remove and restart Highbay; or press Approve this result on a newly verified run.",
 				a.CandidateCommit,
 			),
 		}
@@ -444,11 +444,11 @@ func (c *ControlPlane) currentCardWithPromotion(
 
 // approvalTestSource builds an ApprovalItem's TestSource union from the
 // tests' source and commit.
-func approvalTestSource(source verify.TestsSource, commit string) gensurla.ApprovalTestSource {
+func approvalTestSource(source verify.TestsSource, commit string) genhighbay.ApprovalTestSource {
 	if source == verify.TestsEvaluator {
-		return gensurla.NewApprovalTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
+		return genhighbay.NewApprovalTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{})
 	}
-	return gensurla.NewApprovalTestSourceWrittenTests(&gensurla.AgentWrittenTests{Commit: commit, Notice: writtenTestsNotice})
+	return genhighbay.NewApprovalTestSourceWrittenTests(&genhighbay.AgentWrittenTests{Commit: commit, Notice: writtenTestsNotice})
 }
 
 // resolvePromotion resolves a PromotionTarget dynamically from the currently

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"testing/synctest"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,17 +36,17 @@ func TestStartBuildCloseDrainsAfterCancellation(t *testing.T) {
 			return errors.New("generation subprocess exited after cancellation")
 		}
 		cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return copy, nil }
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 			ChangeID: "chg", RequestRevision: card.RequestRevision,
 		})
 		require.NoError(t, err)
 		type outcome struct {
-			result *gensurla.TestWriterAssignment
+			result *genhighbay.TestWriterAssignment
 			err    error
 		}
 		started := make(chan outcome, 1)
 		go func() {
-			result, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{
+			result, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{
 				ChangeID: "chg",
 			})
 			started <- outcome{result: result, err: err}

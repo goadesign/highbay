@@ -1,14 +1,14 @@
-// This file names the branches of Surla's builds and reads, with git, the
-// facts Surla checks before it uses a commit of the open build.
+// This file names the branches of Highbay's builds and reads, with git, the
+// facts Highbay checks before it uses a commit of the open build.
 //
-// Each build Surla saves has a number n and a base B, the project's commit
-// when Build saved it. The builder's working copy works on surla/build-<n>
-// and the test writer's on surla/tests-<n>, both started at B. These are
-// build branches: the names Role.Branch gives, and surla/tests, the one
-// branch earlier versions of Surla gave the test writer. Any other branch is
-// an agent's, even one named under surla/. Another build's commit is a commit
+// Each build Highbay saves has a number n and a base B, the project's commit
+// when Build saved it. The builder's working copy works on highbay/build-<n>
+// and the test writer's on highbay/tests-<n>, both started at B. These are
+// build branches: the names Role.Branch gives, and highbay/tests, the one
+// branch earlier versions of Highbay gave the test writer. Any other branch is
+// an agent's, even one named under highbay/. Another build's commit is a commit
 // that a build branch other than the open build's two reaches and B does not
-// hold; a commit Surla uses must be on its build's branch, descend from B and
+// hold; a commit Highbay uses must be on its build's branch, descend from B and
 // hold no such commit.
 //
 // The checks read the branches of the repository the copies share with the
@@ -36,16 +36,16 @@ type (
 		// Prefix begins the name of each of the role's build branches; the
 		// build's number ends it.
 		Prefix string
-		// Legacy is the one branch earlier versions of Surla gave the role, a
+		// Legacy is the one branch earlier versions of Highbay gave the role, a
 		// build branch numbered 0, or empty when there was none.
 		Legacy string
 	}
 
-	// BranchTip is a build branch's commit as Surla recorded it. Drop records
+	// BranchTip is a build branch's commit as Highbay recorded it. Drop records
 	// the dropped build's two tips, so CheckBuildCommit still finds that
 	// build's commits after an agent moved or deleted its branches.
 	BranchTip struct {
-		// Branch is the branch's short name, such as surla/build-1.
+		// Branch is the branch's short name, such as highbay/build-1.
 		Branch string
 		// Commit is the full object name of the commit Branch pointed at.
 		Commit string
@@ -75,7 +75,7 @@ type (
 	}
 
 	// CommitCheck is what CheckBuildCommit found for one commit of the open
-	// build. Surla uses the commit only when OnBranch and FromBase hold and
+	// build. Highbay uses the commit only when OnBranch and FromBase hold and
 	// Foreign is empty, and uses a candidate only when IsBase does not hold.
 	CommitCheck struct {
 		// OnBranch reports that the build branch the commit must be on
@@ -92,10 +92,10 @@ type (
 		Foreign []ForeignWork
 	}
 
-	// surlaBranch is a branch under refs/heads/surla/ and its commit, as one
+	// highbayBranch is a branch under refs/heads/highbay/ and its commit, as one
 	// listing showed them.
-	surlaBranch struct {
-		// name is the branch's short name, such as surla/build-1.
+	highbayBranch struct {
+		// name is the branch's short name, such as highbay/build-1.
 		name string
 		// tip is the full object name of the commit it points at.
 		tip string
@@ -103,25 +103,25 @@ type (
 )
 
 const (
-	// surlaBranchRefs holds every build branch, and any branch an agent
-	// names under surla/.
-	surlaBranchRefs = "refs/heads/surla/"
+	// highbayBranchRefs holds every build branch, and any branch an agent
+	// names under highbay/.
+	highbayBranchRefs = "refs/heads/highbay/"
 	// maxWorkFiles is the most paths one ForeignWork names; FileCount counts
 	// them all.
 	maxWorkFiles = 5
 )
 
 var (
-	// BuilderRole is the builder's copy, .surla-build, which works on
-	// surla/build-<n>.
-	BuilderRole = Role{Folder: ".surla-build", Prefix: "surla/build-"}
-	// TestsRole is the test writer's copy, .surla-tests, which works on
-	// surla/tests-<n>, and worked on surla/tests before builds were numbered.
-	TestsRole = Role{Folder: ".surla-tests", Prefix: "surla/tests-", Legacy: "surla/tests"}
+	// BuilderRole is the builder's copy, .highbay-build, which works on
+	// highbay/build-<n>.
+	BuilderRole = Role{Folder: ".highbay-build", Prefix: "highbay/build-"}
+	// TestsRole is the test writer's copy, .highbay-tests, which works on
+	// highbay/tests-<n>, and worked on highbay/tests before builds were numbered.
+	TestsRole = Role{Folder: ".highbay-tests", Prefix: "highbay/tests-", Legacy: "highbay/tests"}
 )
 
 // Branch returns the role's branch for build n, a build's number and so at
-// least 1: Prefix followed by n in decimal, such as surla/build-3.
+// least 1: Prefix followed by n in decimal, such as highbay/build-3.
 func (r Role) Branch(n int) string {
 	return r.Prefix + strconv.Itoa(n)
 }
@@ -130,7 +130,7 @@ func (r Role) Branch(n int) string {
 // branch, and returns its role and number. A build branch is a name
 // Role.Branch gives for a number of at least 1, so its digits carry no sign
 // or leading zero and fit an int, or TestsRole.Legacy, numbered 0. Any other
-// name is an agent's: surla/build-2-backup, surla/build-x, surla/build-007,
+// name is an agent's: highbay/build-2-backup, highbay/build-x, highbay/build-007,
 // or a number too large for an int.
 func ParseBuildBranch(name string) (Role, int, bool) {
 	if name == TestsRole.Legacy {
@@ -163,7 +163,7 @@ func NextNumber(ctx context.Context, project string, saved int) (int, error) {
 	if saved < 0 {
 		return 0, fmt.Errorf("the open build's number %d is negative", saved)
 	}
-	branches, err := listSurlaBranches(ctx, project)
+	branches, err := listHighbayBranches(ctx, project)
 	if err != nil {
 		return 0, err
 	}
@@ -182,9 +182,9 @@ func NextNumber(ctx context.Context, project string, saved int) (int, error) {
 
 // CheckBuildCommit reads, with git in the repository of the project folder
 // project, whether commit belongs to the open build. Its callers check a
-// commit where Surla uses it: the candidate verify_change builds and
+// commit where Highbay uses it: the candidate verify_change builds and
 // approve_merge approves, and the tip of the test writer's branch before
-// Surla commits accepted tests on it. base is the build's base B,
+// Highbay commits accepted tests on it. base is the build's base B,
 // buildBranches are the build's two branches, its Role.Branch of BuilderRole
 // and of TestsRole, and ownBranch is the one of them commit must be on.
 // recorded are branch tips the caller saved earlier, the ones Drop recorded
@@ -192,7 +192,7 @@ func NextNumber(ctx context.Context, project string, saved int) (int, error) {
 // so moving or deleting a dropped build's branch hides none of its commits.
 //
 // commit and base are resolved once, and the branches read in one listing of
-// refs/heads/surla/, so every fact describes one state of the repository:
+// refs/heads/highbay/, so every fact describes one state of the repository:
 //
 //   - OnBranch: git merge-base --is-ancestor commit <ownBranch's tip> exits 0;
 //   - FromBase: git merge-base --is-ancestor base commit exits 0, and IsBase:
@@ -236,7 +236,7 @@ func CheckBuildCommit(ctx context.Context, project, commit, ownBranch, base stri
 	if err != nil {
 		return CommitCheck{}, err
 	}
-	branches, err := listSurlaBranches(ctx, project)
+	branches, err := listHighbayBranches(ctx, project)
 	if err != nil {
 		return CommitCheck{}, err
 	}
@@ -266,13 +266,13 @@ func CheckBuildCommit(ctx context.Context, project, commit, ownBranch, base stri
 	return check, nil
 }
 
-// listSurlaBranches lists every branch under refs/heads/surla/ in the
+// listHighbayBranches lists every branch under refs/heads/highbay/ in the
 // project's repository with its commit, sorted by name as git for-each-ref
 // sorts them. Git refuses spaces and line breaks in a branch's name, so each
 // line it prints is an object name, a space and a name.
-func listSurlaBranches(ctx context.Context, project string) ([]surlaBranch, error) {
+func listHighbayBranches(ctx context.Context, project string) ([]highbayBranch, error) {
 	out, err := readGit(ctx, project,
-		"for-each-ref", "--format=%(objectname) %(refname:lstrip=2)", surlaBranchRefs)
+		"for-each-ref", "--format=%(objectname) %(refname:lstrip=2)", highbayBranchRefs)
 	if err != nil {
 		return nil, fmt.Errorf("list the build branches: %w", err)
 	}
@@ -280,13 +280,13 @@ func listSurlaBranches(ctx context.Context, project string) ([]surlaBranch, erro
 		return nil, nil
 	}
 	lines := strings.Split(out, "\n")
-	branches := make([]surlaBranch, 0, len(lines))
+	branches := make([]highbayBranch, 0, len(lines))
 	for _, line := range lines {
 		tip, name, ok := strings.Cut(line, " ")
 		if !ok {
 			return nil, fmt.Errorf("list the build branches: git printed %q, not an object name and a branch", line)
 		}
-		branches = append(branches, surlaBranch{name: name, tip: tip})
+		branches = append(branches, highbayBranch{name: name, tip: tip})
 	}
 	return branches, nil
 }
@@ -296,7 +296,7 @@ func listSurlaBranches(ctx context.Context, project string) ([]surlaBranch, erro
 // recorded tip whose commit the repository still holds and that no branch of
 // its name among those already reaches, so a branch an agent moved or deleted
 // is checked where Drop recorded it and an unmoved one only once.
-func otherBuilds(ctx context.Context, project string, branches []surlaBranch, own [2]string,
+func otherBuilds(ctx context.Context, project string, branches []highbayBranch, own [2]string,
 	recorded []BranchTip) ([]BranchTip, error) {
 	var others []BranchTip
 	checked := map[string]string{}

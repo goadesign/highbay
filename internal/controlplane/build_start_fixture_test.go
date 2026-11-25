@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 )
@@ -94,7 +94,7 @@ func buildFixtureOptions(t *testing.T, opts Options) Options {
 	goMod := filepath.Join(opts.WorkspaceDir, "go.mod")
 	data, err := os.ReadFile(goMod)
 	if os.IsNotExist(err) {
-		data = []byte(fmt.Sprintf("module example.com/shop\n\ngo 1.27.3\n\nrequire github.com/goadesign/surla/story %s\n", testmodule.SurlaVersion(t, "github.com/goadesign/surla/story")))
+		data = []byte(fmt.Sprintf("module example.com/shop\n\ngo 1.27.3\n\nrequire github.com/goadesign/highbay/story %s\n", testmodule.HighbayVersion(t, "github.com/goadesign/highbay/story")))
 		require.NoError(t, os.WriteFile(goMod, data, 0o600))
 	} else {
 		require.NoError(t, err)

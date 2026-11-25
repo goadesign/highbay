@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	genorders "github.com/goadesign/surla/examples/orders/gen/orders"
+	genorders "github.com/goadesign/highbay/examples/orders/gen/orders"
 )
 
 type (

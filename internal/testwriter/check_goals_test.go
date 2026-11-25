@@ -31,7 +31,7 @@ func TestV1OutsideModuleGoals(t *testing.T) {
 			assert.Contains(t, findings[0].Message, "commit "+base)
 			assert.Contains(t, findings[0].Message, tc.goal)
 			assert.Contains(t, findings[0].Message, "keep your own tests inside services/shop/eval uncommitted")
-			assert.Contains(t, findings[0].Message, "Surla commits what it accepts")
+			assert.Contains(t, findings[0].Message, "Highbay commits what it accepts")
 			assert.NotContains(t, findings[0].Message, "git restore")
 			assert.NotContains(t, findings[0].Message, "git rm")
 			assert.NotContains(t, findings[0].Message, "delete")

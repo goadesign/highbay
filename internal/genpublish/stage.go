@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// genStage is the .surla-gen-<random> directory Publish creates in the module
+// genStage is the .highbay-gen-<random> directory Publish creates in the module
 // to build the new gen/ in. dir stays open from acquisition to cleanup, so the
 // exchange and the removal of the old tree act on that directory even if its
 // name is later renamed or replaced.
@@ -29,7 +29,7 @@ type genStage struct {
 }
 
 // stagePrefix starts the name of every staging directory.
-const stagePrefix = ".surla-gen-"
+const stagePrefix = ".highbay-gen-"
 
 // newStage creates a new staging directory in root under a random name and
 // acquires it with acquireStage.
@@ -55,7 +55,7 @@ func acquireStage(root *os.Root, name string) (*genStage, error) {
 		return nil, fmt.Errorf("open staging directory: %w", err)
 	}
 	refuse := func(reason error) (*genStage, error) {
-		return nil, errors.Join(fmt.Errorf("staging directory %s is not the empty directory surla gen created; it was left alone: %w", name, reason), dir.Close())
+		return nil, errors.Join(fmt.Errorf("staging directory %s is not the empty directory hbay gen created; it was left alone: %w", name, reason), dir.Close())
 	}
 	listing, err := dir.Open(".")
 	if err != nil {
@@ -92,7 +92,7 @@ func currentGenDir(root *os.Root) (bool, error) {
 	case err != nil:
 		return false, fmt.Errorf("inspect gen/: %w", err)
 	case !info.IsDir():
-		return false, fmt.Errorf("gen is not a directory (%s); move it away and run surla gen again", info.Mode().Type())
+		return false, fmt.Errorf("gen is not a directory (%s); move it away and run hbay gen again", info.Mode().Type())
 	}
 	return true, nil
 }
@@ -133,7 +133,7 @@ func treeDigests(root *os.Root) (map[string][sha256.Size]byte, error) {
 // writeGuide writes the agent guide at the module root through a temporary
 // file renamed over the old one, both inside root.
 func writeGuide(root *os.Root, content []byte) error {
-	tmp := "." + quickstartGuide + ".surla-" + strings.ToLower(rand.Text())
+	tmp := "." + quickstartGuide + ".highbay-" + strings.ToLower(rand.Text())
 	if err := writeSynced(root, tmp, content, 0o644); err != nil {
 		return errors.Join(err, removeIfPresent(root, tmp))
 	}
@@ -171,7 +171,7 @@ func removeIfPresent(root *os.Root, name string) error {
 	return nil
 }
 
-// leftoverStages returns the names of .surla-gen-* entries in the module
+// leftoverStages returns the names of .highbay-gen-* entries in the module
 // root, sorted. A directory that cannot be read yields none.
 func leftoverStages(root *os.Root) []string {
 	dir, err := root.Open(".")

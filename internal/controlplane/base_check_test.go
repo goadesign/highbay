@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goadesign/surla/internal/designversion"
+	"github.com/goadesign/highbay/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
@@ -80,7 +80,7 @@ func TestDesignBaseWhenRepositoryAppearsLater(t *testing.T) {
 	gitForLayoutTest(t, dir, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Repository appeared after draft")
 	head := strings.TrimSpace(gitForLayoutTest(t, dir, "rev-parse", "HEAD"))
 	writeWorkspaceFiles(t, dir, map[string]string{updateDesignFile: b})
-	assert.ErrorContains(t, checkDesignBase(t.Context(), dir, head, &saved), "changed outside Surla")
+	assert.ErrorContains(t, checkDesignBase(t.Context(), dir, head, &saved), "changed outside Highbay")
 }
 
 // TestRemakeRestoresExactRevisionHistory removes an intervening unrelated

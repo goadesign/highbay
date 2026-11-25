@@ -2,23 +2,23 @@
 package verifyrun
 
 import (
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 // TestCoverageSnapshot is one accepted report and its built agreement, encoded
 // with the generated contract. Absence on StoryContext means not recorded.
 // It is distinct from today's build and never changes after run acceptance.
-type TestCoverageSnapshot gensurla.RecordedTestCoverage
+type TestCoverageSnapshot genhighbay.RecordedTestCoverage
 
 // MarshalJSON uses the owning generated codec rather than a second wire shape.
 func (s TestCoverageSnapshot) MarshalJSON() ([]byte, error) {
-	return gensurla.EncodeRecordedTestCoverage((*gensurla.RecordedTestCoverage)(&s))
+	return genhighbay.EncodeRecordedTestCoverage((*genhighbay.RecordedTestCoverage)(&s))
 }
 
 // UnmarshalJSON validates stored structure and built-requirement membership.
 func (s *TestCoverageSnapshot) UnmarshalJSON(raw []byte) error {
-	record, err := gensurla.DecodeRecordedTestCoverage(raw)
+	record, err := genhighbay.DecodeRecordedTestCoverage(raw)
 	if err != nil {
 		return err
 	}

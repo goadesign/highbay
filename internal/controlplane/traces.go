@@ -7,8 +7,8 @@ import (
 	"errors"
 	"sync/atomic"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/traceview"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/traceview"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -66,12 +66,12 @@ type (
 // unsavedWaitSpans names the waiting reads' request boundary spans and inner
 // spans, which the diagnostics history never saves.
 var unsavedWaitSpans = map[string]bool{
-	"surla.request.wait_for_changes":                true,
-	waitForChangesSpan:                              true,
-	"surla.request.wait_for_builder_assignment":     true,
-	waitForBuilderAssignmentSpan:                    true,
-	"surla.request.wait_for_test_writer_assignment": true,
-	waitForTestWriterAssignmentSpan:                 true,
+	"highbay.request.wait_for_changes":                true,
+	waitForChangesSpan:                                true,
+	"highbay.request.wait_for_builder_assignment":     true,
+	waitForBuilderAssignmentSpan:                      true,
+	"highbay.request.wait_for_test_writer_assignment": true,
+	waitForTestWriterAssignmentSpan:                   true,
 }
 
 // ListTraces reads one bounded disk window belonging to the authenticated
@@ -80,20 +80,20 @@ var unsavedWaitSpans = map[string]bool{
 // failures retain full OpenTelemetry evidence and return a path-free message.
 func (c *ControlPlane) ListTraces(
 	ctx context.Context,
-	p *gensurla.ListTracesPayload,
-) (*gensurla.TraceList, error) {
+	p *genhighbay.ListTracesPayload,
+) (*genhighbay.TraceList, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	if c.traceProvider == nil {
-		return nil, gensurla.MakeNotImplemented(errors.New("operation recording is not configured on this server; start the project with surla, whose server records operations automatically"))
+		return nil, genhighbay.MakeNotImplemented(errors.New("operation recording is not configured on this server; start the project with hbay, whose server records operations automatically"))
 	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.list_traces")
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.list_traces")
 	defer span.End()
 	result, err := c.traces.List(principal.ID, p.Status, p.Limit, p.Cursor)
 	if errors.Is(err, traceview.ErrCursor) {
-		return nil, gensurla.MakeUnprocessable(traceview.ErrCursor)
+		return nil, genhighbay.MakeUnprocessable(traceview.ErrCursor)
 	}
 	if err != nil {
 		span.RecordError(err)

@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,13 +26,13 @@ type (
 	// presentation fixtures, sharing the approval fixture's lock for all fields.
 	browserExperienceService struct {
 		*browserApprovalService
-		team        *gensurla.TeamSnapshot
-		options     *gensurla.ListTeamAgentOptionsResult
-		card        *gensurla.ChangeCardResult
-		newer       *gensurla.VerificationReviewResult
-		buildStarts []*gensurla.StartBuildPayload
-		teamStarts  []*gensurla.StartTeamAgentsPayload
-		merges      []*gensurla.MergeChangePayload
+		team        *genhighbay.TeamSnapshot
+		options     *genhighbay.ListTeamAgentOptionsResult
+		card        *genhighbay.ChangeCardResult
+		newer       *genhighbay.VerificationReviewResult
+		buildStarts []*genhighbay.StartBuildPayload
+		teamStarts  []*genhighbay.StartTeamAgentsPayload
+		merges      []*genhighbay.MergeChangePayload
 		mergeError  error
 	}
 
@@ -60,7 +60,7 @@ type (
 )
 
 // GetTeam returns the saved presentation facts, including persisted dismissals.
-func (s *browserExperienceService) GetTeam(context.Context) (*gensurla.TeamSnapshot, error) {
+func (s *browserExperienceService) GetTeam(context.Context) (*genhighbay.TeamSnapshot, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.team, nil
@@ -69,7 +69,7 @@ func (s *browserExperienceService) GetTeam(context.Context) (*gensurla.TeamSnaps
 // ListTeamAgentOptions supplies installed metadata without probing the machine.
 func (s *browserExperienceService) ListTeamAgentOptions(
 	context.Context,
-) (*gensurla.ListTeamAgentOptionsResult, error) {
+) (*genhighbay.ListTeamAgentOptionsResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.options, nil
@@ -77,8 +77,8 @@ func (s *browserExperienceService) ListTeamAgentOptions(
 
 // GetChange adds the exact recorded approval supplied by the fixture owner.
 func (s *browserExperienceService) GetChange(
-	context.Context, *gensurla.GetChangePayload,
-) (*gensurla.ChangeCardResult, error) {
+	context.Context, *genhighbay.GetChangePayload,
+) (*genhighbay.ChangeCardResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.card, nil
@@ -87,18 +87,18 @@ func (s *browserExperienceService) GetChange(
 // ListVerifications exposes a newer pass alongside the older approved pass.
 // The page must preserve the live approval's exact inputs when it merges.
 func (s *browserExperienceService) ListVerifications(
-	context.Context, *gensurla.ListVerificationsPayload,
-) (*gensurla.VerificationListResult, error) {
+	context.Context, *genhighbay.ListVerificationsPayload,
+) (*genhighbay.VerificationListResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return &gensurla.VerificationListResult{ChangeID: s.review.ChangeID,
-		Runs: []*gensurla.VerificationStatusResult{browserApprovalStatus(s.newer), browserApprovalStatus(s.review)}}, nil
+	return &genhighbay.VerificationListResult{ChangeID: s.review.ChangeID,
+		Runs: []*genhighbay.VerificationStatusResult{browserApprovalStatus(s.newer), browserApprovalStatus(s.review)}}, nil
 }
 
 // ReviewVerification returns the selected run's own approval and evidence.
 func (s *browserExperienceService) ReviewVerification(
-	_ context.Context, p *gensurla.GetVerificationPayload,
-) (*gensurla.VerificationReviewResult, error) {
+	_ context.Context, p *genhighbay.GetVerificationPayload,
+) (*genhighbay.VerificationReviewResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if p.RunID == s.newer.RunID {
@@ -109,8 +109,8 @@ func (s *browserExperienceService) ReviewVerification(
 
 // GetVerification retains the distinct candidates of both saved passes.
 func (s *browserExperienceService) GetVerification(
-	_ context.Context, p *gensurla.GetVerificationPayload,
-) (*gensurla.VerificationStatusResult, error) {
+	_ context.Context, p *genhighbay.GetVerificationPayload,
+) (*genhighbay.VerificationStatusResult, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if p.RunID == s.newer.RunID {
@@ -122,7 +122,7 @@ func (s *browserExperienceService) GetVerification(
 // DismissTeamNotice persists the notice in the fixture's owner result. The
 // browser must read this value again after navigation to prove dismissal.
 func (s *browserExperienceService) DismissTeamNotice(
-	_ context.Context, p *gensurla.DismissTeamNoticePayload,
+	_ context.Context, p *genhighbay.DismissTeamNoticePayload,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -135,8 +135,8 @@ func (s *browserExperienceService) DismissTeamNotice(
 // StartBuild records only the explicit request and returns an existing typed
 // started build; this is presentation evidence, not worker-execution evidence.
 func (s *browserExperienceService) StartBuild(
-	_ context.Context, p *gensurla.StartBuildPayload,
-) (*gensurla.StartBuildResult, error) {
+	_ context.Context, p *genhighbay.StartBuildPayload,
+) (*genhighbay.StartBuildResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.buildStarts = append(s.buildStarts, p)
@@ -144,13 +144,13 @@ func (s *browserExperienceService) StartBuild(
 	if !ok {
 		return nil, errors.New("browser fixture needs a started build receipt")
 	}
-	return &gensurla.StartBuildResult{Build: started, Team: gensurla.NewTeamReady(s.teamReceipt())}, nil
+	return &genhighbay.StartBuildResult{Build: started, Team: genhighbay.NewTeamReady(s.teamReceipt())}, nil
 }
 
 // StartTeamAgents records the user-triggered missing-worker request.
 func (s *browserExperienceService) StartTeamAgents(
-	_ context.Context, p *gensurla.StartTeamAgentsPayload,
-) (*gensurla.ProjectTeam, error) {
+	_ context.Context, p *genhighbay.StartTeamAgentsPayload,
+) (*genhighbay.ProjectTeam, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.teamStarts = append(s.teamStarts, p)
@@ -160,8 +160,8 @@ func (s *browserExperienceService) StartTeamAgents(
 // MergeChange returns a declared owner refusal or actual branch/commit receipt.
 // The browser is responsible only for binding approval and presenting recovery.
 func (s *browserExperienceService) MergeChange(
-	_ context.Context, p *gensurla.MergeChangePayload,
-) (*gensurla.MergeChangeResult, error) {
+	_ context.Context, p *genhighbay.MergeChangePayload,
+) (*genhighbay.MergeChangeResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.merges = append(s.merges, p)
@@ -173,15 +173,15 @@ func (s *browserExperienceService) MergeChange(
 		return nil, errors.New("browser fixture needs a started build to merge")
 	}
 	merged := *started
-	merged.Taking = gensurla.NewBuildTakingMerged(&gensurla.BuildMerged{})
-	s.build = &gensurla.ChangeBuild{ChangeID: p.ChangeID, Build: gensurla.NewBuildStarted(&merged)}
-	return &gensurla.MergeChangeResult{Branch: "feature/orders", HeadCommit: strings.Repeat("3", 40)}, nil
+	merged.Taking = genhighbay.NewBuildTakingMerged(&genhighbay.BuildMerged{})
+	s.build = &genhighbay.ChangeBuild{ChangeID: p.ChangeID, Build: genhighbay.NewBuildStarted(&merged)}
+	return &genhighbay.MergeChangeResult{Branch: "feature/orders", HeadCommit: strings.Repeat("3", 40)}, nil
 }
 
 // teamReceipt names the fixture's execution mode without starting a process.
-func (s *browserExperienceService) teamReceipt() *gensurla.ProjectTeam {
-	return &gensurla.ProjectTeam{Team: s.team.Team, Space: "fixture-space", HerdrMode: s.team.HerdrMode,
-		Roles: []*gensurla.ProjectTeamRole{}, Step: "Read the build assignments."}
+func (s *browserExperienceService) teamReceipt() *genhighbay.ProjectTeam {
+	return &genhighbay.ProjectTeam{Team: s.team.Team, Space: "fixture-space", HerdrMode: s.team.HerdrMode,
+		Roles: []*genhighbay.ProjectTeamRole{}, Step: "Read the build assignments."}
 }
 
 // TestInlineWorkersAndApprovedMergeInChromium proves the changed user journey
@@ -198,7 +198,7 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 	card := proposeChange(t, vp.state.Origin(), vp.agent(t, "guide"), "experience-layout", "")
 	card, err = vp.cp.Load().ConfirmIntent(controlplane.WithPrincipal(t.Context(), controlplane.Principal{
 		ID: vp.state.Record.Owner, CallerID: "experience-layout-user", Kind: controlplane.CallerUser,
-	}), &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	}), &genhighbay.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		Answers: map[string]string{}, Examples: card.Examples})
 	require.NoError(t, err)
 	service := &browserExperienceService{browserApprovalService: &browserApprovalService{Service: vp.cp.Load()}}
@@ -207,7 +207,7 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 	application.Handle("/", controlplane.NewHTTPHandler(service, vp.server.Load().Authenticate))
 	handler := vp.server.Load().Handler(application)
 	vp.handler.Store(&handler)
-	capture := os.Getenv("SURLA_TEST_EXPERIENCE_CAPTURE_DIR")
+	capture := os.Getenv("HIGHBAY_TEST_EXPERIENCE_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
@@ -227,11 +227,11 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 				newer.AcceptedAt = "2026-11-16T12:00:00Z"
 				fixtureCard := *card
 				fixtureCard.Approval, _ = review.Review.Approval.AsRecorded()
-				team := &gensurla.TeamSnapshot{Team: "browser-team", HerdrMode: "attached",
-					Roles: []*gensurla.TeamRoleState{
+				team := &genhighbay.TeamSnapshot{Team: "browser-team", HerdrMode: "attached",
+					Roles: []*genhighbay.TeamRoleState{
 						{Role: "builder", Handle: "builder", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unread"},
 						{Role: "test_writer", Handle: "test-writer", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unread"},
-					}, SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}}
+					}, SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}}
 				options := browserWorkerOptions()
 				if state == "headless" || state == "configured_permissions" {
 					team.HerdrMode = "unavailable"
@@ -244,13 +244,13 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 					team.Roles = team.Roles[:1]
 				}
 				if state == "configured_permissions" {
-					options.Agents = []*gensurla.InstalledAgentOption{{Client: "opencode", Program: "/fixture/opencode",
+					options.Agents = []*genhighbay.InstalledAgentOption{{Client: "opencode", Program: "/fixture/opencode",
 						Title: "OpenCode", Models: []string{}, Efforts: []string{}, ModelSupported: true, HeadlessSupported: true}}
 				}
 				if !mergeJourney {
 					started, ok := build.Build.AsStarted()
 					require.True(t, ok)
-					started.Taking = gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})
+					started.Taking = genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{})
 					fixtureCard.Approval = nil
 				}
 				service.mu.Lock()
@@ -258,10 +258,10 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 				service.newer = newer
 				service.buildStarts, service.teamStarts, service.merges, service.mergeError = nil, nil, nil, nil
 				if state == "dirty_worktree" {
-					service.mergeError = gensurla.MakeDirtyWorktree(errors.New("Save or commit tracked changes in orders.go, then retry the merge."))
+					service.mergeError = genhighbay.MakeDirtyWorktree(errors.New("Save or commit tracked changes in orders.go, then retry the merge."))
 				}
 				if state == "merge_conflict" {
-					service.mergeError = gensurla.MakeMergeConflict(errors.New("The merge conflicted. Your original branch and tracked files were restored. Review the commits, then retry."))
+					service.mergeError = genhighbay.MakeMergeConflict(errors.New("The merge conflicted. Your original branch and tracked files were restored. Review the commits, then retry."))
 				}
 				service.mu.Unlock()
 				link, err := vp.link()
@@ -286,7 +286,7 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 					} else {
 						assert.True(t, view.ClientChanged, view.Name)
 						assert.True(t, view.DraftPreserved, view.Name)
-						assert.Contains(t, view.KeyboardControls, "surla-build-agents-builder-client", view.Name)
+						assert.Contains(t, view.KeyboardControls, "highbay-build-agents-builder-client", view.Name)
 						if state == "headless" || state == "configured_permissions" {
 							assert.True(t, view.BackgroundGated, view.Name)
 						}
@@ -298,14 +298,14 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 					t.Logf("%s/%s native facts: %+v", state, view.Name, view)
 				}
 				service.mu.RLock()
-				merges := append([]*gensurla.MergeChangePayload{}, service.merges...)
-				buildStarts := append([]*gensurla.StartBuildPayload{}, service.buildStarts...)
-				teamStarts := append([]*gensurla.StartTeamAgentsPayload{}, service.teamStarts...)
+				merges := append([]*genhighbay.MergeChangePayload{}, service.merges...)
+				buildStarts := append([]*genhighbay.StartBuildPayload{}, service.buildStarts...)
+				teamStarts := append([]*genhighbay.StartTeamAgentsPayload{}, service.teamStarts...)
 				service.mu.RUnlock()
 				if mergeJourney {
 					require.NotEmpty(t, merges)
 					for _, request := range merges {
-						assert.Equal(t, &gensurla.MergeChangePayload{ChangeID: card.ChangeID,
+						assert.Equal(t, &genhighbay.MergeChangePayload{ChangeID: card.ChangeID,
 							RequestRevision: review.RequestRevision, CandidateCommit: review.CandidateCommit,
 							ReportDigest: fixtureCard.Approval.ReportDigest}, request)
 					}
@@ -338,9 +338,9 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 
 // browserWorkerOptions mirrors installed metadata with both model families,
 // custom-model inputs and explicit permission capability for native interaction.
-func browserWorkerOptions() *gensurla.ListTeamAgentOptionsResult {
-	return &gensurla.ListTeamAgentOptionsResult{BuildRoles: []string{"builder", "test_writer"},
-		Agents: []*gensurla.InstalledAgentOption{
+func browserWorkerOptions() *genhighbay.ListTeamAgentOptionsResult {
+	return &genhighbay.ListTeamAgentOptionsResult{BuildRoles: []string{"builder", "test_writer"},
+		Agents: []*genhighbay.InstalledAgentOption{
 			{Client: "codex", Program: "/fixture/codex", Title: "Codex", Models: []string{"codex-model"}, Efforts: []string{"low", "high"},
 				ModelSupported: true, ThinkingSupported: true, YoloSupported: true, HeadlessSupported: true},
 			{Client: "claude", Program: "/fixture/claude", Title: "Claude Code", Models: []string{"claude-model"}, Efforts: []string{"low", "high"},

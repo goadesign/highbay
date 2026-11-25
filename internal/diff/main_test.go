@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // testEvaluator is shared by this package's tests, so later comparisons

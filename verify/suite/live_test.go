@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 // liveConfig is how one table case configures its fakeLive.

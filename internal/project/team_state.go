@@ -14,13 +14,13 @@ import (
 type (
 	// teamStateFailure is a failure to use one private state path: the
 	// project record, an agent credential or the agents folder. It carries the
-	// path and whether Surla was writing it, never the file's contents.
+	// path and whether Highbay was writing it, never the file's contents.
 	teamStateFailure struct {
 		// path is the file or folder that could not be used.
 		path string
 		// dir is true when path is a folder.
 		dir bool
-		// write is true when Surla was writing path rather than reading it.
+		// write is true when Highbay was writing path rather than reading it.
 		write bool
 		// err is the underlying failure; it stays out of user text.
 		err error
@@ -62,7 +62,7 @@ func (s *Server) recordWriteFailure(err error) error {
 }
 
 // stateRepair is the page's step for a project_state failure. A failed write
-// names the folder to make writable. A path that failed Surla's own privacy
+// names the folder to make writable. A path that failed Highbay's own privacy
 // check is fixed on that path alone; a read the system refused, for example
 // through a folder this account cannot open, names the folders that hold it.
 // A missing or damaged file is restored from a backup. A failure that names no
@@ -78,14 +78,14 @@ func stateRepair(err error) string {
 	}
 	switch {
 	case failure.write:
-		return fmt.Sprintf("Surla could not write %s; make sure this account can write the folder %s and the disk has free space, then try again", failure.path, filepath.Dir(failure.path))
+		return fmt.Sprintf("Highbay could not write %s; make sure this account can write the folder %s and the disk has free space, then try again", failure.path, filepath.Dir(failure.path))
 	case errors.Is(err, errNotPrivateFile), errors.Is(err, errNotPrivateFolder):
-		return fmt.Sprintf("Surla could not use %s because of its permissions or owner; make it a %s of this account that only this account can use (chmod %s %s, and chown it to this account if another account owns it), then try again", failure.path, kind, mode, failure.path)
+		return fmt.Sprintf("Highbay could not use %s because of its permissions or owner; make it a %s of this account that only this account can use (chmod %s %s, and chown it to this account if another account owns it), then try again", failure.path, kind, mode, failure.path)
 	case errors.Is(err, os.ErrPermission):
-		return fmt.Sprintf("Surla could not open %s; make sure this account can read it and open the folders that hold it, starting at %s, then try again", failure.path, filepath.Dir(failure.path))
+		return fmt.Sprintf("Highbay could not open %s; make sure this account can read it and open the folders that hold it, starting at %s, then try again", failure.path, filepath.Dir(failure.path))
 	case errors.Is(err, os.ErrNotExist):
-		return fmt.Sprintf("%s is missing; restore it from a backup of this project's Surla state, then try again", failure.path)
+		return fmt.Sprintf("%s is missing; restore it from a backup of this project's Highbay state, then try again", failure.path)
 	default:
-		return fmt.Sprintf("%s is damaged; restore it from a backup of this project's Surla state, then try again", failure.path)
+		return fmt.Sprintf("%s is damaged; restore it from a backup of this project's Highbay state, then try again", failure.path)
 	}
 }

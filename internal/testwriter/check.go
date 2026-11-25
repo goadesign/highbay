@@ -31,21 +31,21 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/genpublish"
-	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/genpublish"
+	"github.com/goadesign/highbay/internal/procgroup"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 type (
 	// Suite locates the project's evaluator suite: the Go module holding the
 	// evaluation design, its generated gen/ folder and the test writer's
-	// scenario hooks, and the suite command in it that follows Surla's suite
-	// command contract (verify/suite). A surla init starter has Module "eval"
+	// scenario hooks, and the suite command in it that follows Highbay's suite
+	// command contract (verify/suite). A hbay init starter has Module "eval"
 	// and Command "./gen/cmd/<name>-evals", the program the generator writes
-	// in every Surla test module (designeval.SuiteCommandPackage).
+	// in every Highbay test module (designeval.SuiteCommandPackage).
 	Suite struct {
 		// Module is the module's slash-separated path relative to the
 		// project folder.
@@ -138,7 +138,7 @@ const (
 	// FindingGeneration means the required tests could not be generated from
 	// the Story with the copy's suite module, for example because its design
 	// does not compile, does not declare exactly one evaluation suite, or a
-	// folder stands where Surla writes the module's Story table.
+	// folder stands where Highbay writes the module's Story table.
 	FindingGeneration FindingKind = "generation"
 	// FindingDependencies means the suite module's dependencies could not be
 	// downloaded from its go.mod and go.sum, and the cause may be in the
@@ -222,13 +222,13 @@ var (
 var errTableIsFolder = errors.New("a folder is at the Story table's path")
 
 // ErrDependencies reports that the test module's dependencies could not be
-// downloaded where Surla runs, for a cause that is not in the author's
+// downloaded where Highbay runs, for a cause that is not in the author's
 // changes: the module's go.mod and go.sum are the ones of the copy's base, or
 // the base's own could not be downloaded either (dependencyFailure). The
-// download's output is withheld, so the error's text holds only what Surla
+// download's output is withheld, so the error's text holds only what Highbay
 // decided and the base commit; the user finds the cause by running the
-// download where Surla runs.
-var ErrDependencies = errors.New("the test module's dependencies could not be downloaded where Surla runs")
+// download where Highbay runs.
+var ErrDependencies = errors.New("the test module's dependencies could not be downloaded where Highbay runs")
 
 // absolutePath matches an absolute file path where a word starts: a slash at
 // the start of a line or after a space, a quote, a parenthesis, a bracket, an
@@ -333,7 +333,7 @@ func Record(
 // WithoutAbsolutePaths replaces every absolute file path in text with
 // <absolute path>, leaving URLs, import paths and relative paths such as
 // ./gen/cmd/shop-evals as they are. Every finding and every reason a check
-// gives passes through it, so no path of Surla's folders or of the user's
+// gives passes through it, so no path of Highbay's folders or of the user's
 // machine reaches the test writer, the builder or the page.
 func WithoutAbsolutePaths(text string) string {
 	return absolutePath.ReplaceAllString(text, "${1}<absolute path>")
@@ -361,7 +361,7 @@ func WithoutAbsolutePaths(text string) string {
 // can say what failed: ErrGeneration, when the generator failed (the context
 // ended, or it failed while preparing its own files), and ErrWriteGenerated,
 // when the generated folder could not be written. A third is ErrDependencies: generation failed while loading the
-// module's dependencies, and they cannot be downloaded where Surla runs for a
+// module's dependencies, and they cannot be downloaded where Highbay runs for a
 // cause outside the author's changes since base (loadFailure). A staging
 // folder that an interrupted publication left in the module is removed and
 // never a failure (publish).
@@ -416,7 +416,7 @@ func (c *Checker) Prepare(
 // is a finding too. No finding holds an absolute path
 // (WithoutAbsolutePaths). The working copy itself is not written. Errors are
 // failures that say nothing about the author's work: ctx ended, the module's
-// dependencies cannot be downloaded where Surla runs for a cause outside the
+// dependencies cannot be downloaded where Highbay runs for a cause outside the
 // author's changes (ErrDependencies), or git, the file system or the build's
 // process cleanup failed. ctx bounds the whole check.
 //
@@ -539,13 +539,13 @@ func (v Verdict) Accepted() bool {
 // error means gen/ was not replaced and wraps ErrWriteGenerated.
 //
 // It first removes the staging folders that publications cut short by a
-// server's death left in the module (genpublish.RemoveLeftoverStages). Surla
+// server's death left in the module (genpublish.RemoveLeftoverStages). Highbay
 // writes the generated folder of a working copy and of its snapshots one
 // publication at a time, in the project's working-copy turn, so none of its
-// own publications is using one. A surla gen the author runs in the copy at
+// own publications is using one. A hbay gen the author runs in the copy at
 // that moment loses its staging folder and fails; the copy's generated folder
-// is Surla's to write, and this publication writes it. An entry with a
-// staging folder's name that is not one Surla made, such as a link or a file,
+// is Highbay's to write, and this publication writes it. An entry with a
+// staging folder's name that is not one Highbay made, such as a link or a file,
 // is the author's: it is left as it is, like any other file the author keeps
 // in the module.
 //
@@ -558,7 +558,7 @@ func publish(ctx context.Context, root *os.Root, files map[string][]byte) error 
 	span := trace.SpanFromContext(ctx)
 	if err := genpublish.RemoveLeftoverStages(root); err != nil {
 		span.AddEvent("staging folders of earlier publications were left in the test module",
-			trace.WithAttributes(attribute.String("surla.error", err.Error())))
+			trace.WithAttributes(attribute.String("highbay.error", err.Error())))
 	}
 	res, err := genpublish.Publish(ctx, root, files)
 	if err != nil {
@@ -566,7 +566,7 @@ func publish(ctx context.Context, root *os.Root, files map[string][]byte) error 
 	}
 	if len(res.Warnings) > 0 {
 		span.AddEvent("the generated folder was written with warnings",
-			trace.WithAttributes(attribute.StringSlice("surla.warnings", res.Warnings)))
+			trace.WithAttributes(attribute.StringSlice("highbay.warnings", res.Warnings)))
 	}
 	return nil
 }
@@ -703,10 +703,10 @@ func workingCopyFinding(branch string, facts CopyFacts) Finding {
 		}
 		uncommittedClause = fmt.Sprintf(" Uncommitted files (%d): %s.", facts.UncommittedCount, listed)
 	}
-	goal := fmt.Sprintf("Put your test files on %s, uncommitted (Surla commits what it accepts), and report again.", branch)
+	goal := fmt.Sprintf("Put your test files on %s, uncommitted (Highbay commits what it accepts), and report again.", branch)
 	if facts.Operation != "none" {
 		goal = fmt.Sprintf(
-			"A %s is in progress in your working copy: abort it, then put your test files on %s, uncommitted (Surla commits what it accepts), and report again.",
+			"A %s is in progress in your working copy: abort it, then put your test files on %s, uncommitted (Highbay commits what it accepts), and report again.",
 			strings.ReplaceAll(facts.Operation, "_", "-"),
 			branch,
 		)
@@ -744,7 +744,7 @@ func outsideModule(changed []changedPath, modulePath, base string) []Finding {
 		}
 		findings = append(findings, Finding{Kind: FindingOutsideModule, Message: WithoutAbsolutePaths(fmt.Sprintf(
 			"%s is changed outside the test module %s. Only files inside the test module may change: %s; "+
-				"keep your own tests inside %s uncommitted (Surla commits what it accepts), then report again.",
+				"keep your own tests inside %s uncommitted (Highbay commits what it accepts), then report again.",
 			c.path, modulePath, goal, modulePath))})
 	}
 	return findings
@@ -885,7 +885,7 @@ func (c *Checker) generate(
 	table, required, err := designeval.StoryTests(root.FS(), stories)
 	switch {
 	case errors.Is(err, designeval.ErrDesignPackage):
-		return nil, author(err, fmt.Sprintf("Surla could not write the tests the Story requires into %s/%s: %v. "+
+		return nil, author(err, fmt.Sprintf("Highbay could not write the tests the Story requires into %s/%s: %v. "+
 			"Keep design/ holding the Go files of one package, then report again.", modulePath, designeval.StoryTestsPath, err))
 	case err != nil:
 		return nil, fmt.Errorf("%w: %w", ErrGeneration, err)
@@ -893,7 +893,7 @@ func (c *Checker) generate(
 	writeTable := func() error {
 		err := writeStoryTests(root, table)
 		if errors.Is(err, errTableIsFolder) {
-			return author(err, fmt.Sprintf("%s/%s is a folder. Surla writes the tests the Story requires in that file: "+
+			return author(err, fmt.Sprintf("%s/%s is a folder. Highbay writes the tests the Story requires in that file: "+
 				"delete the folder, then report again.", modulePath, designeval.StoryTestsPath))
 		}
 		if err != nil {
@@ -925,7 +925,7 @@ func (c *Checker) generate(
 		cause := err
 		if designeval.FailedLoadingDependencies(err) {
 			// The load may have failed because the dependencies cannot be
-			// downloaded where Surla runs, which is not the author's to fix
+			// downloaded where Highbay runs, which is not the author's to fix
 			// unless the author's own lists are what cannot be downloaded.
 			depErr := c.loadFailure(ctx, wc, base, modulePath, files)
 			switch {
@@ -942,8 +942,8 @@ func (c *Checker) generate(
 	}
 	program := path.Join(strings.TrimPrefix(s.Command, "./"), "main.go")
 	if _, ok := generated[program]; !ok {
-		return nil, author(nil, fmt.Sprintf("Surla generated no test program at %s, because the test module is not "+
-			"a Surla test module: its go.mod must declare the module path <service module>/%s, as surla init writes it, "+
+		return nil, author(nil, fmt.Sprintf("Highbay generated no test program at %s, because the test module is not "+
+			"a Highbay test module: its go.mod must declare the module path <service module>/%s, as hbay init writes it, "+
 			"and it must keep its %s package, which provides Name, Hooks, New, Live and LiveThroughGateway.",
 			s.Command, designeval.TestModuleDir, designeval.AcceptancePackage))
 	}
@@ -1026,12 +1026,12 @@ func (c *Checker) listScenarios(
 				"for example by running go mod tidy in it."), nil
 		}
 		return nil, finding(FindingDependencies, fmt.Sprintf("The suite module's dependencies could not be "+
-			"downloaded where Surla runs (go mod download failed), while those that commit %s, the base your "+
+			"downloaded where Highbay runs (go mod download failed), while those that commit %s, the base your "+
 			"working copy is measured from, lists can be. The cause is in your changes to the suite module's "+
 			"go.mod or go.sum: a module or version that does not exist or cannot be fetched there, a go.sum "+
-			"line that does not match, or a go line newer than the Go that Surla runs. Correct them, for "+
+			"line that does not match, or a go line newer than the Go that Highbay runs. Correct them, for "+
 			"example by running go mod tidy in the module, then report again. If go mod download succeeds in "+
-			"your working copy, a module you added cannot be reached from where Surla runs: tell the user.",
+			"your working copy, a module you added cannot be reached from where Highbay runs: tell the user.",
 			base)), nil
 	}
 	modCache, err := abspath.Eval(tc.modCache)

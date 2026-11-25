@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -132,11 +132,11 @@ func recordSpans(t *testing.T) (*tracetest.InMemoryExporter, *sdktrace.TracerPro
 	return exporter, provider
 }
 
-// reminderSpans returns only the surla.team.reminder spans.
+// reminderSpans returns only the highbay.team.reminder spans.
 func reminderSpans(exporter *tracetest.InMemoryExporter) tracetest.SpanStubs {
 	var spans tracetest.SpanStubs
 	for _, span := range exporter.GetSpans() {
-		if span.Name == "surla.team.reminder" {
+		if span.Name == "highbay.team.reminder" {
 			spans = append(spans, span)
 		}
 	}
@@ -248,9 +248,9 @@ func TestTeamReminderSendsOnce(t *testing.T) {
 			require.Len(t, f.sends, 1)
 			assert.Equal(t, TeamReminder{
 				Team: "example-team",
-				From: teamName("surla", o.server.state.Record.ID),
+				From: teamName("highbay", o.server.state.Record.ID),
 				To:   "builder-example",
-				Text: "Surla: you have an unread assignment. Use list_builder_assignments and get_builder_assignment to read it. Surla reads no replies.",
+				Text: "Highbay: you have an unread assignment. Use list_builder_assignments and get_builder_assignment to read it. Highbay reads no replies.",
 			}, f.sends[0])
 			assert.True(t, o.roles["builder"].owed["one"], "the generation is latched")
 			spans := reminderSpans(exporter)
@@ -434,7 +434,7 @@ func slicesTeamRoles(roles []TeamRole) []TeamRole { return append([]TeamRole(nil
 // a reminder settles first. While that read failed or none happened, no
 // reminder can arrive and the bound is 15 seconds. Working or reading clears it.
 func TestTeamIdleUnreadNeedsYou(t *testing.T) {
-	at := func(o *teamSupervisor, now time.Time) gensurla.TeamRoleState {
+	at := func(o *teamSupervisor, now time.Time) genhighbay.TeamRoleState {
 		o.roles["builder"].lastEvent = now
 		o.publish(t.Context(), now, false)
 		return o.roles["builder"].public
@@ -675,7 +675,7 @@ func TestTeamTextsAndSpans(t *testing.T) {
 		operations := names.FindAllString(text, -1)
 		assert.ElementsMatch(t, []string{"list_" + role + "_assignments", "get_" + role + "_assignment"}, operations)
 		for _, operation := range operations {
-			assert.Contains(t, gensurla.MethodNames, operation)
+			assert.Contains(t, genhighbay.MethodNames, operation)
 			assert.True(t, controlplane.OperationAllowed(kind, operation), "%s may not call %s", role, operation)
 		}
 	}
@@ -710,7 +710,7 @@ func TestTeamTextsAndSpans(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	user := controlplane.WithPrincipal(t.Context(), controlplane.Principal{ID: state.Record.Owner, Kind: controlplane.CallerUser})
 	o.publish(user, now, true)
-	history, err := cp.ListTraces(user, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	history, err := cp.ListTraces(user, &genhighbay.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)
 	assert.Empty(t, history.Spans, "plain project observation spans never enter the control plane's local recorder")
 }

@@ -1,5 +1,5 @@
 // Package components renders C4 Architecture Previews and Incoming Change Card
-// notifications inside the Surla Architecture Workspace.
+// notifications inside the Highbay Architecture Workspace.
 
 import React from "react";
 import {
@@ -67,13 +67,13 @@ export function C4GraphSVG({
 
   return (
     <div
-      className="surla-graph-wrap"
+      className="highbay-graph-wrap"
       role="region"
       aria-label="C4 architecture diagram"
       tabIndex={0}
     >
       <svg
-        id="surla-c4-svg"
+        id="highbay-c4-svg"
         role="img"
         aria-label={
           "C4 Architecture Directed Graph (" +
@@ -88,7 +88,7 @@ export function C4GraphSVG({
       >
         <defs>
           <marker
-            id="surla-arrow"
+            id="highbay-arrow"
             viewBox="0 0 10 10"
             refX="9"
             refY="5"
@@ -162,7 +162,7 @@ export function C4GraphSVG({
           return (
             <g
               key={String(idx)}
-              className="surla-svg-edge"
+              className="highbay-svg-edge"
               data-from-id={e.from_id}
               data-to-id={e.to_id}
               data-edge-index={String(idx)}
@@ -172,7 +172,7 @@ export function C4GraphSVG({
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
-                markerEnd="url(#surla-arrow)"
+                markerEnd="url(#highbay-arrow)"
               />
               <text
                 x={String(Math.round(labelX))}
@@ -194,7 +194,7 @@ export function C4GraphSVG({
           return (
             <g
               key={c.id}
-              className="surla-svg-node"
+              className="highbay-svg-node"
               data-container-id={c.id}
               data-container-kind={c.kind}
               transform={"translate(" + pos.x + "," + pos.y + ")"}
@@ -243,16 +243,16 @@ export function ArchitecturePreviewView({
 
   return (
     <>
-      <Card className="surla-meta">
-        <div className="surla-region-header">
-          <div className="surla-region-title-group">
+      <Card className="highbay-meta">
+        <div className="highbay-region-header">
+          <div className="highbay-region-title-group">
             <h2>{"Architecture Preview: " + preview.system_name}</h2>
             <p>{preview.banner}</p>
           </div>
           {!sameCardLoaded ? (
-            <div className="surla-toolbar-actions">
+            <div className="highbay-toolbar-actions">
               <Button
-                id="surla-open-change-card"
+                id="highbay-open-change-card"
                 disabled={loadingCard}
                 onClick={onOpenChangeCard}
               >
@@ -261,22 +261,22 @@ export function ArchitecturePreviewView({
             </div>
           ) : null}
         </div>
-        <p id="surla-cp2-session-note">
+        <p id="highbay-cp2-session-note">
           Architecture of the agreed revision’s saved design. Draft edits appear here only after
           your coding agent proposes a revision and you adopt it.
         </p>
-        <p id="surla-cp2-scope-note">
+        <p id="highbay-cp2-scope-note">
           This preview shows what the design declares. It does not
           compare the design with the Change Card&apos;s requirements.
         </p>
         {differentRevision ? (
-          <Alert variant="warning" role="status" id="surla-cp2-different-revision">
+          <Alert variant="warning" role="status" id="highbay-cp2-different-revision">
             This architecture preview was evaluated for a different saved Change Card revision than
             the one currently loaded.
           </Alert>
         ) : null}
         {differentChange ? (
-          <Alert variant="warning" role="status" id="surla-cp2-different-change">
+          <Alert variant="warning" role="status" id="highbay-cp2-different-change">
             {"This architecture preview belongs to Change Card " +
               preview.change_id +
               " (currently loaded: " +
@@ -285,11 +285,11 @@ export function ArchitecturePreviewView({
           </Alert>
         ) : null}
         {cardLoadError !== null && !sameCardLoaded ? (
-          <Alert id="surla-cp2-card-error" variant="destructive" role="alert">
+          <Alert id="highbay-cp2-card-error" variant="destructive" role="alert">
             {cardLoadError}
           </Alert>
         ) : null}
-        <details className="surla-details">
+        <details className="highbay-details">
           <summary>Details</summary>
           <p>
             change_id: <code>{preview.change_id}</code> · request_revision:{" "}
@@ -298,7 +298,7 @@ export function ArchitecturePreviewView({
           </p>
         </details>
       </Card>
-      <Card className="surla-card">
+      <Card className="highbay-card">
         <h3>
           {"C4 Directed Graph (" +
             preview.containers.length +
@@ -307,10 +307,10 @@ export function ArchitecturePreviewView({
             " edges)"}
         </h3>
         <C4GraphSVG containers={preview.containers} edges={preview.edges} />
-        <div className="surla-arch-grid">
-          <div className="surla-panel-section">
+        <div className="highbay-arch-grid">
+          <div className="highbay-panel-section">
             <h3>{"C4 Containers (" + preview.containers.length + ")"}</h3>
-            <ul className="surla-compact-list">
+            <ul className="highbay-compact-list">
               {preview.containers.map((c) => (
                 <li key={c.id}>
                   <Badge>{c.kind}</Badge>
@@ -320,7 +320,7 @@ export function ArchitecturePreviewView({
               ))}
             </ul>
             <h3>{"Directed Contract Edges (" + preview.edges.length + ")"}</h3>
-            <ul className="surla-compact-list">
+            <ul className="highbay-compact-list">
               {preview.edges.map((e, idx) => (
                 <li key={String(idx)}>
                   <code>{e.from_id}</code>
@@ -331,9 +331,9 @@ export function ArchitecturePreviewView({
               ))}
             </ul>
           </div>
-          <div className="surla-panel-section">
+          <div className="highbay-panel-section">
             <h3>{"Evaluated Agent Policies (" + preview.agent_policies.length + ")"}</h3>
-            <ul className="surla-compact-list">
+            <ul className="highbay-compact-list">
               {preview.agent_policies.map((p) => (
                 <li key={p.agent_id}>
                   <code>{p.agent_id}</code>
@@ -355,13 +355,13 @@ export function ArchitecturePreviewView({
               ))}
             </ul>
             <h3>{"Evaluated Tool Guardrails (" + preview.tools.length + ")"}</h3>
-            <p id="surla-cp2-confirmation-note">
+            <p id="highbay-cp2-confirmation-note">
               A Confirmation badge means the design requires approval before that tool runs. It does
               not show that the service asks the right person and continues after their answer:
-              implement that flow and verify it. The <code translate="no">examples/orders</code> project in the Surla
+              implement that flow and verify it. The <code translate="no">examples/orders</code> project in the Highbay
               repository shows one, a manager approving refunds.
             </p>
-            <ul className="surla-compact-list">
+            <ul className="highbay-compact-list">
               {preview.tools.map((t) => (
                 <li key={t.id}>
                   <code>{t.id}</code>
@@ -372,7 +372,7 @@ export function ArchitecturePreviewView({
                   {t.requires_confirmation ? <Badge variant="warning">Confirmation</Badge> : null}
                   {t.bounded_result ? <Badge>BoundedResult</Badge> : null}
                   {t.requires_ui ? <Badge variant="accent">UI required</Badge> : null}
-                  <details className="surla-details">
+                  <details className="highbay-details">
                     <summary>Tool schemas</summary>
                     <p>
                       args_schema: <code>{t.args_schema}</code> · return_schema:{" "}
@@ -401,19 +401,19 @@ export function IncomingChangeCardView({
 }) {
   return (
     <Card
-      id="surla-incoming-change-card"
-      className="surla-card"
+      id="highbay-incoming-change-card"
+      className="highbay-card"
       role="region"
       aria-label="Incoming Change Card"
     >
       <h3>Updated Change Card Available</h3>
       <p>{incomingCard.summary}</p>
-      <div className="surla-field-row">
-        <Button id="surla-replace-incoming-card" onClick={onSwitch}>
+      <div className="highbay-field-row">
+        <Button id="highbay-replace-incoming-card" onClick={onSwitch}>
           Switch to Incoming Card (Keep Unsaved Edits)
         </Button>
       </div>
-      <details className="surla-details">
+      <details className="highbay-details">
         <summary>Details</summary>
         <p>
           change_id: <code>{incomingCard.change_id}</code> ({incomingCard.status}) · incoming

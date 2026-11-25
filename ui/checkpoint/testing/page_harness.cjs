@@ -1,5 +1,5 @@
 // page_harness.cjs opens the built views page in jsdom against a running
-// Surla test server, for the Go tests that drive the page. The page is
+// Highbay test server, for the Go tests that drive the page. The page is
 // fetched from the server's GET /views and runs its own script. Its fetch is
 // the only bridge to the server: each call becomes a real HTTP request to
 // the page's own address carrying the marks a browser adds to a same-origin
@@ -147,8 +147,8 @@ async function openPage(origin, { link, hidden } = {}) {
     $: (selector) => doc.querySelector(selector),
     $$: (selector) => Array.from(doc.querySelectorAll(selector)),
     text: (selector) => (doc.querySelector(selector) || { textContent: "" }).textContent,
-    state: () => doc.getElementById("surla-checkpoint-root").dataset.state,
-    status: () => doc.getElementById("surla-checkpoint-status").textContent,
+    state: () => doc.getElementById("highbay-checkpoint-root").dataset.state,
+    status: () => doc.getElementById("highbay-checkpoint-status").textContent,
     // sent returns the recorded requests to method and path, in order.
     sent: (method, pathname) => requests.filter((r) => r.method === method && r.path === pathname),
     // type replaces a field's text and dispatches the input event a user's typing would.

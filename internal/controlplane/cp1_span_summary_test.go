@@ -1,5 +1,5 @@
 // This file tests the code-authored OpenTelemetry span summary
-// (`surla.public_summary`) that `propose_change` and `revise_change` record for
+// (`highbay.public_summary`) that `propose_change` and `revise_change` record for
 // operators: its exact text on success, refused analyses, conflicts, missing
 // or foreign cards and storage faults, error status only for real faults, and
 // that no span carries the caller's request content, bearer token or host
@@ -24,7 +24,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 type (
@@ -49,7 +49,7 @@ type (
 // TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent drives
 // propose_change and revise_change through success, a refused analysis, a
 // duplicate change_id, and storage read and save faults, and checks each
-// span's surla.public_summary text, its status (error only for storage
+// span's highbay.public_summary text, its status (error only for storage
 // faults), and that no span attribute or event, and no saved diagnostic,
 // contains the caller's prompt, analysis text, ui_composition, design source,
 // bearer token or host paths. Exported exception events of storage faults are
@@ -66,13 +66,13 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 	cp := newControlPlane(t, Options{CardsDir: cardsDir, WorkspaceDir: wsDir, TracerProvider: tp})
 
 	program := "root = DecisionWorkspace(\"private-ui-program-secret\", [])"
-	secretAnalysis := func() *gensurla.CP1Analysis {
-		return &gensurla.CP1Analysis{
+	secretAnalysis := func() *genhighbay.CP1Analysis {
+		return &genhighbay.CP1Analysis{
 			Summary: "private-analysis-summary-secret",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{
 				Question: "private-question-secret", Options: []string{"private-option-a-secret", "private-option-b-secret"},
 			}},
-			Examples: []*gensurla.CP1AnalysisExample{{
+			Examples: []*genhighbay.CP1AnalysisExample{{
 				Scenario: "private-scenario-secret", InputSummary: "private-input-secret",
 				ExpectedOutcome: "private-outcome-secret", VerificationKind: "deterministic",
 			}},
@@ -80,11 +80,11 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 			UIComposition:      &program,
 		}
 	}
-	secretRevision := func(priorID string) *gensurla.CP1RevisionAnalysis {
-		return &gensurla.CP1RevisionAnalysis{
+	secretRevision := func(priorID string) *genhighbay.CP1RevisionAnalysis {
+		return &genhighbay.CP1RevisionAnalysis{
 			Summary:     "private-analysis-summary-secret",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &priorID, Scenario: "private-scenario-secret", InputSummary: "private-input-secret",
 				ExpectedOutcome: "private-outcome-secret", VerificationKind: "deterministic",
 			}},
@@ -93,22 +93,22 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 			UIComposition:      &program,
 		}
 	}
-	propose := func(changeID string, analysis *gensurla.CP1Analysis) (*gensurla.ChangeCardResult, error) {
-		return cp.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: changeID, Prompt: "private-prompt-secret", Analysis: analysis})
+	propose := func(changeID string, analysis *genhighbay.CP1Analysis) (*genhighbay.ChangeCardResult, error) {
+		return cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{ChangeID: changeID, Prompt: "private-prompt-secret", Analysis: analysis})
 	}
-	revise := func(changeID, rev string, analysis *gensurla.CP1RevisionAnalysis) (*gensurla.ChangeCardResult, error) {
-		return cp.ReviseChange(alice, &gensurla.ReviseChangePayload{ChangeID: changeID, RequestRevision: rev, Prompt: "private-prompt-secret", RevisionNote: "Revise the change.", Analysis: analysis})
+	revise := func(changeID, rev string, analysis *genhighbay.CP1RevisionAnalysis) (*genhighbay.ChangeCardResult, error) {
+		return cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{ChangeID: changeID, RequestRevision: rev, Prompt: "private-prompt-secret", RevisionNote: "Revise the change.", Analysis: analysis})
 	}
 
 	// Success over HTTP, so the bearer token reaches the server.
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"private-bearer-token-secret": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
-	status, body := postJSON(t, srv.URL+"/changes/propose", "private-bearer-token-secret", string(proposeArgs(t, &gensurla.ProposeChangePayload{
+	status, body := postJSON(t, srv.URL+"/changes/propose", "private-bearer-token-secret", string(proposeArgs(t, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "private-prompt-secret", Analysis: secretAnalysis(),
 	})))
 	require.Equal(t, http.StatusOK, status, body)
-	assertSummary(t, exp, "surla.controlplane.propose_change", "Proposed Change Card (needs_confirmation).", codes.Unset)
-	card, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+	assertSummary(t, exp, "highbay.controlplane.propose_change", "Proposed Change Card (needs_confirmation).", codes.Unset)
+	card, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 
 	// A repeated option breaks a proposal rule: refused, not a server failure.
@@ -116,31 +116,31 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 	duplicate.Ambiguities[0].Options[1] = duplicate.Ambiguities[0].Options[0]
 	_, err = propose("chg-dup", duplicate)
 	assertServiceError(t, err, "unprocessable")
-	assertSummary(t, exp, "surla.controlplane.propose_change",
+	assertSummary(t, exp, "highbay.controlplane.propose_change",
 		"Change Card analysis broke a proposal rule (this request did not save a Change Card); correct the analysis and retry propose_change.", codes.Unset)
 
 	// A duplicate change_id is a conflict, not a server failure.
 	_, err = propose("chg", secretAnalysis())
 	assertServiceError(t, err, "conflict")
-	assertSummary(t, exp, "surla.controlplane.propose_change",
+	assertSummary(t, exp, "highbay.controlplane.propose_change",
 		"Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id.", codes.Unset)
 
 	// Revision success, then an accounting error, which the caller's error
 	// names but the span summary does not.
 	revised, err := revise("chg", card.RequestRevision, secretRevision("check_01"))
 	require.NoError(t, err)
-	assertSummary(t, exp, "surla.controlplane.revise_change", "Revised Change Card (needs_confirmation).", codes.Unset)
+	assertSummary(t, exp, "highbay.controlplane.revise_change", "Revised Change Card (needs_confirmation).", codes.Unset)
 	_, err = revise("chg", revised.RequestRevision, secretRevision("private-prior-id-secret"))
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, "private-prior-id-secret", "the caller's error names the broken reference")
-	assertSummary(t, exp, "surla.controlplane.revise_change",
+	assertSummary(t, exp, "highbay.controlplane.revise_change",
 		"Change Card analysis broke a revision rule (this request did not modify the Change Card); correct the analysis and retry revise_change.", codes.Unset)
 
 	// A card file that cannot be decoded is a storage read fault.
 	require.NoError(t, os.WriteFile(cp.cards.path("chg-corrupt"), []byte("{"), 0o600))
 	_, err = propose("chg-corrupt", secretAnalysis())
 	require.Error(t, err)
-	assertSummary(t, exp, "surla.controlplane.propose_change",
+	assertSummary(t, exp, "highbay.controlplane.propose_change",
 		"CP1 proposal could not read Change Card storage (this request did not save a Change Card); preserve your request and ask the server operator to check private card storage.", codes.Error)
 
 	// A staging path that cannot be written makes both saves fail after
@@ -148,11 +148,11 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(cp.cards.dir, stagingFile), 0o700))
 	_, err = propose("chg-save-fault", secretAnalysis())
 	require.Error(t, err)
-	assertSummary(t, exp, "surla.controlplane.propose_change",
+	assertSummary(t, exp, "highbay.controlplane.propose_change",
 		"CP1 proposal could not confirm Change Card save; preserve your request, call get_change to check whether the card was saved, and ask the server operator to check private card storage before retrying.", codes.Error)
 	_, err = revise("chg", revised.RequestRevision, secretRevision("check_01"))
 	require.Error(t, err)
-	assertSummary(t, exp, "surla.controlplane.revise_change",
+	assertSummary(t, exp, "highbay.controlplane.revise_change",
 		"CP1 revision could not confirm Change Card save; preserve your request, call get_change to check the saved card revision, and ask the server operator to check private card storage before retrying.", codes.Error)
 
 	secrets := []string{
@@ -164,7 +164,7 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 	hostPaths := []string{cardsDir, cp.cards.dir, wsDir}
 	var checked int
 	for _, sp := range exp.GetSpans() {
-		if sp.Name != "surla.controlplane.propose_change" && sp.Name != "surla.controlplane.revise_change" {
+		if sp.Name != "highbay.controlplane.propose_change" && sp.Name != "highbay.controlplane.revise_change" {
 			continue
 		}
 		checked++
@@ -190,7 +190,7 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 
 	// The caller's own diagnostic view holds no content and no host paths,
 	// including the raw error text of the faults.
-	page, err := cp.ListTraces(alice, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	page, err := cp.ListTraces(alice, &genhighbay.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)
 	raw, err := os.ReadFile(filepath.Join(cp.cards.dir, "traces.jsonl"))
 	require.NoError(t, err)
@@ -216,11 +216,11 @@ func TestCP1SpanSummariesAreCodeAuthoredAndExcludeRequestContent(t *testing.T) {
 func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
 	check01 := "check_01"
-	revision := func(summary string, priorID *string) *gensurla.CP1RevisionAnalysis {
-		return &gensurla.CP1RevisionAnalysis{
+	revision := func(summary string, priorID *string) *genhighbay.CP1RevisionAnalysis {
+		return &genhighbay.CP1RevisionAnalysis{
 			Summary:     summary,
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: priorID, Scenario: "Refund at the limit", InputSummary: "Order total $80.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -232,7 +232,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 		cp   *ControlPlane
 		exp  *tracetest.InMemoryExporter
 		hold *spanHold
-		card *gensurla.ChangeCardResult
+		card *genhighbay.ChangeCardResult
 	}
 	newSetup := func(t *testing.T, held string) setup {
 		t.Helper()
@@ -247,10 +247,10 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 	}
 	// heldRevise starts a revision of s.card that stops at its span start and
 	// returns the channel its error arrives on.
-	heldRevise := func(t *testing.T, s setup, analysis *gensurla.CP1RevisionAnalysis) <-chan error {
+	heldRevise := func(t *testing.T, s setup, analysis *genhighbay.CP1RevisionAnalysis) <-chan error {
 		t.Helper()
 		done := s.hold.run(t, func() error {
-			_, err := s.cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+			_, err := s.cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 				ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Refunds up to $80 are instant.", RevisionNote: "Revise the change.", Analysis: analysis,
 			})
 			return err
@@ -259,26 +259,26 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 	}
 
 	t.Run("concurrent proposal of the same change_id", func(t *testing.T) {
-		s := newSetup(t, "surla.controlplane.propose_change")
+		s := newSetup(t, "highbay.controlplane.propose_change")
 		done := s.hold.run(t, func() error {
-			_, err := s.cp.ProposeChange(alice, &gensurla.ProposeChangePayload{ChangeID: "chg-race", Prompt: "Request A", Analysis: refundAnalysis("Request A")})
+			_, err := s.cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{ChangeID: "chg-race", Prompt: "Request A", Analysis: refundAnalysis("Request A")})
 			return err
 		})
 		winner := mustPropose(t, s.cp, alice, "chg-race", "Request B", refundAnalysis("Request B"))
 		s.hold.releaseOnce()
 		assertServiceError(t, awaitHeld(t, done), "conflict")
-		assertSummary(t, s.exp, "surla.controlplane.propose_change",
+		assertSummary(t, s.exp, "highbay.controlplane.propose_change",
 			"Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id.", codes.Unset)
-		got, err := s.cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-race"})
+		got, err := s.cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg-race"})
 		require.NoError(t, err)
 		assert.Equal(t, winner.RequestRevision, got.RequestRevision)
 	})
 
 	t.Run("refused analysis while another request saves", func(t *testing.T) {
-		s := newSetup(t, "surla.controlplane.revise_change")
+		s := newSetup(t, "highbay.controlplane.revise_change")
 		unknown := "check_09"
 		done := heldRevise(t, s, revision("Request A", &unknown))
-		winner, err := s.cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+		winner, err := s.cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 			ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Request B", RevisionNote: "Revise the change.", Analysis: revision("Request B", &check01),
 		})
 		require.NoError(t, err)
@@ -286,7 +286,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 		errA := awaitHeld(t, done)
 		assertServiceError(t, errA, "unprocessable")
 		assert.NotContains(t, errA.Error(), "Request B")
-		got, err := s.cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg"})
+		got, err := s.cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg"})
 		require.NoError(t, err)
 		assert.Equal(t, winner.RequestRevision, got.RequestRevision, "the refused request leaves the other request's revision intact")
 	})
@@ -305,7 +305,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 		{
 			name: "concurrent revision",
 			change: func(t *testing.T, s setup) {
-				_, err := s.cp.ReviseChange(alice, &gensurla.ReviseChangePayload{
+				_, err := s.cp.ReviseChange(alice, &genhighbay.ReviseChangePayload{
 					ChangeID: "chg", RequestRevision: s.card.RequestRevision, Prompt: "Request B", RevisionNote: "Revise the change.", Analysis: revision("Request B", &check01),
 				})
 				require.NoError(t, err)
@@ -319,8 +319,8 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 			change: func(t *testing.T, s setup) {
 				ex := *s.card.Examples[0]
 				ex.ExpectedOutcome = "Instant store credit within a minute"
-				_, err := s.cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{
-					ChangeID: "chg", RequestRevision: s.card.RequestRevision, Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&ex},
+				_, err := s.cp.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{
+					ChangeID: "chg", RequestRevision: s.card.RequestRevision, Answers: map[string]string{}, Examples: []*genhighbay.ExampleItem{&ex},
 				})
 				require.NoError(t, err)
 			},
@@ -360,7 +360,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newSetup(t, "surla.controlplane.revise_change")
+			s := newSetup(t, "highbay.controlplane.revise_change")
 			done := heldRevise(t, s, revision("Request A", &check01))
 			before, beforeErr := os.ReadFile(s.cp.cards.path("chg"))
 			tc.change(t, s)
@@ -371,7 +371,7 @@ func TestCP1ConcurrentChangesKeepTheWinningCard(t *testing.T) {
 			if tc.wantErr != "" {
 				assertServiceError(t, errA, tc.wantErr)
 			}
-			assertSummary(t, s.exp, "surla.controlplane.revise_change", tc.wantSummary, tc.wantStatus)
+			assertSummary(t, s.exp, "highbay.controlplane.revise_change", tc.wantSummary, tc.wantStatus)
 			now, nowErr := os.ReadFile(s.cp.cards.path("chg"))
 			assert.Equal(t, afterErr == nil, nowErr == nil, "the held request neither created nor removed the card file")
 			assert.Equal(t, string(after), string(now), "the held request left the card file as the other change left it")
@@ -445,11 +445,11 @@ func awaitHeld(t *testing.T, done <-chan error) error {
 }
 
 // assertSummary checks the latest ended span named name: its
-// surla.public_summary equals want and its status code is wantStatus.
+// highbay.public_summary equals want and its status code is wantStatus.
 func assertSummary(t *testing.T, exp *tracetest.InMemoryExporter, name, want string, wantStatus codes.Code) {
 	t.Helper()
 	sp := lastSpanByName(t, exp.GetSpans(), name)
-	got, ok := findSpanAttr(sp.Attributes, "surla.public_summary")
+	got, ok := findSpanAttr(sp.Attributes, "highbay.public_summary")
 	require.True(t, ok, "%s has no summary", name)
 	assert.Equal(t, want, got.AsString())
 	assert.Equal(t, wantStatus, sp.Status.Code, "%s status", name)

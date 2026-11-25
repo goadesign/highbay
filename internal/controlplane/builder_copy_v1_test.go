@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
@@ -41,7 +41,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						candidate, want = strings.Repeat("f", 40), "is not in the project's repository"
 					case "off branch":
 						productionBuildGit(t, builder, "reset", "--hard", build.Base)
-						want = "is not on surla/build-1"
+						want = "is not on highbay/build-1"
 					case "copy off branch":
 						productionBuildGit(t, builder, "checkout", "-q", "-b", "agent-work")
 						want = "A worker's working copy is not on its build's own branch"
@@ -58,13 +58,13 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						require.NoError(t, os.Remove(filepath.Join(cp.cards.dir, openBuildRecordFile)))
 						want = "no build"
 					case "dropped":
-						_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+						_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 							ChangeID: card.ChangeID, StartedAt: build.StartedAt.Format(time.RFC3339Nano),
 						})
 						require.NoError(t, err)
 						want = "The user dropped change " + card.ChangeID
 					case "foreign work":
-						productionBuildGit(t, workspace, "checkout", "-q", "-b", "surla/build-2", build.Base)
+						productionBuildGit(t, workspace, "checkout", "-q", "-b", "highbay/build-2", build.Base)
 						writeWorkspaceFiles(t, workspace, map[string]string{"foreign.go": "package shop\n"})
 						other := commitAllForLayoutTest(t, workspace)
 						productionBuildGit(t, builder, "merge", "--no-edit", other)
@@ -75,7 +75,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						defer func() { <-cp.builderCopyTurn }()
 						want = "working copy"
 					}
-					result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+					result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 						ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
 					})
 					if want == "" {
@@ -86,16 +86,16 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					require.Error(t, err)
 					assert.Contains(t, strings.ToLower(err.Error()), strings.ToLower(want))
 					if scenario == "copy off branch" {
-						var refusal *gensurla.CopyOffBranch
+						var refusal *genhighbay.CopyOffBranch
 						require.ErrorAs(t, err, &refusal)
 						assert.Contains(t, refusal.Message, "Your working copy is on branch 'agent-work'")
 					}
 					if scenario == "index lock" {
-						var refusal *gensurla.CopyOffBranch
+						var refusal *genhighbay.CopyOffBranch
 						require.ErrorAs(t, err, &refusal)
 						assert.Equal(t, "none", refusal.Operation)
 						require.NotNil(t, refusal.Branch)
-						assert.Equal(t, "surla/build-1", *refusal.Branch)
+						assert.Equal(t, "highbay/build-1", *refusal.Branch)
 						assert.Contains(t, refusal.Message, "Git's index lock (")
 						assert.Contains(t, refusal.Message, lock)
 						assert.Equal(t, beforeLock, readBuildFile(t, cp, card.ChangeID), "a locked copy changes no build state")
@@ -104,8 +104,8 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 						assertRefusalSays(t, err, "no_build", "stop work on it; make no more edits or commits for it")
 					}
 					if scenario == "foreign work" {
-						assert.ErrorContains(t, err, "Make surla/build-1 and your working copy hold neither")
-						assert.ErrorContains(t, err, "Make your own work again as a new commit on surla/build-1")
+						assert.ErrorContains(t, err, "Make highbay/build-1 and your working copy hold neither")
+						assert.ErrorContains(t, err, "Make your own work again as a new commit on highbay/build-1")
 					}
 					assert.Nil(t, result)
 					entries, readErr := os.ReadDir(cp.runsDir)
@@ -115,7 +115,7 @@ func TestBuilderCopyV1VerifyEntry(t *testing.T) {
 					}
 					if scenario == "index lock" {
 						require.NoError(t, os.Remove(lock))
-						started, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+						started, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 							ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
 						})
 						require.NoError(t, err)
@@ -144,21 +144,21 @@ func TestBuilderCopyV1HoldsTurnThroughPreflight(t *testing.T) {
 			gate := newPublishGate(t)
 			bin := t.TempDir()
 			script := "#!/bin/sh\nfor arg do\n" +
-				"if [ \"$arg\" = \"$SURLA_V1_PAUSE_ARGUMENT\" ] && mkdir \"$SURLA_V1_GIT_GATE/claimed\" 2>/dev/null; then\n" +
-				"exec 3<> \"$SURLA_V1_GIT_GATE/release\"\n: > \"$SURLA_V1_GIT_GATE/in-write\"\n" +
+				"if [ \"$arg\" = \"$HIGHBAY_V1_PAUSE_ARGUMENT\" ] && mkdir \"$HIGHBAY_V1_GIT_GATE/claimed\" 2>/dev/null; then\n" +
+				"exec 3<> \"$HIGHBAY_V1_GIT_GATE/release\"\n: > \"$HIGHBAY_V1_GIT_GATE/in-write\"\n" +
 				"dd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nfi\ndone\n" +
-				"exec \"$SURLA_V1_REAL_GIT\" \"$@\"\n"
+				"exec \"$HIGHBAY_V1_REAL_GIT\" \"$@\"\n"
 			require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
-			t.Setenv("SURLA_V1_PAUSE_ARGUMENT", phase.argument)
-			t.Setenv("SURLA_V1_GIT_GATE", gate.dir)
-			t.Setenv("SURLA_V1_REAL_GIT", realGit)
+			t.Setenv("HIGHBAY_V1_PAUSE_ARGUMENT", phase.argument)
+			t.Setenv("HIGHBAY_V1_GIT_GATE", gate.dir)
+			t.Setenv("HIGHBAY_V1_REAL_GIT", realGit)
 			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 			ctx, cancel := context.WithTimeout(asCaller("alice@example.com", CallerBuilder), 10*time.Second)
 			defer cancel()
 			defer func() { assert.NoError(t, gate.release()) }()
 			finished := make(chan error, 1)
 			go func() {
-				_, err := cp.VerifyChange(ctx, &gensurla.VerifyChangePayload{
+				_, err := cp.VerifyChange(ctx, &genhighbay.VerifyChangePayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
 				})
 				finished <- err
@@ -169,7 +169,7 @@ func TestBuilderCopyV1HoldsTurnThroughPreflight(t *testing.T) {
 				t.Fatal("verification did not reach the Git preflight boundary")
 			}
 			assert.Len(t, cp.builderCopyTurn, 1)
-			_, err = cp.GetBuilderAssignment(ctx, &gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+			_, err = cp.GetBuilderAssignment(ctx, &genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 			assertRefusalSays(t, err, "working_copy_busy", "call get_builder_assignment again")
 			require.NoError(t, gate.release())
 			select {
@@ -213,7 +213,7 @@ func TestBuilderCopyV1ApprovalRechecksReportCommit(t *testing.T) {
 				}
 				finished := make(chan error, 1)
 				go func() {
-					_, err := cp.ApproveMerge(asCaller("alice@example.com", CallerUser), &gensurla.ApproveMergePayload{
+					_, err := cp.ApproveMerge(asCaller("alice@example.com", CallerUser), &genhighbay.ApproveMergePayload{
 						ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 						CandidateCommit: candidate, ReportDigest: target.report.Digest,
 					})
@@ -234,12 +234,12 @@ func TestBuilderCopyV1ApprovalRechecksReportCommit(t *testing.T) {
 						productionBuildGit(t, builder, "reset", "--hard", build.Base)
 					case "deleted branch":
 						productionBuildGit(t, builder, "checkout", "--detach", "-q")
-						productionBuildGit(t, workspace, "branch", "-D", "surla/build-1")
+						productionBuildGit(t, workspace, "branch", "-D", "highbay/build-1")
 					case "replacement build":
 						build.StartedAt = build.StartedAt.Add(time.Second)
 						require.NoError(t, cp.cards.saveOpenBuild(build))
 					case "dropped build":
-						_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+						_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 							ChangeID: card.ChangeID, StartedAt: build.StartedAt.Format(time.RFC3339Nano),
 						})
 						require.NoError(t, err)
@@ -275,7 +275,7 @@ func TestBuilderCopyV1ApprovalRechecksReportCommit(t *testing.T) {
 func TestBuilderCopyV1ForeignWorkText(t *testing.T) {
 	for _, files := range [][]string{nil, {"a'b.go", "line\nbreak.go", "c.go", "d.go", "e.go"}} {
 		check := testwriter.CommitCheck{OnBranch: true, FromBase: true,
-			Foreign: []testwriter.ForeignWork{{MergeBase: "foreign", Branch: "surla/build-2", Files: files, FileCount: len(files) * 2}},
+			Foreign: []testwriter.ForeignWork{{MergeBase: "foreign", Branch: "highbay/build-2", Files: files, FileCount: len(files) * 2}},
 		}
 		for _, reader := range []struct {
 			refuse func(string, string, string, testwriter.CommitCheck) error
@@ -285,23 +285,23 @@ func TestBuilderCopyV1ForeignWorkText(t *testing.T) {
 		}{
 			{
 				refuse: candidateBuildRefusal,
-				goal:   "Make surla/build-1 and your working copy hold neither the other builds' commits nor their changes to the named files.",
-				remake: "Make your own work again as a new commit on surla/build-1 from base base",
+				goal:   "Make highbay/build-1 and your working copy hold neither the other builds' commits nor their changes to the named files.",
+				remake: "Make your own work again as a new commit on highbay/build-1 from base base",
 				next:   "then call verify_change again",
 			},
 			{
 				refuse: approvalBuildRefusal,
-				goal:   "Ask the builder to make surla/build-1 and its working copy hold neither the other builds' commits nor their changes to the named files",
-				remake: "make its own work again as a new commit on surla/build-1 from base base",
+				goal:   "Ask the builder to make highbay/build-1 and its working copy hold neither the other builds' commits nor their changes to the named files",
+				remake: "make its own work again as a new commit on highbay/build-1 from base base",
 				next:   "call verify_change again; then approve that run",
 			},
 		} {
-			err := reader.refuse("candidate", "base", "surla/build-1", check)
+			err := reader.refuse("candidate", "base", "highbay/build-1", check)
 			require.Error(t, err)
 			var refusal *goa.ServiceError
 			require.ErrorAs(t, err, &refusal)
 			assert.Equal(t, "build_branch_mismatch", refusal.Name)
-			assert.ErrorContains(t, err, "commit foreign on surla/build-2 merges work the user has not taken")
+			assert.ErrorContains(t, err, "commit foreign on highbay/build-2 merges work the user has not taken")
 			assert.ErrorContains(t, err, reader.goal)
 			assert.ErrorContains(t, err, reader.remake)
 			assert.ErrorContains(t, err, reader.next)
@@ -320,7 +320,7 @@ func TestBuilderCopyV1ForeignWorkText(t *testing.T) {
 // builderCopyV1Fixture supplies a real current build, readable builder copy and
 // immutable committed candidate. Its supervisor exits without building code.
 func builderCopyV1Fixture(t *testing.T, stored bool) (
-	*ControlPlane, *gensurla.ChangeCardResult, buildFile, string, string,
+	*ControlPlane, *genhighbay.ChangeCardResult, buildFile, string, string,
 ) {
 	t.Helper()
 	cp, card, _ := verificationSetupForSource(t, stored)
@@ -337,8 +337,8 @@ func builderCopyV1Fixture(t *testing.T, stored bool) (
 	}
 	require.NoError(t, cp.cards.saveOpenBuild(build))
 	builder := filepath.Join(workspace, testwriter.BuilderRole.Folder)
-	productionBuildGit(t, workspace, "worktree", "add", "-q", "-b", "surla/build-1", builder, build.Base)
-	productionBuildGit(t, workspace, "branch", "surla/tests-1", build.Base)
+	productionBuildGit(t, workspace, "worktree", "add", "-q", "-b", "highbay/build-1", builder, build.Base)
+	productionBuildGit(t, workspace, "branch", "highbay/tests-1", build.Base)
 	writeBuilderDesignFixture(t, builder, build.DesignSource)
 	writeWorkspaceFiles(t, builder, map[string]string{"implementation.go": "package shop\n"})
 	candidate := commitAllForLayoutTest(t, builder)

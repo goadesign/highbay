@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,7 +20,7 @@ type pagePendingBuildRead struct {
 	armed atomic.Bool
 	// captured proves the old answer existed while replacement was pending,
 	// before the owner handles its held POST.
-	captured chan *gensurla.ChangeBuild
+	captured chan *genhighbay.ChangeBuild
 }
 
 // TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement preserves a
@@ -30,18 +30,18 @@ type pagePendingBuildRead struct {
 // This proves page/HTTP behavior, not candidate execution or real window effects.
 func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T) {
 	team := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
-	team.start = func(context.Context) (*gensurla.ProjectTeam, error) {
-		return &gensurla.ProjectTeam{
+	team.start = func(context.Context) (*genhighbay.ProjectTeam, error) {
+		return &genhighbay.ProjectTeam{
 			Team: "page-team", Space: "page-space", HerdrMode: "attached",
 			Step:  "Build workers were requested in Herdr.",
-			Roles: []*gensurla.ProjectTeamRole{{Role: "builder", Handle: "page-builder", Running: false}},
+			Roles: []*genhighbay.ProjectTeamRole{{Role: "builder", Handle: "page-builder", Running: false}},
 		}, nil
 	}
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: team}})
 	cp.changesWait = 400 * time.Millisecond
 	cp.changesPoll = 20 * time.Millisecond
 	buildableChange(t, cp, "chg")
-	service := &pagePendingBuildRead{ControlPlane: cp, captured: make(chan *gensurla.ChangeBuild, 1)}
+	service := &pagePendingBuildRead{ControlPlane: cp, captured: make(chan *genhighbay.ChangeBuild, 1)}
 	ps := startPageServer(t, service)
 	ps.act("hold-old-build-answer", func() {
 		// Interception cannot see the gate until the observer is also armed.
@@ -66,25 +66,25 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	runPageScript(t, ps, nil, `
 const path = "/changes/chg/build";
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build did not become available");
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "first Build did not become available");
 // Keep the first build's version update behind its direct successful answer.
 // Releasing it during replacement forces the background-read interleaving.
 await control(origin, "answer-later", { key: "GET /changes" });
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build did not remain ready after delaying its list update");
-page.$("#surla-build-start").click();
-await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled && page.$("#surla-build-start-team-receipt") && page.sent("GET", path).every((r) => r.status === 200), "the first saved build and its read did not finish");
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "first Build did not remain ready after delaying its list update");
+page.$("#highbay-build-start").click();
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled && page.$("#highbay-build-start-team-receipt") && page.sent("GET", path).every((r) => r.status === 200), "the first saved build and its read did not finish");
 expect(!("replaces" in page.sent("POST", path)[0].body), "the first Build sent a replacement identity");
 const oldStarted = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
-expect(page.text("#surla-build-details").includes(oldStarted), "the first saved start is missing");
+expect(page.text("#highbay-build-details").includes(oldStarted), "the first saved start is missing");
 
 // Hold before the owner handles replacement; its old build remains readable.
 await control(origin, "hold", { key: "POST " + path });
-await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the first build's background read did not settle before replacement");
-page.$("#surla-build-again").click();
-await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "the replacement confirmation did not become ready");
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "the first build's background read did not settle before replacement");
+page.$("#highbay-build-again").click();
+await until(() => page.$("#highbay-build-confirm") && !page.$("#highbay-build-confirm").disabled, "the replacement confirmation did not become ready");
 expect(page.sent("POST", path).length === 1, "opening the question sent a replacement");
-page.$("#surla-build-confirm").click();
-await until(() => page.sent("POST", path).length === 2 && page.$("#surla-build-starting"), "the replacement POST was not held pending");
+page.$("#highbay-build-confirm").click();
+await until(() => page.sent("POST", path).length === 2 && page.$("#highbay-build-starting"), "the replacement POST was not held pending");
 const replacement = page.sent("POST", path)[1];
 expect(replacement.status === undefined, "replacement completed before the race was armed");
 expect(replacement.body.replaces?.change_id === "chg" && replacement.body.replaces.started_at === oldStarted && Object.keys(replacement.body.replaces).length === 2, "the held replacement did not name exactly the observed prior build");
@@ -103,25 +103,25 @@ await control(origin, "act", { key: "await-old-build-answer" });
 // This real Team mutation follows wait/list updates. Its build refresh may
 // coalesce with oldRead; another GET is neither required nor safe to await.
 await control(origin, "act", { key: "new-attention" });
-await until(() => page.$("#surla-team-attention-builder"), "the real Team update did not reach the page while its build read was held");
+await until(() => page.$("#highbay-team-attention-builder"), "the real Team update did not reach the page while its build read was held");
 expect(oldRead.status === undefined && replacement.status === undefined, "the captured old read or replacement escaped its gate");
 
 await control(origin, "release", { key: "POST " + path });
-await until(() => replacement.status === 200 && !page.$("#surla-build-starting") && page.$("#surla-build-start-team-receipt"), "the replacement did not display its successful receipt");
+await until(() => replacement.status === 200 && !page.$("#highbay-build-starting") && page.$("#highbay-build-start-team-receipt"), "the replacement did not display its successful receipt");
 const newStarted = JSON.parse(replacement.answer).build.started_at;
-expect(newStarted !== oldStarted && page.text("#surla-build-details").includes(newStarted), "the replacement did not display its new saved start");
-const teamReceipt = page.text("#surla-build-start-team-receipt");
+expect(newStarted !== oldStarted && page.text("#highbay-build-details").includes(newStarted), "the replacement did not display its new saved start");
+const teamReceipt = page.text("#highbay-build-start-team-receipt");
 expect(teamReceipt.includes("returned: «") && !teamReceipt.includes("the team was ready"), "the replacement team receipt did not quote the owner's start outcome");
 const startTeam = JSON.parse(replacement.answer).team;
 expect(startTeam.state === "ready" && startTeam.herdr_mode === "attached" && startTeam.roles.find((role) => role.role === "builder")?.running === false, "the fixture did not return a successful launch request without a running builder");
 expect(teamReceipt.includes("«" + startTeam.step + "»"), "the receipt inferred worker readiness instead of quoting the owner's launch outcome");
 const regressions = [];
 const observe = () => {
-  if (page.text("#surla-build-details").includes(oldStarted)) regressions.push("previous started_at flashed");
-  if (page.text("#surla-build-start-team-receipt") !== teamReceipt) regressions.push("replacement team receipt cleared");
+  if (page.text("#highbay-build-details").includes(oldStarted)) regressions.push("previous started_at flashed");
+  if (page.text("#highbay-build-start-team-receipt") !== teamReceipt) regressions.push("replacement team receipt cleared");
 };
 const observer = new page.win.MutationObserver(observe);
-observer.observe(page.$("#surla-build-section"), { childList: true, attributes: true, subtree: true });
+observer.observe(page.$("#highbay-build-section"), { childList: true, attributes: true, subtree: true });
 await control(origin, "release", { key: "GET " + path });
 await until(() => oldRead.status === 200, "the delayed old answer did not arrive");
 expect(JSON.parse(oldRead.answer).build.started_at === oldStarted, "the delayed read did not actually contain the previous build");
@@ -131,8 +131,8 @@ await sleep(0);
 observe();
 observer.disconnect();
 expect(regressions.length === 0, "a read captured during replacement overwrote successful Build facts: " + JSON.stringify(regressions));
-expect(page.text("#surla-build-details").includes(newStarted), "the replacement saved start was lost");
-expect(page.text("#surla-build-start-team-receipt") === teamReceipt, "the replacement team receipt was lost");
+expect(page.text("#highbay-build-details").includes(newStarted), "the replacement saved start was lost");
+expect(page.text("#highbay-build-start-team-receipt") === teamReceipt, "the replacement team receipt was lost");
 expect(page.sent("POST", path).length === 2, "the delayed read repeated the replacement effect");
 page.close();
 `)
@@ -142,8 +142,8 @@ page.close();
 // surrounding answer-later gate then holds delivery while StartBuild completes.
 func (s *pagePendingBuildRead) GetBuild(
 	ctx context.Context,
-	p *gensurla.GetBuildPayload,
-) (*gensurla.ChangeBuild, error) {
+	p *genhighbay.GetBuildPayload,
+) (*genhighbay.ChangeBuild, error) {
 	result, err := s.ControlPlane.GetBuild(ctx, p)
 	if err == nil && s.armed.CompareAndSwap(true, false) {
 		s.captured <- result

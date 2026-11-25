@@ -21,8 +21,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcphighbay "github.com/goadesign/highbay/gen/mcp_highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -103,7 +103,7 @@ func TestCheckFailuresReturnReadableOutput(t *testing.T) {
 							assert.False(t, body.Fault)
 						}
 					} else {
-						call, err := clients.mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
+						call, err := clients.mcpClient.ToolsCall(t.Context(), &genmcphighbay.ToolsCallPayload{
 							Name: tool, Arguments: json.RawMessage(`{}`),
 						})
 						require.NoError(t, err)
@@ -121,18 +121,18 @@ func TestCheckFailuresReturnReadableOutput(t *testing.T) {
 					require.Len(t, match, 2, message)
 					opID := match[1]
 					var saved strings.Builder
-					payload := &gensurla.ReadCheckOutputPayload{OpID: opID}
+					payload := &genhighbay.ReadCheckOutputPayload{OpID: opID}
 					for pages := 0; ; pages++ {
 						require.Less(t, pages, 3, "saved output must finish within three pages")
-						var page *gensurla.CheckOutputPage
+						var page *genhighbay.CheckOutputPage
 						if transport == "http" {
 							var err error
 							page, err = clients.httpClient.ReadCheckOutput(t.Context(), payload)
 							require.NoError(t, err)
 						} else {
-							args, err := gensurla.EncodeReadCheckOutputPayload(payload)
+							args, err := genhighbay.EncodeReadCheckOutputPayload(payload)
 							require.NoError(t, err)
-							page = callMCPTool(t, clients.mcpClient, "read_check_output", string(args), gensurla.DecodeCheckOutputPage)
+							page = callMCPTool(t, clients.mcpClient, "read_check_output", string(args), genhighbay.DecodeCheckOutputPage)
 						}
 						saved.WriteString(page.Text)
 						if page.NextCursor == nil {
@@ -169,14 +169,14 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	daemon := newFakeDockerDaemon(t)
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(dockerBin), "context_endpoint.txt"), []byte(daemon.serverURL+"\n"), 0o600))
 	t.Setenv("DOCKER_HOST", "")
-	t.Setenv("SURLA_OPERATOR_SECRET", "must-not-leak-to-docker")
+	t.Setenv("HIGHBAY_OPERATOR_SECRET", "must-not-leak-to-docker")
 
 	workspace := newShopModule(t, map[string]string{
 		"go.sum":                      "repaired-sum\n",
 		"eval/go.mod":                 "module example.com/shop/eval\n\ngo 1.24\n",
 		"eval/eval_test.go":           "package eval\n",
 		"testdata/fixture/go.mod":     "module example.com/ignored\n",
-		".surla/cards/c1.json":        "{}\n",
+		".highbay/cards/c1.json":      "{}\n",
 		"reports/public-fixture.json": "public fixture\n",
 	})
 	runGitForTest(t, workspace, "init", "-q")
@@ -190,10 +190,10 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	project := workspace
 	workspace = clients.workingFolder
 
-	tools, err := clients.mcpClient.ToolsList(ctx, &genmcpsurla.ToolsListPayload{})
+	tools, err := clients.mcpClient.ToolsList(ctx, &genmcphighbay.ToolsListPayload{})
 	require.NoError(t, err)
 	for _, want := range []string{"check_project", "update_dependencies", "read_check_output"} {
-		assert.True(t, slices.ContainsFunc(tools.Tools, func(ti *genmcpsurla.ToolInfo) bool {
+		assert.True(t, slices.ContainsFunc(tools.Tools, func(ti *genmcphighbay.ToolInfo) bool {
 			return ti.Name == want
 		}), want)
 	}
@@ -212,7 +212,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 		assert.Subset(t, c.Env, []string{"HOME=/work", "TMPDIR=/work/tmp", "GOCACHE=/work/gocache", "GOPATH=/work/gopath"})
 		assert.False(t, findMount(t, c, containerWork).ReadOnly)
 		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".git", "HEAD"))
-		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".surla", "cards", "c1.json"))
+		assert.NoFileExists(t, filepath.Join(srcMount.Source, ".highbay", "cards", "c1.json"))
 		assert.FileExists(t, filepath.Join(srcMount.Source, "reports", "public-fixture.json"))
 		assert.FileExists(t, filepath.Join(srcMount.Source, "shop_test.go"))
 
@@ -263,7 +263,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 
 	// 1. Passing check_project over MCP pulls CheckImage once, runs Phase 1 ->
 	// Phase 2 per module, leaves live files untouched, and cleans scratch.
-	res := callMCPTool(t, clients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult)
+	res := callMCPTool(t, clients.mcpClient, "check_project", `{}`, genhighbay.DecodeCheckProjectResult)
 	assert.True(t, res.Passed)
 	assert.Equal(t, "tested 2 module(s): ., eval. All passed.", res.Message)
 	assert.Equal(t, int64(1), daemon.pulls.Load())
@@ -299,9 +299,9 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	require.Len(t, created, 3)
 	assert.Equal(t, []string{workspace, evalDir, evalDir}, []string{created[0].WorkDir, created[1].WorkDir, created[2].WorkDir})
 
-	repairRes := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
+	repairRes := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, genhighbay.DecodeUpdateDependenciesResult)
 	assert.Equal(t, []string{"go.sum"}, repairRes.FilesWritten)
-	assert.True(t, callMCPTool(t, clients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult).Passed)
+	assert.True(t, callMCPTool(t, clients.mcpClient, "check_project", `{}`, genhighbay.DecodeCheckProjectResult).Passed)
 	assertFileContent(t, filepath.Join(project, "go.sum"), "repaired-sum\n")
 	assertFileContent(t, filepath.Join(project, "reports", "public-fixture.json"), "public fixture\n")
 
@@ -309,7 +309,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	// decoded MCP Message and read_check_output page without splitting valid runes.
 	daemon.resetContainers()
 	failEvalTest.Store(true)
-	resTestFail := callMCPTool(t, clients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult)
+	resTestFail := callMCPTool(t, clients.mcpClient, "check_project", `{}`, genhighbay.DecodeCheckProjectResult)
 	assert.False(t, resTestFail.Passed)
 	assert.LessOrEqual(t, len(resTestFail.Message), maxCheckMessageBytes)
 	assert.True(t, utf8.ValidString(resTestFail.Message))
@@ -320,9 +320,9 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	var combined strings.Builder
 	pages := 0
 	for cursor := (*string)(nil); ; {
-		args, err := gensurla.EncodeReadCheckOutputPayload(&gensurla.ReadCheckOutputPayload{OpID: resTestFail.OpID, Cursor: cursor})
+		args, err := genhighbay.EncodeReadCheckOutputPayload(&genhighbay.ReadCheckOutputPayload{OpID: resTestFail.OpID, Cursor: cursor})
 		require.NoError(t, err)
-		page := callMCPTool(t, clients.mcpClient, "read_check_output", string(args), gensurla.DecodeCheckOutputPage)
+		page := callMCPTool(t, clients.mcpClient, "read_check_output", string(args), genhighbay.DecodeCheckOutputPage)
 		assert.LessOrEqual(t, len(page.Text), maxCheckMessageBytes)
 		assert.True(t, utf8.ValidString(page.Text))
 		combined.WriteString(page.Text)
@@ -340,7 +340,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	assert.Contains(t, combined.String(), strings.Repeat("log-✓-", 3200))
 	assert.Contains(t, combined.String(), "--- FAIL: TestEvalScenario (0.01s)")
 
-	httpPage, err := clients.httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: resTestFail.OpID})
+	httpPage, err := clients.httpClient.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: resTestFail.OpID})
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(httpPage.Text), maxCheckMessageBytes)
 	assert.NotEmpty(t, httpPage.Text)
@@ -383,7 +383,7 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "go.sum"), []byte("stale-sum\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(workspace, "eval", "go.sum"), []byte("broken-eval-sum\n"), 0o644))
 
-	writtenFail := callMCPTool(t, writtenClients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult)
+	writtenFail := callMCPTool(t, writtenClients.mcpClient, "check_project", `{}`, genhighbay.DecodeCheckProjectResult)
 	assert.False(t, writtenFail.Passed)
 	assert.Contains(t, writtenFail.Message, "tested 1 module(s): .. Left test module eval out (tests belong to the test writer).")
 	assert.Contains(t, writtenFail.Message, "Dependencies for . could not be prepared (go list exited 1)")
@@ -392,19 +392,19 @@ func TestCheckProjectLifecycle(t *testing.T) {
 	require.Len(t, created, 1, "eval is not entered during check_project")
 	assert.Equal(t, workspace, created[0].WorkDir)
 
-	writtenRepair := callMCPTool(t, writtenClients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
+	writtenRepair := callMCPTool(t, writtenClients.mcpClient, "update_dependencies", `{}`, genhighbay.DecodeUpdateDependenciesResult)
 	assert.Equal(t, []string{"go.sum"}, writtenRepair.FilesWritten)
 	assert.Equal(t, "Wrote 1 file(s): go.sum. Left test module eval out (tests belong to the test writer).", writtenRepair.Message)
 	assertFileContent(t, filepath.Join(workspace, "eval", "go.sum"), "broken-eval-sum\n")
 
 	daemon.resetContainers()
-	writtenPass := callMCPTool(t, writtenClients.mcpClient, "check_project", `{}`, gensurla.DecodeCheckProjectResult)
+	writtenPass := callMCPTool(t, writtenClients.mcpClient, "check_project", `{}`, genhighbay.DecodeCheckProjectResult)
 	assert.True(t, writtenPass.Passed)
 	assert.Equal(t, "tested 1 module(s): .. Left test module eval out (tests belong to the test writer). All passed.", writtenPass.Message)
 	created = daemon.createdContainers()
 	require.Len(t, created, 2, "only the root module runs list and test")
 	assert.Equal(t, []string{workspace, workspace}, []string{created[0].WorkDir, created[1].WorkDir})
-	writtenOut, err := writtenClients.httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: writtenPass.OpID})
+	writtenOut, err := writtenClients.httpClient.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: writtenPass.OpID})
 	require.NoError(t, err)
 	assert.Contains(t, writtenOut.Text, "note: Left test module eval out (tests belong to the test writer)\n")
 }
@@ -457,7 +457,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			}
 		})
 
-		res := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
+		res := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, genhighbay.DecodeUpdateDependenciesResult)
 		assert.Equal(t, []string{"eval/go.sum", "go.sum"}, res.FilesWritten)
 		assert.Contains(t, res.Message, "Wrote 2 file(s): eval/go.sum, go.sum.")
 		assert.Contains(t, res.Message, "go tidy failed for broken (exit 1); its files were not written.")
@@ -503,7 +503,7 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			}
 		})
 
-		res := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, gensurla.DecodeUpdateDependenciesResult)
+		res := callMCPTool(t, clients.mcpClient, "update_dependencies", `{}`, genhighbay.DecodeUpdateDependenciesResult)
 		assert.Equal(t, []string{"go.sum"}, res.FilesWritten)
 		assert.Contains(t, res.Message, "Wrote 1 file(s): go.sum. Left test module eval out (tests belong to the test writer).")
 		assert.Contains(t, res.Message, "go tidy failed for broken (exit 1); its files were not written.")
@@ -608,8 +608,8 @@ func TestUpdateDependenciesLifecycle(t *testing.T) {
 			require.NoError(t, err)
 			assert.NotNil(t, result.FilesWritten)
 			assert.Empty(t, result.FilesWritten)
-			assert.NoError(t, gensurla.ValidateUpdateDependenciesResultValue(result))
-			encoded, err := gensurla.EncodeUpdateDependenciesResult(result)
+			assert.NoError(t, genhighbay.ValidateUpdateDependenciesResultValue(result))
+			encoded, err := genhighbay.EncodeUpdateDependenciesResult(result)
 			require.NoError(t, err)
 			assert.Contains(t, string(encoded), `"files_written":[]`)
 			if tc.edit {
@@ -707,7 +707,7 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		assert.Empty(t, readOwnerRecord(t, pA.opDir).Containers)
 		assertFileContent(t, filepath.Join(moduleCache, "retained"), "input")
 
-		page, err := cpA2.ReadCheckOutput(authCtx, &gensurla.ReadCheckOutputPayload{OpID: opID})
+		page, err := cpA2.ReadCheckOutput(authCtx, &genhighbay.ReadCheckOutputPayload{OpID: opID})
 		require.NoError(t, err)
 		assert.Contains(t, page.Text, "pinned check output")
 	})
@@ -744,7 +744,7 @@ func TestCheckOperationsRecoveryAndRetainedOwner(t *testing.T) {
 		assert.Zero(t, daemon.removes.Load())
 		assert.ElementsMatch(t, []string{outputFile, outputMetaFile}, dirEntryNames(t, opDir))
 
-		page, err := cp.ReadCheckOutput(authCtx, &gensurla.ReadCheckOutputPayload{OpID: opID})
+		page, err := cp.ReadCheckOutput(authCtx, &genhighbay.ReadCheckOutputPayload{OpID: opID})
 		require.NoError(t, err)
 		assert.Equal(t, savedText, page.Text)
 	})
@@ -763,7 +763,7 @@ func testConcurrentCheckAndUpdate(t *testing.T, daemon *fakeDockerDaemon) {
 	checkDone := make(chan struct{})
 	releaseOnce := sync.OnceFunc(func() { close(release) })
 	var first sync.Once
-	var checkRes *gensurla.CheckProjectResult
+	var checkRes *genhighbay.CheckProjectResult
 	var checkErr error
 	var wg sync.WaitGroup
 	t.Cleanup(func() {
@@ -825,14 +825,14 @@ func testConcurrentCheckAndUpdate(t *testing.T, daemon *fakeDockerDaemon) {
 	for _, target := range []string{workspace, containerModCache, containerWork} {
 		assert.NotEqual(t, findMount(t, &created[0], target).Source, findMount(t, &created[2], target).Source)
 	}
-	checkPage, err := httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: checkRes.OpID})
+	checkPage, err := httpClient.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: checkRes.OpID})
 	require.NoError(t, err)
 	assert.Contains(t, checkPage.Text, "check step test ./...")
-	updatePage, err := httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: updateRes.OpID})
+	updatePage, err := httpClient.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: updateRes.OpID})
 	require.NoError(t, err)
 	assert.Contains(t, updatePage.Text, "tidy output")
 	require.NotNil(t, updatePage.NextCursor)
-	_, err = httpClient.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: checkRes.OpID, Cursor: updatePage.NextCursor})
+	_, err = httpClient.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: checkRes.OpID, Cursor: updatePage.NextCursor})
 	assertServiceError(t, err, "unprocessable")
 }
 
@@ -853,7 +853,7 @@ func testIndependentServerUpdates(t *testing.T, daemon *fakeDockerDaemon) {
 	var (
 		tidyMu      sync.Mutex
 		tidyEntered int
-		resA, resB  *gensurla.UpdateDependenciesResult
+		resA, resB  *genhighbay.UpdateDependenciesResult
 		errA, errB  error
 		wg          sync.WaitGroup
 	)
