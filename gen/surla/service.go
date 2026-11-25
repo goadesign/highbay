@@ -376,9 +376,10 @@ type Service interface {
 	// read. Only the user's browser session may call it. wait_for_changes covers
 	// this snapshot as well as the change list.
 	GetTeam(context.Context) (res *TeamSnapshot, err error)
-	// Show this project's space and focus the requested registered role's pane,
-	// only at the user's request. Any open Herdr dialog prevents all window
-	// changes. Fresh project, handle and space labels must still identify the pane.
+	// Raise the Herdr window, show this project's space and tab, and focus the
+	// requested registered role's pane, only at the user's request. Any open Herdr
+	// dialog prevents all window changes. Fresh project, handle and space labels
+	// must still identify the pane.
 	ShowTeamPane(context.Context, *ShowTeamPanePayload) (err error)
 	// Start missing project agents using explicit choices, otherwise saved choices
 	// and installed cross-family defaults. Never replace a running guide. Only the
@@ -901,26 +902,37 @@ type C4EdgeItem struct {
 	Protocol string
 }
 
-// Your analysis of the feature request against the target's current Goa design
-// (its design/*.go files) and the Golden Path playbook served at
-// surla://golden-path. Surla saves it as the Change Card after checking its
-// structure and cross-field rules; it cannot judge whether the analysis is
-// complete or correct.
+// Product-level Change Card shown to the requester on the Surla browser page
+// to confirm intent before code is written. Write every field for a requester
+// who knows only their own goal, not the repository: use plain domain language
+// about observable user behavior, never repository file paths (such as
+// design/design.go), Surla candidate runner flags (such as -listen), or
+// internal Goa/Goa-AI symbol names unless the requester explicitly asked about
+// a CLI or API surface. When building a new product in a project created from
+// Surla's starter scaffold (init_project's price-answering sample), replace
+// that sample silently in your draft: never mention or ask about Surla's
+// starter sample on the Change Card. Surla checks structure and cross-field
+// rules; it cannot judge whether the analysis is complete or correct.
 type CP1Analysis struct {
-	// Plain-English description of the requested behavior, including the details
-	// the request or the design already settle.
+	// Concise plain-English description (2–4 sentences) of what the product or
+	// change will do for its users and the key product defaults your draft
+	// settles. Never describe file paths, candidate runner flags, or removal of
+	// Surla's starter sample.
 	Summary string
 	// Open questions only the requester can answer: product, domain, or
-	// operational choices that change observable behavior or service boundaries.
-	// Do not ask about details the request or the design already settle; state
-	// them in summary, or in examples when they change an observable outcome. Send
-	// an empty list when nothing is open.
+	// operational choices that change user-visible behavior. Never ask whether to
+	// replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not
+	// ask about details the request already settles; state settled product
+	// defaults in summary, or in examples when they change an observable outcome.
+	// Send an empty list when nothing is open.
 	Ambiguities []*CP1AnalysisAmbiguity
-	// Concrete acceptance examples drawn from the request and the design, never
-	// placeholder text; each becomes a check the change must pass.
+	// Concrete acceptance examples in plain domain terms, never placeholder text
+	// or starter-sample leftovers; each becomes a check the change must pass.
 	Examples []*CP1AnalysisExample
-	// Existing behaviors and contract rules of the target that the change must
-	// keep, each stated concretely; empty when none apply.
+	// Existing user-facing behaviors of an established product that this change
+	// must keep, each stated in plain domain terms; send an empty list ([]) on a
+	// new product (including the first change after init_project, where the
+	// starter sample is replaced rather than preserved) or when none apply.
 	PreservedBehaviors []string
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -966,39 +978,44 @@ type CP1AnalysisExample struct {
 	VerificationKind string
 }
 
-// Your analysis of the revised request against the current Change Card (as
-// get_change returns it at request_revision), the target's current Goa design,
-// and the Golden Path playbook served at surla://golden-path. A confirmed
-// answer stays settled unless the revised request or design contradicts it: do
-// not ask it again, and restate it in summary, examples or
-// preserved_behaviors, because the revised card drops every answer. An
-// explicit instruction in the revised request or design replaces the
-// decisions, examples and preserved behaviors it affects. An unanswered
-// question stays in ambiguities unless the revised request or design answers
-// it or removes its scope. Everything else on the current card stays unless
-// the revised request or design changes it. Surla checks the structure and the
-// example accounting; it cannot judge whether the analysis is complete or
-// correct.
+// Updated product-level Change Card shown to the requester on the Surla
+// browser page, analyzed against the current Change Card (as get_change
+// returns it at request_revision), the draft design, and surla://golden-path.
+// Write every field for a requester who knows their own goal, not the
+// repository: use plain domain language without file paths (such as
+// design/design.go), Surla candidate runner flags (such as -listen),
+// starter-sample references, or internal Goa/Goa-AI symbol names unless the
+// requester explicitly asked about a CLI or API surface. A confirmed answer
+// stays settled unless the revised request or design contradicts it: do not
+// ask it again, and restate it in summary, examples or preserved_behaviors,
+// because the revised card drops every answer. An explicit instruction in the
+// revised request or design replaces the decisions, examples and preserved
+// behaviors it affects. An unanswered question stays in ambiguities unless the
+// revised request or design answers it or removes its scope. Everything else
+// on the current card stays unless the revised request or design changes it.
+// Surla checks the structure and the example accounting; it cannot judge
+// whether the analysis is complete or correct.
 type CP1RevisionAnalysis struct {
-	// Plain-English description of the revised behavior, including the details the
-	// request, the design or confirmed answers already settle.
+	// Concise plain-English description (2–4 sentences) of the revised product
+	// behavior and settled product defaults, without file paths, candidate runner
+	// flags, or starter-sample references.
 	Summary string
 	// Open questions only the requester can answer: product, domain, or
-	// operational choices that change observable behavior or service boundaries.
-	// Do not ask about details the request, the design or a confirmed answer
-	// already settle; state them in summary, or in examples when they change an
-	// observable outcome. Send an empty list when nothing is open.
+	// operational choices that change user-visible behavior. Never ask about
+	// Surla's starter sample or internal Go/Goa plumbing. Do not ask about details
+	// the request, the design or a confirmed answer already settle; state settled
+	// product defaults in summary, or in examples when they change an observable
+	// outcome. Send an empty list when nothing is open.
 	Ambiguities []*CP1AnalysisAmbiguity
-	// Concrete acceptance examples drawn from the revised request and the design.
-	// Give prior_id for each current example you keep or edit; omit it for new
-	// ones.
+	// Concrete acceptance examples in plain domain terms. Give prior_id for each
+	// current example you keep or edit; omit it for new ones.
 	Examples []*CP1RevisionAnalysisExample
 	// IDs of the current card's examples this revision drops. Every current
 	// example ID appears exactly once, either as an examples[].prior_id or here;
 	// send an empty list when none are dropped.
 	RemovedExampleIds []string
-	// Existing behaviors and contract rules of the target that the change must
-	// keep, each stated concretely; empty when none apply.
+	// Existing user-facing behaviors of the product that this revision must keep,
+	// each stated in plain domain terms; empty when none apply.
 	PreservedBehaviors []string
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -1131,6 +1148,16 @@ type ChangeList struct {
 	// running. A first initialization downloads Go modules and can take a few
 	// minutes. version changes with it, so wait_for_changes reports each phase.
 	InitializingPhase *string
+	// Progress of preparing the project's first Change Card while changes is empty
+	// and initializing_phase is absent: initialized after init_project published
+	// the starter in this server run, editing once update_draft prepared the
+	// guide's draft, evaluating_story while refresh_story is checking the Story
+	// and Goa design, story_ready after refresh_story succeeded and before
+	// propose_change saves the card, or story_failed when the latest refresh_story
+	// failed. Absent once a Change Card exists, while initializing_phase is set,
+	// or before starter initialization and draft preparation begin. version
+	// changes with it.
+	DraftState *string
 }
 
 // One saved Change Card of the project as list_changes reports it.
@@ -4080,20 +4107,25 @@ func validatejsonCP1AnalysisExampleTransport(value *jsonCP1AnalysisExampleTransp
 
 // jsonCP1AnalysisTransport stores JSON fields until they have been validated.
 type jsonCP1AnalysisTransport struct {
-	// Plain-English description of the requested behavior, including the details
-	// the request or the design already settle.
+	// Concise plain-English description (2–4 sentences) of what the product or
+	// change will do for its users and the key product defaults your draft
+	// settles. Never describe file paths, candidate runner flags, or removal of
+	// Surla's starter sample.
 	Summary *string `json:"summary"`
 	// Open questions only the requester can answer: product, domain, or
-	// operational choices that change observable behavior or service boundaries.
-	// Do not ask about details the request or the design already settle; state
-	// them in summary, or in examples when they change an observable outcome. Send
-	// an empty list when nothing is open.
+	// operational choices that change user-visible behavior. Never ask whether to
+	// replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not
+	// ask about details the request already settles; state settled product
+	// defaults in summary, or in examples when they change an observable outcome.
+	// Send an empty list when nothing is open.
 	Ambiguities []*jsonCP1AnalysisAmbiguityTransport `json:"ambiguities"`
-	// Concrete acceptance examples drawn from the request and the design, never
-	// placeholder text; each becomes a check the change must pass.
+	// Concrete acceptance examples in plain domain terms, never placeholder text
+	// or starter-sample leftovers; each becomes a check the change must pass.
 	Examples []*jsonCP1AnalysisExampleTransport `json:"examples"`
-	// Existing behaviors and contract rules of the target that the change must
-	// keep, each stated concretely; empty when none apply.
+	// Existing user-facing behaviors of an established product that this change
+	// must keep, each stated in plain domain terms; send an empty list ([]) on a
+	// new product (including the first change after init_project, where the
+	// starter sample is replaced rather than preserved) or when none apply.
 	PreservedBehaviors []*string `json:"preserved_behaviors"`
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -4217,25 +4249,26 @@ func validatejsonCP1RevisionAnalysisExampleTransport(value *jsonCP1RevisionAnaly
 
 // jsonCP1RevisionAnalysisTransport stores JSON fields until they have been validated.
 type jsonCP1RevisionAnalysisTransport struct {
-	// Plain-English description of the revised behavior, including the details the
-	// request, the design or confirmed answers already settle.
+	// Concise plain-English description (2–4 sentences) of the revised product
+	// behavior and settled product defaults, without file paths, candidate runner
+	// flags, or starter-sample references.
 	Summary *string `json:"summary"`
 	// Open questions only the requester can answer: product, domain, or
-	// operational choices that change observable behavior or service boundaries.
-	// Do not ask about details the request, the design or a confirmed answer
-	// already settle; state them in summary, or in examples when they change an
-	// observable outcome. Send an empty list when nothing is open.
+	// operational choices that change user-visible behavior. Never ask about
+	// Surla's starter sample or internal Go/Goa plumbing. Do not ask about details
+	// the request, the design or a confirmed answer already settle; state settled
+	// product defaults in summary, or in examples when they change an observable
+	// outcome. Send an empty list when nothing is open.
 	Ambiguities []*jsonCP1AnalysisAmbiguityTransport `json:"ambiguities"`
-	// Concrete acceptance examples drawn from the revised request and the design.
-	// Give prior_id for each current example you keep or edit; omit it for new
-	// ones.
+	// Concrete acceptance examples in plain domain terms. Give prior_id for each
+	// current example you keep or edit; omit it for new ones.
 	Examples []*jsonCP1RevisionAnalysisExampleTransport `json:"examples"`
 	// IDs of the current card's examples this revision drops. Every current
 	// example ID appears exactly once, either as an examples[].prior_id or here;
 	// send an empty list when none are dropped.
 	RemovedExampleIds []*string `json:"removed_example_ids"`
-	// Existing behaviors and contract rules of the target that the change must
-	// keep, each stated concretely; empty when none apply.
+	// Existing user-facing behaviors of the product that this revision must keep,
+	// each stated in plain domain terms; empty when none apply.
 	PreservedBehaviors []*string `json:"preserved_behaviors"`
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -4581,6 +4614,16 @@ type jsonChangeListTransport struct {
 	// running. A first initialization downloads Go modules and can take a few
 	// minutes. version changes with it, so wait_for_changes reports each phase.
 	InitializingPhase *string `json:"initializing_phase,omitempty"`
+	// Progress of preparing the project's first Change Card while changes is empty
+	// and initializing_phase is absent: initialized after init_project published
+	// the starter in this server run, editing once update_draft prepared the
+	// guide's draft, evaluating_story while refresh_story is checking the Story
+	// and Goa design, story_ready after refresh_story succeeded and before
+	// propose_change saves the card, or story_failed when the latest refresh_story
+	// failed. Absent once a Change Card exists, while initializing_phase is set,
+	// or before starter initialization and draft preparation begin. version
+	// changes with it.
+	DraftState *string `json:"draft_state,omitempty"`
 }
 
 // validatejsonChangeListTransport checks decoded JSON before it becomes a service value.
@@ -4602,6 +4645,11 @@ func validatejsonChangeListTransport(value *jsonChangeListTransport) (err error)
 			if err2 := validatejsonChangeListItemTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if value.DraftState != nil {
+		if !(*value.DraftState == "initialized" || *value.DraftState == "editing" || *value.DraftState == "evaluating_story" || *value.DraftState == "story_ready" || *value.DraftState == "story_failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.draft_state", *value.DraftState, []any{"initialized", "editing", "evaluating_story", "story_ready", "story_failed"}))
 		}
 	}
 	return err
@@ -9752,6 +9800,11 @@ func validateChangeListOriginal(value *ChangeList) (err error) {
 			if err2 := validateChangeListItemOriginal(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if value.DraftState != nil {
+		if !(*value.DraftState == "initialized" || *value.DraftState == "editing" || *value.DraftState == "evaluating_story" || *value.DraftState == "story_ready" || *value.DraftState == "story_failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.draft_state", *value.DraftState, []any{"initialized", "editing", "evaluating_story", "story_ready", "story_failed"}))
 		}
 	}
 	return err
@@ -17421,6 +17474,7 @@ func EncodeChangeList(in *ChangeList) ([]byte, error) {
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
 			InitializingPhase: in.InitializingPhase,
+			DraftState:        in.DraftState,
 		}
 		body.Changes = make([]*jsonChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {
@@ -17462,6 +17516,7 @@ func ValidateChangeListValue(in *ChangeList) error {
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
 			InitializingPhase: in.InitializingPhase,
+			DraftState:        in.DraftState,
 		}
 		body.Changes = make([]*jsonChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {
@@ -17507,6 +17562,7 @@ func DecodeChangeList(data []byte) (out *ChangeList, err error) {
 			Version:           *body.Version,
 			ApprovalAvailable: *body.ApprovalAvailable,
 			InitializingPhase: body.InitializingPhase,
+			DraftState:        body.DraftState,
 		}
 		out.Changes = make([]*ChangeListItem, len(body.Changes))
 		for i, val := range body.Changes {
@@ -34772,28 +34828,28 @@ func validateCP1AnalysisJSONValue(path string, value any, description string) er
 		case "ambiguities":
 			if err := validateCP1AnalysisJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request or the design already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 			); err != nil {
 				return err
 			}
 		case "examples":
 			if err := validateCP1AnalysisJSONValue5(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concrete acceptance examples drawn from the request and the design, never placeholder text; each becomes a check the change must pass.",
+				typed[key], "Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.",
 			); err != nil {
 				return err
 			}
 		case "preserved_behaviors":
 			if err := validateCP1AnalysisJSONValue7(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Existing behaviors and contract rules of the target that the change must keep, each stated concretely; empty when none apply.",
+				typed[key], "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.",
 			); err != nil {
 				return err
 			}
 		case "summary":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Plain-English description of the requested behavior, including the details the request or the design already settle.",
+				typed[key], "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's starter sample.",
 			); err != nil {
 				return err
 			}
@@ -35048,21 +35104,21 @@ func validateCP1RevisionAnalysisJSONValue(path string, value any, description st
 		case "ambiguities":
 			if err := validateCP1RevisionAnalysisJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request, the design or a confirmed answer already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 			); err != nil {
 				return err
 			}
 		case "examples":
 			if err := validateCP1RevisionAnalysisJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concrete acceptance examples drawn from the revised request and the design. Give prior_id for each current example you keep or edit; omit it for new ones.",
+				typed[key], "Concrete acceptance examples in plain domain terms. Give prior_id for each current example you keep or edit; omit it for new ones.",
 			); err != nil {
 				return err
 			}
 		case "preserved_behaviors":
 			if err := validateCP1RevisionAnalysisJSONValue5(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Existing behaviors and contract rules of the target that the change must keep, each stated concretely; empty when none apply.",
+				typed[key], "Existing user-facing behaviors of the product that this revision must keep, each stated in plain domain terms; empty when none apply.",
 			); err != nil {
 				return err
 			}
@@ -35076,7 +35132,7 @@ func validateCP1RevisionAnalysisJSONValue(path string, value any, description st
 		case "summary":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Plain-English description of the revised behavior, including the details the request, the design or confirmed answers already settle.",
+				typed[key], "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or starter-sample references.",
 			); err != nil {
 				return err
 			}
@@ -37265,6 +37321,13 @@ func validateChangeListJSONValue(path string, value any, description string) err
 			); err != nil {
 				return err
 			}
+		case "draft_state":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Progress of preparing the project's first Change Card while changes is empty and initializing_phase is absent: initialized after init_project published the starter in this server run, editing once update_draft prepared the guide's draft, evaluating_story while refresh_story is checking the Story and Goa design, story_ready after refresh_story succeeded and before propose_change saves the card, or story_failed when the latest refresh_story failed. Absent once a Change Card exists, while initializing_phase is set, or before starter initialization and draft preparation begin. version changes with it.",
+			); err != nil {
+				return err
+			}
 		case "initializing_phase":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -37283,6 +37346,7 @@ func validateChangeListJSONValue(path string, value any, description string) err
 			return unknownJSONFieldError(path, key, []string{
 				"approval_available",
 				"changes",
+				"draft_state",
 				"initializing_phase",
 				"version",
 			})
@@ -45407,6 +45471,11 @@ func checkChangeListChangeListValue(in *ChangeList, field string, active map[any
 		if in.InitializingPhase != nil {
 			if !utf8.ValidString(string(*in.InitializingPhase)) {
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "initializing_phase", false))
+			}
+		}
+		if in.DraftState != nil {
+			if !utf8.ValidString(string(*in.DraftState)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_state", false))
 			}
 		}
 	}

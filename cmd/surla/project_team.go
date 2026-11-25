@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -31,6 +32,10 @@ type (
 		run               func(ctx context.Context, env []string, program string, args ...string) ([]byte, error)
 		// input passes closed-schema JSON to Chorus's explicit choices stdin.
 		input func(context.Context, []string, io.Reader, string, ...string) error
+		// activate brings the macOS Herdr application bundle in front of the
+		// browser after Focus selects the space, tab and pane; nil outside macOS
+		// default-home bundles and in unit stand-ins.
+		activate func(context.Context) error
 		// herdrEnv is the environment of Herdr's own programs (herdr-app, herdr-core): the
 		// surla command's, or the server's original one, unchanged, because a Herdr core
 		// these programs start keeps it for every terminal, the agents' included.
@@ -74,8 +79,17 @@ func projectTeamDependencies(ctx context.Context, herdrEnv []string) (project.Te
 		home = filepath.Join(userHome, ".config", "herdr-app")
 	}
 	_, coreErr := exec.LookPath(commands.core)
-	_, appErr := exec.LookPath(commands.app)
+	appPath, appErr := exec.LookPath(commands.app)
 	available := coreErr == nil && appErr == nil
+	if available && runtime.GOOS == "darwin" && os.Getenv("HERDR_APP_HOME") == "" {
+		if bundle := herdrMacOSAppBundle(appPath); bundle != "" {
+			openEnv := commands.chorusEnv
+			commands.activate = func(ctx context.Context) error {
+				_, err := runTeamCommand(ctx, openEnv, "/usr/bin/open", "-a", bundle)
+				return err
+			}
+		}
+	}
 	connect := commands.connectChorus
 	if !available {
 		connect = func(context.Context) (project.TeamConnection, error) {
@@ -197,7 +211,8 @@ func (c teamCommands) Terminals(ctx context.Context, root, space string, handles
 	return result, nil
 }
 
-// Focus shows the owned space and focuses the requested terminal.
+// Focus shows the owned space and tab, focuses the requested terminal, and
+// raises the Herdr window so a browser caller brings the pane into view.
 func (c teamCommands) Focus(ctx context.Context, space project.TeamSpace) error {
 	var result map[string]json.RawMessage
 	if err := c.do(ctx, "space.select", struct {
@@ -207,14 +222,61 @@ func (c teamCommands) Focus(ctx context.Context, space project.TeamSpace) error 
 	}
 	for _, tab := range space.Tabs {
 		for _, pane := range tab.Terminals {
-			if pane.Terminal != "" {
-				return c.do(ctx, "pane.focus", struct {
-					Terminal string `json:"terminal"`
-				}{pane.Terminal}, &result)
+			if pane.Terminal == "" {
+				continue
 			}
+			if tab.ID != "" {
+				if err := c.do(ctx, "tab.select", struct {
+					ID string `json:"id"`
+				}{tab.ID}, &result); err != nil {
+					return err
+				}
+			}
+			if err := c.do(ctx, "pane.focus", struct {
+				Terminal string `json:"terminal"`
+			}{pane.Terminal}, &result); err != nil {
+				return err
+			}
+			return c.raiseWindow(ctx)
 		}
 	}
 	return errors.New("Herdr space has no terminal to focus")
+}
+
+// raiseWindow asks the open Herdr window to raise itself and, when running as a
+// macOS application bundle, activates that bundle through LaunchServices so it
+// comes in front of the active browser window.
+func (c teamCommands) raiseWindow(ctx context.Context) error {
+	raiseCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if _, err := c.run(raiseCtx, c.herdrEnv, c.app); err != nil {
+		return err
+	}
+	if c.activate != nil {
+		return c.activate(raiseCtx)
+	}
+	return nil
+}
+
+// herdrMacOSAppBundle resolves a herdr-app executable (including a symlink such
+// as ~/.local/bin/herdr-app -> /Applications/Herdr.app/Contents/MacOS/Herdr) to
+// its enclosing .app bundle path, or "" when it does not live inside a bundle.
+func herdrMacOSAppBundle(executable string) string {
+	if executable == "" {
+		return ""
+	}
+	resolved, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		resolved = executable
+	}
+	resolved = filepath.Clean(resolved)
+	macOSDir := filepath.Dir(resolved)
+	contentsDir := filepath.Dir(macOSDir)
+	bundleDir := filepath.Dir(contentsDir)
+	if filepath.Base(macOSDir) == "MacOS" && filepath.Base(contentsDir) == "Contents" && strings.HasSuffix(bundleDir, ".app") {
+		return bundleDir
+	}
+	return ""
 }
 
 // Overlays reads the names reported by herdr-app status; opening a mod is a toggle.

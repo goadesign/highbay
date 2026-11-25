@@ -70,7 +70,8 @@ func (c *ControlPlane) InitProject(
 	ctx context.Context,
 	p *gensurla.InitProjectPayload,
 ) (res *gensurla.InitProjectResult, retErr error) {
-	if _, ok := PrincipalFromContext(ctx); !ok {
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 
@@ -419,7 +420,7 @@ func (c *ControlPlane) InitProject(
 		if err := c.finishInPlaceWorkspace(wal, workspaceFD, stageParentFD, stageFD); err != nil {
 			return nil, failInitFault(span, "in-place publication interrupted; restart Surla to recover the workspace", err)
 		}
-		return initializedProject(span, targetPath, modulePath, builtService, initialCommit), nil
+		return c.initializedProject(principal.ID, span, targetPath, modulePath, builtService, initialCommit), nil
 	}
 
 	if gotWSPath, err := abspath.FDPath(workspaceFD); err != nil || gotWSPath != c.initialWorkspaceRoot {
@@ -515,11 +516,14 @@ func (c *ControlPlane) InitProject(
 		recordWorkspaceCleanupFailure("surla.controlplane.finalize_init_project", err)
 	}
 
-	return initializedProject(span, targetPath, modulePath, builtService, initialCommit), nil
+	return c.initializedProject(principal.ID, span, targetPath, modulePath, builtService, initialCommit), nil
 }
 
 // initializedProject records completed publication and returns the bound project.
-func initializedProject(span trace.Span, targetPath, modulePath, builtService, initialCommit string) *gensurla.InitProjectResult {
+func (c *ControlPlane) initializedProject(
+	owner string, span trace.Span, targetPath, modulePath, builtService, initialCommit string,
+) *gensurla.InitProjectResult {
+	c.initOwner.Store(&owner)
 	span.AddEvent(
 		"project_initialized",
 		trace.WithAttributes(

@@ -966,6 +966,11 @@ func ValidateListChangesResultTransport(body *ListChangesResultTransport) (err e
 			}
 		}
 	}
+	if body.DraftState != nil {
+		if !(*body.DraftState == "initialized" || *body.DraftState == "editing" || *body.DraftState == "evaluating_story" || *body.DraftState == "story_ready" || *body.DraftState == "story_failed") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.draft_state", *body.DraftState, []any{"initialized", "editing", "evaluating_story", "story_ready", "story_failed"}))
+		}
+	}
 	return
 }
 

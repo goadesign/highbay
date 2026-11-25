@@ -77,17 +77,17 @@ var CP1RevisionAnalysisExample = Type("CP1RevisionAnalysisExample", func() {
 
 // CP1Analysis is the caller's analysis of a new feature request.
 var CP1Analysis = Type("CP1Analysis", func() {
-	Description("Your analysis of the feature request against the target's current Goa design (its design/*.go files) and the Golden Path playbook served at surla://golden-path. Surla saves it as the Change Card after checking its structure and cross-field rules; it cannot judge whether the analysis is complete or correct.")
-	Attribute("summary", String, "Plain-English description of the requested behavior, including the details the request or the design already settle.", func() {
+	Description("Product-level Change Card shown to the requester on the Surla browser page to confirm intent before code is written. Write every field for a requester who knows only their own goal, not the repository: use plain domain language about observable user behavior, never repository file paths (such as design/design.go), Surla candidate runner flags (such as -listen), or internal Goa/Goa-AI symbol names unless the requester explicitly asked about a CLI or API surface. When building a new product in a project created from Surla's starter scaffold (init_project's price-answering sample), replace that sample silently in your draft: never mention or ask about Surla's starter sample on the Change Card. Surla checks structure and cross-field rules; it cannot judge whether the analysis is complete or correct.")
+	Attribute("summary", String, "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's starter sample.", func() {
 		Pattern(nonBlank)
 	})
-	Attribute("ambiguities", ArrayOfRequired(CP1AnalysisAmbiguity), "Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request or the design already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.")
-	Attribute("examples", ArrayOfRequired(CP1AnalysisExample), "Concrete acceptance examples drawn from the request and the design, never placeholder text; each becomes a check the change must pass.", func() {
+	Attribute("ambiguities", ArrayOfRequired(CP1AnalysisAmbiguity), "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.")
+	Attribute("examples", ArrayOfRequired(CP1AnalysisExample), "Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.", func() {
 		MinLength(1)
 	})
 	Attribute("preserved_behaviors", ArrayOfRequired(String, func() {
 		Pattern(nonBlank)
-	}), "Existing behaviors and contract rules of the target that the change must keep, each stated concretely; empty when none apply.")
+	}), "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.")
 	Attribute("ui_composition", String, "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.")
 	Required("summary", "ambiguities", "examples", "preserved_behaviors")
 })
@@ -95,12 +95,12 @@ var CP1Analysis = Type("CP1Analysis", func() {
 // CP1RevisionAnalysis is the caller's analysis of a revised feature request
 // against the current Change Card.
 var CP1RevisionAnalysis = Type("CP1RevisionAnalysis", func() {
-	Description("Your analysis of the revised request against the current Change Card (as get_change returns it at request_revision), the target's current Goa design, and the Golden Path playbook served at surla://golden-path. A confirmed answer stays settled unless the revised request or design contradicts it: do not ask it again, and restate it in summary, examples or preserved_behaviors, because the revised card drops every answer. An explicit instruction in the revised request or design replaces the decisions, examples and preserved behaviors it affects. An unanswered question stays in ambiguities unless the revised request or design answers it or removes its scope. Everything else on the current card stays unless the revised request or design changes it. Surla checks the structure and the example accounting; it cannot judge whether the analysis is complete or correct.")
-	Attribute("summary", String, "Plain-English description of the revised behavior, including the details the request, the design or confirmed answers already settle.", func() {
+	Description("Updated product-level Change Card shown to the requester on the Surla browser page, analyzed against the current Change Card (as get_change returns it at request_revision), the draft design, and surla://golden-path. Write every field for a requester who knows their own goal, not the repository: use plain domain language without file paths (such as design/design.go), Surla candidate runner flags (such as -listen), starter-sample references, or internal Goa/Goa-AI symbol names unless the requester explicitly asked about a CLI or API surface. A confirmed answer stays settled unless the revised request or design contradicts it: do not ask it again, and restate it in summary, examples or preserved_behaviors, because the revised card drops every answer. An explicit instruction in the revised request or design replaces the decisions, examples and preserved behaviors it affects. An unanswered question stays in ambiguities unless the revised request or design answers it or removes its scope. Everything else on the current card stays unless the revised request or design changes it. Surla checks the structure and the example accounting; it cannot judge whether the analysis is complete or correct.")
+	Attribute("summary", String, "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or starter-sample references.", func() {
 		Pattern(nonBlank)
 	})
-	Attribute("ambiguities", ArrayOfRequired(CP1AnalysisAmbiguity), "Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request, the design or a confirmed answer already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.")
-	Attribute("examples", ArrayOfRequired(CP1RevisionAnalysisExample), "Concrete acceptance examples drawn from the revised request and the design. Give prior_id for each current example you keep or edit; omit it for new ones.", func() {
+	Attribute("ambiguities", ArrayOfRequired(CP1AnalysisAmbiguity), "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.")
+	Attribute("examples", ArrayOfRequired(CP1RevisionAnalysisExample), "Concrete acceptance examples in plain domain terms. Give prior_id for each current example you keep or edit; omit it for new ones.", func() {
 		MinLength(1)
 	})
 	Attribute("removed_example_ids", ArrayOfRequired(String, func() {
@@ -108,7 +108,7 @@ var CP1RevisionAnalysis = Type("CP1RevisionAnalysis", func() {
 	}), "IDs of the current card's examples this revision drops. Every current example ID appears exactly once, either as an examples[].prior_id or here; send an empty list when none are dropped.")
 	Attribute("preserved_behaviors", ArrayOfRequired(String, func() {
 		Pattern(nonBlank)
-	}), "Existing behaviors and contract rules of the target that the change must keep, each stated concretely; empty when none apply.")
+	}), "Existing user-facing behaviors of the product that this revision must keep, each stated in plain domain terms; empty when none apply.")
 	Attribute("ui_composition", String, "Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.")
 	Required("summary", "ambiguities", "examples", "removed_example_ids", "preserved_behaviors")
 })

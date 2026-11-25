@@ -2,7 +2,7 @@
 // find work and open one change.
 
 import React from "react";
-import { ChangeList, ChangeListItem, LatestVerificationItem } from "../types";
+import { ChangeList, ChangeListItem, LatestVerificationItem, TeamRoleState } from "../types";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
 // ChangeListViewProps supplies the last list the server returned and the
@@ -21,9 +21,10 @@ export interface ChangeListViewProps {
   openChangeId: string | null;
   // busy disables opening while a Change Card request is outstanding.
   busy: boolean;
-  // guideConnected and guideInHerdr describe the guide the project reports.
+  // guideConnected, guideInHerdr and guideState describe the guide the project reports.
   guideConnected: boolean;
   guideInHerdr: boolean;
+  guideState: TeamRoleState["state"] | null;
   // disabled and showingGuide prevent a duplicate or expired pane request.
   disabled: boolean;
   showingGuide: boolean;
@@ -54,6 +55,7 @@ export function ChangeListView({
   busy,
   guideConnected,
   guideInHerdr,
+  guideState,
   disabled,
   showingGuide,
   onShowGuidePane,
@@ -61,30 +63,23 @@ export function ChangeListView({
   onRetry,
 }: ChangeListViewProps) {
   if (list !== null && list.changes.length === 0 && error === null && openError === null) {
-    const phase = list.initializing_phase;
+    const empty = emptyChangeState(list, guideConnected, guideInHerdr, guideState);
     return (
       <Card id="surla-change-list" className="surla-card surla-welcome-card"
         aria-labelledby="surla-change-list-title" aria-busy={loading ? "true" : undefined}>
-        <h2 id="surla-change-list-title">
-          {phase !== undefined ? "Preparing your project"
-            : guideConnected ? "Describe what you want to build in your coding agent"
-            : "Start in your coding agent with /surla"}
-        </h2>
-        <p id="surla-change-list-empty" role={phase !== undefined ? "status" : undefined}>
-          {phase ?? (guideConnected
-            ? "Your coding agent drafts the Change Card. It opens here when it’s ready."
-            : <>Open your coding agent in this folder and invoke <code>/surla</code> (<code>$surla</code> in Codex)
-                to connect it, then describe what you want to build. Your Change Card will appear here automatically.</>)}
+        <h2 id="surla-change-list-title">{empty.title}</h2>
+        <p id="surla-change-list-empty" role={empty.liveStatus ? "status" : undefined}>
+          {empty.body}
         </p>
         {guideConnected && guideInHerdr ? (
           <div className="surla-field-row">
-            <Button id="surla-empty-show-guide" variant="primary" disabled={disabled || showingGuide}
-              aria-busy={showingGuide} onClick={onShowGuidePane}>
+            <Button id="surla-empty-show-guide" variant={empty.primaryShowPane ? "primary" : "default"}
+              disabled={disabled || showingGuide} aria-busy={showingGuide} onClick={onShowGuidePane}>
               {showingGuide ? "Showing coding agent pane…" : "Show coding agent pane"}
             </Button>
           </div>
         ) : null}
-        {phase === undefined ? <ol className="surla-welcome-steps">
+        {empty.showSteps ? <ol className="surla-welcome-steps">
           <li><strong>Confirm intent</strong> Answer open questions and lock concrete examples before code is written.</li>
           <li><strong>Build &amp; verify</strong> Surla coordinates implementation and independent checks.</li>
           <li><strong>Approve &amp; merge</strong> Review the verified evidence and merge the change into your branch.</li>
@@ -139,6 +134,138 @@ export function ChangeListView({
       ) : null}
     </Card>
   );
+}
+
+// emptyChangeState selects the empty-project heading, live progress copy, and
+// button emphasis from Surla's initialization/draft facts and observed guide state.
+function emptyChangeState(
+  list: ChangeList,
+  guideConnected: boolean,
+  guideInHerdr: boolean,
+  guideState: TeamRoleState["state"] | null,
+): {
+  title: string;
+  body: React.ReactNode;
+  liveStatus: boolean;
+  primaryShowPane: boolean;
+  showSteps: boolean;
+} {
+  if (list.initializing_phase !== undefined) {
+    return {
+      title: "Preparing your project",
+      body: list.initializing_phase,
+      liveStatus: true,
+      primaryShowPane: false,
+      showSteps: false,
+    };
+  }
+  if (!guideConnected) {
+    return {
+      title: "Start in your coding agent with /surla",
+      body: (
+        <>
+          Open your coding agent in this folder and invoke <code>/surla</code> (<code>$surla</code> in Codex)
+          to connect it, then describe what you want to build. Your Change Card will appear here automatically.
+        </>
+      ),
+      liveStatus: false,
+      primaryShowPane: false,
+      showSteps: true,
+    };
+  }
+  const draftState = list.draft_state;
+  if (draftState === "evaluating_story") {
+    return {
+      title: "Drafting your Change Card",
+      body: "Checking the Story and Goa design. Your Change Card will open here automatically when it’s ready.",
+      liveStatus: true,
+      primaryShowPane: false,
+      showSteps: false,
+    };
+  }
+  if (guideInHerdr && guideState === "needs_you") {
+    return {
+      title: "Your coding agent needs you",
+      body: "Show your coding agent pane to answer its prompt so it can continue.",
+      liveStatus: true,
+      primaryShowPane: true,
+      showSteps: false,
+    };
+  }
+  if (guideInHerdr && guideState === "starting") {
+    return {
+      title: "Starting your coding agent",
+      body: "Waiting for your coding agent pane to start. Your Change Card will open here when ready.",
+      liveStatus: true,
+      primaryShowPane: false,
+      showSteps: false,
+    };
+  }
+  if (guideState === "working") {
+    const body = draftState === "story_ready"
+      ? "Story and design checked — your coding agent is preparing the Change Card. It will open here automatically."
+      : draftState === "story_failed"
+      ? "The last Story check reported an issue — your coding agent is updating the draft. Your Change Card will open here automatically."
+      : draftState === "editing" || draftState === "initialized"
+      ? "Starter project ready — your coding agent is writing the service design and Story. Your Change Card will open here automatically."
+      : "Your coding agent is working on your request. Progress and your Change Card will appear here automatically.";
+    return {
+      title: draftState !== undefined ? "Drafting your Change Card" : "Working on your request",
+      body,
+      liveStatus: true,
+      primaryShowPane: false,
+      showSteps: false,
+    };
+  }
+  if (guideInHerdr && guideState === "error") {
+    return {
+      title: "Check your coding agent",
+      body: "Your coding agent reported an error before proposing a Change Card. Show its pane to check its status.",
+      liveStatus: true,
+      primaryShowPane: true,
+      showSteps: false,
+    };
+  }
+  if (draftState !== undefined) {
+    if (draftState === "story_failed") {
+      return {
+        title: "Story check needs attention",
+        body: guideInHerdr
+          ? "The last Story check reported an issue, and your coding agent is waiting. Show its pane so it can fix the draft and propose the Change Card."
+          : "The last Story check reported an issue. Return to your coding agent so it can fix the draft and propose the Change Card.",
+        liveStatus: true,
+        primaryShowPane: true,
+        showSteps: false,
+      };
+    }
+    if (guideInHerdr && guideState === "waiting") {
+      return {
+        title: "Your coding agent is waiting",
+        body: draftState === "story_ready"
+          ? "Story and design checked, and no Change Card has been proposed yet. Show your coding agent pane to check its message or ask it to propose the Change Card."
+          : "Starter project ready, and no Change Card has been proposed yet. Show your coding agent pane to answer any question or ask it to propose the Change Card.",
+        liveStatus: true,
+        primaryShowPane: true,
+        showSteps: false,
+      };
+    }
+    return {
+      title: "Drafting your Change Card",
+      body: draftState === "story_ready"
+        ? "Story and design checked — waiting for your coding agent to propose the Change Card. It will open here automatically."
+        : "Starter project ready — your coding agent drafts the service design, Story, and Change Card next. Keep an eye on your coding agent in case it asks a question; the card will open here automatically.",
+      liveStatus: true,
+      primaryShowPane: false,
+      showSteps: false,
+    };
+  }
+  return {
+    title: "Describe what you want to build in your coding agent",
+    body: "Your coding agent drafts the Change Card. It opens here when it’s ready.",
+    liveStatus: false,
+    primaryShowPane: true,
+    showSteps: true,
+  };
 }
 
 // ChangeListRow shows one change's summary and state before its identifiers.

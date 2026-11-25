@@ -54,41 +54,41 @@ func ToolSchema(name tools.Ident) (*genregistry.ToolSchema, bool) {
 	case "surla.list_changes":
 		return declarations.schema1172(), true
 	case "surla.list_test_writer_assignments":
-		return declarations.schema1194(), true
+		return declarations.schema1195(), true
 	case "surla.list_traces":
-		return declarations.schema1225(), true
+		return declarations.schema1226(), true
 	case "surla.list_verifications":
-		return declarations.schema1254(), true
+		return declarations.schema1255(), true
 	case "surla.open_views":
-		return declarations.schema1311(), true
+		return declarations.schema1312(), true
 	case "surla.preview_architecture":
-		return declarations.schema1320(), true
+		return declarations.schema1321(), true
 	case "surla.propose_change":
-		return declarations.schema1378(), true
+		return declarations.schema1379(), true
 	case "surla.read_check_output":
-		return declarations.schema1585(), true
+		return declarations.schema1586(), true
 	case "surla.refresh_story":
-		return declarations.schema1600(), true
+		return declarations.schema1601(), true
 	case "surla.report_tests_finished":
-		return declarations.schema1649(), true
+		return declarations.schema1650(), true
 	case "surla.review_verification":
-		return declarations.schema1698(), true
+		return declarations.schema1699(), true
 	case "surla.revise_change":
-		return declarations.schema1869(), true
+		return declarations.schema1870(), true
 	case "surla.start_live_target":
-		return declarations.schema2086(), true
+		return declarations.schema2087(), true
 	case "surla.stop_live_target":
-		return declarations.schema2100(), true
+		return declarations.schema2101(), true
 	case "surla.update_dependencies":
-		return declarations.schema2109(), true
+		return declarations.schema2110(), true
 	case "surla.update_draft":
-		return declarations.schema2120(), true
+		return declarations.schema2121(), true
 	case "surla.verify_change":
-		return declarations.schema2137(), true
+		return declarations.schema2138(), true
 	case "surla.wait_for_builder_assignment":
-		return declarations.schema2195(), true
+		return declarations.schema2196(), true
 	case "surla.wait_for_test_writer_assignment":
-		return declarations.schema2221(), true
+		return declarations.schema2222(), true
 	default:
 		return nil, false
 	}

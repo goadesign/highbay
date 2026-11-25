@@ -50,6 +50,9 @@ function plain(value) {
 // load starts a fresh copy of main.js against a fake Herdr in state, and
 // returns the module plus the calls it made.
 function load(state) {
+  const modSource = state.executable
+    ? source.replace('const SURLA_COMMAND = "surla";', `const SURLA_COMMAND = ${JSON.stringify(state.executable)};`)
+    : source;
   const calls = { exec: [], run: [], closed: [] };
   const herdr = {
     spaces: () => state.spaces ?? [],
@@ -62,6 +65,9 @@ function load(state) {
     exec: async (command, args, options) => {
       calls.exec.push(plain({ command, args, options }));
       if (state.deferred) return new Promise((resolve, reject) => state.deferred.push({ resolve, reject }));
+      const commandAnswer = state.byCommand?.[command]?.[args.join(' ')];
+      if (commandAnswer instanceof Error) throw commandAnswer;
+      if (commandAnswer) return commandAnswer;
       const answer = state.answers?.[args.join(' ')];
       if (answer instanceof Error) throw answer;
       return answer ?? { code: 0, stdout: '{"running":false}', stderr: '' };
@@ -81,7 +87,7 @@ function load(state) {
     Set,
     Boolean,
   });
-  vm.runInContext(source, context);
+  vm.runInContext(modSource, context);
   return { mod: context.mod, calls };
 }
 
@@ -385,4 +391,39 @@ test('a Start Surla failure stays with the folder it was for', async () => {
   while (state.deferred.length) state.deferred.shift().resolve({ code: 0, stdout: '{"running":false}', stderr: '' });
   await tick();
   assert.ok(texts(view.render(cx)).includes('Could not run surla: not installed'));
+});
+
+test('uses the setup-configured surla executable path and falls back to PATH when moved', async () => {
+  const configured = '/opt/go/bin/surla';
+  const { mod, calls } = load({
+    executable: configured,
+    spaces: [space],
+    byCommand: {
+      [configured]: {
+        'status --json': { code: 0, stdout: JSON.stringify(running), stderr: '' },
+        '': new Error('No such file or directory (os error 2)'),
+      },
+      surla: {
+        '': { code: 0, stdout: '', stderr: '' },
+      },
+    },
+  });
+  const view = new mod.SurlaCompanion();
+  const cx = fakeCx();
+  view.init(undefined, cx);
+  await cx.settle();
+  assert.equal(calls.exec[0].command, configured);
+  assert.ok(texts(view.render(cx)).includes('Surla · homes'));
+
+  walk(view.render(cx)).find(node => node.id === 'surla-open').handlers.click({}, cx);
+  await cx.settle();
+  assert.deepEqual(
+    calls.exec.slice(1).map(call => [call.command, call.args]),
+    [
+      [configured, []],
+      ['surla', []],
+      [configured, ['status', '--json']],
+    ],
+  );
+  assert.ok(texts(view.render(cx)).includes('Opened in browser'));
 });

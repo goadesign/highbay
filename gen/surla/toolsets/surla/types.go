@@ -637,6 +637,16 @@ type (
 		// running. A first initialization downloads Go modules and can take a few
 		// minutes. version changes with it, so wait_for_changes reports each phase.
 		InitializingPhase *string
+		// Progress of preparing the project's first Change Card while changes is empty
+		// and initializing_phase is absent: initialized after init_project published
+		// the starter in this server run, editing once update_draft prepared the
+		// guide's draft, evaluating_story while refresh_story is checking the Story
+		// and Goa design, story_ready after refresh_story succeeded and before
+		// propose_change saves the card, or story_failed when the latest refresh_story
+		// failed. Absent once a Change Card exists, while initializing_phase is set,
+		// or before starter initialization and draft preparation begin. version
+		// changes with it.
+		DraftState *string
 	}
 	// ListTestWriterAssignmentsPayload defines the JSON payload for the surla.list_test_writer_assignments tool.
 	ListTestWriterAssignmentsPayload = struct {
@@ -1320,20 +1330,25 @@ type (
 	}
 	// CP1Analysis is a nested type used by the generated JSON contract.
 	CP1Analysis = struct {
-		// Plain-English description of the requested behavior, including the details
-		// the request or the design already settle.
+		// Concise plain-English description (2–4 sentences) of what the product or
+		// change will do for its users and the key product defaults your draft
+		// settles. Never describe file paths, candidate runner flags, or removal of
+		// Surla's starter sample.
 		Summary string
 		// Open questions only the requester can answer: product, domain, or
-		// operational choices that change observable behavior or service boundaries.
-		// Do not ask about details the request or the design already settle; state
-		// them in summary, or in examples when they change an observable outcome. Send
-		// an empty list when nothing is open.
+		// operational choices that change user-visible behavior. Never ask whether to
+		// replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not
+		// ask about details the request already settles; state settled product
+		// defaults in summary, or in examples when they change an observable outcome.
+		// Send an empty list when nothing is open.
 		Ambiguities []*CP1AnalysisAmbiguity
-		// Concrete acceptance examples drawn from the request and the design, never
-		// placeholder text; each becomes a check the change must pass.
+		// Concrete acceptance examples in plain domain terms, never placeholder text
+		// or starter-sample leftovers; each becomes a check the change must pass.
 		Examples []*CP1AnalysisExample
-		// Existing behaviors and contract rules of the target that the change must
-		// keep, each stated concretely; empty when none apply.
+		// Existing user-facing behaviors of an established product that this change
+		// must keep, each stated in plain domain terms; send an empty list ([]) on a
+		// new product (including the first change after init_project, where the
+		// starter sample is replaced rather than preserved) or when none apply.
 		PreservedBehaviors []string
 		// Optional OpenUI Lang program that helps the requester decide the open
 		// questions, built only from the decision components the surla://golden-path
@@ -1376,25 +1391,26 @@ type (
 	}
 	// CP1RevisionAnalysis is a nested type used by the generated JSON contract.
 	CP1RevisionAnalysis = struct {
-		// Plain-English description of the revised behavior, including the details the
-		// request, the design or confirmed answers already settle.
+		// Concise plain-English description (2–4 sentences) of the revised product
+		// behavior and settled product defaults, without file paths, candidate runner
+		// flags, or starter-sample references.
 		Summary string
 		// Open questions only the requester can answer: product, domain, or
-		// operational choices that change observable behavior or service boundaries.
-		// Do not ask about details the request, the design or a confirmed answer
-		// already settle; state them in summary, or in examples when they change an
-		// observable outcome. Send an empty list when nothing is open.
+		// operational choices that change user-visible behavior. Never ask about
+		// Surla's starter sample or internal Go/Goa plumbing. Do not ask about details
+		// the request, the design or a confirmed answer already settle; state settled
+		// product defaults in summary, or in examples when they change an observable
+		// outcome. Send an empty list when nothing is open.
 		Ambiguities []*CP1AnalysisAmbiguity
-		// Concrete acceptance examples drawn from the revised request and the design.
-		// Give prior_id for each current example you keep or edit; omit it for new
-		// ones.
+		// Concrete acceptance examples in plain domain terms. Give prior_id for each
+		// current example you keep or edit; omit it for new ones.
 		Examples []*CP1RevisionAnalysisExample
 		// IDs of the current card's examples this revision drops. Every current
 		// example ID appears exactly once, either as an examples[].prior_id or here;
 		// send an empty list when none are dropped.
 		RemovedExampleIds []string
-		// Existing behaviors and contract rules of the target that the change must
-		// keep, each stated concretely; empty when none apply.
+		// Existing user-facing behaviors of the product that this revision must keep,
+		// each stated in plain domain terms; empty when none apply.
 		PreservedBehaviors []string
 		// Optional OpenUI Lang program that helps the requester decide the open
 		// questions, built only from the decision components the surla://golden-path

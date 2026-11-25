@@ -112,6 +112,7 @@ export interface ChangeCardResult {
 export interface ChangeList {
   approval_available: boolean;
   changes: ChangeListItem[];
+  draft_state?: "initialized" | "editing" | "evaluating_story" | "story_ready" | "story_failed";
   initializing_phase?: string;
   version: string;
 }
@@ -1660,6 +1661,16 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "items": {
           "$ref": "#/$defs/ChangeListItem"
         }
+      },
+      "draft_state": {
+        "type": "string",
+        "enum": [
+          "initialized",
+          "editing",
+          "evaluating_story",
+          "story_ready",
+          "story_failed"
+        ]
       },
       "initializing_phase": {
         "type": "string"

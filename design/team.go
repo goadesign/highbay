@@ -42,7 +42,7 @@ func teamMethods() {
 		})
 	})
 	Method("show_team_pane", func() {
-		Description("Show this project's space and focus the requested registered role's pane, only at the user's request. Any open Herdr dialog prevents all window changes. Fresh project, handle and space labels must still identify the pane.")
+		Description("Raise the Herdr window, show this project's space and tab, and focus the requested registered role's pane, only at the user's request. Any open Herdr dialog prevents all window changes. Fresh project, handle and space labels must still identify the pane.")
 		Payload(func() {
 			Attribute("role", String, "Registered role whose pane the user requests.", func() { Enum("guide", "builder", "test_writer") })
 			Required("role")

@@ -17,6 +17,20 @@ const OPEN_TIMEOUT_MS = 60000;
 // FOLLOW_MS is how often the window checks, without running anything,
 // whether the shown space now points at another folder.
 const FOLLOW_MS = 500;
+// SURLA_COMMAND is replaced with the installed executable path by
+// `surla setup -global` so GUI-launched Herdr finds surla outside login PATH.
+const SURLA_COMMAND = "surla";
+
+// execSurla runs the configured surla executable, falling back to "surla" on
+// PATH only when a configured path cannot be started.
+async function execSurla(args, options) {
+  try {
+    return await exec(SURLA_COMMAND, args, options);
+  } catch (err) {
+    if (SURLA_COMMAND !== "surla") return exec("surla", args, options);
+    throw err;
+  }
+}
 
 // STAGES names each stage of ProjectStatus.stage for people.
 const STAGES = {
@@ -178,7 +192,7 @@ export default class SurlaCompanion extends View {
     cx.spawn(async cx => {
       let result;
       try {
-        result = parseStatus(await exec("surla", ["status", "--json"], { cwd: folder, timeout: STATUS_TIMEOUT_MS }));
+        result = parseStatus(await execSurla(["status", "--json"], { cwd: folder, timeout: STATUS_TIMEOUT_MS }));
       } catch (err) {
         result = { kind: "error", message: `Could not run surla: ${err?.message ?? err}` };
       }
@@ -209,7 +223,7 @@ export default class SurlaCompanion extends View {
     cx.spawn(async cx => {
       let message = "";
       try {
-        const answer = await exec("surla", [], { cwd: folder, timeout: OPEN_TIMEOUT_MS });
+        const answer = await execSurla([], { cwd: folder, timeout: OPEN_TIMEOUT_MS });
         if (answer.code !== 0) message = (answer.stderr || answer.stdout || "surla failed.").trim();
       } catch (err) {
         message = `Could not run surla: ${err?.message ?? err}`;

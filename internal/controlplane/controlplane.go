@@ -386,6 +386,11 @@ type (
 		// initPhase is the sentence naming what the admitted init_project is
 		// doing, for the change list; nil when none is admitted.
 		initPhase atomic.Pointer[string]
+		// initOwner and draftOwner record the principal whose starter
+		// initialization or update_draft completed in this server run so
+		// another principal's calls cannot move an empty project's version.
+		initOwner  atomic.Pointer[string]
+		draftOwner atomic.Pointer[string]
 		// initTurn admits one init_project at a time. Its holder alone
 		// publishes and clears initPhase; a second call waits here and
 		// publishes nothing until the first has cleared its phase.

@@ -63,6 +63,20 @@ Chorus), while you speak to the user in plain language without calling yourself
   users, policy thresholds or edge cases—into the analysis's `ambiguities` with
   concrete options so the user answers and confirms them in the Surla browser
   window.
+- Treat `init_project`'s built-in price-answering sample (`ask`, `price`,
+  `override_prompt`, `helper` agent, `prices_cookie`) as invisible scaffolding
+  that only makes a new repository compile out of the box: the user never asked
+  for it and does not know it exists. When building the user's product, replace
+  that sample silently in `.surla-draft`. Never mention or ask about Surla's
+  starter sample in chat or on the Change Card (`summary`, `ambiguities`,
+  `examples` or `preserved_behaviors`, which must be `[]` on a brand-new
+  product).
+- Write every Change Card field for the user, not a code reviewer: keep
+  `summary` to 2–4 plain sentences describing what the product or change does
+  for users and the key product defaults your draft chose. Never mention
+  repository file paths (such as `design/design.go`), Surla's `-listen` runner
+  flag, or internal Goa/Goa-AI symbol names unless the user's own request is
+  explicitly about an API or CLI flag.
 - Set an ambiguity's `draft_option` to the option your draft already
   implements whenever another option would change the design, Story, examples
   or preserved behaviors. Never write that inside an option's text. The page

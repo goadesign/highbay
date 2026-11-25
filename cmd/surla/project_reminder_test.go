@@ -353,15 +353,22 @@ func TestTeamReminderProductionBinding(t *testing.T) {
 // recording stand-in: no argument list ever starts with send or keys, and
 // neither adapter has an operation that could type into a terminal.
 func TestTeamCommandsNeverType(t *testing.T) {
+	type recordedCall struct {
+		program string
+		args    []string
+	}
 	var mu sync.Mutex
-	var calls [][]string
-	record := func(args []string) {
+	var calls []recordedCall
+	record := func(program string, args []string) {
 		mu.Lock()
 		defer mu.Unlock()
-		calls = append(calls, slices.Clone(args))
+		calls = append(calls, recordedCall{program: program, args: slices.Clone(args)})
 	}
-	commands := teamCommands{core: "recorded-core", app: "recorded-app", run: func(_ context.Context, _ []string, _ string, args ...string) ([]byte, error) {
-		record(args)
+	commands := teamCommands{core: "recorded-core", app: "recorded-app", run: func(_ context.Context, _ []string, program string, args ...string) ([]byte, error) {
+		record(program, args)
+		if len(args) == 0 {
+			return nil, nil
+		}
 		switch {
 		case args[0] == "ls" && len(args) > 1:
 			return []byte(`{"terminals":[{"address":"owned"}]}`), nil
@@ -374,8 +381,8 @@ func TestTeamCommandsNeverType(t *testing.T) {
 		}
 		return []byte(`{"address":"owned","state":"live","labels":{}}`), nil
 	}}
-	observations := teamObservations{commands: commands, stream: func(ctx context.Context, _ []string, _ string, args []string, _ func(io.Reader) error) error {
-		record(args)
+	observations := teamObservations{commands: commands, stream: func(ctx context.Context, _ []string, program string, args []string, _ func(io.Reader) error) error {
+		record(program, args)
 		return errors.New("recorded stream ended")
 	}}
 	ctx := t.Context()
@@ -396,9 +403,12 @@ func TestTeamCommandsNeverType(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Error(t, observations.Follow(ctx, selection, func(project.TeamEvent) {}))
 	require.NotEmpty(t, calls)
-	for _, args := range calls {
-		require.NotEmpty(t, args)
-		assert.NotContains(t, []string{"send", "keys"}, args[0], "%v", args)
+	for _, call := range calls {
+		if len(call.args) == 0 {
+			assert.Equal(t, "recorded-app", call.program, "only the Herdr window raise runs without arguments")
+			continue
+		}
+		assert.NotContains(t, []string{"send", "keys"}, call.args[0], "%v", call.args)
 	}
 	assert.ElementsMatch(t, []string{"ClosePane", "CreateSpace", "Focus", "LabelGuide", "LaunchWorkers", "OpenCompanion", "Overlays", "ReadTerminal", "Spaces", "Terminals"}, exportedMethods(reflect.TypeFor[teamCommands]()))
 	assert.ElementsMatch(t, []string{"FindTerminals", "Follow", "ReadTerminal", "ReadWatchers"}, exportedMethods(reflect.TypeFor[teamObservations]()))

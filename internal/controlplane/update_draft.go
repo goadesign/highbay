@@ -45,7 +45,8 @@ const (
 // UpdateDraft brings the project folder's changes into the draft, preserving
 // merge conflicts for the guide. Evaluation remains a separate refresh action.
 func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateResult, error) {
-	if _, ok := PrincipalFromContext(ctx); !ok {
+	principal, ok := PrincipalFromContext(ctx)
+	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	wsDir, dev, ino := c.currentWorkspaceTarget()
@@ -133,6 +134,8 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 		}
 		return nil, err
 	}
+	owner := principal.ID
+	c.draftOwner.Store(&owner)
 	slices.Sort(result.Taken)
 	slices.Sort(result.Merged)
 	slices.SortStableFunc(result.ToCorrect, func(a, b *gensurla.DraftCorrection) int { return strings.Compare(a.Path, b.Path) })
