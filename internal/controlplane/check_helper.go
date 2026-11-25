@@ -111,6 +111,17 @@ type (
 		Timeout   bool `json:"timeout"`
 		Temporary bool `json:"temporary"`
 		Fault     bool `json:"fault"`
+		// EngineUnavailable carries that the error is the container engine's
+		// absence, which the name unavailable alone does not say.
+		EngineUnavailable bool `json:"engine_unavailable,omitempty"`
+	}
+
+	// engineUnavailableError is the unavailable refusal of a check whose
+	// container engine could not be used. Callers get the same service
+	// error and status as before; the operation's spans record it as a
+	// failure, since nothing in the project or the call caused it.
+	engineUnavailableError struct {
+		*goa.ServiceError
 	}
 
 	// boundedBuffer keeps the first n bytes written to it and accepts the
@@ -318,8 +329,13 @@ func newCheckHelperError(err error) *checkHelperError {
 	if errors.As(err, &serviceErr) {
 		e.Name, e.Timeout, e.Temporary, e.Fault = serviceErr.Name, serviceErr.Timeout, serviceErr.Temporary, serviceErr.Fault
 	}
+	var engine *engineUnavailableError
+	e.EngineUnavailable = errors.As(err, &engine)
 	return e
 }
+
+// Unwrap gives transports the service error they encode.
+func (e *engineUnavailableError) Unwrap() error { return e.ServiceError }
 
 // runCheckHelper runs tool for the open build's builder copy. The workspace
 // lifetime gate and builder turn cover readiness, binding, the helper's whole
@@ -503,5 +519,9 @@ func (e *checkHelperError) err() error {
 	if e.Name == "" {
 		return errors.New(e.Message)
 	}
-	return goa.NewServiceError(errors.New(e.Message), e.Name, e.Timeout, e.Temporary, e.Fault)
+	service := goa.NewServiceError(errors.New(e.Message), e.Name, e.Timeout, e.Temporary, e.Fault)
+	if e.EngineUnavailable {
+		return &engineUnavailableError{service}
+	}
+	return service
 }

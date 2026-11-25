@@ -4,7 +4,6 @@ package controlplane
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +29,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // TestBuilderCopyCheckPublishesOnlyInItsCopy exercises both public service
@@ -502,66 +502,100 @@ func TestBuilderCheckRecordBelongsToItsBuild(t *testing.T) {
 	assert.Nil(t, again.Builder.LastCheckAt)
 }
 
-// TestCheckFailureGetsASafeSummary names why a failed check_project or
-// update_dependencies failed, on its span and on the request span that
-// carries it, in words that hold no path and no raw error text. A refusal
-// whose tool error instructs the caller keeps the history's own wording.
-func TestCheckFailureGetsASafeSummary(t *testing.T) {
-	timedOut := gensurla.MakeUnavailable(errors.New("engine did not answer in /private/path"))
-	timedOut.Timeout = true
+// TestCheckFailuresSaveTheirReasonOnBothSpans drives check_project and
+// update_dependencies through the request wrapper and the real helper into
+// each kind of failure, and reads the saved diagnostics history: the request
+// span and the operation span both end in error with the same sentence, which
+// holds no path. A refusal whose tool error instructs the caller stays an
+// outcome with the history's own wording.
+func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
+	installFakeDocker(t)
+	const (
+		timeLimit = "Stopped at its time limit of 1.5s. Call it again; a first run downloads modules and images."
+		canceled  = "Canceled before it finished: the caller went away or the server was stopping."
+		engine    = "The local container engine could not be used. The tool error says what to do; then call again."
+		helper    = "The check helper failed before it produced a result. Call it again."
+		outcome   = "Operation ended; consult its result for the outcome."
+	)
 	for _, tc := range []struct {
-		// name describes the failure.
-		name string
-		// err is what the operation returned.
-		err error
-		// want is the summary, empty when none is set.
-		want string
+		// state is the failure the operations run into.
+		state string
+		// summary and status are what both saved spans show.
+		summary, status string
 	}{
-		{"none", nil, ""},
-		{"time limit", fmt.Errorf("run go test in /private/path: %w", context.DeadlineExceeded), "Timed out after 5m0s. Call it again; a first run downloads modules and images."},
-		{"helper time limit", timedOut, "Timed out after 5m0s. Call it again; a first run downloads modules and images."},
-		{"canceled", fmt.Errorf("copy /private/path: %w", context.Canceled), "Canceled before it finished: the caller went away or the server was stopping."},
-		{"container engine", gensurla.MakeUnavailable(errors.New("dial unix /private/docker.sock")), "The local container engine was not available. Start it, then call again."},
-		{"busy copy", gensurla.MakeWorkingCopyBusy(errors.New("The builder's working copy is in use")), ""},
-		{"helper fault", errors.New("decode the check result: unexpected end of JSON input"), "The check helper failed before it produced a result. Call it again."},
+		{"time limit", timeLimit, "error"},
+		{"canceled", canceled, "error"},
+		{"engine unavailable", engine, "error"},
+		{"helper failed", helper, "error"},
+		{"busy", outcome, "unset"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got := checkFailureSummary(tc.err, 5*time.Minute)
-			assert.Equal(t, tc.want, got)
-			assert.NotContains(t, got, "/private")
+		t.Run(tc.state, func(t *testing.T) {
+			provider := sdktrace.NewTracerProvider()
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			cp := newControlPlane(t, Options{
+				WorkspaceDir: newShopModule(t, nil), TracerProvider: provider,
+				Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
+			})
+			readCheckBuilderFixture(t, cp)
+			daemon := newFakeDockerDaemon(t)
+			t.Setenv("DOCKER_HOST", daemon.hostURI)
+			// cancelCall ends the call in flight, as a caller going away does.
+			var cancelCall atomic.Pointer[context.CancelFunc]
+			switch tc.state {
+			case "time limit":
+				cp.checkTimeout = 1500 * time.Millisecond
+				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+					time.Sleep(4 * time.Second)
+					return "", "", 0
+				})
+			case "canceled":
+				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+					if cancel := cancelCall.Load(); cancel != nil {
+						(*cancel)()
+					}
+					time.Sleep(2 * time.Second)
+					return "", "", 0
+				})
+			case "engine unavailable":
+				t.Setenv("DOCKER_HOST", "tcp://192.0.2.1:2375")
+			case "helper failed":
+				cp.checkHelper = func() *exec.Cmd { return exec.Command(filepath.Join(t.TempDir(), "missing-helper")) }
+			case "busy":
+				cp.builderCopyTurn <- struct{}{}
+				defer func() { <-cp.builderCopyTurn }()
+			}
+			endpoints := gensurla.NewEndpoints(cp)
+			applyOperationPolicy(endpoints, cp.tracer("surla/requests"))
+			calls := map[string]func(context.Context, any) (any, error){
+				"check_project": endpoints.CheckProject, "update_dependencies": endpoints.UpdateDependencies,
+			}
+			for name, call := range calls {
+				ctx, cancel := context.WithCancel(asCaller("alice@example.com", CallerBuilder))
+				cancelCall.Store(&cancel)
+				_, err := call(ctx, nil)
+				cancel()
+				require.Error(t, err, name)
+				if tc.state == "engine unavailable" {
+					var service *goa.ServiceError
+					require.ErrorAs(t, err, &service, "callers still get the service error")
+					assert.Equal(t, "unavailable", service.Name)
+				}
+			}
+			history, err := cp.traces.List("alice@example.com", "all", 50, nil)
+			require.NoError(t, err)
+			saved := map[string]*gensurla.TraceSpan{}
+			for _, record := range history.Spans {
+				saved[record.Name] = record
+			}
+			for name := range calls {
+				for _, span := range []string{"surla.request." + name, "surla.controlplane." + name} {
+					record := saved[span]
+					require.NotNil(t, record, span)
+					assert.Equal(t, tc.summary, record.Summary, span)
+					assert.Equal(t, tc.status, record.Status, span)
+					assert.NotContains(t, record.Summary, string(filepath.Separator), span)
+				}
+			}
 		})
 	}
-
-	exported := tracetest.NewInMemoryExporter()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exported))
-	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	cp := newControlPlane(t, Options{TracerProvider: provider})
-	builder := asCaller("alice@example.com", CallerBuilder)
-	for _, operation := range []string{"check_project", "update_dependencies"} {
-		ctx, request := cp.tracer("surla/requests").Start(builder, "surla.request."+operation)
-		_, span := cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane."+operation)
-		summarizeCheckFailure(request, span, operation, context.DeadlineExceeded, 5*time.Minute)
-		endCheckRequestSpan(span, context.DeadlineExceeded)
-		request.End()
-	}
-	// An unrelated parent span is left alone.
-	ctx, parent := cp.tracer("surla/requests").Start(builder, "surla.request.verify_change")
-	_, span := cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
-	summarizeCheckFailure(parent, span, "check_project", context.Canceled, time.Minute)
-	endCheckRequestSpan(span, context.Canceled)
-	parent.End()
-
-	history, err := cp.traces.List("alice@example.com", "all", 20, nil)
-	require.NoError(t, err)
-	summaries := map[string][]string{}
-	for _, record := range history.Spans {
-		summaries[record.Name] = append(summaries[record.Name], record.Summary)
-	}
-	timeout := "Timed out after 5m0s. Call it again; a first run downloads modules and images."
-	assert.Equal(t, []string{timeout}, summaries["surla.request.check_project"])
-	assert.Equal(t, []string{timeout}, summaries["surla.request.update_dependencies"])
-	assert.Equal(t, []string{timeout}, summaries["surla.controlplane.update_dependencies"])
-	assert.ElementsMatch(t, []string{timeout, "Canceled before it finished: the caller went away or the server was stopping."}, summaries["surla.controlplane.check_project"])
-	require.Len(t, summaries["surla.request.verify_change"], 1)
-	assert.NotContains(t, summaries["surla.request.verify_change"][0], "Canceled")
 }

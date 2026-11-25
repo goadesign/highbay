@@ -139,13 +139,13 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 		endCheckRequestSpan(span, err)
 		return nil, err
 	}
+	ctx, cancel := c.checkDeadline(ctx)
+	defer cancel()
 	defer func() {
-		summarizeCheckFailure(request, span, "check_project", retErr, c.checkTimeout)
+		summarizeCheckFailure(request, span, "check_project", ctx, retErr, c.checkTimeout)
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
-	ctx, cancel := c.checkDeadline(ctx)
-	defer cancel()
 	result, err := c.runCheckHelper(ctx, checkToolProject)
 	if err != nil {
 		return nil, err
@@ -396,7 +396,7 @@ func (op *checkOperation) start(ctx context.Context) error {
 	}
 	if err != nil {
 		if errors.Is(err, candidate.ErrEngineUnavailable) {
-			return op.finish(gensurla.MakeUnavailable(err))
+			return op.finish(&engineUnavailableError{gensurla.MakeUnavailable(err)})
 		}
 		return op.finish(err)
 	}
@@ -784,35 +784,39 @@ func endCheckRequestSpan(span trace.Span, err error) {
 // a code-authored sentence without paths or raw error text, on its span and
 // on the request span that carries it, so the diagnostics history says why it
 // failed. A failure the sentence cannot name keeps the history's own wording.
-func summarizeCheckFailure(request, span trace.Span, operation string, err error, timeout time.Duration) {
-	summary := checkFailureSummary(err, timeout)
+// operation is the context the helper ran under, which holds why it ended.
+func summarizeCheckFailure(request, span trace.Span, name string, operation context.Context, err error, timeout time.Duration) {
+	summary := checkFailureSummary(operation, err, timeout)
 	if summary == "" {
 		return
 	}
 	public := attribute.String(traceview.SummaryAttribute, summary)
 	span.SetAttributes(public)
-	if named, ok := request.(interface{ Name() string }); ok && named.Name() == "surla.request."+operation {
+	if named, ok := request.(interface{ Name() string }); ok && named.Name() == "surla.request."+name {
 		request.SetAttributes(public)
 	}
 }
 
-// checkFailureSummary names why a check operation that ran its helper failed:
-// its time limit, a cancellation, the container engine, or the helper itself.
-// It returns "" for no failure and for a refusal whose tool error is the
-// caller's instruction, such as a busy working copy.
-func checkFailureSummary(err error, timeout time.Duration) string {
-	var service *goa.ServiceError
-	named := errors.As(err, &service)
-	switch {
-	case err == nil:
+// checkFailureSummary names why a check operation that ran its helper failed.
+// The time limit and a cancellation are read from the operation's own
+// context: the helper runs in another process and its error reaches this one
+// as text. The container engine's absence is carried from the helper as a
+// fact of its own. Any other failure that is not a refusal, whose tool error
+// is the caller's instruction, such as a busy working copy, is the helper's.
+// It returns "" for no failure and for such a refusal.
+func checkFailureSummary(operation context.Context, err error, timeout time.Duration) string {
+	if err == nil {
 		return ""
-	case errors.Is(err, context.DeadlineExceeded) || named && service.Timeout:
-		return fmt.Sprintf("Timed out after %s. Call it again; a first run downloads modules and images.", timeout)
-	case errors.Is(err, context.Canceled):
+	}
+	var engine *engineUnavailableError
+	switch {
+	case errors.Is(operation.Err(), context.DeadlineExceeded):
+		return fmt.Sprintf("Stopped at its time limit of %s. Call it again; a first run downloads modules and images.", timeout)
+	case operation.Err() != nil:
 		return "Canceled before it finished: the caller went away or the server was stopping."
-	case named && service.Name == "unavailable":
-		return "The local container engine was not available. Start it, then call again."
-	case named && !service.Fault:
+	case errors.As(err, &engine):
+		return "The local container engine could not be used. The tool error says what to do; then call again."
+	case expectedRequestRefusal(err):
 		return ""
 	default:
 		return "The check helper failed before it produced a result. Call it again."

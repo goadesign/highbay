@@ -69,13 +69,13 @@ func (c *ControlPlane) UpdateDependencies(ctx context.Context) (res *gensurla.Up
 		endCheckRequestSpan(span, err)
 		return nil, err
 	}
+	ctx, cancel := c.checkDeadline(ctx)
+	defer cancel()
 	defer func() {
-		summarizeCheckFailure(request, span, "update_dependencies", retErr, c.checkTimeout)
+		summarizeCheckFailure(request, span, "update_dependencies", ctx, retErr, c.checkTimeout)
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
-	ctx, cancel := c.checkDeadline(ctx)
-	defer cancel()
 	result, err := c.runCheckHelper(ctx, checkToolDependencies)
 	if err != nil {
 		return nil, err
