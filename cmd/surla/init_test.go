@@ -3,45 +3,39 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/goadesign/surla/internal/scaffold"
 	"github.com/goadesign/surla/internal/shquote"
 )
 
 // TestInitNextStepsGiveAWorkingFirstRunPath verifies the CLI handoff for the
 // blank project and the worked example: the first line says which was
-// created, the printed commands stage exactly the entries the project has,
+// created, the printed commands stage the entries the scaffold says that
+// project has (the scaffold's tests hold that list to what Init writes),
 // commit them and end by starting surla in it, the operator tools are named
 // only after that, and the text points to the documented change steps.
 func TestInitNextStepsGiveAWorkingFirstRunPath(t *testing.T) {
-	blank := []string{".gitignore", "AGENTS_QUICKSTART.md", "README.md", "cmd", "design", "eval", "gen", "go.mod", "go.sum"}
 	for _, tc := range []struct {
 		name    string
+		example bool
 		created string
-		entries []string
 		first   string
 		staged  string
 	}{
-		{name: "blank", created: initCreatedBlank, entries: blank,
+		{name: "blank", created: initCreatedBlank,
 			first:  "Created the bakery service as a blank project: no methods yet,",
-			staged: "git add .gitignore AGENTS_QUICKSTART.md README.md cmd design eval gen go.mod go.sum"},
-		{name: "worked example", created: initCreatedExample, entries: append([]string{"internal"}, blank...),
+			staged: "git add .gitignore README.md go.mod go.sum design gen cmd eval"},
+		{name: "worked example", example: true, created: initCreatedExample,
 			first:  "Created the bakery service as Surla's worked example:",
-			staged: "git add .gitignore AGENTS_QUICKSTART.md README.md cmd design eval gen go.mod go.sum internal"},
+			staged: "git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen internal cmd eval"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			for _, name := range tc.entries {
-				require.NoError(t, os.WriteFile(filepath.Join(dir, name), nil, 0o600))
-			}
-			staged, err := initStagedEntries(dir)
-			require.NoError(t, err)
+			staged := strings.Join(scaffold.FirstCommitPaths(tc.example), " ")
 			out := fmt.Sprintf(initNextSteps, shquote.Quote("/tmp/my shop"), "bakery", fmt.Sprintf(tc.created, "bakery"), staged)
 			assert.True(t, strings.HasPrefix(out, tc.first), out)
 			var commands []string

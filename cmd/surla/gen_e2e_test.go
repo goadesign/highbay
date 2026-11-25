@@ -158,7 +158,7 @@ func TestGenOnAFreshStarterChangesNothingAndKeepsModulesApart(t *testing.T) {
 	assert.Contains(t, *complete.Content[0].Text, "already initialized at "+dir)
 	evalDir := filepath.Join(dir, "eval")
 	created := files(t, dir, ".")
-	require.Contains(t, created, quickstartGuide, "the product design declares an agent, so goa-ai writes its guide")
+	require.NotContains(t, created, quickstartGuide, "the blank design declares no agent, so goa-ai writes no guide")
 	assert.Contains(t, created["gen/shop/service.go"], "// $ surla gen", "surla init generates with the same generator")
 	require.Contains(t, created, "eval/design/story_tests.go", "the starter's test module holds its Story table")
 	assert.Contains(t, created["eval/gen/evals/shop_acceptance/suite.go"], "StartsAndListens(context.Context) (eval.Result, error)",

@@ -77,6 +77,11 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 				Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + service, SurlaVersion: published, Example: tc.example,
 			}, RunCommand, starterGenerator(t))
 			require.NoError(t, err)
+			// With the real generator, the project holds exactly what its
+			// first commit stages: for instance, no guide for coding agents
+			// when the design declares no agent.
+			assertOnly(t, dir, FirstCommitPaths(tc.example)...)
+			assertReadmeStagesTheProject(t, dir)
 			bin := t.TempDir()
 			build := func(moduleDir, out, pkg string) {
 				cmd := exec.CommandContext(t.Context(), "go", "build", "-o", filepath.Join(bin, out), pkg)
@@ -111,6 +116,25 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 				}
 			}
 			runSuite(scenarios)
+			if !tc.example {
+				// The blank project's one scenario must fail for a program
+				// that exits before it binds an address. It dials only the
+				// address the program itself reports, so another program's
+				// listener can never make it pass.
+				quits := filepath.Join(t.TempDir(), "main.go")
+				require.NoError(t, os.WriteFile(quits, []byte("package main\n\nfunc main() {}\n"), 0o600))
+				build(filepath.Dir(quits), "quits", quits)
+				out, _ := exec.CommandContext(t.Context(), filepath.Join(bin, name+"-evals"),
+					"--artifact", name+"="+filepath.Join(bin, "quits")).Output()
+				var report eval.Report
+				require.NoError(t, json.Unmarshal(out, &report), string(out))
+				assert.False(t, report.Passed)
+				require.Len(t, report.Scenarios, 1)
+				require.NotNil(t, report.Scenarios[0].Result)
+				for _, c := range report.Scenarios[0].Result.Checks {
+					assert.False(t, c.Passed, "%s passed for a program that never listened", c.Name)
+				}
+			}
 
 			ev, err := designeval.NewEvaluatorWithCache(t.TempDir(), testmodule.CompilerCache(t))
 			require.NoError(t, err)

@@ -21,7 +21,8 @@ import (
 // initNextSteps is what `surla init` prints after creating a project; the
 // verbs are the shell-quoted project directory, the service name, the
 // sentence saying what was created (initCreatedBlank or initCreatedExample,
-// which take the service name) and the entries the first commit stages. The
+// which take the service name) and the entries the first commit stages
+// (scaffold.FirstCommitPaths: fixed names that need no shell quoting). The
 // commands end at `surla`, which starts the project's server and opens its
 // views page; the operator tools come after them.
 const initNextSteps = `%[3]s
@@ -99,34 +100,13 @@ func (runtime projectRuntime) init(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	staged, err := initStagedEntries(target)
-	if err != nil {
-		return err
-	}
 	created := initCreatedBlank
 	if *example {
 		created = initCreatedExample
 	}
+	staged := strings.Join(scaffold.FirstCommitPaths(*example), " ")
 	_, err = fmt.Fprintf(stdout, initNextSteps, shquote.Quote(*dir), name, fmt.Sprintf(created, name), staged)
 	return err
-}
-
-// initStagedEntries returns the top-level entries of the project
-// scaffold.Init just wrote in dir, in name order, for the first commit's
-// git add. Listing what was written keeps the command right for both the
-// blank project and the worked example, which has more folders. Init writes
-// only fixed names such as go.mod and design, none of which needs quoting in
-// a shell.
-func initStagedEntries(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", fmt.Errorf("list the new project: %w", err)
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	return strings.Join(names, " "), nil
 }
 
 // runVersion prints the module version this surla binary was built from to

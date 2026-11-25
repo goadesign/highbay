@@ -28,7 +28,7 @@ var _ = Suite("[[.Name]]_acceptance", func() {
 	Timeout("1m")
 
 	Scenario("starts_and_listens", func() {
-		Description("The [[.Name]] binary starts and accepts TCP connections on the address given with -listen.")
+		Description("The [[.Name]] binary starts, binds the address given with -listen, reports the address it bound and accepts TCP connections on it.")
 		Tags("repair")
 	})
 })

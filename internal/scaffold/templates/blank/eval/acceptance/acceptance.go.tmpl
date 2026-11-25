@@ -1,6 +1,6 @@
 // Package acceptance runs the acceptance scenarios against a pinned [[.Name]]
 // binary. The one scenario so far starts the [[.Name]] and checks that it
-// accepts connections. A change adds a method here for each scenario it adds
+// binds an address and accepts connections on it. A change adds a method here for each scenario it adds
 // to the suite in ../design.
 package acceptance
 
@@ -11,7 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
+	"regexp"
 	"time"
 
 	"goa.design/goa-ai/eval"
@@ -40,8 +40,11 @@ func New(binary candidate.Artifact) *Hooks {
 	return &Hooks{binary: binary}
 }
 
-// StartsAndListens checks that the [[.Name]] binary starts and accepts TCP
-// connections on the address given with -listen.
+// StartsAndListens checks that the [[.Name]] binary starts, binds an address
+// and accepts TCP connections on it. The [[.Name]] chooses the port (-listen
+// 127.0.0.1:0) and prints the address it bound, so the scenario dials only an
+// address this process reported and can never pass against another program's
+// listener.
 func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err error) {
 	res.Artifacts = []eval.Artifact{h.binary.Evidence(Name)}
 	// work holds the [[.Name]]'s state directory and, outside it, its log file.
@@ -53,13 +56,8 @@ func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err erro
 	if err := os.Mkdir(state, 0o700); err != nil {
 		return res, errors.Join(fmt.Errorf("create state directory: %w", err), os.RemoveAll(work))
 	}
-	port, err := freePort()
-	if err != nil {
-		return res, errors.Join(err, os.RemoveAll(work))
-	}
-	addr := "127.0.0.1:" + strconv.Itoa(port)
 	proc, err := candidate.Exec(ctx, h.binary, candidate.Spec{
-		Args:     []string{"-listen", addr},
+		Args:     []string{"-listen", "127.0.0.1:0"},
 		StateDir: state,
 		LogFile:  filepath.Join(work, "[[.Name]].log"),
 	})
@@ -75,14 +73,16 @@ func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err erro
 		}
 		err = errors.Join(err, os.RemoveAll(work))
 	}()
-	listenErr := waitListening(ctx, addr, proc.Done())
-	tail := ""
-	if listenErr != nil {
-		tail, _, err = proc.Excerpt(4 << 10)
+	addr, boundErr := boundAddress(ctx, proc)
+	var dialErr error
+	if boundErr == nil {
+		dialErr = dial(ctx, addr, proc.Done())
 	}
+	tail, _, err := proc.Excerpt(4 << 10)
 	res.Output = addr
 	res.Checks = []eval.Check{
-		check("listens", listenErr == nil, "the [[.Name]] never accepted a connection on %s: %v\n%s", addr, listenErr, tail),
+		check("reports_bound_address", boundErr == nil, "the [[.Name]] did not report an address it bound: %v\n%s", boundErr, tail),
+		check("accepts_connections", boundErr == nil && dialErr == nil, "the [[.Name]] did not accept a connection on %q: %v\n%s", addr, dialErr, tail),
 	}
 	return res, err
 }
@@ -110,34 +110,48 @@ func check(name string, passed bool, format string, args ...any) eval.Check {
 	return eval.Check{Name: name, Diagnostic: fmt.Sprintf(format, args...)}
 }
 
-// freePort returns a loopback TCP port that was free a moment ago. Another
-// process can take it before the [[.Name]] listens; the scenario then fails
-// with the [[.Name]]'s log rather than testing the wrong server.
-func freePort() (int, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, fmt.Errorf("find free port: %w", err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	return port, ln.Close()
-}
+// listeningLine matches the line the [[.Name]] prints once it has bound its
+// address (see cmd/[[.Name]]/main.go).
+var listeningLine = regexp.MustCompile(`(?m)^listening on (\S+)$`)
 
-// waitListening waits up to 30 seconds for addr to accept TCP connections,
-// and stops early when exited is closed because the process ended.
-func waitListening(ctx context.Context, addr string, exited <-chan struct{}) error {
+// boundAddress waits up to 30 seconds for the [[.Name]] to print the address
+// it bound and returns it. It stops early when the process exits, which is
+// how a program that cannot bind fails this scenario.
+func boundAddress(ctx context.Context, proc *candidate.Process) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	for {
-		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
-		if err == nil {
-			return conn.Close()
+		out, _, err := proc.Excerpt(4 << 10)
+		if err != nil {
+			return "", err
+		}
+		if m := listeningLine.FindStringSubmatch(out); m != nil {
+			return m[1], nil
 		}
 		select {
-		case <-exited:
-			return errors.New("the process exited")
+		case <-proc.Done():
+			return "", errors.New("the process exited before it bound an address")
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+			return "", ctx.Err()
+		case <-time.After(50 * time.Millisecond):
 		}
+	}
+}
+
+// dial connects to addr once and closes the connection. It fails when the
+// process has exited, so a connection never counts for a program that is no
+// longer running.
+func dial(ctx context.Context, addr string, exited <-chan struct{}) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-exited:
+		return errors.Join(errors.New("the process exited"), conn.Close())
+	default:
+		return conn.Close()
 	}
 }

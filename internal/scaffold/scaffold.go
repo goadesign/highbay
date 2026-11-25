@@ -269,6 +269,18 @@ func Prepare(ctx context.Context, o Options, run Runner, gen Generator) (name, s
 	return name, stage.path, commit, nil
 }
 
+// FirstCommitPaths returns the top-level entries of the project Init writes
+// for the blank project, or with example for the worked example: what the
+// project's first commit stages. The worked example also has hand-written
+// packages under internal/ and, because its design declares an agent, the
+// guide goa-ai generates for coding agents.
+func FirstCommitPaths(example bool) []string {
+	if example {
+		return []string{".gitignore", "README.md", quickstartGuide, "go.mod", "go.sum", "design", "gen", "internal", "cmd", "eval"}
+	}
+	return []string{".gitignore", "README.md", "go.mod", "go.sum", "design", "gen", "cmd", "eval"}
+}
+
 // RunCommand runs args in dir as its own process group with GOWORK=off, so a
 // go.work file around dir cannot change the new modules, strips inherited
 // repository-redirecting Git variables while preserving operator author and

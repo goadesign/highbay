@@ -275,12 +275,14 @@ func TestInitStopsAndCleansUpWhenCanceled(t *testing.T) {
 // not set: a service with no methods and no agent, a Story file that declares
 // no Story, a command that takes only -listen, and a test module whose one
 // scenario starts the program and whose live hooks refuse. Nothing of the
-// worked example is written. The Go command and the generator are stand-ins.
+// worked example is written. The Go command and the generator are stand-ins;
+// the generator writes no guide for coding agents, as goa-ai writes none for
+// a design without an agent.
 func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	parent := t.TempDir()
 	dir := filepath.Join(parent, "bakery")
 	run := func(_ context.Context, dir, _ string, args ...string) error { return fakeGo(dir, args) }
-	gen := &fakeGenerator{pkgs: []string{"bakery"}, extra: map[string]string{quickstartGuide: "guide\n"}}
+	gen := &fakeGenerator{pkgs: []string{"bakery"}}
 	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published}, run, gen)
 	require.NoError(t, err)
 	assert.Equal(t, "bakery", name)
@@ -289,8 +291,8 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	assert.Equal(t, []string{
 		"acceptance/acceptance.go", "design/design.go", "design/story_tests.go", "go.mod", "go.sum",
 	}, slices.Sorted(maps.Keys(gen.inputs[1])), "the test module is generated with its acceptance package and Story table")
-	assertOnly(t, dir, ".gitignore", "README.md", quickstartGuide, "go.mod", "go.sum", "design", "gen", "cmd", "eval")
-	assertOnly(t, filepath.Join(dir, "eval"), quickstartGuide, "go.mod", "go.sum", "design", "gen", "acceptance")
+	assertOnly(t, dir, FirstCommitPaths(false)...)
+	assertOnly(t, filepath.Join(dir, "eval"), "go.mod", "go.sum", "design", "gen", "acceptance")
 	assertReadmeStagesTheProject(t, dir)
 
 	read := func(rel string) string {
@@ -312,7 +314,10 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	assert.Equal(t, []string{"starts_and_listens"}, scenarioNames(evalDesign))
 	acceptance := read("eval/acceptance/acceptance.go")
 	assert.Contains(t, acceptance, "func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err error)")
-	assert.Contains(t, acceptance, `Args:     []string{"-listen", addr},`, "the scenario starts the program with -listen alone")
+	assert.Contains(t, acceptance, `Args:     []string{"-listen", "127.0.0.1:0"},`,
+		"the scenario starts the program with -listen alone and lets it choose the port")
+	assert.Contains(t, main, `fmt.Println("listening on", ln.Addr())`, "the program reports the address it bound, which the scenario dials")
+	assert.Less(t, strings.Index(main, "net.Listen("), strings.Index(main, `fmt.Println("listening on"`), "only after binding it")
 	for _, refuses := range []string{
 		"func Live(context.Context, candidate.Artifact, string, model.Provider) (suite.LiveTarget, error) {\n\treturn suite.LiveTarget{}, errNoPrompt\n}",
 		"func LiveThroughGateway(context.Context, candidate.Artifact, string, string) (suite.LiveTarget, error) {\n\treturn suite.LiveTarget{}, errNoPrompt\n}",
@@ -406,6 +411,7 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(main), `genbakery "example.com/bakery/gen/bakery"`)
 	assert.NotContains(t, string(main), "[[")
+	assertOnly(t, dir, FirstCommitPaths(true)...)
 	assertReadmeStagesTheProject(t, dir)
 	assertOnly(t, parent, "bakery")
 }

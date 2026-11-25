@@ -17,12 +17,13 @@ adds behavior and the tests that prove it.
   design into its working copy's `design/` and regenerate `gen/`; it edits
   neither directory. An operator can run `surla gen` in this directory: it
   runs Goa's generator for this module with the module's own versions. Never
-  edit `gen/`. `AGENTS_QUICKSTART.md` is generated with it for coding agents.
-- `cmd/[[.Name]]` serves the API on the address given with `-listen host:port`.
-  Nothing is mounted on it yet.
+  edit `gen/`. Once the design declares an agent, generation also writes
+  `AGENTS_QUICKSTART.md` here for coding agents; commit it with `gen/`.
+- `cmd/[[.Name]]` serves the API on the address given with `-listen host:port`
+  and prints the address once it has bound it. Nothing is mounted on it yet.
 - `eval/` is a separate Go module: the evaluator suite. Its one scenario,
   `starts_and_listens`, starts the `[[.Name]]` binary and checks that it
-  accepts connections. Its program, `eval/gen/cmd/[[.Name]]-evals`, is
+  binds an address and accepts connections on it. Its program, `eval/gen/cmd/[[.Name]]-evals`, is
   generated with the rest of `eval/gen/` from `eval/design/` and calls
   `eval/acceptance`: its `Name`, `Hooks`, `New`, `Live` and
   `LiveThroughGateway`. `Live` and `LiveThroughGateway` refuse until a change
@@ -42,7 +43,7 @@ Surla in this directory:
 
 ```sh
 git init
-git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen cmd eval
+git add .gitignore README.md go.mod go.sum design gen cmd eval
 git commit -m "Start [[.Name]] from surla init"
 surla
 ```
