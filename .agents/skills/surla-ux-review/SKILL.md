@@ -160,8 +160,9 @@ source out of its view.
   things the study has no business with: take one only when the person
   running the study has said that screen holds nothing but the study, and
   otherwise rely on the name of the application in front. The Herdr window
-  can show the person's other spaces, so keep every frame in the tester's
-  folder and quote from a frame only what belongs to the study;
+  can show the person's other spaces, so section 2 limits what is kept of
+  its frames. Keep what you do capture in the tester's folder; storing a
+  frame privately does not make it right to capture more;
 - **which `surla` a program started from the desktop finds.** An app opened
   from the Dock, Finder or a desktop launcher does not read the shell
   startup files that add a Go or personal `bin` folder to `PATH`. A button
@@ -236,18 +237,24 @@ minutes. Those minutes are what a user stares at, and a study that first
 looks afterwards never sees them.
 
 - From the participant's first message, record the application in front
-  every 2 seconds until Surla's tab appears: the default browser comes to
-  the front, the agent's pane says it opened the page, or a tool that sees
-  the tab shows it. Record when it appeared and what was in front then. If
-  no tab has appeared after two minutes, check every 15 seconds and say so
-  in the log.
+  every 2 seconds. The default browser coming to the front, or the agent's
+  pane saying it opened the page, is a cue to look and not proof: either
+  can happen with no Surla tab.
+- Count Surla's tab as open, or open again, only when it is observed: a
+  tool shows the tab itself, or the browser confirms a tab at the page's
+  address. Ask the browser about that address only, never the link, and
+  print just yes or no. Record when the tab was observed and what was in
+  front then. If no tab has been observed after two minutes, check every 15
+  seconds and say so in the log. If nothing on this machine can observe the
+  tab, record each opening as "cue only: tab not observed".
 - Use that tab for the rest of the attempt when a tool can both see it and
   click in it.
-- Otherwise open a second window on the same page within seconds of the tab
-  appearing: run `surla --print-link` in `work/` yourself and open its link
+- Otherwise open a second window on the same page within seconds of
+  observing the tab, or of a cue when the tab cannot be observed: run
+  `surla --print-link` in `work/` yourself and open its link
   in the browser window the participant uses, without printing the link.
   Record it as a harness-only step. Open it again, the same way, each time
-  the screen record shows Surla opening or reopening its tab, and at no
+  the screen record shows Surla opening its tab again, and at no
   other time. A second window the product did not open would hide a page the
   user lost.
 - The second window shows the same page, but it is not the tab Surla
@@ -257,18 +264,33 @@ looks afterwards never sees them.
   not exercised.
 - When the participant closes its page, record what was closed: the tab
   Surla opened, the second window, or both. Close Surla's own tab as well
-  when a tool can. Count the page as back only when the record shows Surla
-  opening a tab again, and record which tab that was.
+  when a tool can. Count the page as back only when Surla's new tab is
+  observed, and record which tab that was. If only the second window could
+  be closed, Surla's own tab stayed open throughout and nothing was
+  reopened: record closing and reopening the page as not exercised.
 
 **The Herdr window.** `herdr-app shot <file>` saves the window as a person
 sees it, including Surla's companion and any other overlay.
 `herdr-app status` prints the showing `space` and `tab`, the `focused_pane`,
-and the `overlays` and `errors`. Save both at every capture. Read each
-overlay in the frame: an error line in the companion is a finding even when
-the browser page looks fine. A shot captures the app even when another
-window covers it, so it cannot show whether Herdr is in front; the
-application in front shows that. Do not start, stop or restart the person's
-Herdr app or its core for the study.
+and the `overlays` and `errors`. Take both at every capture and look at
+the frame. Read each overlay in it: an error line in the companion is a
+finding even when the browser page looks fine.
+
+Keep the status output. Of the frame, keep only what belongs to the study,
+and do not keep the uncropped file:
+
+- When the study's space is the one showing, crop to its panes and Surla's
+  overlays, leaving out the list of the person's other spaces and tabs.
+- When another space is showing, keep no image of it. The status output
+  already says which space, tab and pane are showing, which is what a focus
+  check needs. If one of Surla's overlays is open, keep a crop of that
+  overlay alone.
+
+Give the participant the same cropped view.
+
+A shot captures the app even when another window covers it, so it cannot
+show whether Herdr is in front; the application in front shows that. Do not
+start, stop or restart the person's Herdr app or its core for the study.
 
 **The screen record.** Save frames in `attempt-<N>/screen/`, named by time
 and surface, and index them in `attempt-<N>/screen/screen-log.md`. Each row

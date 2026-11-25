@@ -20,8 +20,9 @@ and brings back their step reports.
 - The complete text of each proposal the page showed, saved word for word
   beside the screen record's frames.
 - The screen record of each attempt, `{{TESTER}}/attempt-<N>/screen/`: timed
-  frames of the browser page and the Herdr window, with the application in
-  front at each one, indexed in `screen-log.md`. It holds only what a user could see. View the frames
+  frames of the browser page and of the study's part of the Herdr window,
+  with Herdr's status and the application in front at each one, indexed in
+  `screen-log.md`. It holds only what a user could see. View the frames
   themselves; the index is a guide to them.
 - Your own notes file, `{{TESTER}}/observations.md`, which you keep up to
   date after every report.
@@ -279,7 +280,8 @@ cannot find a way. Record each as one of these:
   rows just before and after the click;
 - not offered by the screen;
 - not exercised, with the reason: no Herdr window, nothing can click inside
-  the Herdr window, or the trigger was never reached.
+  the Herdr window, Surla's own tab could not be closed or observed, or the
+  trigger was never reached.
 
 Judge S1b, S1c and S3b from the rows and frames around the click, not from
 the participant's account alone. A sub-milestone is met only by a change the
@@ -288,9 +290,11 @@ the one the sub-milestone asks for. If Herdr was already in front, or the
 agent's pane already had the focus, record that sub-milestone as not
 exercised: already in that state. If the browser the participant clicks in
 cannot be in front, S1b is not exercised. For S2 and S3, record which tab or
-window was closed, and judge S2b and S3b from the row that shows Surla
-opening a tab again, not from a second window the facilitator opened after
-it.
+window was closed, and judge S2b and S3b from the row that shows Surla's
+new tab observed, not from a cue such as the browser coming to the front,
+and not from a second window the facilitator opened after it. If only the
+study's second window could be closed, or the new tab could not be
+observed, S2 and S3 are not exercised.
 
 ## Mid-build changes
 
