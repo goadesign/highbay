@@ -94,7 +94,7 @@ var BuilderProgress = Type("BuilderProgress", func() {
 	Description("The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work. branch, head_commit and the last check are three independent recorded facts: none says that a check or a verification ran on head_commit.")
 	Attribute("read", Boolean, "True once the builder read this assignment in full with get_builder_assignment.")
 	Attribute("branch", String, "The build's builder branch, surla/build-<n>.")
-	Attribute("head_commit", String, "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.", func() {
+	Attribute("head_commit", String, "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.", func() {
 		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
 	})
 	Attribute("last_check_passed", Boolean, "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.")

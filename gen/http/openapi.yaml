@@ -4040,7 +4040,7 @@ definitions:
                 example: Sint dolores dolor.
             head_commit:
                 type: string
-                description: 'The commit the builder''s branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.'
+                description: 'The commit the builder''s branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.'
                 example: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
                 pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
             last_check_at:

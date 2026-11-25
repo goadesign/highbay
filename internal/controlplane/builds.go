@@ -226,12 +226,17 @@ func (c *ControlPlane) changeBuild(
 	if err != nil {
 		return nil, err
 	}
-	head, err := c.builderBranchHead(ctx, saved)
-	if err != nil {
-		return nil, err
-	}
-	if head != "" {
-		build.Builder.HeadCommit = &head
+	// The branch's current commit is a fact of a build still in progress.
+	// Once a verification passed, the build names the verified commit and
+	// stays the same when its branch later moves or disappears.
+	if _, building := build.Taking.AsBuilding(); building {
+		head, err := c.builderBranchHead(ctx, saved)
+		if err != nil {
+			return nil, err
+		}
+		if head != "" {
+			build.Builder.HeadCommit = &head
+		}
 	}
 	return &gensurla.ChangeBuild{
 		ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,

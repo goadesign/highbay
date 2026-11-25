@@ -4597,7 +4597,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("head_commit")},
 		JSONType:    "string",
-		Description: "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.",
+		Description: "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -28959,7 +28959,7 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 		case "head_commit":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.",
+				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.",
 			); err != nil {
 				return err
 			}
