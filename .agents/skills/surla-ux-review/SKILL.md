@@ -13,6 +13,15 @@ uses the browser for human decisions, and reaches an approved merge without
 typing terminal commands to move between stages. Commands the coding agent
 runs internally are distinct from commands the user must enter. Observe whether the product
 actually enables that journey; never supply missing steps as hidden coaching.
+
+The study judges Surla by what its screens show at the moment they show it.
+A person who asked for a product watches three things: their coding agent's
+pane, the browser page, and, when Herdr is open, the Herdr window. They do
+not read Git history or run status commands to learn whether anything is
+happening, and they lose patience quickly. So the study keeps a timed record
+of those screens from the first second, and the participant waits the way
+that person waits: by looking.
+
 Two subagents take part:
 
 - **The participant** plays a developer who has never used Surla. It may read
@@ -24,7 +33,8 @@ Two subagents take part:
   usability problems, and writes the report.
 
 You, the agent running this skill, are the session facilitator. You set up the
-run, pass messages between the two subagents, and fix blocking bugs. You can
+run, keep the screen record, pass messages between the two subagents, and fix
+blocking bugs. You can
 read Surla's code, so pass their messages on word for word, and add only the
 facts this skill lists. A facilitator who explains or coaches ends up
 measuring itself, not Surla. When you are tempted to explain something, write
@@ -65,6 +75,7 @@ participant's folder and, apart from it, the tester's folder:
                # each other
   observations.md   # the tester's notes, which it writes
   attempt-1/transcript.md   # you append every relayed message here
+  attempt-1/screen/         # the screen record: frames and screen-log.md
   report.md    # the final report
 ```
 
@@ -122,11 +133,49 @@ source out of its view.
   that cannot preserve the coding session is a study limitation. Do not
   hand it an HTTP route, credential, prewritten MCP configuration or lifecycle
   command. Failure to discover or use the documented integration is evidence;
-- whether Herdr and Chorus are installed, whether the agent starts inside a
-  live Herdr pane, whether its client has been observed forwarding
+- whether Herdr and Chorus are installed, whether the Herdr app's window is
+  open (`herdr-app status` reports on the open window), whether the agent
+  starts inside a live Herdr pane, whether its client has been observed forwarding
   `HC_TERMINAL_ID` and provider settings to stdio, the installed agent
   families and background-worker support, and any project choices or
   dismissed recommendations already present. Do not install a second family just to hide the one-family path;
+- **how the study sees and uses the screen** (section 2 depends on these).
+  Record the tool that captures each of these as an image: the tab Surla
+  opens in the default browser, the Herdr window (`herdr-app shot`), and
+  the desktop. Record how the participant clicks on the page, and whether
+  anything can click inside the Herdr window. If no tool can see the tab
+  Surla opens, record the second browser window the study uses instead
+  (section 2). If nothing can click inside the Herdr window, record that
+  the companion's buttons cannot be pressed in this run. A run that cannot
+  capture the browser page as an image cannot grade the screen: stop and
+  say so. Desktop captures can show the person's other windows, so prefer
+  captures of one window and keep every frame in the tester's folder;
+- **which `surla` a program started from the desktop finds.** An app opened
+  from the Dock, Finder or a desktop launcher does not read the shell
+  startup files that add a Go or personal `bin` folder to `PATH`. A button
+  in that app can then fail to run a command that works in every terminal,
+  or run an older build. Run these lookups before the attempt and again
+  when the participant first reports Surla installed:
+
+  ```sh
+  # the interactive shell
+  command -v surla
+  # a clean login shell
+  env -i HOME="$HOME" USER="$USER" SHELL="$SHELL" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin "$SHELL" -lc 'command -v surla'
+  # the bare system path, with no startup files
+  env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/sh -c 'command -v surla'
+  ```
+
+  Record each result as "the build under test", "another build" (compare
+  `surla version`) or "not found", never the `PATH` value. When the Herdr
+  app is running, also record whether the folder holding `surla` is in the
+  `PATH` entry of the app's own process, and whether the app was started
+  from the desktop or from a terminal. An app started from a terminal can
+  inherit that terminal's `PATH` and hide the difference; record then that
+  the desktop-started path was not exercised. Do not repair a difference
+  for the attempt: no symlink, no edited startup file, no relaunch from a
+  terminal. Give the tester the results as environment facts;
 - **what each mid-build change needs** (see the tester brief's "Mid-build
   changes"), recorded as two separate facts: what this machine provides,
   such as model credentials or the access a live demo needs, and what the
@@ -134,7 +183,104 @@ source out of its view.
   design change. The tester uses them to tell "not supported on this
   machine" apart from "blocked by a missing Surla capability".
 
-## 2. Start the two subagents
+## 2. Put the session on the screen and record it
+
+A first-time user meets Surla on three surfaces. Set each one up before the
+participant sends its first message, and record all of them until the attempt
+ends.
+
+**The coding agent's pane.** When the Herdr app's window is open, the
+participant's coding-agent session runs in a pane of that window, where a
+person could watch it and type. The participant creates it the way a user
+starts work on a new project, as a new space (or a new tab) for `work/` with
+the agent as its program:
+
+```sh
+herdr-app do space.new --name <short name> --folder <participant>/work --argv '["<agent>"]'
+```
+
+The command prints the IDs it created, and `herdr-app ls` lists the new
+space with its terminal. The participant types into that terminal with
+`hc send` and `hc keys`, reads it with `hc read`, and waits on it in short
+steps with `hc wait --timeout 60`. These stand in for a keyboard and a pair
+of eyes; record them as harness-only steps.
+
+Do not run the participant's agent as a background terminal (`hc run --bg`)
+or as a one-shot non-interactive command while the Herdr window is open.
+Neither puts a pane on the screen, so Surla has no pane of the user's to
+link, and the companion and the page's button that shows the coding agent's
+pane go untested.
+
+When no Herdr window is open, the agent runs in an interactive terminal
+session the participant can type into and read between turns. Record that,
+and mark pane linking, the companion and the show-pane button as not
+exercised. Never present such a run as covering them.
+
+**The browser page.** Start looking when the page opens, not when the agent
+says it is done. The agent opens the page early and keeps working for
+minutes. Those minutes are what a user stares at, and a study that first
+looks afterwards never sees them.
+
+- From the participant's first message, capture the desktop, or the default
+  browser's window, every 2 seconds until Surla's tab appears. Record when it
+  appeared and which application was in front then. If no tab has appeared
+  after two minutes, capture every 15 seconds and say so in the log.
+- Use that tab for the rest of the attempt when a tool can both see it and
+  click in it.
+- Otherwise open a second window on the same page within seconds of the tab
+  appearing: run `surla --print-link` in `work/` yourself and open its link
+  in the browser window the participant uses, without printing the link.
+  Record it as a harness-only step. Open it again, the same way, each time
+  the screen record shows Surla opening or reopening its tab, and at no
+  other time. A second window the product did not open would hide a page the
+  user lost.
+- The second window shows the same page but not which window is in front.
+  Keep capturing the desktop for that.
+
+**The Herdr window.** `herdr-app shot <file>` saves the window as a person
+sees it, including Surla's companion and any other overlay.
+`herdr-app status` prints the showing `space` and `tab`, the `focused_pane`,
+and the `overlays` and `errors`. Save both at every capture. Read each
+overlay in the frame: an error line in the companion is a finding even when
+the browser page looks fine. A shot captures the app even when another
+window covers it, so it cannot show whether Herdr is in front; the
+application in front and the desktop capture show that. Do not start, stop
+or restart the person's Herdr app or its core for the study.
+
+**The screen record.** Save frames in `attempt-<N>/screen/`, named by time
+and surface, and index them in `attempt-<N>/screen/screen-log.md`. Each row
+holds the time, the surface, the file, the page's heading and status line
+word for word, Herdr's `space`, `tab`, `focused_pane`, `overlays` and
+`errors`, and the application in front (on macOS,
+`lsappinfo info -only name "$(lsappinfo front)"`).
+
+| When | Capture |
+| --- | --- |
+| Before the participant's first message | The Herdr window and status, and the desktop |
+| From the first message until Surla's tab appears | The desktop every 2 seconds |
+| When the agent's first Surla call returns | The Herdr window and status at about 2 and 10 seconds: is Surla's companion among `overlays`, and what does it show? |
+| When the tab appears | The page at about 2, 5 and 10 seconds |
+| While an agent or Surla is working: project setup (`init_project`), the stretch between setup and the first proposal (`propose_change`), builds, tests, verification | The page's text every 15 seconds; a frame each time its heading or status changes, and at least one a minute. The Herdr window and status once a minute, and when `overlays` or `errors` change |
+| Each human decision on the page | The page just before and just after |
+| Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, the Herdr window and status, and the application in front |
+
+A script may take the captures. Viewing them is your job: look at every kept
+frame in the round it was taken. A saved file nobody looked at is not an
+observation.
+
+**Flag at once.** Mark the row and tell the tester with the next relay when a
+frame shows any of these. State what the frames show and for how long; do
+not explain it from the source.
+
+- The page showed work in progress, then returned to an earlier or empty
+  state, or asked again for something already given, while work continued.
+- A click after which nothing a user can see changed within 10 seconds: the
+  same page, the same application in front, the same focused pane.
+- Error text on the page, in an overlay, or in the companion.
+- No visible change and no explanation for two minutes while an agent is
+  working.
+
+## 3. Start the two subagents
 
 Read `references/tester-brief.md` and `references/participant-brief.md` and
 fill in every placeholder:
@@ -145,6 +291,7 @@ fill in every placeholder:
 | `{{PARTICIPANT_PROFILE}}` | the participant profile |
 | `{{ENVIRONMENT_FACTS}}` | the recorded facts that matter to a user: installed tools, credentials set, network access and coding-agent sandbox restrictions |
 | `{{CODING_AGENTS}}` | the coding-agent CLIs the participant may run, or "none" |
+| `{{SCREEN_TOOLS}}` | from section 2: the exact commands the participant uses to start, type into and read its coding agent's pane, to view and click the browser page, and to capture the Herdr window and name the application in front. Say which of these this run lacks |
 | `{{PARTICIPANT}}` | the participant's folder |
 | `{{TESTER}}` | the tester's folder |
 | `{{CHALLENGE}}` | the tester's challenge text, word for word |
@@ -161,7 +308,10 @@ do not present a run as a first-time experience.
 Set each subagent's model explicitly to your
 harness's frontier reasoning model, such as Opus in Claude Code or the
 high-reasoning model in Codex or Gemini CLI. Both roles need judgment, and a
-weaker model turns its own confusion into false usability findings.
+weaker model turns its own confusion into false usability findings. Both
+roles also view the screen record's images. If a role's model cannot view
+images, describe each frame for it in `screen-log.md` and list that as a
+limitation.
 
 The session runs over many turns, so you need to send each subagent more
 messages while it is still running. In Claude Code, start it with the Agent
@@ -175,26 +325,40 @@ Start the tester first. It writes its private success criteria to
 `observations.md` and replies with the challenge text. Then start the
 participant.
 
-## 3. Run the session loop
+## 4. Run the session loop
 
 Each round trip works like this:
 
 1. The participant works until a natural pause and replies with a step
    report. Its brief lists when it pauses, including before one-time setup,
-   its first skill invocation and each new human decision on the page.
+   its first skill invocation, each new human decision on the page, and each
+   screen state that would make a person doubt or stop.
 2. Append the report to the transcript and send it unchanged to the tester,
-   together with the elapsed time since the previous report.
+   together with the elapsed time since the previous report, the rows added
+   to `screen-log.md` since then, and the paths of the frames they name.
 3. The tester replies with up to three questions, an optional hint, an
-   optional `CHANGE_REQUEST`, and a decision: `continue`, `stop_for_bug`, or
-   `end_session`.
-4. If there is a `CHANGE_REQUEST`, check it before relaying it. If it names
-   a Surla command or MCP tool, a checkpoint (`CP1`–`CP5`), "Change Card",
-   "checkpoint", or a Surla doc or section, send it back to the tester to
+   optional `CHANGE_REQUEST`, an optional `SCREEN_TASK`, and a decision:
+   `continue`, `stop_for_bug`, or `end_session`.
+4. If there is a `CHANGE_REQUEST` or a `SCREEN_TASK`, check it before
+   relaying it. If it names a Surla command or MCP tool, a checkpoint
+   (`CP1`–`CP5`), "Change Card", "checkpoint", the label of a Surla button,
+   or a Surla doc or section, send it back to the tester to
    reword and relay nothing yet. A returned draft does not count as handed
    over. If private criteria or tester instructions ever reach the
    participant, treat it as a scope leak.
 5. Append the reply to the transcript. On `continue`, send the participant
-   only the questions, the hint and the change request, word for word.
+   only the questions, the hint, the change request and the screen task,
+   word for word.
+
+**While the participant waits.** Keep capturing on section 2's schedule
+whether or not a report is due. The participant's brief limits it to the
+screen while its agent or Surla is working. From its actual tool calls, count
+each off-screen check: a command or file read used to learn what is
+happening, such as `git log`, `git status`, listing or reading project
+files, or `surla status`. Tell the tester each one, with the screen state it
+followed. An off-screen check does not end the attempt. It shows that the
+screen left a question open, and the tester grades the screen as it stood
+before the check.
 
 **Bounds.** Unless the person running the skill sets others: 4 hours of
 wall-clock time per session, and 3 attempts. If a running participant sends
@@ -219,7 +383,7 @@ A participant cannot unlearn what it read, so a leak ends the attempt. Tell
 the tester what was read and when. The tester records the leak as a finding,
 because reaching for the source usually means the docs failed, and marks
 later milestones in that attempt as not valid. Then restart, as in section
-4 step 4, with the same build. If nothing can be checked, note in the
+5 step 4, with the same build. If nothing can be checked, note in the
 limitations that leaks were only self-reported.
 
 **When an attempt or the session ends**, do two things:
@@ -228,7 +392,11 @@ limitations that leaks were only self-reported.
   serve` or a Temporal dev server. Check first that each PID still runs the
   command the participant started in this attempt, for example that
   `ps -p <pid> -o command=` shows the reported binary and folder. PIDs get
-  reused. Leave running any process you cannot match.
+  reused. Leave running any process you cannot match. The participant's
+  coding agent in its Herdr pane is one of them: end its program with
+  `hc kill` after checking the terminal is the one this attempt created.
+  Leave the Herdr space in place and record its name; never close a space
+  the attempt did not create.
 - Delete nothing else. Every project folder the participant created is
   evidence for the report, including a project initialized outside `work/`,
   and may hold a Git repository with unpushed work. Keep machine-wide setup
@@ -244,7 +412,7 @@ Surla bug. If someone later asks for cleanup, inspect each exact target
 first: nested repositories, `git status`, unpushed commits, and whether
 deleting it is authorized.
 
-## 4. Handle a blocking bug
+## 5. Handle a blocking bug
 
 When the tester decides `stop_for_bug`, it names the bug and gives the steps
 to reproduce it. A blocking bug is one where Surla crashes, behaves
@@ -277,7 +445,7 @@ journey goal; record both outcomes rather than silently counting success.
    pin when that is what selects the dependency. Do not patch the participant's
    project or supply an undocumented override to make the attempt pass.
 4. Restart from scratch:
-   1. Stop processes and record leftovers as in section 3.
+   1. Stop processes and record leftovers as in section 4.
    2. Create a new participant folder, `~/src/surla-ux-<id>-a<N+1>/`, holding
       a clone at the newest commit of the fix, including any
       version-pin follow-up, and an empty `work/`. Leave the previous
@@ -295,7 +463,7 @@ journey goal; record both outcomes rather than silently counting success.
 Fix and restart after every blocking bug. If the person invoking the skill
 set a limit on attempts, stop and report when it is reached.
 
-## 5. Debrief and report
+## 6. Debrief and report
 
 Keep these outcomes separate: product built, verified, approved, and merged;
 one-time installation/setup; later user-entered terminal commands; commands
@@ -303,8 +471,12 @@ the coding agent runs internally; harness-only invocations; and steps
 completed with help. For each applicable path, record observed success or why it was not
 exercised: live guide adoption, page recovery through the guide or companion,
 inline agent choices, builder-only builds with configured tests, one-family
-operation, missing Herdr, persisted choices/notices after reload, and human
-Merge with refusal recovery. Do not add fixtures or hints to force coverage.
+operation, missing Herdr, persisted choices/notices after reload, human
+Merge with refusal recovery, what the page showed from its first seconds to
+the first proposal, the page's button that shows the coding agent's pane,
+the companion's overlay and its buttons, and commands the Herdr app runs
+when it was started from the desktop. Do not add fixtures or hints to force
+coverage.
 A source claim, successful command or assignment is not proof of a visible
 outcome. The report's severity ratings and transcript evidence remain the
 moderator's responsibility.
@@ -317,6 +489,8 @@ Before handing the report over, check it against the transcripts:
 
 - Every finding points to a step that happened.
 - Quotes are exact.
+- Every finding about a screen names its frames and their times, and the
+  frames show what the finding says.
 - The counts of hints, errors, and milestones match the transcripts.
 - Every change request in the report was relayed word for word, as the
   transcript shows, and every planned change has exactly one outcome per
