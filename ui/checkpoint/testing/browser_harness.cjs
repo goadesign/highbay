@@ -483,6 +483,8 @@ async function phoneView(tab, selector) {
       role_states: Array.from(document.querySelectorAll("#surla-team-roles > li"), (node) => node.dataset.state),
       controls: nodes.filter((node) => node.matches("button") && !node.disabled).map((node) => node.id),
       overflowing: nodes.filter((node) => {
+        // Fully clipped accessibility text can exceed its own box without widening the page.
+        if (getComputedStyle(node).clipPath === "inset(50%)") return false;
         const box = node.getBoundingClientRect();
         return box.left < -1 || box.right > document.documentElement.clientWidth + 1 || node.scrollWidth > node.clientWidth + 1;
       }).map((node) => node.id || node.tagName + "." + node.className),
@@ -610,6 +612,8 @@ async function takingScenario(input, facts, views) {
           if (node === document.documentElement) return node.scrollWidth > node.clientWidth;
           // Exact command lines intentionally scroll inside their focusable pre.
           if (!node.getClientRects().length || node.closest(".surla-build-merge pre")) return false;
+          // Measure visible descendants here. The document check still catches page widening.
+          if (getComputedStyle(node).clipPath === "inset(50%)") return false;
           const box = node.getBoundingClientRect();
           return box.left < -1 || box.right > document.documentElement.clientWidth + 1 || node.scrollWidth > node.clientWidth + 1;
         }).map((node) => node.id || node.tagName),
