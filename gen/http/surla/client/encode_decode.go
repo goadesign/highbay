@@ -5926,6 +5926,105 @@ func DecodeListBuilderAssignmentsResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// BuildWaitForBuilderAssignmentRequest instantiates a HTTP request object with
+// method and path set to call the "surla" service
+// "wait_for_builder_assignment" endpoint
+func (c *Client) BuildWaitForBuilderAssignmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: WaitForBuilderAssignmentSurlaPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "wait_for_builder_assignment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeWaitForBuilderAssignmentRequest returns an encoder for requests sent
+// to the surla wait_for_builder_assignment server.
+func EncodeWaitForBuilderAssignmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*surla.WaitForBuilderAssignmentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("surla", "wait_for_builder_assignment", "*surla.WaitForBuilderAssignmentPayload", v)
+		}
+		values := req.URL.Query()
+		if p.SinceVersion != nil {
+			values.Add("since_version", *p.SinceVersion)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeWaitForBuilderAssignmentResponse returns a decoder for responses
+// returned by the surla wait_for_builder_assignment endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeWaitForBuilderAssignmentResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeWaitForBuilderAssignmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_builder_assignment", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "wait_for_builder_assignment", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body WaitForBuilderAssignmentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_builder_assignment", err)
+			}
+			err = ValidateWaitForBuilderAssignmentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "wait_for_builder_assignment", err)
+			}
+			res := NewWaitForBuilderAssignmentBuilderAssignmentWaitOK(&body)
+			return res, nil
+		case http.StatusForbidden:
+			var (
+				body WaitForBuilderAssignmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_builder_assignment", err)
+			}
+			err = ValidateWaitForBuilderAssignmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "wait_for_builder_assignment", err)
+			}
+			return nil, NewWaitForBuilderAssignmentForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_builder_assignment", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "wait_for_builder_assignment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetBuilderAssignmentRequest instantiates a HTTP request object with
 // method and path set to call the "surla" service "get_builder_assignment"
 // endpoint
@@ -6183,6 +6282,105 @@ func DecodeListTestWriterAssignmentsResponse(decoder func(*http.Response) goahtt
 				return nil, goahttp.ErrDecodingError("surla", "list_test_writer_assignments", err)
 			}
 			return nil, goahttp.ErrInvalidResponse("surla", "list_test_writer_assignments", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildWaitForTestWriterAssignmentRequest instantiates a HTTP request object
+// with method and path set to call the "surla" service
+// "wait_for_test_writer_assignment" endpoint
+func (c *Client) BuildWaitForTestWriterAssignmentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: WaitForTestWriterAssignmentSurlaPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("surla", "wait_for_test_writer_assignment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeWaitForTestWriterAssignmentRequest returns an encoder for requests
+// sent to the surla wait_for_test_writer_assignment server.
+func EncodeWaitForTestWriterAssignmentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*surla.WaitForTestWriterAssignmentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("surla", "wait_for_test_writer_assignment", "*surla.WaitForTestWriterAssignmentPayload", v)
+		}
+		values := req.URL.Query()
+		if p.SinceVersion != nil {
+			values.Add("since_version", *p.SinceVersion)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeWaitForTestWriterAssignmentResponse returns a decoder for responses
+// returned by the surla wait_for_test_writer_assignment endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeWaitForTestWriterAssignmentResponse may return the following errors:
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - error: internal error
+func DecodeWaitForTestWriterAssignmentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_test_writer_assignment", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("surla", "wait_for_test_writer_assignment", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body WaitForTestWriterAssignmentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_test_writer_assignment", err)
+			}
+			err = ValidateWaitForTestWriterAssignmentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "wait_for_test_writer_assignment", err)
+			}
+			res := NewWaitForTestWriterAssignmentTestWriterAssignmentWaitOK(&body)
+			return res, nil
+		case http.StatusForbidden:
+			var (
+				body WaitForTestWriterAssignmentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_test_writer_assignment", err)
+			}
+			err = ValidateWaitForTestWriterAssignmentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("surla", "wait_for_test_writer_assignment", err)
+			}
+			return nil, NewWaitForTestWriterAssignmentForbidden(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("surla", "wait_for_test_writer_assignment", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("surla", "wait_for_test_writer_assignment", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -6763,7 +6961,8 @@ func marshalSurlaCP1AnalysisToCP1AnalysisRequestBody(v *surla.CP1Analysis) *CP1A
 // *surla.CP1AnalysisAmbiguity.
 func marshalSurlaCP1AnalysisAmbiguityToCP1AnalysisAmbiguityRequestBody(v *surla.CP1AnalysisAmbiguity) *CP1AnalysisAmbiguityRequestBody {
 	res := &CP1AnalysisAmbiguityRequestBody{
-		Question: v.Question,
+		Question:    v.Question,
+		DraftOption: v.DraftOption,
 	}
 	if v.Options != nil {
 		res.Options = make([]string, len(v.Options))
@@ -6839,7 +7038,8 @@ func marshalCP1AnalysisRequestBodyToSurlaCP1Analysis(v *CP1AnalysisRequestBody) 
 // *CP1AnalysisAmbiguityRequestBody.
 func marshalCP1AnalysisAmbiguityRequestBodyToSurlaCP1AnalysisAmbiguity(v *CP1AnalysisAmbiguityRequestBody) *surla.CP1AnalysisAmbiguity {
 	res := &surla.CP1AnalysisAmbiguity{
-		Question: v.Question,
+		Question:    v.Question,
+		DraftOption: v.DraftOption,
 	}
 	if v.Options != nil {
 		res.Options = make([]string, len(v.Options))
@@ -6872,8 +7072,9 @@ func marshalCP1AnalysisExampleRequestBodyToSurlaCP1AnalysisExample(v *CP1Analysi
 // *AmbiguityQuestionResponseBody.
 func unmarshalAmbiguityQuestionResponseBodyToSurlaAmbiguityQuestion(v *AmbiguityQuestionResponseBody) *surla.AmbiguityQuestion {
 	res := &surla.AmbiguityQuestion{
-		ID:       *v.ID,
-		Question: *v.Question,
+		ID:          *v.ID,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -7991,7 +8192,11 @@ func unmarshalStartedBuildResponseBodyToSurlaStartedBuild(v *StartedBuildRespons
 // *BuilderProgressResponseBody.
 func unmarshalBuilderProgressResponseBodyToSurlaBuilderProgress(v *BuilderProgressResponseBody) *surla.BuilderProgress {
 	res := &surla.BuilderProgress{
-		Read: *v.Read,
+		Read:            *v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res

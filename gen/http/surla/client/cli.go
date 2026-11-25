@@ -28,7 +28,7 @@ func BuildProposeChangePayload(surlaProposeChangeBody *string) (*surla.ProposeCh
 		}
 		err = json.Unmarshal([]byte(*surlaProposeChangeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            },\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U0005ce6e\",\n            \"\U000a550e\",\n            \"\U000d207b\",\n            \"𪁯\"\n         ],\n         \"summary\": \"\U000fb38a\",\n         \"ui_composition\": \"In optio et.\"\n      },\n      \"change_id\": \"Ipsum soluta officiis facilis dolorem quae.\",\n      \"prompt\": \"Enim distinctio et sunt sunt et.\",\n      \"story_refresh_op_id\": \"In eaque eveniet facere.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            },\n            {\n               \"expected_outcome\": \"\U0001195a\",\n               \"input_summary\": \"\U00092b7a\",\n               \"scenario\": \"\U0001b54f\",\n               \"verification_kind\": \"deterministic\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U0005ce6e\",\n            \"\U000a550e\",\n            \"\U000d207b\",\n            \"𪁯\"\n         ],\n         \"summary\": \"\U000fb38a\",\n         \"ui_composition\": \"In optio et.\"\n      },\n      \"change_id\": \"Ipsum soluta officiis facilis dolorem quae.\",\n      \"prompt\": \"Enim distinctio et sunt sunt et.\",\n      \"story_refresh_op_id\": \"In eaque eveniet facere.\"\n   }'")
 		}
 		if body.Analysis == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
@@ -65,7 +65,7 @@ func BuildReviseChangePayload(surlaReviseChangeBody *string) (*surla.ReviseChang
 		}
 		err = json.Unmarshal([]byte(*surlaReviseChangeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U00092d5e\",\n               \"input_summary\": \"፤\",\n               \"prior_id\": \"te\",\n               \"scenario\": \"\U0008a024\",\n               \"verification_kind\": \"model_judged\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U000fa9ca\",\n            \"\U000c31d4\",\n            \"𬓺\",\n            \"\U000e9eb6\"\n         ],\n         \"removed_example_ids\": [\n            \"swo\",\n            \"u\"\n         ],\n         \"summary\": \"\U000aa915\",\n         \"ui_composition\": \"Sed tempora quos nobis odio ab.\"\n      },\n      \"change_id\": \"Optio ratione suscipit et neque officia.\",\n      \"prompt\": \"Omnis est.\",\n      \"request_revision\": \"Neque dolore optio.\",\n      \"revision_note\": \"Fugit est libero distinctio omnis sint praesentium.\",\n      \"story_refresh_op_id\": \"Assumenda tenetur minus et magnam consequatur.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"analysis\": {\n         \"ambiguities\": [\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            },\n            {\n               \"draft_option\": \"\U000161be\",\n               \"options\": [\n                  \"\U000556d5\",\n                  \"\U00103058\",\n                  \"\U0001e633\"\n               ],\n               \"question\": \"\U00064b88\"\n            }\n         ],\n         \"examples\": [\n            {\n               \"expected_outcome\": \"\U00092d5e\",\n               \"input_summary\": \"፤\",\n               \"prior_id\": \"te\",\n               \"scenario\": \"\U0008a024\",\n               \"verification_kind\": \"model_judged\"\n            }\n         ],\n         \"preserved_behaviors\": [\n            \"\U000fa9ca\",\n            \"\U000c31d4\",\n            \"𬓺\",\n            \"\U000e9eb6\"\n         ],\n         \"removed_example_ids\": [\n            \"swo\",\n            \"u\"\n         ],\n         \"summary\": \"\U000aa915\",\n         \"ui_composition\": \"Sed tempora quos nobis odio ab.\"\n      },\n      \"change_id\": \"Optio ratione suscipit et neque officia.\",\n      \"prompt\": \"Omnis est.\",\n      \"request_revision\": \"Neque dolore optio.\",\n      \"revision_note\": \"Fugit est libero distinctio omnis sint praesentium.\",\n      \"story_refresh_op_id\": \"Assumenda tenetur minus et magnam consequatur.\"\n   }'")
 		}
 		if body.Analysis == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("analysis", "body"))
@@ -903,6 +903,28 @@ func BuildGetTestFindingsPayload(surlaGetTestFindingsChangeID *string) (*surla.G
 	return v, nil
 }
 
+// BuildWaitForBuilderAssignmentPayload builds the payload for the surla
+// wait_for_builder_assignment endpoint from CLI flags.
+func BuildWaitForBuilderAssignmentPayload(surlaWaitForBuilderAssignmentSinceVersion *string) (*surla.WaitForBuilderAssignmentPayload, error) {
+	var err error
+	var sinceVersion *string
+	{
+		if surlaWaitForBuilderAssignmentSinceVersion != nil {
+			sinceVersion = surlaWaitForBuilderAssignmentSinceVersion
+			if utf8.RuneCountInString(*surlaWaitForBuilderAssignmentSinceVersion) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("since_version", *surlaWaitForBuilderAssignmentSinceVersion, utf8.RuneCountInString(*surlaWaitForBuilderAssignmentSinceVersion), 128, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &surla.WaitForBuilderAssignmentPayload{}
+	v.SinceVersion = sinceVersion
+
+	return v, nil
+}
+
 // BuildGetBuilderAssignmentPayload builds the payload for the surla
 // get_builder_assignment endpoint from CLI flags.
 func BuildGetBuilderAssignmentPayload(surlaGetBuilderAssignmentChangeID *string) (*surla.GetBuilderAssignmentPayload, error) {
@@ -922,6 +944,28 @@ func BuildGetBuilderAssignmentPayload(surlaGetBuilderAssignmentChangeID *string)
 	}
 	v := &surla.GetBuilderAssignmentPayload{}
 	v.ChangeID = changeID
+
+	return v, nil
+}
+
+// BuildWaitForTestWriterAssignmentPayload builds the payload for the surla
+// wait_for_test_writer_assignment endpoint from CLI flags.
+func BuildWaitForTestWriterAssignmentPayload(surlaWaitForTestWriterAssignmentSinceVersion *string) (*surla.WaitForTestWriterAssignmentPayload, error) {
+	var err error
+	var sinceVersion *string
+	{
+		if surlaWaitForTestWriterAssignmentSinceVersion != nil {
+			sinceVersion = surlaWaitForTestWriterAssignmentSinceVersion
+			if utf8.RuneCountInString(*surlaWaitForTestWriterAssignmentSinceVersion) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("since_version", *surlaWaitForTestWriterAssignmentSinceVersion, utf8.RuneCountInString(*surlaWaitForTestWriterAssignmentSinceVersion), 128, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &surla.WaitForTestWriterAssignmentPayload{}
+	v.SinceVersion = sinceVersion
 
 	return v, nil
 }

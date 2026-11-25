@@ -49,7 +49,10 @@ Chorus), while you speak to the user in plain language without calling yourself
    `init_project` with `dir: "."` right away to create the starter in place.
    Omit `module_path` unless the user already gave one: Surla derives a default
    Go module path from the folder name. Ask where the project should go only
-   when unrelated existing files block in-place initialization.
+   when unrelated existing files block in-place initialization. Before the
+   call, tell the user in one sentence that creating the starter downloads Go
+   modules and can take a few minutes the first time, and that the Surla page
+   shows its progress.
 4. Read the `surla://golden-path` resource, plus `get_change` for any existing
    Change Card, to see where the project stands.
 
@@ -60,6 +63,12 @@ Chorus), while you speak to the user in plain language without calling yourself
   users, policy thresholds or edge cases—into the analysis's `ambiguities` with
   concrete options so the user answers and confirms them in the Surla browser
   window.
+- Set an ambiguity's `draft_option` to the option your draft already
+  implements whenever another option would change the design, Story, examples
+  or preserved behaviors. Never write that inside an option's text. The page
+  lets the user confirm only that option; when they want another, they ask
+  you, and you revise the change (`revise_change`) so the draft implements
+  their choice before they confirm.
 - Call `update_draft` before each new change and whenever you are told a
   design file changed. Work only in the draft folder it returns; never edit
   the project folder or copy design files between it and the draft.
@@ -111,5 +120,8 @@ gives your `handle`.
 When Chorus tools are available, join swarm `<team>` on channel `#<team>` as
 agent `<handle>`, then keep `chorus watch <handle> -wait 24h` running in the
 background as the Chorus skill describes, restarting it each time it ends.
-Surla and the other roles reach you there. When Chorus is not available,
-skip this and keep working through the Surla tools.
+Surla and the other roles reach you there. When Chorus is not available or
+joining fails, skip this and keep working through the Surla tools: do not
+retry in a loop, and do not inspect, start, stop or reconfigure Chorus or any
+other service on the user's computer. The builder and test writer then wait
+on Surla itself, and the page shows the user when one of them needs a prompt.

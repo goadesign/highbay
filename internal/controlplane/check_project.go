@@ -33,6 +33,7 @@ import (
 
 	gensurla "github.com/goadesign/surla/gen/surla"
 	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/surla/internal/traceview"
 	"github.com/goadesign/surla/verify/candidate"
 )
 
@@ -132,23 +133,49 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
+	request := trace.SpanFromContext(ctx)
 	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
 	if err := c.admitCheckOperation(); err != nil {
 		endCheckRequestSpan(span, err)
 		return nil, err
 	}
+	ctx, cancel := c.checkDeadline(ctx)
+	defer cancel()
 	defer func() {
+		summarizeCheckFailure(request, span, "check_project", ctx, retErr, c.checkTimeout)
 		endCheckRequestSpan(span, retErr)
 		c.checkOps.Done()
 	}()
-	ctx, cancel := c.checkDeadline(ctx)
-	defer cancel()
 	result, err := c.runCheckHelper(ctx, checkToolProject)
 	if err != nil {
 		return nil, err
 	}
 	span.SetAttributes(attribute.Bool("surla.check.passed", result.Check.Passed))
 	return result.Check, nil
+}
+
+// recordBuilderCheck saves a completed check's verdict and time on the open
+// build started at build, the build whose builder copy the check ran in, for
+// the user's view of the build. Its caller still holds that copy's turn, so
+// verdicts of one copy are saved in the order their checks completed. It
+// saves nothing when another build has replaced that one. A failed save does
+// not fail the builder's check: its own span records the failure, and the
+// build keeps the facts of the check before.
+func (c *ControlPlane) recordBuilderCheck(ctx context.Context, build time.Time, passed bool) {
+	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.record_builder_check")
+	defer span.End()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	saved, found, err := c.cards.loadOpenBuild()
+	if err == nil && found && saved.StartedAt.Equal(build) {
+		at := time.Now().UTC()
+		saved.Builder.LastCheckPassed, saved.Builder.LastCheckAt = &passed, &at
+		err = c.cards.saveOpenBuild(saved)
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "save the check's verdict on the open build")
+	}
 }
 
 // admitCheckOperation registers a new operation with checkOps, or refuses it
@@ -174,7 +201,7 @@ func (c *ControlPlane) admitCheckOperation() error {
 // pull, every container) by the configured check timeout, and cancels it
 // when the server closes. The request context can only shorten it.
 func (c *ControlPlane) checkDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(ctx, c.checkTimeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, c.checkTimeout, errCheckTimeLimit)
 	stop := context.AfterFunc(c.serverCtx, cancel)
 	return ctx, func() { stop(); cancel() }
 }
@@ -369,7 +396,7 @@ func (op *checkOperation) start(ctx context.Context) error {
 	}
 	if err != nil {
 		if errors.Is(err, candidate.ErrEngineUnavailable) {
-			return op.finish(gensurla.MakeUnavailable(err))
+			return op.finish(&engineUnavailableError{gensurla.MakeUnavailable(err)})
 		}
 		return op.finish(err)
 	}
@@ -751,6 +778,53 @@ func endCheckRequestSpan(span trace.Span, err error) {
 		return
 	}
 	endCheckSpan(span, err)
+}
+
+// summarizeCheckFailure gives a failed check_project or update_dependencies
+// a code-authored sentence without paths or raw error text, on its span and
+// on the request span that carries it, so the diagnostics history says why it
+// failed. A failure the sentence cannot name keeps the history's own wording.
+// operation is the context the helper ran under, which holds why it ended.
+func summarizeCheckFailure(request, span trace.Span, name string, operation context.Context, err error, timeout time.Duration) {
+	summary := checkFailureSummary(operation, err, timeout)
+	if summary == "" {
+		return
+	}
+	public := attribute.String(traceview.SummaryAttribute, summary)
+	span.SetAttributes(public)
+	if named, ok := request.(interface{ Name() string }); ok && named.Name() == "surla.request."+name {
+		request.SetAttributes(public)
+	}
+}
+
+// checkFailureSummary names why a check operation that ran its helper failed.
+// The time limit and a cancellation are read from the operation's own
+// context: the helper runs in another process and its error reaches this one
+// as text. Only the limit checkDeadline set names the configured duration; a
+// deadline the caller brought is reported as the caller's. The container engine's absence is carried from the helper as a
+// fact of its own. Any other failure that is not a refusal, whose tool error
+// is the caller's instruction, such as a busy working copy, is the helper's.
+// It returns "" for no failure and for such a refusal.
+func checkFailureSummary(operation context.Context, err error, timeout time.Duration) string {
+	if err == nil {
+		return ""
+	}
+	var engine *engineUnavailableError
+	switch {
+	case errors.Is(context.Cause(operation), errCheckTimeLimit):
+		return fmt.Sprintf("Stopped at its time limit of %s. Call it again; a first run downloads modules and images.", timeout)
+	case errors.Is(operation.Err(), context.DeadlineExceeded):
+		// A deadline the caller set, shorter than the check's own limit.
+		return "Stopped at the caller's deadline before it finished. Call it again with more time."
+	case operation.Err() != nil:
+		return "Canceled before it finished: the caller went away or the server was stopping."
+	case errors.As(err, &engine):
+		return "The local container engine could not be used. The tool error says what to do; then call again."
+	case expectedRequestRefusal(err):
+		return ""
+	default:
+		return "The check helper failed before it produced a result. Call it again."
+	}
 }
 
 // endCheckSpan records a failed operation's error with error status and

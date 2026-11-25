@@ -184,6 +184,10 @@ type Client struct {
 	// list_builder_assignments endpoint.
 	ListBuilderAssignmentsDoer goahttp.Doer
 
+	// WaitForBuilderAssignment Doer is the HTTP client used to make requests to
+	// the wait_for_builder_assignment endpoint.
+	WaitForBuilderAssignmentDoer goahttp.Doer
+
 	// GetBuilderAssignment Doer is the HTTP client used to make requests to the
 	// get_builder_assignment endpoint.
 	GetBuilderAssignmentDoer goahttp.Doer
@@ -191,6 +195,10 @@ type Client struct {
 	// ListTestWriterAssignments Doer is the HTTP client used to make requests to
 	// the list_test_writer_assignments endpoint.
 	ListTestWriterAssignmentsDoer goahttp.Doer
+
+	// WaitForTestWriterAssignment Doer is the HTTP client used to make requests to
+	// the wait_for_test_writer_assignment endpoint.
+	WaitForTestWriterAssignmentDoer goahttp.Doer
 
 	// GetTestWriterAssignment Doer is the HTTP client used to make requests to the
 	// get_test_writer_assignment endpoint.
@@ -224,58 +232,60 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GoldenPathDoer:                doer,
-		ProposeChangeDoer:             doer,
-		ReviseChangeDoer:              doer,
-		ConfirmIntentDoer:             doer,
-		GetChangeDoer:                 doer,
-		DeclineRevisionDoer:           doer,
-		PreviewArchitectureDoer:       doer,
-		DraftOverrideDoer:             doer,
-		StartLiveTargetDoer:           doer,
-		StopLiveTargetDoer:            doer,
-		GetLiveTargetDoer:             doer,
-		VerifyChangeDoer:              doer,
-		GetVerificationDoer:           doer,
-		ListVerificationsDoer:         doer,
-		ApproveMergeDoer:              doer,
-		DiffDoer:                      doer,
-		ConfigureModelDoer:            doer,
-		GetModelConnectionDoer:        doer,
-		HandOverModelSettingsDoer:     doer,
-		InitProjectDoer:               doer,
-		GenerateCodeDoer:              doer,
-		CheckProjectDoer:              doer,
-		UpdateDependenciesDoer:        doer,
-		ReadCheckOutputDoer:           doer,
-		ListTracesDoer:                doer,
-		RefreshStoryDoer:              doer,
-		GetStoryRefreshDoer:           doer,
-		UpdateDraftDoer:               doer,
-		GetTeamDoer:                   doer,
-		ShowTeamPaneDoer:              doer,
-		StartTeamAgentsDoer:           doer,
-		ListTeamAgentOptionsDoer:      doer,
-		DismissTeamNoticeDoer:         doer,
-		OpenViewsDoer:                 doer,
-		MergeChangeDoer:               doer,
-		ListChangesDoer:               doer,
-		WaitForChangesDoer:            doer,
-		StartBuildDoer:                doer,
-		DropBuildDoer:                 doer,
-		GetBuildDoer:                  doer,
-		GetTestFindingsDoer:           doer,
-		ListBuilderAssignmentsDoer:    doer,
-		GetBuilderAssignmentDoer:      doer,
-		ListTestWriterAssignmentsDoer: doer,
-		GetTestWriterAssignmentDoer:   doer,
-		ReportTestsFinishedDoer:       doer,
-		ReviewVerificationDoer:        doer,
-		RestoreResponseBody:           restoreBody,
-		scheme:                        scheme,
-		host:                          host,
-		decoder:                       dec,
-		encoder:                       enc,
+		GoldenPathDoer:                  doer,
+		ProposeChangeDoer:               doer,
+		ReviseChangeDoer:                doer,
+		ConfirmIntentDoer:               doer,
+		GetChangeDoer:                   doer,
+		DeclineRevisionDoer:             doer,
+		PreviewArchitectureDoer:         doer,
+		DraftOverrideDoer:               doer,
+		StartLiveTargetDoer:             doer,
+		StopLiveTargetDoer:              doer,
+		GetLiveTargetDoer:               doer,
+		VerifyChangeDoer:                doer,
+		GetVerificationDoer:             doer,
+		ListVerificationsDoer:           doer,
+		ApproveMergeDoer:                doer,
+		DiffDoer:                        doer,
+		ConfigureModelDoer:              doer,
+		GetModelConnectionDoer:          doer,
+		HandOverModelSettingsDoer:       doer,
+		InitProjectDoer:                 doer,
+		GenerateCodeDoer:                doer,
+		CheckProjectDoer:                doer,
+		UpdateDependenciesDoer:          doer,
+		ReadCheckOutputDoer:             doer,
+		ListTracesDoer:                  doer,
+		RefreshStoryDoer:                doer,
+		GetStoryRefreshDoer:             doer,
+		UpdateDraftDoer:                 doer,
+		GetTeamDoer:                     doer,
+		ShowTeamPaneDoer:                doer,
+		StartTeamAgentsDoer:             doer,
+		ListTeamAgentOptionsDoer:        doer,
+		DismissTeamNoticeDoer:           doer,
+		OpenViewsDoer:                   doer,
+		MergeChangeDoer:                 doer,
+		ListChangesDoer:                 doer,
+		WaitForChangesDoer:              doer,
+		StartBuildDoer:                  doer,
+		DropBuildDoer:                   doer,
+		GetBuildDoer:                    doer,
+		GetTestFindingsDoer:             doer,
+		ListBuilderAssignmentsDoer:      doer,
+		WaitForBuilderAssignmentDoer:    doer,
+		GetBuilderAssignmentDoer:        doer,
+		ListTestWriterAssignmentsDoer:   doer,
+		WaitForTestWriterAssignmentDoer: doer,
+		GetTestWriterAssignmentDoer:     doer,
+		ReportTestsFinishedDoer:         doer,
+		ReviewVerificationDoer:          doer,
+		RestoreResponseBody:             restoreBody,
+		scheme:                          scheme,
+		host:                            host,
+		decoder:                         dec,
+		encoder:                         enc,
 	}
 }
 
@@ -1192,6 +1202,30 @@ func (c *Client) ListBuilderAssignments() goa.Endpoint {
 	}
 }
 
+// WaitForBuilderAssignment returns an endpoint that makes HTTP requests to the
+// surla service wait_for_builder_assignment server.
+func (c *Client) WaitForBuilderAssignment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeWaitForBuilderAssignmentRequest(c.encoder)
+		decodeResponse = DecodeWaitForBuilderAssignmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildWaitForBuilderAssignmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.WaitForBuilderAssignmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "wait_for_builder_assignment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetBuilderAssignment returns an endpoint that makes HTTP requests to the
 // surla service get_builder_assignment server.
 func (c *Client) GetBuilderAssignment() goa.Endpoint {
@@ -1225,6 +1259,30 @@ func (c *Client) ListTestWriterAssignments() goa.Endpoint {
 		resp, err := c.ListTestWriterAssignmentsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("surla", "list_test_writer_assignments", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// WaitForTestWriterAssignment returns an endpoint that makes HTTP requests to
+// the surla service wait_for_test_writer_assignment server.
+func (c *Client) WaitForTestWriterAssignment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeWaitForTestWriterAssignmentRequest(c.encoder)
+		decodeResponse = DecodeWaitForTestWriterAssignmentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildWaitForTestWriterAssignmentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.WaitForTestWriterAssignmentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("surla", "wait_for_test_writer_assignment", err)
 		}
 		return decodeResponse(resp)
 	}

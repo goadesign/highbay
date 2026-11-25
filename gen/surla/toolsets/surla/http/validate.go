@@ -1719,6 +1719,62 @@ func ValidateVerifyChangeResultTransport(body *VerifyChangeResultTransport) (err
 	return
 }
 
+// ValidateWaitForBuilderAssignmentPayloadTransport runs the validations defined on WaitForBuilderAssignmentPayloadTransport.
+func ValidateWaitForBuilderAssignmentPayloadTransport(body *WaitForBuilderAssignmentPayloadTransport) (err error) {
+	if body.SinceVersion != nil {
+		if utf8.RuneCountInString(*body.SinceVersion) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.since_version", *body.SinceVersion, utf8.RuneCountInString(*body.SinceVersion), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateWaitForBuilderAssignmentResultTransport runs the validations defined on WaitForBuilderAssignmentResultTransport.
+func ValidateWaitForBuilderAssignmentResultTransport(body *WaitForBuilderAssignmentResultTransport) (err error) {
+	if body.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.Assignments {
+		if e != nil {
+			if err2 := ValidateBuilderAssignmentTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWaitForTestWriterAssignmentPayloadTransport runs the validations defined on WaitForTestWriterAssignmentPayloadTransport.
+func ValidateWaitForTestWriterAssignmentPayloadTransport(body *WaitForTestWriterAssignmentPayloadTransport) (err error) {
+	if body.SinceVersion != nil {
+		if utf8.RuneCountInString(*body.SinceVersion) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.since_version", *body.SinceVersion, utf8.RuneCountInString(*body.SinceVersion), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateWaitForTestWriterAssignmentResultTransport runs the validations defined on WaitForTestWriterAssignmentResultTransport.
+func ValidateWaitForTestWriterAssignmentResultTransport(body *WaitForTestWriterAssignmentResultTransport) (err error) {
+	if body.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.Assignments {
+		if e != nil {
+			if err2 := ValidateTestWriterAssignmentItemTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateAgentPolicyItemTransport runs the validations defined on AgentPolicyItemTransport.
 func ValidateAgentPolicyItemTransport(body *AgentPolicyItemTransport) (err error) {
 	if body.AgentID == nil {
@@ -1932,6 +1988,12 @@ func ValidateBuilderProgressTransport(body *BuilderProgressTransport) (err error
 	if body.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
 	}
+	if body.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.head_commit", *body.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if body.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_check_at", *body.LastCheckAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -2024,6 +2086,9 @@ func ValidateCP1AnalysisAmbiguityTransport(body *CP1AnalysisAmbiguityTransport) 
 		if e != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
+	}
+	if body.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *body.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return
 }

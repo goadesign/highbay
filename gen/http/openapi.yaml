@@ -13,6 +13,78 @@ produces:
     - application/xml
     - application/gob
 paths:
+    /assignment-updates/builder:
+        get:
+            tags:
+                - surla
+            summary: wait_for_builder_assignment surla
+            description: Return the builder's assignment list, as list_builder_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla accepted the tests, the user built the change again or dropped the build, or a verification of the build passed, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A builder uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting builder does not push real operations out of view.
+            operationId: surla#wait_for_builder_assignment
+            parameters:
+                - name: since_version
+                  in: query
+                  description: version returned by your last wait_for_builder_assignment call. Omit it on the first call.
+                  required: false
+                  type: string
+                  maxLength: 128
+            responses:
+                "200":
+                    description: OK response.
+                    schema:
+                        $ref: '#/definitions/BuilderAssignmentWait'
+                        required:
+                            - assignments
+                            - version
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    schema:
+                        $ref: '#/definitions/SurlaWaitForBuilderAssignmentForbiddenResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: forbidden
+                            temporary: false
+                            timeout: false
+            schemes:
+                - http
+    /assignment-updates/test-writer:
+        get:
+            tags:
+                - surla
+            summary: wait_for_test_writer_assignment surla
+            description: 'Return the test writer''s assignment list, as list_test_writer_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla''s check of a report reached a verdict, the user built the change again or dropped the build, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. The list holds the assignment only while the role has work: a check that accepts the tests removes it, as a drop does, so an empty list alone does not say which happened; get_test_writer_assignment does. Without since_version it returns at once. It records nothing and moves no working copy. A test writer uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting test writer does not push real operations out of view.'
+            operationId: surla#wait_for_test_writer_assignment
+            parameters:
+                - name: since_version
+                  in: query
+                  description: version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.
+                  required: false
+                  type: string
+                  maxLength: 128
+            responses:
+                "200":
+                    description: OK response.
+                    schema:
+                        $ref: '#/definitions/TestWriterAssignmentWait'
+                        required:
+                            - assignments
+                            - version
+                "403":
+                    description: 'forbidden: The authenticated caller may not perform this operation or does not own the resource.'
+                    schema:
+                        $ref: '#/definitions/SurlaWaitForTestWriterAssignmentForbiddenResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: forbidden
+                            temporary: false
+                            timeout: false
+            schemes:
+                - http
     /assignments/builder:
         get:
             tags:
@@ -315,7 +387,7 @@ paths:
             tags:
                 - surla
             summary: wait_for_changes surla
-            description: Return the current change list's version as soon as it differs from since, the version of the list the caller last read, or after a bounded wait of a few seconds when nothing changed. The version also changes when the owner's Story evaluation starts, finishes or is replaced, or a public fact in get_team changes. The views page keeps one such read open and, only when the version changed, calls list_changes again and, while it shows the Story, get_story_refresh. Each call is traced but never saved in the diagnostics history list_traces reads, so an open page does not push real operations out of view.
+            description: Return the current change list's version as soon as it differs from since, the version of the list the caller last read, or after a bounded wait of a few seconds when nothing changed. The version also changes when a card's get_build view changes (including the builder's branch head_commit or latest check), the owner's Story evaluation starts, finishes or is replaced, or a public fact in get_team or get_live_target changes. The views page keeps one such read open and, only when the version changed, calls list_changes again and, while it shows the Story, get_story_refresh. Each call is traced but never saved in the diagnostics history list_traces reads, so an open page does not push real operations out of view.
             operationId: surla#wait_for_changes
             parameters:
                 - name: since
@@ -433,7 +505,7 @@ paths:
             tags:
                 - surla
             summary: get_build surla
-            description: 'Return a change''s build when it is the project''s open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the test writer''s state with the number of Surla''s findings (never their text), and whether the build is for the change''s revision in force. Reading changes nothing; deciding merged reads the project''s repository.'
+            description: 'Return a change''s build when it is the project''s open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the builder''s branch, while the build is still building its head_commit once the branch advances past the build''s base, and its latest completed check_project verdict, the test writer''s state with the number of Surla''s findings (never their text), and whether the build is for the change''s revision in force. Reading changes nothing; reading the branch tip and deciding merged read the project''s repository.'
             operationId: surla#get_build
             parameters:
                 - name: change_id
@@ -1067,7 +1139,7 @@ paths:
             tags:
                 - surla
             summary: confirm_intent surla
-            description: 'Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user''s browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision''s request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card''s request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests'' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target''s current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate''s binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision.'
+            description: 'Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user''s browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision''s request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card''s request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests'' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target''s current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate''s binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision. The same holds for an option the draft does not implement: when a question names its draft_option, any other answer is refused until the guide has revised the change so the design, Story, examples and preserved behaviors implement it.'
             operationId: surla#confirm_intent
             parameters:
                 - name: confirm_intent_request_body
@@ -3295,6 +3367,10 @@ definitions:
         title: AmbiguityQuestion
         type: object
         properties:
+            draft_option:
+                type: string
+                description: The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.
+                example: Voluptatem fuga ut deserunt suscipit non.
             id:
                 type: string
                 description: Stable question identifier.
@@ -3316,6 +3392,7 @@ definitions:
                 example: Labore harum illo eos ipsum deleniti possimus.
         description: Domain ambiguity surfaced with concrete examples at Checkpoint 1.
         example:
+            draft_option: Voluptatem fuga ut deserunt suscipit non.
             id: Incidunt quasi molestias itaque tempore animi.
             options:
                 - Et laudantium quibusdam aut voluptas atque magnam.
@@ -3868,16 +3945,123 @@ definitions:
                     state: not_used
         required:
             - assignments
+    BuilderAssignmentWait:
+        title: BuilderAssignmentWait
+        type: object
+        properties:
+            assignments:
+                type: array
+                items:
+                    $ref: '#/definitions/BuilderAssignment'
+                description: The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.
+                example:
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+                    - change_id: Et quos quod.
+                      gowork_off: false
+                      in_force: true
+                      read: false
+                      request_revision: Incidunt enim in.
+                      working_folder: Nihil omnis.
+                      written_tests:
+                        state: not_used
+            version:
+                type: string
+                description: Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.
+                example: Rerum autem quis quo ut.
+        description: The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.
+        example:
+            assignments:
+                - change_id: Et quos quod.
+                  gowork_off: false
+                  in_force: true
+                  read: false
+                  request_revision: Incidunt enim in.
+                  working_folder: Nihil omnis.
+                  written_tests:
+                    state: not_used
+                - change_id: Et quos quod.
+                  gowork_off: false
+                  in_force: true
+                  read: false
+                  request_revision: Incidunt enim in.
+                  working_folder: Nihil omnis.
+                  written_tests:
+                    state: not_used
+                - change_id: Et quos quod.
+                  gowork_off: false
+                  in_force: true
+                  read: false
+                  request_revision: Incidunt enim in.
+                  working_folder: Nihil omnis.
+                  written_tests:
+                    state: not_used
+                - change_id: Et quos quod.
+                  gowork_off: false
+                  in_force: true
+                  read: false
+                  request_revision: Incidunt enim in.
+                  working_folder: Nihil omnis.
+                  written_tests:
+                    state: not_used
+            version: Rerum autem quis quo ut.
+        required:
+            - assignments
+            - version
     BuilderProgress:
         title: BuilderProgress
         type: object
         properties:
+            branch:
+                type: string
+                description: The build's builder branch, surla/build-<n>.
+                example: Sint dolores dolor.
+            head_commit:
+                type: string
+                description: 'The commit the builder''s branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. Omitted in other states. A passed build records its verified candidate_commit in taking.'
+                example: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
+            last_check_at:
+                type: string
+                description: When that check_project completed; absent with last_check_passed.
+                example: "1994-05-28T12:02:31Z"
+                format: date-time
+            last_check_passed:
+                type: boolean
+                description: Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.
+                example: true
             read:
                 type: boolean
                 description: True once the builder read this assignment in full with get_builder_assignment.
                 example: false
-        description: The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.
+        description: 'The builder''s assignment for one build. It exists from the moment the user starts the build; verification of the build''s revision, not the assignment, judges the builder''s work. branch, head_commit and the last check are three independent recorded facts: none says that a check or a verification ran on head_commit.'
         example:
+            branch: Sint dolores dolor.
+            head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+            last_check_at: "1994-05-28T12:02:31Z"
+            last_check_passed: true
             read: false
         required:
             - read
@@ -4093,17 +4277,20 @@ definitions:
                     $ref: '#/definitions/CP1AnalysisAmbiguity'
                 description: 'Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request or the design already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
                 example:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -4147,17 +4334,20 @@ definitions:
         description: Your analysis of the feature request against the target's current Goa design (its design/*.go files) and the Golden Path playbook served at surla://golden-path. Surla saves it as the Change Card after checking its structure and cross-field rules; it cannot judge whether the analysis is complete or correct.
         example:
             ambiguities:
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
@@ -4187,6 +4377,11 @@ definitions:
         title: CP1AnalysisAmbiguity
         type: object
         properties:
+            draft_option:
+                type: string
+                description: The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.
+                example: "\U000161BE"
+                pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
             options:
                 type: array
                 items:
@@ -4206,6 +4401,7 @@ definitions:
                 pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
         description: One product, domain, or operational choice only the requester can make. Surla gives it the ID <change_id>-ambiguity-NN, numbered in list order.
         example:
+            draft_option: "\U000161BE"
             options:
                 - "\U000556D5"
                 - "\U00103058"
@@ -4261,22 +4457,26 @@ definitions:
                     $ref: '#/definitions/CP1AnalysisAmbiguity'
                 description: 'Open questions only the requester can answer: product, domain, or operational choices that change observable behavior or service boundaries. Do not ask about details the request, the design or a confirmed answer already settle; state them in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
                 example:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -4327,22 +4527,26 @@ definitions:
         description: 'Your analysis of the revised request against the current Change Card (as get_change returns it at request_revision), the target''s current Goa design, and the Golden Path playbook served at surla://golden-path. A confirmed answer stays settled unless the revised request or design contradicts it: do not ask it again, and restate it in summary, examples or preserved_behaviors, because the revised card drops every answer. An explicit instruction in the revised request or design replaces the decisions, examples and preserved behaviors it affects. An unanswered question stays in ambiguities unless the revised request or design answers it or removes its scope. Everything else on the current card stays unless the revised request or design changes it. Surla checks the structure and the example accounting; it cannot judge whether the analysis is complete or correct.'
         example:
             ambiguities:
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
                   question: "\U00064B88"
-                - options:
+                - draft_option: "\U000161BE"
+                  options:
                     - "\U000556D5"
                     - "\U00103058"
                     - "\U0001E633"
@@ -4428,6 +4632,10 @@ definitions:
                           id: Autem facilis doloribus quo vero accusantium eos.
                           question: Sit eius quasi.
                     builder:
+                        branch: Sint dolores dolor.
+                        head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                        last_check_at: "1994-05-28T12:02:31Z"
+                        last_check_passed: true
                         read: false
                     coverage_statements:
                         - example_ids:
@@ -4757,6 +4965,10 @@ definitions:
                       id: Autem facilis doloribus quo vero accusantium eos.
                       question: Sit eius quasi.
                 builder:
+                    branch: Sint dolores dolor.
+                    head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                    last_check_at: "1994-05-28T12:02:31Z"
+                    last_check_passed: true
                     read: false
                 coverage_statements:
                     - example_ids:
@@ -4842,21 +5054,24 @@ definitions:
                     $ref: '#/definitions/AmbiguityQuestion'
                 description: Domain questions surfaced at CP1, retained for audit after confirmation.
                 example:
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -5490,21 +5705,24 @@ definitions:
         description: Checkpoint 1 Change Card containing examples, preserved behaviors, optional adopted domain Stories, and audit metadata.
         example:
             ambiguities:
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -5548,21 +5766,24 @@ definitions:
             prompt: Ea perferendis neque.
             proposed_revision:
                 ambiguities:
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -7022,9 +7243,13 @@ definitions:
                       saved_at: "2015-06-29T05:47:08Z"
                       status: needs_confirmation
                       summary: Ut saepe incidunt odit.
+            initializing_phase:
+                type: string
+                description: What init_project is doing now, as a short sentence for the user, such as "Resolving the service's Go modules"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.
+                example: Deleniti id.
             version:
                 type: string
-                description: Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.
+                description: Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.
                 example: Voluptas voluptates.
         description: The project's saved Change Cards, most recently saved first (tie-broken by change_id).
         example:
@@ -7050,6 +7275,7 @@ definitions:
                   saved_at: "2015-06-29T05:47:08Z"
                   status: needs_confirmation
                   summary: Ut saepe incidunt odit.
+            initializing_phase: Deleniti id.
             version: Voluptas voluptates.
         required:
             - changes
@@ -8345,6 +8571,10 @@ definitions:
                       id: Autem facilis doloribus quo vero accusantium eos.
                       question: Sit eius quasi.
                 builder:
+                    branch: Sint dolores dolor.
+                    head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                    last_check_at: "1994-05-28T12:02:31Z"
+                    last_check_passed: true
                     read: false
                 coverage_statements:
                     - example_ids:
@@ -9419,17 +9649,20 @@ definitions:
         example:
             analysis:
                 ambiguities:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -9467,21 +9700,24 @@ definitions:
                     $ref: '#/definitions/AmbiguityQuestion'
                 description: Domain questions the user answers when adopting this revision.
                 example:
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
                         - Et temporibus suscipit et tempore praesentium fuga.
                         - Est ipsa et nihil aut omnis fugit.
                       question: Labore harum illo eos ipsum deleniti possimus.
-                    - id: Incidunt quasi molestias itaque tempore animi.
+                    - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                      id: Incidunt quasi molestias itaque tempore animi.
                       options:
                         - Et laudantium quibusdam aut voluptas atque magnam.
                         - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -10367,21 +10603,24 @@ definitions:
         description: A revision the guide proposed with revise_change beside the confirmed revision in force. It waits until the user adopts it, by answering its questions and confirming its request_revision with confirm_intent, or declines it with decline_revision. Until then the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source, and architecture preview, verification and approval keep working on it. A later revise_change naming this request_revision replaces it.
         example:
             ambiguities:
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
                     - Et temporibus suscipit et tempore praesentium fuga.
                     - Est ipsa et nihil aut omnis fugit.
                   question: Labore harum illo eos ipsum deleniti possimus.
-                - id: Incidunt quasi molestias itaque tempore animi.
+                - draft_option: Voluptatem fuga ut deserunt suscipit non.
+                  id: Incidunt quasi molestias itaque tempore animi.
                   options:
                     - Et laudantium quibusdam aut voluptas atque magnam.
                     - Vel voluptas deleniti nemo molestiae quia ipsa.
@@ -11336,22 +11575,26 @@ definitions:
         example:
             analysis:
                 ambiguities:
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
                       question: "\U00064B88"
-                    - options:
+                    - draft_option: "\U000161BE"
+                      options:
                         - "\U000556D5"
                         - "\U00103058"
                         - "\U0001E633"
@@ -11551,6 +11794,10 @@ definitions:
                       id: Autem facilis doloribus quo vero accusantium eos.
                       question: Sit eius quasi.
                 builder:
+                    branch: Sint dolores dolor.
+                    head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                    last_check_at: "1994-05-28T12:02:31Z"
+                    last_check_passed: true
                     read: false
                 coverage_statements:
                     - example_ids:
@@ -11869,6 +12116,10 @@ definitions:
                   id: Autem facilis doloribus quo vero accusantium eos.
                   question: Sit eius quasi.
             builder:
+                branch: Sint dolores dolor.
+                head_commit: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
+                last_check_at: "1994-05-28T12:02:31Z"
+                last_check_passed: true
                 read: false
             coverage_statements:
                 - example_ids:
@@ -22337,7 +22588,93 @@ definitions:
             - temporary
             - timeout
             - fault
+    SurlaWaitForBuilderAssignmentForbiddenResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
     SurlaWaitForChangesForbiddenResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    SurlaWaitForTestWriterAssignmentForbiddenResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -22395,7 +22732,7 @@ definitions:
                     - unknown
             attention:
                 type: string
-                description: 'Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds.'
+                description: 'Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds, or for 15 seconds while Chorus is not known to be reachable and so no reminder can arrive.'
                 example: assignment
                 enum:
                     - none
@@ -22456,6 +22793,14 @@ definitions:
         title: TeamSnapshot
         type: object
         properties:
+            chorus_status:
+                type: string
+                description: 'Whether Chorus serves this team: not_used when workers run outside Herdr and never use it; connected after Surla''s latest read of the team''s Chorus view succeeded; unavailable after that read failed or when the team''s space has no Chorus connection. While unavailable no Chorus reminder reaches a worker: workers wait on Surla with wait_for_builder_assignment and wait_for_test_writer_assignment, and a worker that stopped needs the user''s prompt. Absent before a team space exists or before the first read settled it.'
+                example: connected
+                enum:
+                    - connected
+                    - unavailable
+                    - not_used
             dismissed_notices:
                 type: array
                 items:
@@ -22518,6 +22863,7 @@ definitions:
                 description: Stable team name, also returned before a team is prepared.
                 example: Autem explicabo omnis ipsam aut provident architecto.
         example:
+            chorus_status: connected
             dismissed_notices:
                 - herdr_unavailable
                 - herdr_unavailable
@@ -25212,6 +25558,107 @@ definitions:
                   request_revision: Quidem nulla minima at voluptatum delectus.
         required:
             - assignments
+    TestWriterAssignmentWait:
+        title: TestWriterAssignmentWait
+        type: object
+        properties:
+            assignments:
+                type: array
+                items:
+                    $ref: '#/definitions/TestWriterAssignmentItem'
+                description: The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.
+                example:
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+                    - change_id: Veniam ex reiciendis.
+                      in_force: true
+                      progress:
+                        read: true
+                        report: 7108203204833819401
+                        tests:
+                            checked_at: "1972-09-26T18:55:16Z"
+                            finding_count: 5254885262627643994
+                            state: needs_changes
+                      request_revision: Quidem nulla minima at voluptatum delectus.
+            version:
+                type: string
+                description: Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.
+                example: Commodi et at.
+        description: The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.
+        example:
+            assignments:
+                - change_id: Veniam ex reiciendis.
+                  in_force: true
+                  progress:
+                    read: true
+                    report: 7108203204833819401
+                    tests:
+                        checked_at: "1972-09-26T18:55:16Z"
+                        finding_count: 5254885262627643994
+                        state: needs_changes
+                  request_revision: Quidem nulla minima at voluptatum delectus.
+                - change_id: Veniam ex reiciendis.
+                  in_force: true
+                  progress:
+                    read: true
+                    report: 7108203204833819401
+                    tests:
+                        checked_at: "1972-09-26T18:55:16Z"
+                        finding_count: 5254885262627643994
+                        state: needs_changes
+                  request_revision: Quidem nulla minima at voluptatum delectus.
+                - change_id: Veniam ex reiciendis.
+                  in_force: true
+                  progress:
+                    read: true
+                    report: 7108203204833819401
+                    tests:
+                        checked_at: "1972-09-26T18:55:16Z"
+                        finding_count: 5254885262627643994
+                        state: needs_changes
+                  request_revision: Quidem nulla minima at voluptatum delectus.
+                - change_id: Veniam ex reiciendis.
+                  in_force: true
+                  progress:
+                    read: true
+                    report: 7108203204833819401
+                    tests:
+                        checked_at: "1972-09-26T18:55:16Z"
+                        finding_count: 5254885262627643994
+                        state: needs_changes
+                  request_revision: Quidem nulla minima at voluptatum delectus.
+            version: Commodi et at.
+        required:
+            - assignments
+            - version
     TestWriterProgress:
         title: TestWriterProgress
         type: object

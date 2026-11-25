@@ -595,6 +595,7 @@ var _ = Service("orders", func() {
 		"list_traces", "refresh_story", "get_story_refresh", "update_draft", "list_changes", "decline_revision",
 		"get_build", "list_builder_assignments", "get_builder_assignment",
 		"list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished",
+		"wait_for_builder_assignment", "wait_for_test_writer_assignment",
 	}, toolNames)
 	// The views page reads the server directly; no tool asks a client to
 	// embed a page for its result.

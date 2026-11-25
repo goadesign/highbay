@@ -84,7 +84,10 @@ type Service interface {
 	// promotion target's current binaries, or in unverified_approval when a
 	// promotion target is configured and cannot measure the candidate's binaries.
 	// A decision that no option expresses goes to the guide, which records it with
-	// revise_change; the user then confirms the resulting revision.
+	// revise_change; the user then confirms the resulting revision. The same holds
+	// for an option the draft does not implement: when a question names its
+	// draft_option, any other answer is refused until the guide has revised the
+	// change so the design, Story, examples and preserved behaviors implement it.
 	ConfirmIntent(context.Context, *ConfirmIntentPayload) (res *ChangeCardResult, err error)
 	// Return the current Change Card, including its request_revision, to its
 	// owner, for example after confirm_intent or revise_change refused an edit
@@ -410,13 +413,14 @@ type Service interface {
 	ListChanges(context.Context) (res *ChangeList, err error)
 	// Return the current change list's version as soon as it differs from since,
 	// the version of the list the caller last read, or after a bounded wait of a
-	// few seconds when nothing changed. The version also changes when the owner's
-	// Story evaluation starts, finishes or is replaced, or a public fact in
-	// get_team changes. The views page keeps one such read open and, only when the
-	// version changed, calls list_changes again and, while it shows the Story,
-	// get_story_refresh. Each call is traced but never saved in the diagnostics
-	// history list_traces reads, so an open page does not push real operations out
-	// of view.
+	// few seconds when nothing changed. The version also changes when a card's
+	// get_build view changes (including the builder's branch head_commit or latest
+	// check), the owner's Story evaluation starts, finishes or is replaced, or a
+	// public fact in get_team or get_live_target changes. The views page keeps one
+	// such read open and, only when the version changed, calls list_changes again
+	// and, while it shows the Story, get_story_refresh. Each call is traced but
+	// never saved in the diagnostics history list_traces reads, so an open page
+	// does not push real operations out of view.
 	WaitForChanges(context.Context, *WaitForChangesPayload) (res *ChangeListVersion, err error)
 	// The user starts building a confirmed change at its agreed revision, the one
 	// in force, on the project owner's bound team. A project has one open build.
@@ -462,10 +466,12 @@ type Service interface {
 	// or dropped. not_started when it is not, including a builder-only build whose
 	// stored verification settings were removed; start a new build on the views
 	// page. Otherwise return the revision built, when, whether each role read its
-	// assignment, the test writer's state with the number of Surla's findings
-	// (never their text), and whether the build is for the change's revision in
-	// force. Reading changes nothing; deciding merged reads the project's
-	// repository.
+	// assignment, the builder's branch, while the build is still building its
+	// head_commit once the branch advances past the build's base, and its latest
+	// completed check_project verdict, the test writer's state with the number of
+	// Surla's findings (never their text), and whether the build is for the
+	// change's revision in force. Reading changes nothing; reading the branch tip
+	// and deciding merged read the project's repository.
 	GetBuild(context.Context, *GetBuildPayload) (res *ChangeBuild, err error)
 	// Return the text of Surla's findings on the tests of a change's build, which
 	// get_build only counts, with the build's revision and start time, the number
@@ -476,6 +482,18 @@ type Service interface {
 	// has work; empty otherwise. Reading the list records nothing and moves no
 	// working copy.
 	ListBuilderAssignments(context.Context) (res *BuilderAssignmentList, err error)
+	// Return the builder's assignment list, as list_builder_assignments does, with
+	// a version naming it. With since_version, the version an earlier call
+	// returned, the call waits until the list differs from it, for example because
+	// Surla accepted the tests, the user built the change again or dropped the
+	// build, or a verification of the build passed, and otherwise returns the
+	// unchanged list after a bounded wait of about 30 seconds. Without
+	// since_version it returns at once. It records nothing and moves no working
+	// copy. A builder uses it in place of repeated list calls while it waits,
+	// whether or not Chorus delivers reminders. Each call is traced but never
+	// saved in the diagnostics history list_traces reads, so a waiting builder
+	// does not push real operations out of view.
+	WaitForBuilderAssignment(context.Context, *WaitForBuilderAssignmentPayload) (res *BuilderAssignmentWait, err error)
 	// Return the builder's assignment for the open build's change in full and
 	// record that the builder read it at its revision. The first read of a new
 	// build joins the builder's working copy to the build's own branch,
@@ -491,6 +509,21 @@ type Service interface {
 	// role has work; empty otherwise. Reading the list records nothing and moves
 	// no working copy.
 	ListTestWriterAssignments(context.Context) (res *TestWriterAssignmentList, err error)
+	// Return the test writer's assignment list, as list_test_writer_assignments
+	// does, with a version naming it. With since_version, the version an earlier
+	// call returned, the call waits until the list differs from it, for example
+	// because Surla's check of a report reached a verdict, the user built the
+	// change again or dropped the build, and otherwise returns the unchanged list
+	// after a bounded wait of about 30 seconds. The list holds the assignment only
+	// while the role has work: a check that accepts the tests removes it, as a
+	// drop does, so an empty list alone does not say which happened;
+	// get_test_writer_assignment does. Without since_version it returns at once.
+	// It records nothing and moves no working copy. A test writer uses it in place
+	// of repeated list calls while it waits, whether or not Chorus delivers
+	// reminders. Each call is traced but never saved in the diagnostics history
+	// list_traces reads, so a waiting test writer does not push real operations
+	// out of view.
+	WaitForTestWriterAssignment(context.Context, *WaitForTestWriterAssignmentPayload) (res *TestWriterAssignmentWait, err error)
 	// Return the test writer's assignment for a change in full (the working
 	// folder, the design and Story as agreed at the built revision, the user's
 	// confirmed answers, confirmation examples and preserved behaviors of that
@@ -538,7 +571,7 @@ const ServiceName = "surla"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [47]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "get_builder_assignment", "list_test_writer_assignments", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
+var MethodNames = [49]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "wait_for_builder_assignment", "get_builder_assignment", "list_test_writer_assignments", "wait_for_test_writer_assignment", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
 
 // Evaluated Goa-AI cost, safety, history, and cache policy for a single agent.
 type AgentPolicyItem struct {
@@ -578,6 +611,12 @@ type AmbiguityQuestion struct {
 	Question string
 	// Concrete resolution choices.
 	Options []string
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // Checkpoint 5 approval recorded by approve_merge after the verification
@@ -785,13 +824,41 @@ type BuilderAssignmentList struct {
 	Assignments []*BuilderAssignment
 }
 
+// BuilderAssignmentWait is the result type of the surla service
+// wait_for_builder_assignment method.
+type BuilderAssignmentWait struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*BuilderAssignment
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string
+}
+
 // The builder's assignment for one build. It exists from the moment the user
 // starts the build; verification of the build's revision, not the assignment,
-// judges the builder's work.
+// judges the builder's work. branch, head_commit and the last check are three
+// independent recorded facts: none says that a check or a verification ran on
+// head_commit.
 type BuilderProgress struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read bool
+	// The build's builder branch, surla/build-<n>.
+	Branch *string
+	// The commit the builder's branch points at, returned by get_build and
+	// reflected in list_changes.version (start_build omits it before any branch
+	// commit exists, and list_changes items carry no branch field): present while
+	// the build is still building, once the branch exists and points at another
+	// commit than the one the build started from. Omitted in other states. A
+	// passed build records its verified candidate_commit in taking.
+	HeadCommit *string
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string
 }
 
 // The builder view of a Checkpoint 4 verification report: counts, verdict and
@@ -873,6 +940,15 @@ type CP1AnalysisAmbiguity struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []string
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string
 }
 
 // One concrete acceptance example that becomes a check the change must pass.
@@ -1038,14 +1114,23 @@ type ChangeCardResult struct {
 type ChangeList struct {
 	// Saved Change Cards, most recently saved first.
 	Changes []*ChangeListItem
-	// Opaque value for change detection. Compare it only for equality; the
-	// returned fields contain the facts this operation makes readable.
+	// Opaque value for change detection. It changes whenever the listed cards, a
+	// card's get_build view (including the builder's branch head_commit and latest
+	// check), approval_available, initializing_phase, the owner's Story
+	// evaluation, get_team, or get_live_target changes; list_changes items carry
+	// no build or branch fields, so read get_build for those facts. Compare it
+	// only for equality.
 	Version string
 	// Whether approve_merge can record approvals on this server: true when the
 	// server runs Checkpoint 4 verification, as every server surla starts does,
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable bool
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string
 }
 
 // One saved Change Card of the project as list_changes reports it.
@@ -2128,7 +2213,8 @@ type TeamRoleState struct {
 	State string
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention string
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -2154,6 +2240,15 @@ type TeamSnapshot struct {
 	SavedChoices map[string]*RoleAgentChoice
 	// Dismissed project notices.
 	DismissedNotices []string
+	// Whether Chorus serves this team: not_used when workers run outside Herdr and
+	// never use it; connected after Surla's latest read of the team's Chorus view
+	// succeeded; unavailable after that read failed or when the team's space has
+	// no Chorus connection. While unavailable no Chorus reminder reaches a worker:
+	// workers wait on Surla with wait_for_builder_assignment and
+	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
+	// prompt. Absent before a team space exists or before the first read settled
+	// it.
+	ChorusStatus *string
 }
 
 // No test-writer coverage snapshot was recorded. Never infer it from today's
@@ -2273,6 +2368,17 @@ type TestWriterAssignmentItem struct {
 type TestWriterAssignmentList struct {
 	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*TestWriterAssignmentItem
+}
+
+// TestWriterAssignmentWait is the result type of the surla service
+// wait_for_test_writer_assignment method.
+type TestWriterAssignmentWait struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*TestWriterAssignmentItem
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string
 }
 
 // Where the test writer's assignment for one build stands.
@@ -2639,11 +2745,27 @@ type VerifyChangePayload struct {
 	CandidateCommit string
 }
 
+// WaitForBuilderAssignmentPayload is the payload type of the surla service
+// wait_for_builder_assignment method.
+type WaitForBuilderAssignmentPayload struct {
+	// version returned by your last wait_for_builder_assignment call. Omit it on
+	// the first call.
+	SinceVersion *string
+}
+
 // WaitForChangesPayload is the payload type of the surla service
 // wait_for_changes method.
 type WaitForChangesPayload struct {
 	// version of the change list the caller last read.
 	Since string
+}
+
+// WaitForTestWriterAssignmentPayload is the payload type of the surla service
+// wait_for_test_writer_assignment method.
+type WaitForTestWriterAssignmentPayload struct {
+	// version returned by your last wait_for_test_writer_assignment call. Omit it
+	// on the first call.
+	SinceVersion *string
 }
 
 // Error returns an error description.
@@ -3098,6 +3220,12 @@ type jsonAmbiguityQuestionTransport struct {
 	Question *string `json:"question"`
 	// Concrete resolution choices.
 	Options []string `json:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // validatejsonAmbiguityQuestionTransport checks decoded JSON before it becomes a service value.
@@ -3667,11 +3795,57 @@ func validatejsonBuilderAssignmentTransport(value *jsonBuilderAssignmentTranspor
 	return err
 }
 
+// jsonBuilderAssignmentWaitTransport stores JSON fields until they have been validated.
+type jsonBuilderAssignmentWaitTransport struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*jsonBuilderAssignmentTransport `json:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version *string `json:"version"`
+}
+
+// validatejsonBuilderAssignmentWaitTransport checks decoded JSON before it becomes a service value.
+func validatejsonBuilderAssignmentWaitTransport(value *jsonBuilderAssignmentWaitTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if value.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validatejsonBuilderAssignmentTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
 // jsonBuilderProgressTransport stores JSON fields until they have been validated.
 type jsonBuilderProgressTransport struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read *bool `json:"read"`
+	// The build's builder branch, surla/build-<n>.
+	Branch *string `json:"branch,omitempty"`
+	// The commit the builder's branch points at, returned by get_build and
+	// reflected in list_changes.version (start_build omits it before any branch
+	// commit exists, and list_changes items carry no branch field): present while
+	// the build is still building, once the branch exists and points at another
+	// commit than the one the build started from. Omitted in other states. A
+	// passed build records its verified candidate_commit in taking.
+	HeadCommit *string `json:"head_commit,omitempty"`
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool `json:"last_check_passed,omitempty"`
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string `json:"last_check_at,omitempty"`
 }
 
 // validatejsonBuilderProgressTransport checks decoded JSON before it becomes a service value.
@@ -3681,6 +3855,12 @@ func validatejsonBuilderProgressTransport(value *jsonBuilderProgressTransport) (
 	}
 	if value.Read == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("read", "body"))
+	}
+	if value.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.head_commit", *value.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_check_at", *value.LastCheckAt, goa.FormatDateTime))
 	}
 	return err
 }
@@ -3808,6 +3988,15 @@ type jsonCP1AnalysisAmbiguityTransport struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []*string `json:"options"`
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // validatejsonCP1AnalysisAmbiguityTransport checks decoded JSON before it becomes a service value.
@@ -3834,6 +4023,9 @@ func validatejsonCP1AnalysisAmbiguityTransport(value *jsonCP1AnalysisAmbiguityTr
 		if e != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
+	}
+	if value.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *value.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return err
 }
@@ -4372,14 +4564,23 @@ func validatejsonChangeListItemTransport(value *jsonChangeListItemTransport) (er
 type jsonChangeListTransport struct {
 	// Saved Change Cards, most recently saved first.
 	Changes []*jsonChangeListItemTransport `json:"changes"`
-	// Opaque value for change detection. Compare it only for equality; the
-	// returned fields contain the facts this operation makes readable.
+	// Opaque value for change detection. It changes whenever the listed cards, a
+	// card's get_build view (including the builder's branch head_commit and latest
+	// check), approval_available, initializing_phase, the owner's Story
+	// evaluation, get_team, or get_live_target changes; list_changes items carry
+	// no build or branch fields, so read get_build for those facts. Compare it
+	// only for equality.
 	Version *string `json:"version"`
 	// Whether approve_merge can record approvals on this server: true when the
 	// server runs Checkpoint 4 verification, as every server surla starts does,
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable *bool `json:"approval_available"`
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string `json:"initializing_phase,omitempty"`
 }
 
 // validatejsonChangeListTransport checks decoded JSON before it becomes a service value.
@@ -7033,7 +7234,8 @@ type jsonTeamRoleStateTransport struct {
 	State *string `json:"state"`
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention *string `json:"attention"`
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -7110,6 +7312,15 @@ type jsonTeamSnapshotTransport struct {
 	SavedChoices map[string]*jsonRoleAgentChoiceTransport `json:"saved_choices"`
 	// Dismissed project notices.
 	DismissedNotices []string `json:"dismissed_notices"`
+	// Whether Chorus serves this team: not_used when workers run outside Herdr and
+	// never use it; connected after Surla's latest read of the team's Chorus view
+	// succeeded; unavailable after that read failed or when the team's space has
+	// no Chorus connection. While unavailable no Chorus reminder reaches a worker:
+	// workers wait on Surla with wait_for_builder_assignment and
+	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
+	// prompt. Absent before a team space exists or before the first read settled
+	// it.
+	ChorusStatus *string `json:"chorus_status,omitempty"`
 }
 
 // validatejsonTeamSnapshotTransport checks decoded JSON before it becomes a service value.
@@ -7157,6 +7368,11 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 	for _, e := range value.DismissedNotices {
 		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		}
+	}
+	if value.ChorusStatus != nil {
+		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable" || *value.ChorusStatus == "not_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
 		}
 	}
 	return err
@@ -7508,6 +7724,37 @@ func validatejsonTestWriterAssignmentTransport(value *jsonTestWriterAssignmentTr
 		}
 		if e != nil {
 			if err2 := validatejsonTestCoverageStatementTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// jsonTestWriterAssignmentWaitTransport stores JSON fields until they have been validated.
+type jsonTestWriterAssignmentWaitTransport struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*jsonTestWriterAssignmentItemTransport `json:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version *string `json:"version"`
+}
+
+// validatejsonTestWriterAssignmentWaitTransport checks decoded JSON before it becomes a service value.
+func validatejsonTestWriterAssignmentWaitTransport(value *jsonTestWriterAssignmentWaitTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "body"))
+	}
+	if value.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validatejsonTestWriterAssignmentItemTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -8929,6 +9176,32 @@ func validateBuilderAssignmentListOriginal(value *BuilderAssignmentList) (err er
 	return err
 }
 
+// validateBuilderAssignmentWaitOriginal checks the original typed value before JSON conversion.
+func validateBuilderAssignmentWaitOriginal(value *BuilderAssignmentWait) (err error) {
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validateBuilderAssignmentOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// validateBuilderProgressOriginal checks the original typed value before JSON conversion.
+func validateBuilderProgressOriginal(value *BuilderProgress) (err error) {
+	if value.HeadCommit != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("value.head_commit", *value.HeadCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
+	}
+	if value.LastCheckAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("value.last_check_at", *value.LastCheckAt, goa.FormatDateTime))
+	}
+	return err
+}
+
 // validateBuilderVerificationReportOriginal checks the original typed value before JSON conversion.
 func validateBuilderVerificationReportOriginal(value *BuilderVerificationReport) (err error) {
 	if value.Counts == nil {
@@ -9007,6 +9280,9 @@ func validateCP1AnalysisAmbiguityOriginal(value *CP1AnalysisAmbiguity) (err erro
 	}
 	for _, e := range value.Options {
 		err = goa.MergeErrors(err, goa.ValidatePattern("value.options[*]", e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
+	}
+	if value.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("value.draft_option", *value.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return err
 }
@@ -9134,6 +9410,11 @@ func validateStartedBuildOriginal(value *StartedBuild) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("taking", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidateFormat("value.started_at", value.StartedAt, goa.FormatDateTime))
+	if value.Builder != nil {
+		if err2 := validateBuilderProgressOriginal(value.Builder); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if value.TestWriter != nil {
 		if err2 := validateTestWriterProgressOriginal(value.TestWriter); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -10270,6 +10551,11 @@ func validateTeamSnapshotOriginal(value *TeamSnapshot) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
 		}
 	}
+	if value.ChorusStatus != nil {
+		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable" || *value.ChorusStatus == "not_used") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
+		}
+	}
 	return err
 }
 
@@ -10370,6 +10656,21 @@ func validateTestWriterAssignmentItemOriginal(value *TestWriterAssignmentItem) (
 
 // validateTestWriterAssignmentListOriginal checks the original typed value before JSON conversion.
 func validateTestWriterAssignmentListOriginal(value *TestWriterAssignmentList) (err error) {
+	if value.Assignments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
+	}
+	for _, e := range value.Assignments {
+		if e != nil {
+			if err2 := validateTestWriterAssignmentItemOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// validateTestWriterAssignmentWaitOriginal checks the original typed value before JSON conversion.
+func validateTestWriterAssignmentWaitOriginal(value *TestWriterAssignmentWait) (err error) {
 	if value.Assignments == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignments", "value"))
 	}
@@ -13882,8 +14183,9 @@ func EncodeAmbiguityQuestion(in *AmbiguityQuestion) ([]byte, error) {
 	var body *jsonAmbiguityQuestionTransport
 	{
 		body = &jsonAmbiguityQuestionTransport{
-			ID:       &in.ID,
-			Question: &in.Question,
+			ID:          &in.ID,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]string, len(in.Options))
 		for i, val := range in.Options {
@@ -13918,8 +14220,9 @@ func ValidateAmbiguityQuestionValue(in *AmbiguityQuestion) error {
 	var body *jsonAmbiguityQuestionTransport
 	{
 		body = &jsonAmbiguityQuestionTransport{
-			ID:       &in.ID,
-			Question: &in.Question,
+			ID:          &in.ID,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]string, len(in.Options))
 		for i, val := range in.Options {
@@ -13958,8 +14261,9 @@ func DecodeAmbiguityQuestion(data []byte) (out *AmbiguityQuestion, err error) {
 	}
 	{
 		out = &AmbiguityQuestion{
-			ID:       *body.ID,
-			Question: *body.Question,
+			ID:          *body.ID,
+			Question:    *body.Question,
+			DraftOption: body.DraftOption,
 		}
 		out.Options = make([]string, len(body.Options))
 		for i, val := range body.Options {
@@ -15598,15 +15902,129 @@ func DecodeBuilderAssignmentList(data []byte) (out *BuilderAssignmentList, err e
 	return out, nil
 }
 
+// EncodeBuilderAssignmentWait turns a service value into JSON using the field names in the Goa design.
+func EncodeBuilderAssignmentWait(in *BuilderAssignmentWait) ([]byte, error) {
+	if err := checkBuilderAssignmentWaitValue(in); err != nil {
+		return nil, fmt.Errorf("encode BuilderAssignmentWait JSON: %w", err)
+	}
+	if err := validateBuilderAssignmentWaitOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+	var body *jsonBuilderAssignmentWaitTransport
+	{
+		body = &jsonBuilderAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonBuilderAssignmentTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeBuilderAssignmentToBuilderAssignmentTransport(val)
+		}
+	}
+	if err := validatejsonBuilderAssignmentWaitTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BuilderAssignmentWait JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BuilderAssignmentWait JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBuilderAssignmentWaitValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBuilderAssignmentWaitValue(in *BuilderAssignmentWait) error {
+	if err := checkBuilderAssignmentWaitValue(in); err != nil {
+		return fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+	if err := validateBuilderAssignmentWaitOriginal(in); err != nil {
+		return fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BuilderAssignmentWait")
+	}
+
+	var body *jsonBuilderAssignmentWaitTransport
+	{
+		body = &jsonBuilderAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonBuilderAssignmentTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeBuilderAssignmentToBuilderAssignmentTransport(val)
+		}
+	}
+	if err := validatejsonBuilderAssignmentWaitTransport(body); err != nil {
+		return fmt.Errorf("validate BuilderAssignmentWait value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBuilderAssignmentWait checks JSON field names from the Goa design and returns a service value.
+func DecodeBuilderAssignmentWait(data []byte) (out *BuilderAssignmentWait, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON: %w", err)
+	}
+	if err := validateBuilderAssignmentWaitJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON: %w", err)
+	}
+	var body *jsonBuilderAssignmentWaitTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BuilderAssignmentWait JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BuilderAssignmentWait JSON after first value: %w", err)
+	}
+	if err := validatejsonBuilderAssignmentWaitTransport(body); err != nil {
+		return out, fmt.Errorf("validate BuilderAssignmentWait JSON: %w", err)
+	}
+	{
+		out = &BuilderAssignmentWait{
+			Version: *body.Version,
+		}
+		out.Assignments = make([]*BuilderAssignment, len(body.Assignments))
+		for i, val := range body.Assignments {
+			if val == nil {
+				out.Assignments[i] = nil
+				continue
+			}
+			out.Assignments[i] = decodeBuilderAssignmentTransportToBuilderAssignment(val)
+		}
+	}
+	return out, nil
+}
+
 // EncodeBuilderProgress turns a service value into JSON using the field names in the Goa design.
 func EncodeBuilderProgress(in *BuilderProgress) ([]byte, error) {
 	if err := checkBuilderProgressValue(in); err != nil {
 		return nil, fmt.Errorf("encode BuilderProgress JSON: %w", err)
 	}
+	if err := validateBuilderProgressOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BuilderProgress value: %w", err)
+	}
 	var body *jsonBuilderProgressTransport
 	{
 		body = &jsonBuilderProgressTransport{
-			Read: &in.Read,
+			Read:            &in.Read,
+			Branch:          in.Branch,
+			HeadCommit:      in.HeadCommit,
+			LastCheckPassed: in.LastCheckPassed,
+			LastCheckAt:     in.LastCheckAt,
 		}
 	}
 	if err := validatejsonBuilderProgressTransport(body); err != nil {
@@ -15626,6 +16044,9 @@ func ValidateBuilderProgressValue(in *BuilderProgress) error {
 	if err := checkBuilderProgressValue(in); err != nil {
 		return fmt.Errorf("validate BuilderProgress value: %w", err)
 	}
+	if err := validateBuilderProgressOriginal(in); err != nil {
+		return fmt.Errorf("validate BuilderProgress value: %w", err)
+	}
 
 	if in == nil {
 		return goa.MissingFieldError("result", "BuilderProgress")
@@ -15634,7 +16055,11 @@ func ValidateBuilderProgressValue(in *BuilderProgress) error {
 	var body *jsonBuilderProgressTransport
 	{
 		body = &jsonBuilderProgressTransport{
-			Read: &in.Read,
+			Read:            &in.Read,
+			Branch:          in.Branch,
+			HeadCommit:      in.HeadCommit,
+			LastCheckPassed: in.LastCheckPassed,
+			LastCheckAt:     in.LastCheckAt,
 		}
 	}
 	if err := validatejsonBuilderProgressTransport(body); err != nil {
@@ -15669,7 +16094,11 @@ func DecodeBuilderProgress(data []byte) (out *BuilderProgress, err error) {
 	}
 	{
 		out = &BuilderProgress{
-			Read: *body.Read,
+			Read:            *body.Read,
+			Branch:          body.Branch,
+			HeadCommit:      body.HeadCommit,
+			LastCheckPassed: body.LastCheckPassed,
+			LastCheckAt:     body.LastCheckAt,
 		}
 	}
 	return out, nil
@@ -16127,7 +16556,8 @@ func EncodeCP1AnalysisAmbiguity(in *CP1AnalysisAmbiguity) ([]byte, error) {
 	var body *jsonCP1AnalysisAmbiguityTransport
 	{
 		body = &jsonCP1AnalysisAmbiguityTransport{
-			Question: &in.Question,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]*string, len(in.Options))
 		for i, val := range in.Options {
@@ -16164,7 +16594,8 @@ func ValidateCP1AnalysisAmbiguityValue(in *CP1AnalysisAmbiguity) error {
 	var body *jsonCP1AnalysisAmbiguityTransport
 	{
 		body = &jsonCP1AnalysisAmbiguityTransport{
-			Question: &in.Question,
+			Question:    &in.Question,
+			DraftOption: in.DraftOption,
 		}
 		body.Options = make([]*string, len(in.Options))
 		for i, val := range in.Options {
@@ -16205,7 +16636,8 @@ func DecodeCP1AnalysisAmbiguity(data []byte) (out *CP1AnalysisAmbiguity, err err
 	}
 	{
 		out = &CP1AnalysisAmbiguity{
-			Question: *body.Question,
+			Question:    *body.Question,
+			DraftOption: body.DraftOption,
 		}
 		out.Options = make([]string, len(body.Options))
 		for i, val := range body.Options {
@@ -16988,6 +17420,7 @@ func EncodeChangeList(in *ChangeList) ([]byte, error) {
 		body = &jsonChangeListTransport{
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
+			InitializingPhase: in.InitializingPhase,
 		}
 		body.Changes = make([]*jsonChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {
@@ -17028,6 +17461,7 @@ func ValidateChangeListValue(in *ChangeList) error {
 		body = &jsonChangeListTransport{
 			Version:           &in.Version,
 			ApprovalAvailable: &in.ApprovalAvailable,
+			InitializingPhase: in.InitializingPhase,
 		}
 		body.Changes = make([]*jsonChangeListItemTransport, len(in.Changes))
 		for i, val := range in.Changes {
@@ -17072,6 +17506,7 @@ func DecodeChangeList(data []byte) (out *ChangeList, err error) {
 		out = &ChangeList{
 			Version:           *body.Version,
 			ApprovalAvailable: *body.ApprovalAvailable,
+			InitializingPhase: body.InitializingPhase,
 		}
 		out.Changes = make([]*ChangeListItem, len(body.Changes))
 		for i, val := range body.Changes {
@@ -24802,8 +25237,9 @@ func EncodeTeamSnapshot(in *TeamSnapshot) ([]byte, error) {
 	var body *jsonTeamSnapshotTransport
 	{
 		body = &jsonTeamSnapshotTransport{
-			Team:      &in.Team,
-			HerdrMode: &in.HerdrMode,
+			Team:         &in.Team,
+			HerdrMode:    &in.HerdrMode,
+			ChorusStatus: in.ChorusStatus,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -24855,8 +25291,9 @@ func ValidateTeamSnapshotValue(in *TeamSnapshot) error {
 	var body *jsonTeamSnapshotTransport
 	{
 		body = &jsonTeamSnapshotTransport{
-			Team:      &in.Team,
-			HerdrMode: &in.HerdrMode,
+			Team:         &in.Team,
+			HerdrMode:    &in.HerdrMode,
+			ChorusStatus: in.ChorusStatus,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -24912,8 +25349,9 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 	}
 	{
 		out = &TeamSnapshot{
-			Team:      *body.Team,
-			HerdrMode: *body.HerdrMode,
+			Team:         *body.Team,
+			HerdrMode:    *body.HerdrMode,
+			ChorusStatus: body.ChorusStatus,
 		}
 		out.Roles = make([]*TeamRoleState, len(body.Roles))
 		for i, val := range body.Roles {
@@ -25736,6 +26174,113 @@ func DecodeTestWriterAssignmentList(data []byte) (out *TestWriterAssignmentList,
 	}
 	{
 		out = &TestWriterAssignmentList{}
+		out.Assignments = make([]*TestWriterAssignmentItem, len(body.Assignments))
+		for i, val := range body.Assignments {
+			if val == nil {
+				out.Assignments[i] = nil
+				continue
+			}
+			out.Assignments[i] = decodeTestWriterAssignmentItemTransportToTestWriterAssignmentItem(val)
+		}
+	}
+	return out, nil
+}
+
+// EncodeTestWriterAssignmentWait turns a service value into JSON using the field names in the Goa design.
+func EncodeTestWriterAssignmentWait(in *TestWriterAssignmentWait) ([]byte, error) {
+	if err := checkTestWriterAssignmentWaitValue(in); err != nil {
+		return nil, fmt.Errorf("encode TestWriterAssignmentWait JSON: %w", err)
+	}
+	if err := validateTestWriterAssignmentWaitOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+	var body *jsonTestWriterAssignmentWaitTransport
+	{
+		body = &jsonTestWriterAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonTestWriterAssignmentItemTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeTestWriterAssignmentItemToTestWriterAssignmentItemTransport(val)
+		}
+	}
+	if err := validatejsonTestWriterAssignmentWaitTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TestWriterAssignmentWait JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TestWriterAssignmentWait JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTestWriterAssignmentWaitValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTestWriterAssignmentWaitValue(in *TestWriterAssignmentWait) error {
+	if err := checkTestWriterAssignmentWaitValue(in); err != nil {
+		return fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+	if err := validateTestWriterAssignmentWaitOriginal(in); err != nil {
+		return fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TestWriterAssignmentWait")
+	}
+
+	var body *jsonTestWriterAssignmentWaitTransport
+	{
+		body = &jsonTestWriterAssignmentWaitTransport{
+			Version: &in.Version,
+		}
+		body.Assignments = make([]*jsonTestWriterAssignmentItemTransport, len(in.Assignments))
+		for i, val := range in.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = encodeTestWriterAssignmentItemToTestWriterAssignmentItemTransport(val)
+		}
+	}
+	if err := validatejsonTestWriterAssignmentWaitTransport(body); err != nil {
+		return fmt.Errorf("validate TestWriterAssignmentWait value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTestWriterAssignmentWait checks JSON field names from the Goa design and returns a service value.
+func DecodeTestWriterAssignmentWait(data []byte) (out *TestWriterAssignmentWait, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: %w", err)
+	}
+	if err := validateTestWriterAssignmentWaitJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: %w", err)
+	}
+	var body *jsonTestWriterAssignmentWaitTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TestWriterAssignmentWait JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TestWriterAssignmentWait JSON after first value: %w", err)
+	}
+	if err := validatejsonTestWriterAssignmentWaitTransport(body); err != nil {
+		return out, fmt.Errorf("validate TestWriterAssignmentWait JSON: %w", err)
+	}
+	{
+		out = &TestWriterAssignmentWait{
+			Version: *body.Version,
+		}
 		out.Assignments = make([]*TestWriterAssignmentItem, len(body.Assignments))
 		for i, val := range body.Assignments {
 			if val == nil {
@@ -28859,8 +29404,9 @@ func decodeAgentWrittenTestsTransportToAgentWrittenTests(v *jsonAgentWrittenTest
 
 func decodeAmbiguityQuestionTransportToAmbiguityQuestion(v *jsonAmbiguityQuestionTransport) *AmbiguityQuestion {
 	res := &AmbiguityQuestion{
-		ID:       *v.ID,
-		Question: *v.Question,
+		ID:          *v.ID,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -29047,7 +29593,11 @@ func decodeBuilderAssignmentTransportToBuilderAssignment(v *jsonBuilderAssignmen
 
 func decodeBuilderProgressTransportToBuilderProgress(v *jsonBuilderProgressTransport) *BuilderProgress {
 	res := &BuilderProgress{
-		Read: *v.Read,
+		Read:            *v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res
@@ -29095,7 +29645,8 @@ func decodeC4EdgeItemTransportToC4EdgeItem(v *jsonC4EdgeItemTransport) *C4EdgeIt
 
 func decodeCP1AnalysisAmbiguityTransportToCP1AnalysisAmbiguity(v *jsonCP1AnalysisAmbiguityTransport) *CP1AnalysisAmbiguity {
 	res := &CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -30236,8 +30787,9 @@ func encodeAgentWrittenTestsToAgentWrittenTestsTransport(v *AgentWrittenTests) *
 
 func encodeAmbiguityQuestionToAmbiguityQuestionTransport(v *AmbiguityQuestion) *jsonAmbiguityQuestionTransport {
 	res := &jsonAmbiguityQuestionTransport{
-		ID:       &v.ID,
-		Question: &v.Question,
+		ID:          &v.ID,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -30518,7 +31070,11 @@ func encodeBuilderAssignmentToBuilderAssignmentTransport(v *BuilderAssignment) *
 
 func encodeBuilderProgressToBuilderProgressTransport(v *BuilderProgress) *jsonBuilderProgressTransport {
 	res := &jsonBuilderProgressTransport{
-		Read: &v.Read,
+		Read:            &v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res
@@ -30566,7 +31122,8 @@ func encodeC4EdgeItemToC4EdgeItemTransport(v *C4EdgeItem) *jsonC4EdgeItemTranspo
 
 func encodeCP1AnalysisAmbiguityToCP1AnalysisAmbiguityTransport(v *CP1AnalysisAmbiguity) *jsonCP1AnalysisAmbiguityTransport {
 	res := &jsonCP1AnalysisAmbiguityTransport{
-		Question: &v.Question,
+		Question:    &v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]*string, len(v.Options))
 	for i, val := range v.Options {
@@ -32188,6 +32745,13 @@ func validateAmbiguityQuestionJSONValue(path string, value any, description stri
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "draft_option":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The option that this revision's draft design, Story, examples and preserved behaviors already implement. confirm_intent accepts only this answer for the question; the user asks the coding agent to revise the change before confirming any other. Absent when every option works with the draft as it stands.",
+			); err != nil {
+				return err
+			}
 		case "id":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -32211,6 +32775,7 @@ func validateAmbiguityQuestionJSONValue(path string, value any, description stri
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"draft_option",
 				"id",
 				"options",
 				"question",
@@ -33743,6 +34308,77 @@ func validateBuilderAssignmentListJSONValue2(path string, value any, description
 	return nil
 }
 
+// validateBuilderAssignmentWaitJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuilderAssignmentWaitJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignments":
+			if err := validateBuilderAssignmentWaitJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignments",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateBuilderAssignmentWaitJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBuilderAssignmentWaitJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateBuilderAssignmentJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateBuilderProgressJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateBuilderProgressJSONValue(path string, value any, description string) error {
 	field := path
@@ -33763,6 +34399,34 @@ func validateBuilderProgressJSONValue(path string, value any, description string
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "branch":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The build's builder branch, surla/build-<n>.",
+			); err != nil {
+				return err
+			}
+		case "head_commit":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. Omitted in other states. A passed build records its verified candidate_commit in taking.",
+			); err != nil {
+				return err
+			}
+		case "last_check_at":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "When that check_project completed; absent with last_check_passed.",
+			); err != nil {
+				return err
+			}
+		case "last_check_passed":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.",
+			); err != nil {
+				return err
+			}
 		case "read":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
@@ -33772,6 +34436,10 @@ func validateBuilderProgressJSONValue(path string, value any, description string
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"branch",
+				"head_commit",
+				"last_check_at",
+				"last_check_passed",
 				"read",
 			})
 		}
@@ -34193,6 +34861,13 @@ func validateCP1AnalysisJSONValue3(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "draft_option":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The one string in options, character for character, that the draft design, Story, examples and preserved behaviors you send with this proposal already implement. Set it whenever choosing another option would require changing any of them. The user can then confirm only this option on the page; when they want another, the page sends them back to you, and you revise the change (revise_change) so the draft implements their choice before they confirm. Omit it only when every option works with the draft exactly as it stands.",
+			); err != nil {
+				return err
+			}
 		case "options":
 			if err := validateCP1AnalysisJSONValue4(
 				generatedJSONChildPath(path, key, false),
@@ -34209,6 +34884,7 @@ func validateCP1AnalysisJSONValue3(path string, value any, description string) e
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"draft_option",
 				"options",
 				"question",
 			})
@@ -36589,10 +37265,17 @@ func validateChangeListJSONValue(path string, value any, description string) err
 			); err != nil {
 				return err
 			}
+		case "initializing_phase":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "What init_project is doing now, as a short sentence for the user, such as \"Resolving the service's Go modules\"; absent when no initialization is running. A first initialization downloads Go modules and can take a few minutes. version changes with it, so wait_for_changes reports each phase.",
+			); err != nil {
+				return err
+			}
 		case "version":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.",
+				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 			); err != nil {
 				return err
 			}
@@ -36600,6 +37283,7 @@ func validateChangeListJSONValue(path string, value any, description string) err
 			return unknownJSONFieldError(path, key, []string{
 				"approval_available",
 				"changes",
+				"initializing_phase",
 				"version",
 			})
 		}
@@ -40616,7 +41300,7 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 		case "attention":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds.",
+				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds, or for 15 seconds while Chorus is not known to be reachable and so no reminder can arrive.",
 			); err != nil {
 				return err
 			}
@@ -40682,6 +41366,13 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "chorus_status":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether Chorus serves this team: not_used when workers run outside Herdr and never use it; connected after Surla's latest read of the team's Chorus view succeeded; unavailable after that read failed or when the team's space has no Chorus connection. While unavailable no Chorus reminder reaches a worker: workers wait on Surla with wait_for_builder_assignment and wait_for_test_writer_assignment, and a worker that stopped needs the user's prompt. Absent before a team space exists or before the first read settled it.",
+			); err != nil {
+				return err
+			}
 		case "dismissed_notices":
 			if err := validateTeamSnapshotJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -40719,6 +41410,7 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"chorus_status",
 				"dismissed_notices",
 				"herdr_mode",
 				"roles",
@@ -41323,6 +42015,77 @@ func validateTestWriterAssignmentListJSONValue(path string, value any, descripti
 
 // validateTestWriterAssignmentListJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
 func validateTestWriterAssignmentListJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateTestWriterAssignmentItemJSONValue(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTestWriterAssignmentWaitJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTestWriterAssignmentWaitJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "assignments":
+			if err := validateTestWriterAssignmentWaitJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"assignments",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTestWriterAssignmentWaitJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTestWriterAssignmentWaitJSONValue2(path string, value any, description string) error {
 	field := path
 	if field == "" {
 		field = "$payload"
@@ -42576,6 +43339,11 @@ func checkAmbiguityQuestionAmbiguityQuestionValue(in *AmbiguityQuestion, field s
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "options", false), strconv.Itoa(index1), true))
 			}
 		}
+		if in.DraftOption != nil {
+			if !utf8.ValidString(string(*in.DraftOption)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_option", false))
+			}
+		}
 	}
 	return nil
 }
@@ -43368,6 +44136,43 @@ func checkBuilderAssignmentListBuilderAssignmentListValue(in *BuilderAssignmentL
 	return nil
 }
 
+// checkBuilderAssignmentWaitValue checks text and cycles before conversion.
+func checkBuilderAssignmentWaitValue(in *BuilderAssignmentWait) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBuilderAssignmentWaitBuilderAssignmentWaitValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBuilderAssignmentWaitBuilderAssignmentWaitValue checks one generated value on the active path.
+func checkBuilderAssignmentWaitBuilderAssignmentWaitValue(in *BuilderAssignmentWait, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.Assignments {
+			_ = index1
+			_ = item1
+			if err := checkBuilderAssignmentBuilderAssignmentValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		if !utf8.ValidString(string(in.Version)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
+		}
+	}
+	return nil
+}
+
 // checkBuilderProgressValue checks text and cycles before conversion.
 func checkBuilderProgressValue(in *BuilderProgress) error {
 	if in == nil {
@@ -43391,6 +44196,21 @@ func checkBuilderProgressBuilderProgressValue(in *BuilderProgress, field string,
 	active[in] = true
 	defer delete(active, in)
 	if in != nil {
+		if in.Branch != nil {
+			if !utf8.ValidString(string(*in.Branch)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "branch", false))
+			}
+		}
+		if in.HeadCommit != nil {
+			if !utf8.ValidString(string(*in.HeadCommit)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "head_commit", false))
+			}
+		}
+		if in.LastCheckAt != nil {
+			if !utf8.ValidString(string(*in.LastCheckAt)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "last_check_at", false))
+			}
+		}
 	}
 	return nil
 }
@@ -43605,6 +44425,11 @@ func checkCP1AnalysisCP1AnalysisAmbiguityValue(in *CP1AnalysisAmbiguity, field s
 			_ = item1
 			if !utf8.ValidString(string(item1)) {
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "options", false), strconv.Itoa(index1), true))
+			}
+		}
+		if in.DraftOption != nil {
+			if !utf8.ValidString(string(*in.DraftOption)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "draft_option", false))
 			}
 		}
 	}
@@ -44578,6 +45403,11 @@ func checkChangeListChangeListValue(in *ChangeList, field string, active map[any
 		}
 		if !utf8.ValidString(string(in.Version)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
+		}
+		if in.InitializingPhase != nil {
+			if !utf8.ValidString(string(*in.InitializingPhase)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "initializing_phase", false))
+			}
 		}
 	}
 	return nil
@@ -47205,6 +48035,11 @@ func checkTeamSnapshotTeamSnapshotValue(in *TeamSnapshot, field string, active m
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "dismissed_notices", false), strconv.Itoa(index1), true))
 			}
 		}
+		if in.ChorusStatus != nil {
+			if !utf8.ValidString(string(*in.ChorusStatus)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "chorus_status", false))
+			}
+		}
 	}
 	return nil
 }
@@ -47444,6 +48279,43 @@ func checkTestWriterAssignmentListTestWriterAssignmentListValue(in *TestWriterAs
 			if err := checkTestWriterAssignmentItemTestWriterAssignmentItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+// checkTestWriterAssignmentWaitValue checks text and cycles before conversion.
+func checkTestWriterAssignmentWaitValue(in *TestWriterAssignmentWait) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTestWriterAssignmentWaitTestWriterAssignmentWaitValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTestWriterAssignmentWaitTestWriterAssignmentWaitValue checks one generated value on the active path.
+func checkTestWriterAssignmentWaitTestWriterAssignmentWaitValue(in *TestWriterAssignmentWait, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		for index1, item1 := range in.Assignments {
+			_ = index1
+			_ = item1
+			if err := checkTestWriterAssignmentItemTestWriterAssignmentItemValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "assignments", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+		if !utf8.ValidString(string(in.Version)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
 		}
 	}
 	return nil

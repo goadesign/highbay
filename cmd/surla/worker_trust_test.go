@@ -58,8 +58,12 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 		"[mcp_servers.surla]\ncommand = \"/bin/surla\"\nargs = [\"stdio\"]\ndefault_tools_approval_mode = \"approve\"\n\n" +
 		"[mcp_servers.github]\ncommand = \"npx\"\nargs = [\"github-mcp\"]\n"
 	writeTestFile(t, filepath.Join(codexHome, "config.toml"), initialCodex)
+	// The tests copy's entry already answers the trust question with no; it
+	// is kept, while the project folder's missing answer is filled in.
 	writeTestFile(t, filepath.Join(claudeDir, ".claude.json"),
-		`{"numStartups":12345678901234567890,"projects":{"/other":{"hasTrustDialogAccepted":false}}}`)
+		`{"numStartups":12345678901234567890,"projects":{"/other":{"hasTrustDialogAccepted":false},`+
+			fmt.Sprintf("%q", testsDir)+`:{"hasTrustDialogAccepted":false,"allowedTools":[]},`+
+			fmt.Sprintf("%q", repo)+`:{"allowedTools":["Bash(git status)"]}}}`)
 	initialClaudeSettings := `{"permissions":{"allow":["Bash(git status)"],"deny":["Bash(rm -rf *)"]}}`
 	writeTestFile(t, filepath.Join(claudeDir, "settings.json"), initialClaudeSettings)
 	writeTestFile(t, filepath.Join(geminiHome, ".gemini", "trustedFolders.json"),
@@ -108,7 +112,8 @@ func TestPrepareWorkerTrustAcrossClientsLeavesGitWorktreesClean(t *testing.T) {
 	claudeRoot := readTestJSON(t, filepath.Join(claudeDir, ".claude.json"))
 	claudeProjects := claudeRoot["projects"].(map[string]any)
 	assert.Equal(t, true, claudeProjects[repo].(map[string]any)["hasTrustDialogAccepted"])
-	assert.Equal(t, true, claudeProjects[testsDir].(map[string]any)["hasTrustDialogAccepted"])
+	assert.Equal(t, []any{"Bash(git status)"}, claudeProjects[repo].(map[string]any)["allowedTools"])
+	assert.Equal(t, false, claudeProjects[testsDir].(map[string]any)["hasTrustDialogAccepted"], "an existing answer is kept")
 	assert.Equal(t, false, claudeProjects["/other"].(map[string]any)["hasTrustDialogAccepted"])
 	claudeSettingsRaw, err := os.ReadFile(filepath.Join(claudeDir, "settings.json"))
 	require.NoError(t, err)
@@ -155,10 +160,14 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 		requireChorus bool
 		setup         func(t *testing.T, home string) (env []string, verifyPath, initialContent string)
 		wantStepPart  string
+		// folderRule is true when the restriction marks a folder untrusted,
+		// which refuses a role that skips permission prompts as well.
+		folderRule bool
 	}{
 		{
-			name:   "codex explicitly untrusted project",
-			client: "codex",
+			name:       "codex explicitly untrusted project",
+			client:     "codex",
+			folderRule: true,
 			setup: func(t *testing.T, home string) ([]string, string, string) {
 				path := filepath.Join(home, ".codex", "config.toml")
 				content := "[projects." + fmt.Sprintf("%q", repo) + "]\ntrust_level = \"untrusted\"\n"
@@ -203,8 +212,9 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 			wantStepPart: "Set mcpServers.surla.trust to true in your Gemini settings.json",
 		},
 		{
-			name:   "gemini DO_NOT_TRUST parent folder",
-			client: "gemini",
+			name:       "gemini DO_NOT_TRUST parent folder",
+			client:     "gemini",
+			folderRule: true,
 			setup: func(t *testing.T, home string) ([]string, string, string) {
 				path := filepath.Join(home, ".gemini", "trustedFolders.json")
 				content := fmt.Sprintf("{%q:\"DO_NOT_TRUST\"}", repo)
@@ -264,18 +274,31 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 			require.NoError(t, readErr)
 			assert.Equal(t, initialContent, string(raw), "explicit policy must remain untouched")
 
-			// With Yolo: true, startup is permitted and still leaves the explicit policy file untouched.
-			require.NoError(t, prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{{
+			// With Yolo: true, a tool-policy restriction permits startup, an
+			// untrusted folder still refuses it, and neither changes the file.
+			yoloErr := prepareWorkerTrust(t.Context(), env, []project.WorkerTrustTarget{{
 				Role:          "builder",
 				ProjectDir:    repo,
 				Folder:        buildDir,
 				Client:        tc.client,
 				Yolo:          true,
 				RequireChorus: tc.requireChorus,
-			}}))
+			}})
+			if tc.folderRule {
+				var yoloRefusal *controlplane.TeamPolicyRefusal
+				require.ErrorAs(t, yoloErr, &yoloRefusal)
+				assert.Contains(t, yoloRefusal.Step("then choose Start workers again."), tc.wantStepPart)
+			} else {
+				require.NoError(t, yoloErr)
+			}
 			rawAfterYolo, readErr := os.ReadFile(verifyPath)
 			require.NoError(t, readErr)
-			assert.Equal(t, initialContent, string(rawAfterYolo))
+			if tc.folderRule {
+				assert.Equal(t, initialContent, string(rawAfterYolo))
+			} else {
+				// Codex keeps folder trust in the same file as its tool policy.
+				assert.True(t, strings.HasPrefix(string(rawAfterYolo), initialContent), "the explicit policy is kept as written")
+			}
 		})
 	}
 
@@ -293,6 +316,43 @@ func TestPrepareWorkerTrustPreservesExplicitRestrictionsAndRefusesNonYolo(t *tes
 			RequireChorus: false,
 		}}))
 	})
+}
+
+// TestPrepareWorkerTrustWritesMissingFolderTrustUnderYolo covers the roles
+// that skip permission prompts: their clients still ask for folder trust at
+// startup, so the missing entries are written and tool policies are not read.
+func TestPrepareWorkerTrustWritesMissingFolderTrustUnderYolo(t *testing.T) {
+	home := t.TempDir()
+	repo, buildDir, testsDir := initTrustGitRepoWithWorktrees(t)
+	claudeSettings := `{"permissions":{"deny":["mcp__surla__*"]}}`
+	writeTestFile(t, filepath.Join(home, ".claude", "settings.json"), claudeSettings)
+	env := []string{"HOME=" + home}
+	targets := []project.WorkerTrustTarget{
+		{Role: "builder", ProjectDir: repo, Folder: buildDir, Client: "codex", Yolo: true, RequireChorus: true},
+		{Role: "test_writer", ProjectDir: repo, Folder: testsDir, Client: "claude", Yolo: true, RequireChorus: true},
+	}
+	require.NoError(t, prepareWorkerTrust(t.Context(), env, targets))
+
+	codexRaw, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	require.NoError(t, err)
+	var codexDecoded map[string]any
+	require.NoError(t, toml.Unmarshal(codexRaw, &codexDecoded))
+	codexProjects := codexDecoded["projects"].(map[string]any)
+	assert.Equal(t, "trusted", codexProjects[repo].(map[string]any)["trust_level"])
+	assert.Equal(t, "trusted", codexProjects[buildDir].(map[string]any)["trust_level"])
+	assert.NotContains(t, codexDecoded, "mcp_servers", "no MCP server entry is written")
+
+	claudeProjects := readTestJSON(t, filepath.Join(home, ".claude.json"))["projects"].(map[string]any)
+	assert.Equal(t, true, claudeProjects[repo].(map[string]any)["hasTrustDialogAccepted"])
+	assert.Equal(t, true, claudeProjects[testsDir].(map[string]any)["hasTrustDialogAccepted"])
+	settingsRaw, err := os.ReadFile(filepath.Join(home, ".claude", "settings.json"))
+	require.NoError(t, err)
+	assert.Equal(t, claudeSettings, string(settingsRaw))
+
+	for _, dir := range []string{repo, buildDir, testsDir} {
+		out := runTrustGit(t, dir, "status", "--porcelain", "-z", "--no-renames", "--untracked-files=all")
+		assert.Empty(t, out, "unexpected git status in %s", dir)
+	}
 }
 
 func TestPrepareWorkerTrustRoleSpecificOperationsAndWildcardRules(t *testing.T) {

@@ -38,6 +38,14 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 	}
 	s.team.observationMu.RLock()
 	defer s.team.observationMu.RUnlock()
+	// Workers outside Herdr never use Chorus; in Herdr the supervisor's last
+	// view read for this space and endpoint settles it, and nothing is said
+	// before one has.
+	if notUsed := "not_used"; !s.team.dependencies.HerdrAvailable {
+		result.ChorusStatus = &notUsed
+	} else if chorus := s.team.chorus; chorus.status != "" && chorus.space == selection.Space && chorus.endpoint == selection.connection.Endpoint {
+		result.ChorusStatus = &chorus.status
+	}
 	for _, role := range selection.Roles {
 		value := gensurla.TeamRoleState{Role: role.Role, Handle: role.Handle, State: "unknown", Attention: "none", Watcher: "unknown", Assignment: "unknown"}
 		if role.Role == "guide" {
@@ -48,6 +56,11 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 		}
 		if s.team.headless.running(role.Role) {
 			value.State = "working"
+		}
+		// A registered guide that no Herdr tab ever adopted has no pane in
+		// the workers' space; Herdr cannot say what it is doing.
+		if role.Role == "guide" && record.Tab == "" && value.State == "not_started" {
+			value.State = "unknown"
 		}
 		if role.Role == "guide" && (value.State == "ended" || value.State == "not_started") {
 			result.HerdrMode = s.herdrMode("")

@@ -430,7 +430,9 @@ func slicesTeamRoles(roles []TeamRole) []TeamRole { return append([]TeamRole(nil
 
 // TestTeamIdleUnreadNeedsYou keeps a waiting role with an unread assignment
 // waiting just below 90 seconds and makes it needs_you with attention
-// assignment at and above them; working or reading clears it.
+// assignment at and above them while the last Chorus view read succeeded, so
+// a reminder settles first. While that read failed or none happened, no
+// reminder can arrive and the bound is 15 seconds. Working or reading clears it.
 func TestTeamIdleUnreadNeedsYou(t *testing.T) {
 	at := func(o *teamSupervisor, now time.Time) gensurla.TeamRoleState {
 		o.roles["builder"].lastEvent = now
@@ -438,15 +440,28 @@ func TestTeamIdleUnreadNeedsYou(t *testing.T) {
 		return o.roles["builder"].public
 	}
 	for _, tc := range []struct {
+		// chorus is the last Chorus view read: ok, failed or none.
+		chorus         string
 		idle           time.Duration
 		state, reasons string
 	}{
-		{teamIdleUnreadBound - time.Nanosecond, "waiting", "none"},
-		{teamIdleUnreadBound, "needs_you", "assignment"},
-		{teamIdleUnreadBound + time.Second, "needs_you", "assignment"},
+		{"ok", teamIdleUnreadNoChorusBound, "waiting", "none"},
+		{"ok", teamIdleUnreadBound - time.Nanosecond, "waiting", "none"},
+		{"ok", teamIdleUnreadBound, "needs_you", "assignment"},
+		{"ok", teamIdleUnreadBound + time.Second, "needs_you", "assignment"},
+		{"failed", teamIdleUnreadNoChorusBound - time.Nanosecond, "waiting", "none"},
+		{"failed", teamIdleUnreadNoChorusBound, "needs_you", "assignment"},
+		{"none", teamIdleUnreadNoChorusBound - time.Nanosecond, "waiting", "none"},
+		{"none", teamIdleUnreadNoChorusBound, "needs_you", "assignment"},
 	} {
-		t.Run(tc.idle.String(), func(t *testing.T) {
+		t.Run(tc.chorus+" "+tc.idle.String(), func(t *testing.T) {
 			o, _, now := newSupervisionFixture(t)
+			switch tc.chorus {
+			case "ok":
+				listed(o, now, true, "builder-example")
+			case "failed":
+				o.watchers(TeamWatcherView{}, assert.AnError, now)
+			}
 			assert.Equal(t, "waiting", o.roles["builder"].public.State)
 			value := at(o, now.Add(tc.idle))
 			assert.Equal(t, tc.state, value.State)
@@ -456,6 +471,7 @@ func TestTeamIdleUnreadNeedsYou(t *testing.T) {
 	}
 	t.Run("working clears it", func(t *testing.T) {
 		o, f, now := newSupervisionFixture(t)
+		listed(o, now, true, "builder-example")
 		assert.Equal(t, "needs_you", at(o, now.Add(teamIdleUnreadBound)).State)
 		working := f.terminal
 		working.Status = &TeamStatus{State: "working"}
@@ -466,6 +482,7 @@ func TestTeamIdleUnreadNeedsYou(t *testing.T) {
 	})
 	t.Run("reading clears it", func(t *testing.T) {
 		o, _, now := newSupervisionFixture(t)
+		listed(o, now, true, "builder-example")
 		assert.Equal(t, "needs_you", at(o, now.Add(teamIdleUnreadBound)).State)
 		setOwed(t, o, nil)
 		value := at(o, now.Add(teamIdleUnreadBound+time.Second))
@@ -480,6 +497,45 @@ func TestTeamIdleUnreadNeedsYou(t *testing.T) {
 		require.Len(t, snapshot.Roles, 1)
 		assert.Equal(t, "needs_you", snapshot.Roles[0].State)
 		assert.Equal(t, "assignment", snapshot.Roles[0].Attention)
+	})
+}
+
+// TestTeamReadReportsChorusForTheTeamsSpace follows the published answer to
+// whether Chorus serves the team: nothing before a view read settled it,
+// connected after one succeeded, unavailable after one failed or when the
+// space has no Chorus connection, and not_used when workers run outside Herdr.
+func TestTeamReadReportsChorusForTheTeamsSpace(t *testing.T) {
+	read := func(t *testing.T, o *teamSupervisor, now time.Time) *string {
+		t.Helper()
+		o.publish(t.Context(), now, false)
+		snapshot, err := o.server.ReadTeam(t.Context())
+		require.NoError(t, err)
+		return snapshot.ChorusStatus
+	}
+	t.Run("the latest view read decides", func(t *testing.T) {
+		o, _, now := newSupervisionFixture(t)
+		assert.Nil(t, read(t, o, now), "no read has settled it")
+		listed(o, now, true, "builder-example")
+		require.NotNil(t, read(t, o, now))
+		assert.Equal(t, "connected", *read(t, o, now))
+		o.watchers(TeamWatcherView{}, assert.AnError, now)
+		assert.Equal(t, "unavailable", *read(t, o, now))
+		listed(o, now, false, "builder-example")
+		assert.Equal(t, "connected", *read(t, o, now))
+	})
+	t.Run("a space without a Chorus connection", func(t *testing.T) {
+		o, _, now := newSupervisionFixture(t)
+		o.server.setTeamConnection(TeamConnection{})
+		o.syncSelection(o.server.teamSelection())
+		require.NotNil(t, read(t, o, now))
+		assert.Equal(t, "unavailable", *read(t, o, now))
+	})
+	t.Run("workers outside Herdr never use it", func(t *testing.T) {
+		o, _, now := newSupervisionFixture(t)
+		listed(o, now, true, "builder-example")
+		o.server.team.dependencies.HerdrAvailable = false
+		require.NotNil(t, read(t, o, now))
+		assert.Equal(t, "not_used", *read(t, o, now))
 	})
 }
 

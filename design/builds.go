@@ -88,10 +88,17 @@ var TestWriterProgress = Type("TestWriterProgress", func() {
 	Required("tests", "read", "report")
 })
 
-// BuilderProgress says whether the builder read its assignment.
+// BuilderProgress says whether the builder read its assignment and what it
+// has recorded since: its branch's commit and its latest check.
 var BuilderProgress = Type("BuilderProgress", func() {
-	Description("The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work.")
+	Description("The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work. branch, head_commit and the last check are three independent recorded facts: none says that a check or a verification ran on head_commit.")
 	Attribute("read", Boolean, "True once the builder read this assignment in full with get_builder_assignment.")
+	Attribute("branch", String, "The build's builder branch, surla/build-<n>.")
+	Attribute("head_commit", String, "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. Omitted in other states. A passed build records its verified candidate_commit in taking.", func() {
+		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
+	})
+	Attribute("last_check_passed", Boolean, "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.")
+	Attribute("last_check_at", String, "When that check_project completed; absent with last_check_passed.", func() { Format(FormatDateTime) })
 	Required("read")
 })
 
@@ -222,6 +229,22 @@ var BuilderAssignmentList = Type("BuilderAssignmentList", func() {
 	Required("assignments")
 })
 
+// BuilderAssignmentWait is the builder's assignment list when a wait ends.
+var BuilderAssignmentWait = Type("BuilderAssignmentWait", func() {
+	Description("The builder's assignment list when wait_for_builder_assignment returned, with the version that names it.")
+	Attribute("assignments", ArrayOf(BuilderAssignment), "The open build's assignment while it needs this role, exactly as list_builder_assignments returns it; empty otherwise.")
+	Attribute("version", String, "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.")
+	Required("assignments", "version")
+})
+
+// TestWriterAssignmentWait is the test writer's assignment list when a wait ends.
+var TestWriterAssignmentWait = Type("TestWriterAssignmentWait", func() {
+	Description("The test writer's assignment list when wait_for_test_writer_assignment returned, with the version that names it.")
+	Attribute("assignments", ArrayOf(TestWriterAssignmentItem), "The open build's assignment while it needs this role, exactly as list_test_writer_assignments returns it; empty otherwise.")
+	Attribute("version", String, "Opaque value naming this list. Pass it as since_version to wait until the list differs; compare it only for equality.")
+	Required("assignments", "version")
+})
+
 // RequiredTest names one test a build's Story requires.
 var RequiredTest = Type("RequiredTest", func() {
 	Description("One test the agreed Story requires: the evaluation scenario Surla generates for one finished flow and the hook method the test writer implements for it.")
@@ -340,14 +363,14 @@ func buildMethods() {
 	})
 
 	Method("get_build", func() {
-		Description("Return a change's build when it is the project's open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the test writer's state with the number of Surla's findings (never their text), and whether the build is for the change's revision in force. Reading changes nothing; deciding merged reads the project's repository.")
+		Description("Return a change's build when it is the project's open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the builder's branch, while the build is still building its head_commit once the branch advances past the build's base, and its latest completed check_project verdict, the test writer's state with the number of Surla's findings (never their text), and whether the build is for the change's revision in force. Reading changes nothing; reading the branch tip and deciding merged read the project's repository.")
 		Payload(func() {
 			Attribute("change_id", String, "Change Card identifier.", func() { MinLength(1) })
 			Required("change_id")
 		})
 		Result(ChangeBuild)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Tool("get_build", "Read a change's usable build for its current test source: the revision built, whether each role read its assignment, the test writer's state with the number of Surla's findings, and whether the build is for the change's revision in force. not_started means there is no usable build; the user starts a new build on the views page.")
+		Tool("get_build", "Read a change's usable build for its current test source: the revision built, whether each role read its assignment, the builder's branch, its head_commit while the build is still building, its latest check_project verdict, the test writer's state with the number of Surla's findings, and whether the build is for the change's revision in force. not_started means there is no usable build; the user starts a new build on the views page.")
 		HTTP(func() {
 			GET("/changes/{change_id}/build")
 			Response(StatusOK)
@@ -378,6 +401,20 @@ func buildMethods() {
 		Tool("list_builder_assignments", "List your assignment for the project's open build while it needs your work. An empty list means no build needs you: say so and stop. Read the assignment in full with get_builder_assignment(change_id) before working.")
 		HTTP(func() {
 			GET("/assignments/builder")
+			Response(StatusOK)
+		})
+	})
+
+	Method("wait_for_builder_assignment", func() {
+		Description("Return the builder's assignment list, as list_builder_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla accepted the tests, the user built the change again or dropped the build, or a verification of the build passed, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. Without since_version it returns at once. It records nothing and moves no working copy. A builder uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting builder does not push real operations out of view.")
+		Payload(func() {
+			Attribute("since_version", String, "version returned by your last wait_for_builder_assignment call. Omit it on the first call.", func() { MaxLength(128) })
+		})
+		Result(BuilderAssignmentWait)
+		Tool("wait_for_builder_assignment", "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs, for example when Surla accepts the tests (the state of written_tests becomes accepted) or the build no longer needs you (the list is empty: say so and stop), and otherwise after about 30 seconds with the same version: call it again with that version. Use it whenever you wait for the tests to be accepted. It needs no Chorus.")
+		HTTP(func() {
+			GET("/assignment-updates/builder")
+			Param("since_version")
 			Response(StatusOK)
 		})
 	})
@@ -416,6 +453,20 @@ func buildMethods() {
 		})
 	})
 
+	Method("wait_for_test_writer_assignment", func() {
+		Description("Return the test writer's assignment list, as list_test_writer_assignments does, with a version naming it. With since_version, the version an earlier call returned, the call waits until the list differs from it, for example because Surla's check of a report reached a verdict, the user built the change again or dropped the build, and otherwise returns the unchanged list after a bounded wait of about 30 seconds. The list holds the assignment only while the role has work: a check that accepts the tests removes it, as a drop does, so an empty list alone does not say which happened; get_test_writer_assignment does. Without since_version it returns at once. It records nothing and moves no working copy. A test writer uses it in place of repeated list calls while it waits, whether or not Chorus delivers reminders. Each call is traced but never saved in the diagnostics history list_traces reads, so a waiting test writer does not push real operations out of view.")
+		Payload(func() {
+			Attribute("since_version", String, "version returned by your last wait_for_test_writer_assignment call. Omit it on the first call.", func() { MaxLength(128) })
+		})
+		Result(TestWriterAssignmentWait)
+		Tool("wait_for_test_writer_assignment", "Wait for your assignment list to change without reading it again and again. Call it once without since_version to get the list and its version; then pass that version as since_version. The call returns as soon as the list differs and otherwise after about 30 seconds with the same version. Use it after report_tests_finished while you wait for the verdict, and decide by what the list shows, not by whether it changed: Surla may reach its verdict before your first call. While the list still shows your assignment with the tests' state reported, call again with the version it returned. As soon as it shows anything else, another state or no assignment at all, call get_test_writer_assignment(change_id) for what happened: the list is empty after Surla accepted your tests and after the user dropped the build, and get_test_writer_assignment returns the accepted state, findings to fix, the no_build refusal after a drop, or a new build's assignment to read. It needs no Chorus.")
+		HTTP(func() {
+			GET("/assignment-updates/test-writer")
+			Param("since_version")
+			Response(StatusOK)
+		})
+	})
+
 	Method("get_test_writer_assignment", func() {
 		Description("Return the test writer's assignment for a change in full (the working folder, the design and Story as agreed at the built revision, the user's confirmed answers, confirmation examples and preserved behaviors of that revision, the tests it requires, and the state with the text of any findings) and record that the test writer read it at its revision. Later revisions do not change what the build saved. A new build of the change replaces the assignment, which then counts as unread, and so does each verdict of Surla's check. The first read of a new build joins your working copy to the build's branch, surla/tests-<n> at the build's base. A read that marks the assignment read also writes the required tests' generated folder into your copy. A copy with uncommitted work on an earlier tests build branch first gets that work committed there; a clean copy joins from any branch. Other uncommitted work or a Git operation is refused with copy_off_branch; nothing is marked read then.")
 		Payload(func() {
@@ -428,7 +479,7 @@ func buildMethods() {
 		Error("copy_off_branch", CopyOffBranch, "Your working copy cannot join or serve this build: the message states its branch, the build's branch, any Git operation and what is uncommitted, and the goal. Put your test files on the build's branch, uncommitted, because Surla commits what it accepts; then call again.")
 		Error("working_folder_missing", ErrorResult, "Your working folder is missing; ask the user to build this change again on the views page.")
 		Error("working_copy_busy", ErrorResult, "Surla is checking the tests in your working folder; call get_test_writer_assignment again when the check has ended.")
-		Tool("get_test_writer_assignment", "Read your test assignment for a change: the working folder, the design and Story as agreed, the user's confirmed answers, examples and preserved behaviors, one required test per finished flow, and your state with any findings to fix. Your tests must hold the service to every answer, example and preserved behavior, not only to the Story's flows. Align the service interface in your copy with the agreed design and write tests inside its test module, eval/ in the working folder. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. Check your work with GOWORK=off go build ./... in eval/, then call report_tests_finished with change_id, request_revision and coverage_statements; Surla's check is the judge, and its verdict appears here. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Run every go command as GOWORK=off go …, as Surla's tests check does. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts.")
+		Tool("get_test_writer_assignment", "Read your test assignment for a change: the working folder, the design and Story as agreed, the user's confirmed answers, examples and preserved behaviors, one required test per finished flow, and your state with any findings to fix. Your tests must hold the service to every answer, example and preserved behavior, not only to the Story's flows. Align the service interface in your copy with the agreed design and write tests inside its test module, eval/ in the working folder. Surla writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run surla gen -dir eval in the working folder first; regenerating keeps the required tests. Check your work with GOWORK=off go build ./... in eval/, then call report_tests_finished with change_id, request_revision and coverage_statements; Surla's check is the judge, and its verdict appears here. Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Surla's verification builds and runs the application. Stay on the branch checked out in your working copy and do not commit: Surla commits what it accepts. Run every go command as GOWORK=off go …, as Surla's tests check does. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Surla will show Not stated. These are your statements, not Surla's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Surla validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Surla records the tests it accepts.")
 		HTTP(func() {
 			GET("/assignments/test-writer/{change_id}")
 			Response(StatusOK)

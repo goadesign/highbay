@@ -252,10 +252,13 @@ func TestFirstMessagesNameOnlyAllowedOperations(t *testing.T) {
 		for _, operation := range names.FindAllString(files.ReplaceAllString(message, ""), -1) {
 			// Assignment/report fields name data, not calls. All remaining
 			// snake-case words must remain permitted operations for this role.
-			if role == "builder" && (operation == "working_folder" || operation == "gowork_off") {
+			if role == "guide" && operation == "draft_option" {
 				continue
 			}
-			if role == "test_writer" && (operation == "coverage_statements" || operation == "question_ids" || operation == "example_ids") {
+			if role == "builder" && (operation == "working_folder" || operation == "gowork_off" || operation == "since_version") {
+				continue
+			}
+			if role == "test_writer" && (operation == "coverage_statements" || operation == "question_ids" || operation == "example_ids" || operation == "since_version") {
 				continue
 			}
 			assert.Contains(t, gensurla.MethodNames, operation)
@@ -304,8 +307,10 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 		required []string
 	}{
 		{"guide", []string{
+			"Set an ambiguity's draft_option to the option your draft already implements whenever another option would change the design, Story, examples or preserved behaviors",
 			"ask one short, plain question and wait; never ask for a Go module path, folder name or requirements checklist",
 			"call init_project with dir \".\" and no module path unless the user gave one",
+			"Before that call, tell the user in one sentence that creating the starter downloads Go modules and can take a few minutes the first time, and that the Surla page shows its progress.",
 			"instead of interviewing them in chat: put open product questions",
 			"into the analysis's ambiguities with concrete options, which the user answers on the views page",
 			"call update_draft before each new change",
@@ -321,6 +326,8 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"it writes the agreed design into design/ and regenerates gen/; never edit either",
 			"When your assignment's gowork_off is true",
 			"Never merge, cherry-pick or copy files from another surla/ branch",
+			"While you wait for that, do not stop and do not wait for a message: call wait_for_builder_assignment, passing the version it returned as since_version",
+			"when your client does not offer that tool, call list_builder_assignments about every 30 seconds instead",
 		}},
 		{"test_writer", []string{
 			"Read each new assignment with get_test_writer_assignment before any other work",
@@ -330,6 +337,10 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"do not commit: Surla commits what it accepts",
 			"Run every go command as GOWORK=off",
 			"Never bring files or commits from another surla/ branch",
+			"Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Surla's verification builds and runs the application.",
+			"after reporting, do not stop and do not wait for a message: call wait_for_test_writer_assignment, and while the list it returns still shows your assignment as reported, call it again, passing the version it returned as since_version",
+			"Surla may reach its verdict before your first call, so decide by what the list shows: as soon as it shows another state or no assignment at all, read get_test_writer_assignment again.",
+			"when your client does not offer that tool, call list_test_writer_assignments about every 30 seconds instead",
 		}},
 	} {
 		t.Run(tc.role, func(t *testing.T) {

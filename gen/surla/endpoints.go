@@ -15,105 +15,109 @@ import (
 
 // Endpoints wraps the "surla" service endpoints.
 type Endpoints struct {
-	GoldenPath                goa.Endpoint
-	ProposeChange             goa.Endpoint
-	ReviseChange              goa.Endpoint
-	ConfirmIntent             goa.Endpoint
-	GetChange                 goa.Endpoint
-	DeclineRevision           goa.Endpoint
-	PreviewArchitecture       goa.Endpoint
-	DraftOverride             goa.Endpoint
-	StartLiveTarget           goa.Endpoint
-	StopLiveTarget            goa.Endpoint
-	GetLiveTarget             goa.Endpoint
-	VerifyChange              goa.Endpoint
-	GetVerification           goa.Endpoint
-	ListVerifications         goa.Endpoint
-	ApproveMerge              goa.Endpoint
-	Diff                      goa.Endpoint
-	ConfigureModel            goa.Endpoint
-	GetModelConnection        goa.Endpoint
-	HandOverModelSettings     goa.Endpoint
-	InitProject               goa.Endpoint
-	GenerateCode              goa.Endpoint
-	CheckProject              goa.Endpoint
-	UpdateDependencies        goa.Endpoint
-	ReadCheckOutput           goa.Endpoint
-	ListTraces                goa.Endpoint
-	RefreshStory              goa.Endpoint
-	GetStoryRefresh           goa.Endpoint
-	UpdateDraft               goa.Endpoint
-	GetTeam                   goa.Endpoint
-	ShowTeamPane              goa.Endpoint
-	StartTeamAgents           goa.Endpoint
-	ListTeamAgentOptions      goa.Endpoint
-	DismissTeamNotice         goa.Endpoint
-	OpenViews                 goa.Endpoint
-	MergeChange               goa.Endpoint
-	ListChanges               goa.Endpoint
-	WaitForChanges            goa.Endpoint
-	StartBuild                goa.Endpoint
-	DropBuild                 goa.Endpoint
-	GetBuild                  goa.Endpoint
-	GetTestFindings           goa.Endpoint
-	ListBuilderAssignments    goa.Endpoint
-	GetBuilderAssignment      goa.Endpoint
-	ListTestWriterAssignments goa.Endpoint
-	GetTestWriterAssignment   goa.Endpoint
-	ReportTestsFinished       goa.Endpoint
-	ReviewVerification        goa.Endpoint
+	GoldenPath                  goa.Endpoint
+	ProposeChange               goa.Endpoint
+	ReviseChange                goa.Endpoint
+	ConfirmIntent               goa.Endpoint
+	GetChange                   goa.Endpoint
+	DeclineRevision             goa.Endpoint
+	PreviewArchitecture         goa.Endpoint
+	DraftOverride               goa.Endpoint
+	StartLiveTarget             goa.Endpoint
+	StopLiveTarget              goa.Endpoint
+	GetLiveTarget               goa.Endpoint
+	VerifyChange                goa.Endpoint
+	GetVerification             goa.Endpoint
+	ListVerifications           goa.Endpoint
+	ApproveMerge                goa.Endpoint
+	Diff                        goa.Endpoint
+	ConfigureModel              goa.Endpoint
+	GetModelConnection          goa.Endpoint
+	HandOverModelSettings       goa.Endpoint
+	InitProject                 goa.Endpoint
+	GenerateCode                goa.Endpoint
+	CheckProject                goa.Endpoint
+	UpdateDependencies          goa.Endpoint
+	ReadCheckOutput             goa.Endpoint
+	ListTraces                  goa.Endpoint
+	RefreshStory                goa.Endpoint
+	GetStoryRefresh             goa.Endpoint
+	UpdateDraft                 goa.Endpoint
+	GetTeam                     goa.Endpoint
+	ShowTeamPane                goa.Endpoint
+	StartTeamAgents             goa.Endpoint
+	ListTeamAgentOptions        goa.Endpoint
+	DismissTeamNotice           goa.Endpoint
+	OpenViews                   goa.Endpoint
+	MergeChange                 goa.Endpoint
+	ListChanges                 goa.Endpoint
+	WaitForChanges              goa.Endpoint
+	StartBuild                  goa.Endpoint
+	DropBuild                   goa.Endpoint
+	GetBuild                    goa.Endpoint
+	GetTestFindings             goa.Endpoint
+	ListBuilderAssignments      goa.Endpoint
+	WaitForBuilderAssignment    goa.Endpoint
+	GetBuilderAssignment        goa.Endpoint
+	ListTestWriterAssignments   goa.Endpoint
+	WaitForTestWriterAssignment goa.Endpoint
+	GetTestWriterAssignment     goa.Endpoint
+	ReportTestsFinished         goa.Endpoint
+	ReviewVerification          goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "surla" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
-		GoldenPath:                NewGoldenPathEndpoint(s),
-		ProposeChange:             NewProposeChangeEndpoint(s),
-		ReviseChange:              NewReviseChangeEndpoint(s),
-		ConfirmIntent:             NewConfirmIntentEndpoint(s),
-		GetChange:                 NewGetChangeEndpoint(s),
-		DeclineRevision:           NewDeclineRevisionEndpoint(s),
-		PreviewArchitecture:       NewPreviewArchitectureEndpoint(s),
-		DraftOverride:             NewDraftOverrideEndpoint(s),
-		StartLiveTarget:           NewStartLiveTargetEndpoint(s),
-		StopLiveTarget:            NewStopLiveTargetEndpoint(s),
-		GetLiveTarget:             NewGetLiveTargetEndpoint(s),
-		VerifyChange:              NewVerifyChangeEndpoint(s),
-		GetVerification:           NewGetVerificationEndpoint(s),
-		ListVerifications:         NewListVerificationsEndpoint(s),
-		ApproveMerge:              NewApproveMergeEndpoint(s),
-		Diff:                      NewDiffEndpoint(s),
-		ConfigureModel:            NewConfigureModelEndpoint(s),
-		GetModelConnection:        NewGetModelConnectionEndpoint(s),
-		HandOverModelSettings:     NewHandOverModelSettingsEndpoint(s),
-		InitProject:               NewInitProjectEndpoint(s),
-		GenerateCode:              NewGenerateCodeEndpoint(s),
-		CheckProject:              NewCheckProjectEndpoint(s),
-		UpdateDependencies:        NewUpdateDependenciesEndpoint(s),
-		ReadCheckOutput:           NewReadCheckOutputEndpoint(s),
-		ListTraces:                NewListTracesEndpoint(s),
-		RefreshStory:              NewRefreshStoryEndpoint(s),
-		GetStoryRefresh:           NewGetStoryRefreshEndpoint(s),
-		UpdateDraft:               NewUpdateDraftEndpoint(s),
-		GetTeam:                   NewGetTeamEndpoint(s),
-		ShowTeamPane:              NewShowTeamPaneEndpoint(s),
-		StartTeamAgents:           NewStartTeamAgentsEndpoint(s),
-		ListTeamAgentOptions:      NewListTeamAgentOptionsEndpoint(s),
-		DismissTeamNotice:         NewDismissTeamNoticeEndpoint(s),
-		OpenViews:                 NewOpenViewsEndpoint(s),
-		MergeChange:               NewMergeChangeEndpoint(s),
-		ListChanges:               NewListChangesEndpoint(s),
-		WaitForChanges:            NewWaitForChangesEndpoint(s),
-		StartBuild:                NewStartBuildEndpoint(s),
-		DropBuild:                 NewDropBuildEndpoint(s),
-		GetBuild:                  NewGetBuildEndpoint(s),
-		GetTestFindings:           NewGetTestFindingsEndpoint(s),
-		ListBuilderAssignments:    NewListBuilderAssignmentsEndpoint(s),
-		GetBuilderAssignment:      NewGetBuilderAssignmentEndpoint(s),
-		ListTestWriterAssignments: NewListTestWriterAssignmentsEndpoint(s),
-		GetTestWriterAssignment:   NewGetTestWriterAssignmentEndpoint(s),
-		ReportTestsFinished:       NewReportTestsFinishedEndpoint(s),
-		ReviewVerification:        NewReviewVerificationEndpoint(s),
+		GoldenPath:                  NewGoldenPathEndpoint(s),
+		ProposeChange:               NewProposeChangeEndpoint(s),
+		ReviseChange:                NewReviseChangeEndpoint(s),
+		ConfirmIntent:               NewConfirmIntentEndpoint(s),
+		GetChange:                   NewGetChangeEndpoint(s),
+		DeclineRevision:             NewDeclineRevisionEndpoint(s),
+		PreviewArchitecture:         NewPreviewArchitectureEndpoint(s),
+		DraftOverride:               NewDraftOverrideEndpoint(s),
+		StartLiveTarget:             NewStartLiveTargetEndpoint(s),
+		StopLiveTarget:              NewStopLiveTargetEndpoint(s),
+		GetLiveTarget:               NewGetLiveTargetEndpoint(s),
+		VerifyChange:                NewVerifyChangeEndpoint(s),
+		GetVerification:             NewGetVerificationEndpoint(s),
+		ListVerifications:           NewListVerificationsEndpoint(s),
+		ApproveMerge:                NewApproveMergeEndpoint(s),
+		Diff:                        NewDiffEndpoint(s),
+		ConfigureModel:              NewConfigureModelEndpoint(s),
+		GetModelConnection:          NewGetModelConnectionEndpoint(s),
+		HandOverModelSettings:       NewHandOverModelSettingsEndpoint(s),
+		InitProject:                 NewInitProjectEndpoint(s),
+		GenerateCode:                NewGenerateCodeEndpoint(s),
+		CheckProject:                NewCheckProjectEndpoint(s),
+		UpdateDependencies:          NewUpdateDependenciesEndpoint(s),
+		ReadCheckOutput:             NewReadCheckOutputEndpoint(s),
+		ListTraces:                  NewListTracesEndpoint(s),
+		RefreshStory:                NewRefreshStoryEndpoint(s),
+		GetStoryRefresh:             NewGetStoryRefreshEndpoint(s),
+		UpdateDraft:                 NewUpdateDraftEndpoint(s),
+		GetTeam:                     NewGetTeamEndpoint(s),
+		ShowTeamPane:                NewShowTeamPaneEndpoint(s),
+		StartTeamAgents:             NewStartTeamAgentsEndpoint(s),
+		ListTeamAgentOptions:        NewListTeamAgentOptionsEndpoint(s),
+		DismissTeamNotice:           NewDismissTeamNoticeEndpoint(s),
+		OpenViews:                   NewOpenViewsEndpoint(s),
+		MergeChange:                 NewMergeChangeEndpoint(s),
+		ListChanges:                 NewListChangesEndpoint(s),
+		WaitForChanges:              NewWaitForChangesEndpoint(s),
+		StartBuild:                  NewStartBuildEndpoint(s),
+		DropBuild:                   NewDropBuildEndpoint(s),
+		GetBuild:                    NewGetBuildEndpoint(s),
+		GetTestFindings:             NewGetTestFindingsEndpoint(s),
+		ListBuilderAssignments:      NewListBuilderAssignmentsEndpoint(s),
+		WaitForBuilderAssignment:    NewWaitForBuilderAssignmentEndpoint(s),
+		GetBuilderAssignment:        NewGetBuilderAssignmentEndpoint(s),
+		ListTestWriterAssignments:   NewListTestWriterAssignmentsEndpoint(s),
+		WaitForTestWriterAssignment: NewWaitForTestWriterAssignmentEndpoint(s),
+		GetTestWriterAssignment:     NewGetTestWriterAssignmentEndpoint(s),
+		ReportTestsFinished:         NewReportTestsFinishedEndpoint(s),
+		ReviewVerification:          NewReviewVerificationEndpoint(s),
 	}
 }
 
@@ -161,8 +165,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetBuild = m(e.GetBuild)
 	e.GetTestFindings = m(e.GetTestFindings)
 	e.ListBuilderAssignments = m(e.ListBuilderAssignments)
+	e.WaitForBuilderAssignment = m(e.WaitForBuilderAssignment)
 	e.GetBuilderAssignment = m(e.GetBuilderAssignment)
 	e.ListTestWriterAssignments = m(e.ListTestWriterAssignments)
+	e.WaitForTestWriterAssignment = m(e.WaitForTestWriterAssignment)
 	e.GetTestWriterAssignment = m(e.GetTestWriterAssignment)
 	e.ReportTestsFinished = m(e.ReportTestsFinished)
 	e.ReviewVerification = m(e.ReviewVerification)
@@ -532,6 +538,15 @@ func NewListBuilderAssignmentsEndpoint(s Service) goa.Endpoint {
 	}
 }
 
+// NewWaitForBuilderAssignmentEndpoint returns an endpoint function that calls
+// the method "wait_for_builder_assignment" of service "surla".
+func NewWaitForBuilderAssignmentEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*WaitForBuilderAssignmentPayload)
+		return s.WaitForBuilderAssignment(ctx, p)
+	}
+}
+
 // NewGetBuilderAssignmentEndpoint returns an endpoint function that calls the
 // method "get_builder_assignment" of service "surla".
 func NewGetBuilderAssignmentEndpoint(s Service) goa.Endpoint {
@@ -546,6 +561,15 @@ func NewGetBuilderAssignmentEndpoint(s Service) goa.Endpoint {
 func NewListTestWriterAssignmentsEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		return s.ListTestWriterAssignments(ctx)
+	}
+}
+
+// NewWaitForTestWriterAssignmentEndpoint returns an endpoint function that
+// calls the method "wait_for_test_writer_assignment" of service "surla".
+func NewWaitForTestWriterAssignmentEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*WaitForTestWriterAssignmentPayload)
+		return s.WaitForTestWriterAssignment(ctx, p)
 	}
 }
 

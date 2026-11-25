@@ -327,17 +327,16 @@ func TestInitProjectEmitsMCPProgress(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(final.Result.StructuredContent, &res))
 	assert.Equal(t, fakeInitialCommit, res.Commit)
-	require.Len(t, events, 2)
-	assert.Equal(t, capturedProgressEvent{
-		progress: 0,
-		total:    2,
-		message:  "Generating, building, testing, and committing the starter project",
-	}, events[0])
-	assert.Equal(t, capturedProgressEvent{
-		progress: 1,
-		total:    2,
-		message:  "Publishing the initialized starter workspace",
-	}, events[1])
+	want := []string{
+		"Resolving the service's Go modules", "Generating the service's code", "Building and testing the service",
+		"Resolving the test module's Go modules", "Generating the test module's code", "Building and testing the test module",
+		"Committing the starter project", "Publishing the starter project into the folder",
+	}
+	require.Len(t, events, len(want))
+	require.Len(t, want, initProgressSteps)
+	for i, message := range want {
+		assert.Equal(t, capturedProgressEvent{progress: float64(i), total: initProgressSteps, message: message}, events[i])
+	}
 }
 
 // TestNewAndInitProjectPreserveSignificantPathWhitespace verifies that

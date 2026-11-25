@@ -44,6 +44,7 @@ func TestOperationPolicyCoversEveryTool(t *testing.T) {
 		"start_build": {CallerUser}, "get_build": {CallerUser, CallerGuide, CallerBuilder, CallerTestWriter}, "get_test_findings": {CallerUser},
 		"list_builder_assignments": {CallerBuilder}, "get_builder_assignment": {CallerBuilder},
 		"list_test_writer_assignments": {CallerTestWriter}, "get_test_writer_assignment": {CallerTestWriter},
+		"wait_for_builder_assignment": {CallerBuilder}, "wait_for_test_writer_assignment": {CallerTestWriter},
 		"report_tests_finished": {CallerTestWriter},
 	}
 	assert.Len(t, expected, len(gensurla.MethodNames))

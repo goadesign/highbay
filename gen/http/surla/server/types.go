@@ -1014,6 +1014,15 @@ type GetTeamResponseBody struct {
 	SavedChoices map[string]*RoleAgentChoiceResponseBody `form:"saved_choices" json:"saved_choices" xml:"saved_choices"`
 	// Dismissed project notices.
 	DismissedNotices []string `form:"dismissed_notices" json:"dismissed_notices" xml:"dismissed_notices"`
+	// Whether Chorus serves this team: not_used when workers run outside Herdr and
+	// never use it; connected after Surla's latest read of the team's Chorus view
+	// succeeded; unavailable after that read failed or when the team's space has
+	// no Chorus connection. While unavailable no Chorus reminder reaches a worker:
+	// workers wait on Surla with wait_for_builder_assignment and
+	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
+	// prompt. Absent before a team space exists or before the first read settled
+	// it.
+	ChorusStatus *string `form:"chorus_status,omitempty" json:"chorus_status,omitempty" xml:"chorus_status,omitempty"`
 }
 
 // StartTeamAgentsResponseBody is the type of the "surla" service
@@ -1063,14 +1072,23 @@ type MergeChangeResponseBody struct {
 type ListChangesResponseBody struct {
 	// Saved Change Cards, most recently saved first.
 	Changes []*ChangeListItemResponseBody `form:"changes" json:"changes" xml:"changes"`
-	// Opaque value for change detection. Compare it only for equality; the
-	// returned fields contain the facts this operation makes readable.
+	// Opaque value for change detection. It changes whenever the listed cards, a
+	// card's get_build view (including the builder's branch head_commit and latest
+	// check), approval_available, initializing_phase, the owner's Story
+	// evaluation, get_team, or get_live_target changes; list_changes items carry
+	// no build or branch fields, so read get_build for those facts. Compare it
+	// only for equality.
 	Version string `form:"version" json:"version" xml:"version"`
 	// Whether approve_merge can record approvals on this server: true when the
 	// server runs Checkpoint 4 verification, as every server surla starts does,
 	// and any stored promotion settings could be resolved; false when the server
 	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable bool `form:"approval_available" json:"approval_available" xml:"approval_available"`
+	// What init_project is doing now, as a short sentence for the user, such as
+	// "Resolving the service's Go modules"; absent when no initialization is
+	// running. A first initialization downloads Go modules and can take a few
+	// minutes. version changes with it, so wait_for_changes reports each phase.
+	InitializingPhase *string `form:"initializing_phase,omitempty" json:"initializing_phase,omitempty" xml:"initializing_phase,omitempty"`
 }
 
 // WaitForChangesResponseBody is the type of the "surla" service
@@ -1159,6 +1177,17 @@ type ListBuilderAssignmentsResponseBody struct {
 	Assignments []*BuilderAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
 }
 
+// WaitForBuilderAssignmentResponseBody is the type of the "surla" service
+// "wait_for_builder_assignment" endpoint HTTP response body.
+type WaitForBuilderAssignmentResponseBody struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_builder_assignments returns it; empty otherwise.
+	Assignments []*BuilderAssignmentResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string `form:"version" json:"version" xml:"version"`
+}
+
 // GetBuilderAssignmentResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body.
 type GetBuilderAssignmentResponseBody struct {
@@ -1195,6 +1224,17 @@ type GetBuilderAssignmentResponseBody struct {
 type ListTestWriterAssignmentsResponseBody struct {
 	// The open build's assignment while it needs this role; empty otherwise.
 	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+}
+
+// WaitForTestWriterAssignmentResponseBody is the type of the "surla" service
+// "wait_for_test_writer_assignment" endpoint HTTP response body.
+type WaitForTestWriterAssignmentResponseBody struct {
+	// The open build's assignment while it needs this role, exactly as
+	// list_test_writer_assignments returns it; empty otherwise.
+	Assignments []*TestWriterAssignmentItemResponseBody `form:"assignments" json:"assignments" xml:"assignments"`
+	// Opaque value naming this list. Pass it as since_version to wait until the
+	// list differs; compare it only for equality.
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // GetTestWriterAssignmentResponseBody is the type of the "surla" service
@@ -4394,6 +4434,25 @@ type ListBuilderAssignmentsForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// WaitForBuilderAssignmentForbiddenResponseBody is the type of the "surla"
+// service "wait_for_builder_assignment" endpoint HTTP response body for the
+// "forbidden" error.
+type WaitForBuilderAssignmentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetBuilderAssignmentNoBuildResponseBody is the type of the "surla" service
 // "get_builder_assignment" endpoint HTTP response body for the "no_build"
 // error.
@@ -4519,6 +4578,25 @@ type GetBuilderAssignmentForbiddenResponseBody struct {
 // service "list_test_writer_assignments" endpoint HTTP response body for the
 // "forbidden" error.
 type ListTestWriterAssignmentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// WaitForTestWriterAssignmentForbiddenResponseBody is the type of the "surla"
+// service "wait_for_test_writer_assignment" endpoint HTTP response body for
+// the "forbidden" error.
+type WaitForTestWriterAssignmentForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4876,6 +4954,12 @@ type AmbiguityQuestionResponseBody struct {
 	Question string `form:"question" json:"question" xml:"question"`
 	// Concrete resolution choices.
 	Options []string `form:"options" json:"options" xml:"options"`
+	// The option that this revision's draft design, Story, examples and preserved
+	// behaviors already implement. confirm_intent accepts only this answer for the
+	// question; the user asks the coding agent to revise the change before
+	// confirming any other. Absent when every option works with the draft as it
+	// stands.
+	DraftOption *string `json:"draft_option,omitempty"`
 }
 
 // ExampleItemResponseBody is used to define fields on response body types.
@@ -5408,7 +5492,8 @@ type TeamRoleStateResponseBody struct {
 	State string `form:"state" json:"state" xml:"state"`
 	// Reported block kind, or why a running agent needs the user: silent when it
 	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds.
+	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
+	// reachable and so no reminder can arrive.
 	Attention string `form:"attention" json:"attention" xml:"attention"`
 	// held when Chorus reports a watcher, gone after its absence grace, unknown
 	// otherwise.
@@ -5553,6 +5638,21 @@ type BuilderProgressResponseBody struct {
 	// True once the builder read this assignment in full with
 	// get_builder_assignment.
 	Read bool `form:"read" json:"read" xml:"read"`
+	// The build's builder branch, surla/build-<n>.
+	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
+	// The commit the builder's branch points at, returned by get_build and
+	// reflected in list_changes.version (start_build omits it before any branch
+	// commit exists, and list_changes items carry no branch field): present while
+	// the build is still building, once the branch exists and points at another
+	// commit than the one the build started from. Omitted in other states. A
+	// passed build records its verified candidate_commit in taking.
+	HeadCommit *string `form:"head_commit,omitempty" json:"head_commit,omitempty" xml:"head_commit,omitempty"`
+	// Whether the builder's latest completed check_project in this build passed;
+	// absent until one completed. The check covered the builder's working folder
+	// as it was then, committed or not.
+	LastCheckPassed *bool `form:"last_check_passed,omitempty" json:"last_check_passed,omitempty" xml:"last_check_passed,omitempty"`
+	// When that check_project completed; absent with last_check_passed.
+	LastCheckAt *string `form:"last_check_at,omitempty" json:"last_check_at,omitempty" xml:"last_check_at,omitempty"`
 }
 
 // TestWriterProgressResponseBody is used to define fields on response body
@@ -5896,6 +5996,15 @@ type CP1AnalysisAmbiguityRequestBody struct {
 	// selects and what follows from it. The requester's answer must be exactly one
 	// of these strings.
 	Options []*string `form:"options,omitempty" json:"options,omitempty" xml:"options,omitempty"`
+	// The one string in options, character for character, that the draft design,
+	// Story, examples and preserved behaviors you send with this proposal already
+	// implement. Set it whenever choosing another option would require changing
+	// any of them. The user can then confirm only this option on the page; when
+	// they want another, the page sends them back to you, and you revise the
+	// change (revise_change) so the draft implements their choice before they
+	// confirm. Omit it only when every option works with the draft exactly as it
+	// stands.
+	DraftOption *string `form:"draft_option,omitempty" json:"draft_option,omitempty" xml:"draft_option,omitempty"`
 }
 
 // CP1AnalysisExampleRequestBody is used to define fields on request body types.
@@ -10482,8 +10591,9 @@ func NewUpdateDraftResponseBody(res *surla.DraftUpdateResult) *UpdateDraftRespon
 // "get_team" endpoint of the "surla" service.
 func NewGetTeamResponseBody(res *surla.TeamSnapshot) *GetTeamResponseBody {
 	body := &GetTeamResponseBody{
-		Team:      res.Team,
-		HerdrMode: res.HerdrMode,
+		Team:         res.Team,
+		HerdrMode:    res.HerdrMode,
+		ChorusStatus: res.ChorusStatus,
 	}
 	if res.Roles != nil {
 		body.Roles = make([]*TeamRoleStateResponseBody, len(res.Roles))
@@ -10596,6 +10706,7 @@ func NewListChangesResponseBody(res *surla.ChangeList) *ListChangesResponseBody 
 	body := &ListChangesResponseBody{
 		Version:           res.Version,
 		ApprovalAvailable: res.ApprovalAvailable,
+		InitializingPhase: res.InitializingPhase,
 	}
 	if res.Changes != nil {
 		body.Changes = make([]*ChangeListItemResponseBody, len(res.Changes))
@@ -10775,6 +10886,28 @@ func NewListBuilderAssignmentsResponseBody(res *surla.BuilderAssignmentList) *Li
 	return body
 }
 
+// NewWaitForBuilderAssignmentResponseBody builds the HTTP response body from
+// the result of the "wait_for_builder_assignment" endpoint of the "surla"
+// service.
+func NewWaitForBuilderAssignmentResponseBody(res *surla.BuilderAssignmentWait) *WaitForBuilderAssignmentResponseBody {
+	body := &WaitForBuilderAssignmentResponseBody{
+		Version: res.Version,
+	}
+	if res.Assignments != nil {
+		body.Assignments = make([]*BuilderAssignmentResponseBody, len(res.Assignments))
+		for i, val := range res.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = marshalSurlaBuilderAssignmentToBuilderAssignmentResponseBody(val)
+		}
+	} else {
+		body.Assignments = []*BuilderAssignmentResponseBody{}
+	}
+	return body
+}
+
 // NewGetBuilderAssignmentResponseBody builds the HTTP response body from the
 // result of the "get_builder_assignment" endpoint of the "surla" service.
 func NewGetBuilderAssignmentResponseBody(res *surla.BuilderAssignment) *GetBuilderAssignmentResponseBody {
@@ -10825,6 +10958,28 @@ func NewGetBuilderAssignmentResponseBody(res *surla.BuilderAssignment) *GetBuild
 // service.
 func NewListTestWriterAssignmentsResponseBody(res *surla.TestWriterAssignmentList) *ListTestWriterAssignmentsResponseBody {
 	body := &ListTestWriterAssignmentsResponseBody{}
+	if res.Assignments != nil {
+		body.Assignments = make([]*TestWriterAssignmentItemResponseBody, len(res.Assignments))
+		for i, val := range res.Assignments {
+			if val == nil {
+				body.Assignments[i] = nil
+				continue
+			}
+			body.Assignments[i] = marshalSurlaTestWriterAssignmentItemToTestWriterAssignmentItemResponseBody(val)
+		}
+	} else {
+		body.Assignments = []*TestWriterAssignmentItemResponseBody{}
+	}
+	return body
+}
+
+// NewWaitForTestWriterAssignmentResponseBody builds the HTTP response body
+// from the result of the "wait_for_test_writer_assignment" endpoint of the
+// "surla" service.
+func NewWaitForTestWriterAssignmentResponseBody(res *surla.TestWriterAssignmentWait) *WaitForTestWriterAssignmentResponseBody {
+	body := &WaitForTestWriterAssignmentResponseBody{
+		Version: res.Version,
+	}
 	if res.Assignments != nil {
 		body.Assignments = make([]*TestWriterAssignmentItemResponseBody, len(res.Assignments))
 		for i, val := range res.Assignments {
@@ -13421,6 +13576,21 @@ func NewListBuilderAssignmentsForbiddenResponseBody(res *goa.ServiceError) *List
 	return body
 }
 
+// NewWaitForBuilderAssignmentForbiddenResponseBody builds the HTTP response
+// body from the result of the "wait_for_builder_assignment" endpoint of the
+// "surla" service.
+func NewWaitForBuilderAssignmentForbiddenResponseBody(res *goa.ServiceError) *WaitForBuilderAssignmentForbiddenResponseBody {
+	body := &WaitForBuilderAssignmentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetBuilderAssignmentNoBuildResponseBody builds the HTTP response body
 // from the result of the "get_builder_assignment" endpoint of the "surla"
 // service.
@@ -13524,6 +13694,21 @@ func NewGetBuilderAssignmentForbiddenResponseBody(res *goa.ServiceError) *GetBui
 // "surla" service.
 func NewListTestWriterAssignmentsForbiddenResponseBody(res *goa.ServiceError) *ListTestWriterAssignmentsForbiddenResponseBody {
 	body := &ListTestWriterAssignmentsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewWaitForTestWriterAssignmentForbiddenResponseBody builds the HTTP response
+// body from the result of the "wait_for_test_writer_assignment" endpoint of
+// the "surla" service.
+func NewWaitForTestWriterAssignmentForbiddenResponseBody(res *goa.ServiceError) *WaitForTestWriterAssignmentForbiddenResponseBody {
+	body := &WaitForTestWriterAssignmentForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -14144,11 +14329,29 @@ func NewGetTestFindingsPayload(changeID string) *surla.GetTestFindingsPayload {
 	return v
 }
 
+// NewWaitForBuilderAssignmentPayload builds a surla service
+// wait_for_builder_assignment endpoint payload.
+func NewWaitForBuilderAssignmentPayload(sinceVersion *string) *surla.WaitForBuilderAssignmentPayload {
+	v := &surla.WaitForBuilderAssignmentPayload{}
+	v.SinceVersion = sinceVersion
+
+	return v
+}
+
 // NewGetBuilderAssignmentPayload builds a surla service get_builder_assignment
 // endpoint payload.
 func NewGetBuilderAssignmentPayload(changeID string) *surla.GetBuilderAssignmentPayload {
 	v := &surla.GetBuilderAssignmentPayload{}
 	v.ChangeID = changeID
+
+	return v
+}
+
+// NewWaitForTestWriterAssignmentPayload builds a surla service
+// wait_for_test_writer_assignment endpoint payload.
+func NewWaitForTestWriterAssignmentPayload(sinceVersion *string) *surla.WaitForTestWriterAssignmentPayload {
+	v := &surla.WaitForTestWriterAssignmentPayload{}
+	v.SinceVersion = sinceVersion
 
 	return v
 }
@@ -14736,6 +14939,9 @@ func ValidateCP1AnalysisAmbiguityRequestBody(body *CP1AnalysisAmbiguityRequestBo
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
 	}
+	if body.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.draft_option", *body.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
+	}
 	return
 }
 
@@ -14761,6 +14967,9 @@ func validateCP1AnalysisAmbiguityRequestBody(body *CP1AnalysisAmbiguityRequestBo
 		if e != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern(path+".options[*]", *e, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 		}
+	}
+	if body.DraftOption != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern(path+".draft_option", *body.DraftOption, "[^\\t\\n\\v\\f\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"))
 	}
 	return
 }

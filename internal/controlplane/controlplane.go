@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -189,6 +190,11 @@ type (
 		// OpenViews mints and opens a browser session through the project credential owner.
 		// It must never return a private link in the operation's model-visible result.
 		OpenViews func(context.Context) error
+		// Stopping ends when the host begins to stop this server, before it
+		// stops serving requests and well before Close. The workers' waiting
+		// reads return then, so an open wait never holds the host's shutdown.
+		// Nil never ends.
+		Stopping context.Context
 	}
 
 	// storedChangeCard holds a versioned Change Card alongside its authenticated
@@ -374,6 +380,24 @@ type (
 		// changesWait and changesPoll override defaultChangesWait and
 		// defaultChangesPoll in tests when positive.
 		changesWait, changesPoll time.Duration
+		// assignmentWait and assignmentPoll override defaultAssignmentWait
+		// and defaultAssignmentPoll in tests when positive.
+		assignmentWait, assignmentPoll time.Duration
+		// initPhase is the sentence naming what the admitted init_project is
+		// doing, for the change list; nil when none is admitted.
+		initPhase atomic.Pointer[string]
+		// initTurn admits one init_project at a time. Its holder alone
+		// publishes and clears initPhase; a second call waits here and
+		// publishes nothing until the first has cleared its phase.
+		initTurn sync.Mutex
+		// initGate orders the change list's workspace reads against an
+		// initialization taking the workspace for minutes. A list read
+		// holds it shared while it decides whether an initialization runs
+		// and, when none does, while it reads the workspace. The admitted
+		// init_project takes it exclusively to publish its first phase, so
+		// it takes the workspace only after every such read has finished,
+		// and every later read sees the phase and stays off the workspace.
+		initGate sync.RWMutex
 		// newGenerator constructs a fresh scaffold.Generator for each
 		// InitProject call when non-nil.
 		newGenerator func() scaffold.Generator
@@ -426,7 +450,10 @@ type (
 		// reportWorker runs it and drains before stores close.
 		reports *reportChecker
 		// openViews is injected by the project composition root and owns private browser exchange.
-		openViews    func(context.Context) error
+		openViews func(context.Context) error
+		// stopping is closed when the host begins to stop the server; nil
+		// when the host gave no such signal.
+		stopping     <-chan struct{}
 		reportWorker sync.WaitGroup
 		// buildStartOps counts accepted starts, admitted through workspaceMu's
 		// existing shutdown barrier and drained before stores and evaluators close.
@@ -607,6 +634,9 @@ func newWithWorkspaceGitTimeout(
 		reportWake:             make(chan struct{}, 1),
 		team:                   *opts.Team,
 		openViews:              opts.OpenViews,
+	}
+	if opts.Stopping != nil {
+		cp.stopping = opts.Stopping.Done()
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())

@@ -29,6 +29,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // TestBuilderCopyCheckPublishesOnlyInItsCopy exercises both public service
@@ -85,6 +86,27 @@ func TestBuilderCopyCheckPublishesOnlyInItsCopy(t *testing.T) {
 			assertFileContent(t, filepath.Join(project, "go.sum"), "user sum\n")
 			assertFileContent(t, filepath.Join(project, "go.work"), "user workspace\n")
 			assert.Empty(t, cp.builderCopyTurn)
+
+			// The user's read of the build shows the check as a recorded fact
+			// of its own, and the branch's commit only once the builder made one.
+			user := asCaller("alice@example.com", CallerUser)
+			build := mustStartedBuild(t, cp, user, card.ChangeID)
+			require.NotNil(t, build.Builder.Branch)
+			assert.Regexp(t, `^surla/build-\d+$`, *build.Builder.Branch)
+			require.NotNil(t, build.Builder.LastCheckPassed)
+			assert.True(t, *build.Builder.LastCheckPassed)
+			require.NotNil(t, build.Builder.LastCheckAt)
+			checkedAt, err := time.Parse(time.RFC3339Nano, *build.Builder.LastCheckAt)
+			require.NoError(t, err)
+			assert.WithinDuration(t, time.Now(), checkedAt, time.Minute)
+			assert.Nil(t, build.Builder.HeadCommit, "the branch is still at the build's base")
+			runGitForTest(t, working, "-c", "user.name=builder", "-c", "user.email=builder@example.com", "commit", "--quiet", "--allow-empty", "-m", "Build the change")
+			tip, err := exec.Command("git", "-C", working, "rev-parse", "HEAD").Output()
+			require.NoError(t, err)
+			build = mustStartedBuild(t, cp, user, card.ChangeID)
+			require.NotNil(t, build.Builder.HeadCommit)
+			assert.Equal(t, strings.TrimSpace(string(tip)), *build.Builder.HeadCommit)
+			assert.True(t, *build.Builder.LastCheckPassed, "a commit changes nothing about the recorded check")
 		})
 	}
 }
@@ -395,4 +417,196 @@ func configureBuilderCopyCheck(t *testing.T, cp *ControlPlane) {
 	cp.checkTimeout = time.Minute
 	cp.checkWorkDir = filepath.Join(cp.cards.dir, "check-work")
 	require.NoError(t, os.Mkdir(cp.checkWorkDir, 0o700))
+}
+
+// TestBuilderCheckVerdictStaysWithTheCheckedBuild runs the real check while
+// another start replaces the open build: the verdict of the copy that was
+// checked is not put on the later start, it is saved while the copy's turn
+// is still held, and the next check, of the later start's copy, is recorded
+// on that start.
+func TestBuilderCheckVerdictStaysWithTheCheckedBuild(t *testing.T) {
+	installFakeDocker(t)
+	_, cp, _, assignment := buildGenerationFixture(t, ".")
+	configureBuilderCopyCheck(t, cp)
+	daemon := newFakeDockerDaemon(t)
+	t.Setenv("DOCKER_HOST", daemon.hostURI)
+	writeBuildDesignFixture(t, assignment.WorkingFolder, "go.sum", "builder sum\n")
+	first, found, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.True(t, found)
+	later := first.StartedAt.Add(time.Hour)
+	var replace sync.Once
+	daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+		replace.Do(func() {
+			assert.Len(t, cp.builderCopyTurn, 1, "the check holds the copy's turn")
+			cp.mu.Lock()
+			defer cp.mu.Unlock()
+			saved, _, err := cp.cards.loadOpenBuild()
+			if assert.NoError(t, err) {
+				saved.StartedAt = later
+				assert.NoError(t, cp.cards.saveOpenBuild(saved))
+			}
+		})
+		return "checked builder copy\n", "", 0
+	})
+	builder := asCaller("alice@example.com", CallerBuilder)
+	checked, err := cp.CheckProject(builder)
+	require.NoError(t, err)
+	require.True(t, checked.Passed)
+	replaced, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.True(t, replaced.StartedAt.Equal(later))
+	assert.Nil(t, replaced.Builder.LastCheckPassed, "the earlier start's verdict is not the later start's")
+
+	checked, err = cp.CheckProject(builder)
+	require.NoError(t, err)
+	require.True(t, checked.Passed)
+	recorded, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.NotNil(t, recorded.Builder.LastCheckPassed)
+	assert.True(t, *recorded.Builder.LastCheckPassed)
+	assert.Empty(t, cp.builderCopyTurn)
+}
+
+// TestBuilderCheckRecordBelongsToItsBuild keeps a completed check's verdict
+// on the build that was open when the check started: a check of another
+// start records nothing, and building the change again starts without one.
+func TestBuilderCheckRecordBelongsToItsBuild(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{})
+	agreed := confirmAgreedTerms(t, cp, "chg")
+	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	require.NoError(t, err)
+	open, found, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.True(t, found)
+
+	cp.recordBuilderCheck(t.Context(), open.StartedAt.Add(-time.Second), true)
+	cp.recordBuilderCheck(t.Context(), time.Time{}, true)
+	unchanged, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	assert.Nil(t, unchanged.Builder.LastCheckPassed)
+	assert.Nil(t, unchanged.Builder.LastCheckAt)
+
+	cp.recordBuilderCheck(t.Context(), open.StartedAt, false)
+	recorded, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	require.NotNil(t, recorded.Builder.LastCheckPassed)
+	assert.False(t, *recorded.Builder.LastCheckPassed)
+	require.NotNil(t, recorded.Builder.LastCheckAt)
+
+	_, err = startBuildAgain(t, cp, agreedUser, "chg", agreed.RequestRevision)
+	require.NoError(t, err)
+	again, _, err := cp.cards.loadOpenBuild()
+	require.NoError(t, err)
+	assert.Nil(t, again.Builder.LastCheckPassed)
+	assert.Nil(t, again.Builder.LastCheckAt)
+}
+
+// TestCheckFailuresSaveTheirReasonOnBothSpans drives check_project and
+// update_dependencies through the request wrapper and the real helper into
+// each kind of failure, and reads the saved diagnostics history: the request
+// span and the operation span both end in error with the same sentence, which
+// holds no path. A refusal whose tool error instructs the caller stays an
+// outcome with the history's own wording.
+func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
+	installFakeDocker(t)
+	const (
+		timeLimit = "Stopped at its time limit of 1.5s. Call it again; a first run downloads modules and images."
+		deadline  = "Stopped at the caller's deadline before it finished. Call it again with more time."
+		canceled  = "Canceled before it finished: the caller went away or the server was stopping."
+		engine    = "The local container engine could not be used. The tool error says what to do; then call again."
+		helper    = "The check helper failed before it produced a result. Call it again."
+		outcome   = "Operation ended; consult its result for the outcome."
+	)
+	for _, tc := range []struct {
+		// state is the failure the operations run into.
+		state string
+		// summary and status are what both saved spans show.
+		summary, status string
+	}{
+		{"time limit", timeLimit, "error"},
+		{"caller deadline", deadline, "error"},
+		{"canceled", canceled, "error"},
+		{"engine unavailable", engine, "error"},
+		{"helper failed", helper, "error"},
+		{"busy", outcome, "unset"},
+	} {
+		t.Run(tc.state, func(t *testing.T) {
+			provider := sdktrace.NewTracerProvider()
+			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
+			cp := newControlPlane(t, Options{
+				WorkspaceDir: newShopModule(t, nil), TracerProvider: provider,
+				Checker: candidate.NewContainerRunner(), CheckHelper: testCheckHelper(t), CheckTimeout: time.Minute,
+			})
+			readCheckBuilderFixture(t, cp)
+			daemon := newFakeDockerDaemon(t)
+			t.Setenv("DOCKER_HOST", daemon.hostURI)
+			// cancelCall ends the call in flight, as a caller going away does.
+			var cancelCall atomic.Pointer[context.CancelFunc]
+			switch tc.state {
+			case "time limit":
+				cp.checkTimeout = 1500 * time.Millisecond
+				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+					time.Sleep(4 * time.Second)
+					return "", "", 0
+				})
+			case "caller deadline":
+				// The configured limit stays a minute; the caller allows less.
+				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+					time.Sleep(4 * time.Second)
+					return "", "", 0
+				})
+			case "canceled":
+				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+					if cancel := cancelCall.Load(); cancel != nil {
+						(*cancel)()
+					}
+					time.Sleep(2 * time.Second)
+					return "", "", 0
+				})
+			case "engine unavailable":
+				t.Setenv("DOCKER_HOST", "tcp://192.0.2.1:2375")
+			case "helper failed":
+				cp.checkHelper = func() *exec.Cmd { return exec.Command(filepath.Join(t.TempDir(), "missing-helper")) }
+			case "busy":
+				cp.builderCopyTurn <- struct{}{}
+				defer func() { <-cp.builderCopyTurn }()
+			}
+			endpoints := gensurla.NewEndpoints(cp)
+			applyOperationPolicy(endpoints, cp.tracer("surla/requests"))
+			calls := map[string]func(context.Context, any) (any, error){
+				"check_project": endpoints.CheckProject, "update_dependencies": endpoints.UpdateDependencies,
+			}
+			for name, call := range calls {
+				ctx, cancel := context.WithCancel(asCaller("alice@example.com", CallerBuilder))
+				if tc.state == "caller deadline" {
+					ctx, cancel = context.WithTimeout(ctx, 1500*time.Millisecond)
+				}
+				cancelCall.Store(&cancel)
+				_, err := call(ctx, nil)
+				cancel()
+				require.Error(t, err, name)
+				if tc.state == "engine unavailable" {
+					var service *goa.ServiceError
+					require.ErrorAs(t, err, &service, "callers still get the service error")
+					assert.Equal(t, "unavailable", service.Name)
+				}
+			}
+			history, err := cp.traces.List("alice@example.com", "all", 50, nil)
+			require.NoError(t, err)
+			saved := map[string]*gensurla.TraceSpan{}
+			for _, record := range history.Spans {
+				saved[record.Name] = record
+			}
+			for name := range calls {
+				for _, span := range []string{"surla.request." + name, "surla.controlplane." + name} {
+					record := saved[span]
+					require.NotNil(t, record, span)
+					assert.Equal(t, tc.summary, record.Summary, span)
+					assert.Equal(t, tc.status, record.Status, span)
+					assert.NotContains(t, record.Summary, string(filepath.Separator), span)
+				}
+			}
+		})
+	}
 }

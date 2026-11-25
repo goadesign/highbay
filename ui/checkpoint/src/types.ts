@@ -18,6 +18,7 @@ export interface AgentPolicyItem {
 }
 
 export interface AmbiguityQuestion {
+  draft_option?: string;
   id: string;
   options: string[];
   question: string;
@@ -55,6 +56,10 @@ export interface ArchitecturePreviewResult {
 }
 
 export interface BuilderProgress {
+  branch?: string;
+  head_commit?: string;
+  last_check_at?: string;
+  last_check_passed?: boolean;
   read: boolean;
 }
 
@@ -107,6 +112,7 @@ export interface ChangeCardResult {
 export interface ChangeList {
   approval_available: boolean;
   changes: ChangeListItem[];
+  initializing_phase?: string;
   version: string;
 }
 
@@ -393,6 +399,7 @@ export interface TeamRoleState {
 }
 
 export interface TeamSnapshot {
+  chorus_status?: "connected" | "unavailable" | "not_used";
   dismissed_notices: ("single_agent_family" | "outside_herdr" | "herdr_unavailable")[];
   herdr_mode: "attached" | "available" | "unavailable";
   roles: TeamRoleState[];
@@ -1022,6 +1029,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "options"
     ],
     "properties": {
+      "draft_option": {
+        "type": "string"
+      },
       "id": {
         "type": "string"
       },
@@ -1210,6 +1220,19 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "read"
     ],
     "properties": {
+      "branch": {
+        "type": "string"
+      },
+      "head_commit": {
+        "type": "string"
+      },
+      "last_check_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "last_check_passed": {
+        "type": "boolean"
+      },
       "read": {
         "type": "boolean"
       }
@@ -1637,6 +1660,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "items": {
           "$ref": "#/$defs/ChangeListItem"
         }
+      },
+      "initializing_phase": {
+        "type": "string"
       },
       "version": {
         "type": "string"
@@ -3201,6 +3227,14 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "dismissed_notices"
     ],
     "properties": {
+      "chorus_status": {
+        "type": "string",
+        "enum": [
+          "connected",
+          "unavailable",
+          "not_used"
+        ]
+      },
       "dismissed_notices": {
         "type": "array",
         "items": {

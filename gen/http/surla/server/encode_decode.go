@@ -4236,6 +4236,74 @@ func EncodeListBuilderAssignmentsError(encoder func(context.Context, http.Respon
 	}
 }
 
+// EncodeWaitForBuilderAssignmentResponse returns an encoder for responses
+// returned by the surla wait_for_builder_assignment endpoint.
+func EncodeWaitForBuilderAssignmentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.BuilderAssignmentWait)
+		enc := encoder(ctx, w)
+		body := NewWaitForBuilderAssignmentResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeWaitForBuilderAssignmentRequest returns a decoder for requests sent to
+// the surla wait_for_builder_assignment endpoint.
+func DecodeWaitForBuilderAssignmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*surla.WaitForBuilderAssignmentPayload, error) {
+	return func(r *http.Request) (*surla.WaitForBuilderAssignmentPayload, error) {
+		var payload *surla.WaitForBuilderAssignmentPayload
+		var (
+			sinceVersion *string
+			err          error
+		)
+		sinceVersionRaw := r.URL.Query().Get("since_version")
+		if sinceVersionRaw != "" {
+			sinceVersion = &sinceVersionRaw
+		}
+		if sinceVersion != nil {
+			if utf8.RuneCountInString(*sinceVersion) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("since_version", *sinceVersion, utf8.RuneCountInString(*sinceVersion), 128, false))
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewWaitForBuilderAssignmentPayload(sinceVersion)
+
+		return payload, nil
+	}
+}
+
+// EncodeWaitForBuilderAssignmentError returns an encoder for errors returned
+// by the wait_for_builder_assignment surla endpoint.
+func EncodeWaitForBuilderAssignmentError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewWaitForBuilderAssignmentForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetBuilderAssignmentResponse returns an encoder for responses returned
 // by the surla get_builder_assignment endpoint.
 func EncodeGetBuilderAssignmentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -4397,6 +4465,74 @@ func EncodeListTestWriterAssignmentsError(encoder func(context.Context, http.Res
 				body = formatter(ctx, res)
 			} else {
 				body = NewListTestWriterAssignmentsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeWaitForTestWriterAssignmentResponse returns an encoder for responses
+// returned by the surla wait_for_test_writer_assignment endpoint.
+func EncodeWaitForTestWriterAssignmentResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*surla.TestWriterAssignmentWait)
+		enc := encoder(ctx, w)
+		body := NewWaitForTestWriterAssignmentResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeWaitForTestWriterAssignmentRequest returns a decoder for requests sent
+// to the surla wait_for_test_writer_assignment endpoint.
+func DecodeWaitForTestWriterAssignmentRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*surla.WaitForTestWriterAssignmentPayload, error) {
+	return func(r *http.Request) (*surla.WaitForTestWriterAssignmentPayload, error) {
+		var payload *surla.WaitForTestWriterAssignmentPayload
+		var (
+			sinceVersion *string
+			err          error
+		)
+		sinceVersionRaw := r.URL.Query().Get("since_version")
+		if sinceVersionRaw != "" {
+			sinceVersion = &sinceVersionRaw
+		}
+		if sinceVersion != nil {
+			if utf8.RuneCountInString(*sinceVersion) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("since_version", *sinceVersion, utf8.RuneCountInString(*sinceVersion), 128, false))
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewWaitForTestWriterAssignmentPayload(sinceVersion)
+
+		return payload, nil
+	}
+}
+
+// EncodeWaitForTestWriterAssignmentError returns an encoder for errors
+// returned by the wait_for_test_writer_assignment surla endpoint.
+func EncodeWaitForTestWriterAssignmentError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewWaitForTestWriterAssignmentForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -4832,7 +4968,8 @@ func unmarshalCP1AnalysisRequestBodyToSurlaCP1Analysis(v *CP1AnalysisRequestBody
 // *CP1AnalysisAmbiguityRequestBody.
 func unmarshalCP1AnalysisAmbiguityRequestBodyToSurlaCP1AnalysisAmbiguity(v *CP1AnalysisAmbiguityRequestBody) *surla.CP1AnalysisAmbiguity {
 	res := &surla.CP1AnalysisAmbiguity{
-		Question: *v.Question,
+		Question:    *v.Question,
+		DraftOption: v.DraftOption,
 	}
 	res.Options = make([]string, len(v.Options))
 	for i, val := range v.Options {
@@ -4861,8 +4998,9 @@ func unmarshalCP1AnalysisExampleRequestBodyToSurlaCP1AnalysisExample(v *CP1Analy
 // *surla.AmbiguityQuestion.
 func marshalSurlaAmbiguityQuestionToAmbiguityQuestionResponseBody(v *surla.AmbiguityQuestion) *AmbiguityQuestionResponseBody {
 	res := &AmbiguityQuestionResponseBody{
-		ID:       v.ID,
-		Question: v.Question,
+		ID:          v.ID,
+		Question:    v.Question,
+		DraftOption: v.DraftOption,
 	}
 	if v.Options != nil {
 		res.Options = make([]string, len(v.Options))
@@ -5942,7 +6080,11 @@ func marshalSurlaStartedBuildToStartedBuildResponseBody(v *surla.StartedBuild) *
 // *surla.BuilderProgress.
 func marshalSurlaBuilderProgressToBuilderProgressResponseBody(v *surla.BuilderProgress) *BuilderProgressResponseBody {
 	res := &BuilderProgressResponseBody{
-		Read: v.Read,
+		Read:            v.Read,
+		Branch:          v.Branch,
+		HeadCommit:      v.HeadCommit,
+		LastCheckPassed: v.LastCheckPassed,
+		LastCheckAt:     v.LastCheckAt,
 	}
 
 	return res

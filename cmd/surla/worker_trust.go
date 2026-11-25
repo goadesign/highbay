@@ -1,6 +1,9 @@
 // This file checks explicit client permission policies against each role's
 // required MCP operations and pre-populates missing user-scoped folder trust
-// outside git working copies before project roles launch.
+// outside git working copies before project roles launch. Skipping permission
+// prompts for a role skips its tool-policy check only: a client still asks
+// for folder trust at startup, so missing folder trust is written and an
+// explicit untrusted folder is refused for every role.
 package main
 
 import (
@@ -40,9 +43,11 @@ type (
 
 	// clientTrustPlan groups the folders and required MCP operations for one coding client.
 	clientTrustPlan struct {
-		// folders lists unique absolute folders needing folder trust when Yolo is false.
+		// folders lists the unique absolute folders of every role of this
+		// client; each needs folder trust whether or not the role skips prompts.
 		folders []string
-		// checkPolicy is true when at least one role for this client runs with Yolo false.
+		// checkPolicy is true when at least one role for this client runs with
+		// Yolo false and so depends on the client's MCP tool policies.
 		checkPolicy bool
 		// requiredServers lists MCP servers ("surla", and "chorus" when needed) in deterministic order.
 		requiredServers []string
@@ -224,7 +229,8 @@ func collectProtectedRoots(targets []project.WorkerTrustTarget) []string {
 	return roots
 }
 
-// buildClientTrustPlans aggregates non-Yolo folders and role-specific MCP tools per client.
+// buildClientTrustPlans aggregates every role's folders, and the MCP tools of
+// the roles that keep permission prompts, per client.
 func buildClientTrustPlans(
 	targets []project.WorkerTrustTarget,
 ) (map[string]clientTrustPlan, []string) {
@@ -261,14 +267,14 @@ func buildClientTrustPlans(
 			if target.RequireChorus {
 				addTools(&plan, "chorus", chorusMCPToolNames)
 			}
-			for _, candidate := range []string{target.ProjectDir, target.Folder} {
-				if !filepath.IsAbs(candidate) {
-					continue
-				}
-				cleaned := filepath.Clean(candidate)
-				if !slices.Contains(plan.folders, cleaned) {
-					plan.folders = append(plan.folders, cleaned)
-				}
+		}
+		for _, candidate := range []string{target.ProjectDir, target.Folder} {
+			if !filepath.IsAbs(candidate) {
+				continue
+			}
+			cleaned := filepath.Clean(candidate)
+			if !slices.Contains(plan.folders, cleaned) {
+				plan.folders = append(plan.folders, cleaned)
 			}
 		}
 		plans[target.Client] = plan
@@ -289,7 +295,10 @@ func resolveTargetRole(target project.WorkerTrustTarget) string {
 
 // requiredSurlaTools returns the minimal Surla MCP operations that role
 // necessarily invokes to execute its assigned startup and workflow. Optional
-// operations such as start_live_target do not block ordinary worker admission.
+// operations such as start_live_target do not block ordinary worker admission,
+// and neither do the waiting reads wait_for_builder_assignment and
+// wait_for_test_writer_assignment: a worker whose client filters them out
+// reads its assignment list again instead.
 func requiredSurlaTools(role string) []string {
 	switch role {
 	case "guide":
@@ -343,8 +352,10 @@ func preflightClientWorkerTrust(
 	switch client {
 	case "codex":
 		codexPath := filepath.Join(cmp.Or(getenv("CODEX_HOME"), filepath.Join(home, ".codex")), "config.toml")
+		// requiredServers is empty for roles that skip prompts, which leaves
+		// the folder rules as the only refusal.
 		checkPath(codexPath, "config.toml", func(p string) error {
-			if !plan.checkPolicy {
+			if !plan.checkPolicy && len(plan.folders) == 0 {
 				return nil
 			}
 			return checkCodexWorkerPolicy(p, plan.requiredServers, plan.folders)
@@ -378,7 +389,7 @@ func preflightClientWorkerTrust(
 		})
 		trustedPath := geminiTrustedFoldersPath(home, getenv)
 		checkPath(trustedPath, filepath.Base(trustedPath), func(p string) error {
-			if !plan.checkPolicy {
+			if len(plan.folders) == 0 {
 				return nil
 			}
 			return checkGeminiTrustedFoldersPolicy(p, plan.folders)
@@ -882,8 +893,10 @@ func locateCodexProjectEntries(doc []byte) (map[string]codexProjectLocation, boo
 	return projects, projectsInline, nil
 }
 
-// mergeClaudeProjectTrust ensures projects[folder].hasTrustDialogAccepted is
-// true in Claude Code's .claude.json, preserving exact numbers and other keys.
+// mergeClaudeProjectTrust sets projects[folder].hasTrustDialogAccepted to
+// true in Claude Code's .claude.json for each folder whose entry has no such
+// key, preserving exact numbers and other keys. A value the file already
+// holds is kept, false included: that client then asks the user itself.
 func mergeClaudeProjectTrust(
 	ctx context.Context, lockDir, path string, protectedRoots, folders []string,
 ) error {
@@ -911,13 +924,10 @@ func mergeClaudeProjectTrust(
 				}
 			}
 			if rawTrusted, hasTrusted := entry["hasTrustDialogAccepted"]; hasTrusted {
-				trusted, ok := rawTrusted.(bool)
-				if !ok {
+				if _, ok := rawTrusted.(bool); !ok {
 					return nil, false, fmt.Errorf("%s: projects[%q].hasTrustDialogAccepted must be a boolean", path, folder)
 				}
-				if trusted {
-					continue
-				}
+				continue
 			}
 			entry["hasTrustDialogAccepted"] = true
 			projects[folder] = entry

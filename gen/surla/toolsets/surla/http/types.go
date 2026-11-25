@@ -728,14 +728,23 @@ type (
 	ListChangesResultTransport struct {
 		// Saved Change Cards, most recently saved first.
 		Changes []*ChangeListItemTransport `json:"changes"`
-		// Opaque value for change detection. Compare it only for equality; the
-		// returned fields contain the facts this operation makes readable.
+		// Opaque value for change detection. It changes whenever the listed cards, a
+		// card's get_build view (including the builder's branch head_commit and latest
+		// check), approval_available, initializing_phase, the owner's Story
+		// evaluation, get_team, or get_live_target changes; list_changes items carry
+		// no build or branch fields, so read get_build for those facts. Compare it
+		// only for equality.
 		Version *string `json:"version"`
 		// Whether approve_merge can record approvals on this server: true when the
 		// server runs Checkpoint 4 verification, as every server surla starts does,
 		// and any stored promotion settings could be resolved; false when the server
 		// runs no verification or resolving the promotion target fails.
 		ApprovalAvailable *bool `json:"approval_available"`
+		// What init_project is doing now, as a short sentence for the user, such as
+		// "Resolving the service's Go modules"; absent when no initialization is
+		// running. A first initialization downloads Go modules and can take a few
+		// minutes. version changes with it, so wait_for_changes reports each phase.
+		InitializingPhase *string `json:"initializing_phase,omitempty"`
 	}
 	// ListTestWriterAssignmentsPayloadTransport is the internal JSON transport type for ListTestWriterAssignmentsPayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1288,6 +1297,48 @@ type (
 		// Exactly one of running, completed or not_completed.
 		State *State `json:"state"`
 	}
+	// WaitForBuilderAssignmentPayloadTransport is the internal JSON transport type for WaitForBuilderAssignmentPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForBuilderAssignmentPayloadTransport struct {
+		// version returned by your last wait_for_builder_assignment call. Omit it on
+		// the first call.
+		SinceVersion *string `json:"since_version,omitempty"`
+	}
+	// WaitForBuilderAssignmentResultTransport is the internal JSON transport type for WaitForBuilderAssignmentResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForBuilderAssignmentResultTransport struct {
+		// The open build's assignment while it needs this role, exactly as
+		// list_builder_assignments returns it; empty otherwise.
+		Assignments []*BuilderAssignmentTransport `json:"assignments"`
+		// Opaque value naming this list. Pass it as since_version to wait until the
+		// list differs; compare it only for equality.
+		Version *string `json:"version"`
+	}
+	// WaitForTestWriterAssignmentPayloadTransport is the internal JSON transport type for WaitForTestWriterAssignmentPayload.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForTestWriterAssignmentPayloadTransport struct {
+		// version returned by your last wait_for_test_writer_assignment call. Omit it
+		// on the first call.
+		SinceVersion *string `json:"since_version,omitempty"`
+	}
+	// WaitForTestWriterAssignmentResultTransport is the internal JSON transport type for WaitForTestWriterAssignmentResult.
+	// It lives in the toolset-local http package and is used only for JSON
+	// decode + validation (missing-field detection) before transforming into
+	// the public tool type.
+	WaitForTestWriterAssignmentResultTransport struct {
+		// The open build's assignment while it needs this role, exactly as
+		// list_test_writer_assignments returns it; empty otherwise.
+		Assignments []*TestWriterAssignmentItemTransport `json:"assignments"`
+		// Opaque value naming this list. Pass it as since_version to wait until the
+		// list differs; compare it only for equality.
+		Version *string `json:"version"`
+	}
 	// AgentPolicyItemTransport is the internal JSON transport type for AgentPolicyItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
 	// decode + validation (missing-field detection) before transforming into
@@ -1332,6 +1383,12 @@ type (
 		Question *string `json:"question"`
 		// Concrete resolution choices.
 		Options []string `json:"options"`
+		// The option that this revision's draft design, Story, examples and preserved
+		// behaviors already implement. confirm_intent accepts only this answer for the
+		// question; the user asks the coding agent to revise the change before
+		// confirming any other. Absent when every option works with the draft as it
+		// stands.
+		DraftOption *string `json:"draft_option,omitempty"`
 	}
 	// ApprovalItemTransport is the internal JSON transport type for ApprovalItemTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1462,6 +1519,21 @@ type (
 		// True once the builder read this assignment in full with
 		// get_builder_assignment.
 		Read *bool `json:"read"`
+		// The build's builder branch, surla/build-<n>.
+		Branch *string `json:"branch,omitempty"`
+		// The commit the builder's branch points at, returned by get_build and
+		// reflected in list_changes.version (start_build omits it before any branch
+		// commit exists, and list_changes items carry no branch field): present while
+		// the build is still building, once the branch exists and points at another
+		// commit than the one the build started from. Omitted in other states. A
+		// passed build records its verified candidate_commit in taking.
+		HeadCommit *string `json:"head_commit,omitempty"`
+		// Whether the builder's latest completed check_project in this build passed;
+		// absent until one completed. The check covered the builder's working folder
+		// as it was then, committed or not.
+		LastCheckPassed *bool `json:"last_check_passed,omitempty"`
+		// When that check_project completed; absent with last_check_passed.
+		LastCheckAt *string `json:"last_check_at,omitempty"`
 	}
 	// BuilderVerificationReportTransport is the internal JSON transport type for BuilderVerificationReportTransport.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1518,6 +1590,15 @@ type (
 		// selects and what follows from it. The requester's answer must be exactly one
 		// of these strings.
 		Options []*string `json:"options"`
+		// The one string in options, character for character, that the draft design,
+		// Story, examples and preserved behaviors you send with this proposal already
+		// implement. Set it whenever choosing another option would require changing
+		// any of them. The user can then confirm only this option on the page; when
+		// they want another, the page sends them back to you, and you revise the
+		// change (revise_change) so the draft implements their choice before they
+		// confirm. Omit it only when every option works with the draft exactly as it
+		// stands.
+		DraftOption *string `json:"draft_option,omitempty"`
 	}
 	// CP1AnalysisExampleTransport is the internal JSON transport type for CP1AnalysisExampleTransport.
 	// It lives in the toolset-local http package and is used only for JSON

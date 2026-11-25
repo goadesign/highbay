@@ -84,7 +84,9 @@ func TestStartBuildOnlyAtTheConfirmedRevisionInForce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, confirmed.RequestRevision, started.Build.RequestRevision)
 	assert.True(t, started.Build.InForce)
-	assert.Equal(t, &gensurla.BuilderProgress{Read: false}, started.Build.Builder)
+	branch := "surla/build-1"
+	assert.Equal(t, &gensurla.BuilderProgress{Read: false, Branch: &branch}, started.Build.Builder,
+		"a build that just started names its builder branch and has no branch commit or check yet")
 	assert.Equal(t, gensurla.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
 	assert.False(t, started.Build.TestWriter.Read)
 	startedAt, err := time.Parse(time.RFC3339Nano, started.Build.StartedAt)
@@ -630,6 +632,8 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 		{name: "list_builder_assignments", method: http.MethodGet, path: "/assignments/builder", arguments: `{}`, callers: []string{"builder"}},
 		{name: "get_builder_assignment", method: http.MethodGet, path: "/assignments/builder/chg", arguments: `{"change_id":"chg"}`, callers: []string{"builder"}},
 		{name: "list_test_writer_assignments", method: http.MethodGet, path: "/assignments/test-writer", arguments: `{}`, callers: []string{"tests"}},
+		{name: "wait_for_builder_assignment", method: http.MethodGet, path: "/assignment-updates/builder", arguments: `{}`, callers: []string{"builder"}},
+		{name: "wait_for_test_writer_assignment", method: http.MethodGet, path: "/assignment-updates/test-writer", arguments: `{}`, callers: []string{"tests"}},
 		{name: "get_test_writer_assignment", method: http.MethodGet, path: "/assignments/test-writer/chg", arguments: `{"change_id":"chg"}`, callers: []string{"tests"}},
 		{name: "report_tests_finished", method: http.MethodPost, path: "/assignments/test-writer/chg/finished", body: fmt.Sprintf(`{"request_revision":%q,"coverage_statements":[]}`, card.RequestRevision),
 			arguments: `{"change_id":"chg","request_revision":"` + card.RequestRevision + `","coverage_statements":[]}`, callers: []string{"tests"}},

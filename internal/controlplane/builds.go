@@ -48,6 +48,12 @@ type (
 	builderAssignment struct {
 		// Read records that the builder read the assignment in full.
 		Read bool `json:"read"`
+		// LastCheckPassed and LastCheckAt record the builder's latest
+		// completed check_project of this build: its verdict and when it
+		// completed. Both are absent until one completed; a new build
+		// starts without them.
+		LastCheckPassed *bool      `json:"last_check_passed,omitempty"`
+		LastCheckAt     *time.Time `json:"last_check_at,omitempty"`
 	}
 )
 
@@ -220,6 +226,18 @@ func (c *ControlPlane) changeBuild(
 	if err != nil {
 		return nil, err
 	}
+	// The branch's current commit is a fact of a build still in progress.
+	// Once a verification passed, the build names the verified commit and
+	// stays the same when its branch later moves or disappears.
+	if _, building := build.Taking.AsBuilding(); building {
+		head, err := c.builderBranchHead(ctx, saved)
+		if err != nil {
+			return nil, err
+		}
+		if head != "" {
+			build.Builder.HeadCommit = &head
+		}
+	}
 	return &gensurla.ChangeBuild{
 		ChangeID: changeID, DraftedBeforeDrop: draftPredatesDrop,
 		Build: gensurla.NewBuildStarted(build),
@@ -244,7 +262,7 @@ func startedBuild(held heldBuild, taking gensurla.BuildTaking) (*gensurla.Starte
 		RequestRevision:    held.file.RequestRevision,
 		StartedAt:          held.file.StartedAt.UTC().Format(time.RFC3339Nano),
 		InForce:            held.inForce,
-		Builder:            builderProgress(held.file.Builder),
+		Builder:            builderProgress(held.file.Builder, held.file.Number),
 		TestWriter:         testWriterProgress(held),
 		RequiredTestCount:  len(required),
 		RequiredTests:      required,
@@ -297,9 +315,36 @@ func testWriterAssignmentItem(held heldBuild) *gensurla.TestWriterAssignmentItem
 	}
 }
 
-// builderProgress converts the builder's saved assignment.
-func builderProgress(saved builderAssignment) *gensurla.BuilderProgress {
-	return &gensurla.BuilderProgress{Read: saved.Read}
+// builderProgress converts the builder's saved assignment of build number.
+// It leaves head_commit to the reads that look at the repository.
+func builderProgress(saved builderAssignment, number int) *gensurla.BuilderProgress {
+	branch := testwriter.BuilderRole.Branch(number)
+	progress := &gensurla.BuilderProgress{Read: saved.Read, Branch: &branch, LastCheckPassed: saved.LastCheckPassed}
+	if saved.LastCheckAt != nil {
+		at := saved.LastCheckAt.UTC().Format(time.RFC3339Nano)
+		progress.LastCheckAt = &at
+	}
+	return progress
+}
+
+// builderBranchHead returns the commit the builder's branch of saved points
+// at, or "" while the branch is missing or still at the build's base.
+func (c *ControlPlane) builderBranchHead(ctx context.Context, saved buildFile) (string, error) {
+	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
+	defer cancel()
+	workspace, _, _ := c.currentWorkspaceTarget()
+	repo, _, err := resolveStarterRepo(work, workspace)
+	if err != nil {
+		return "", err
+	}
+	tips, err := buildBranchTips(work, repo, saved.Number)
+	if err != nil {
+		return "", err
+	}
+	if tip := tips[testwriter.BuilderRole.Branch(saved.Number)]; tip != saved.Base {
+		return tip, nil
+	}
+	return "", nil
 }
 
 // testWriterProgress converts the test writer's saved assignment and the

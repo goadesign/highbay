@@ -25,6 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -399,7 +400,9 @@ func newStdioRelay(state *project.State, credential string) *stdioRelay {
 // no server accepted the connection, the session binds again and sends it
 // once more; any other failure is reported, so a tool that changes state is
 // never sent twice.
-func (s *stdioSession) dispatch(ctx context.Context, payload []byte, raw *jsonrpc.RawRequest) ([]byte, error) {
+func (s *stdioSession) dispatch(
+	ctx context.Context, payload []byte, raw *jsonrpc.RawRequest, notify func([]byte),
+) ([]byte, error) {
 	method := ""
 	if raw != nil && !raw.Invalid {
 		method = raw.Method
@@ -418,7 +421,7 @@ func (s *stdioSession) dispatch(ctx context.Context, payload []byte, raw *jsonrp
 				return stdioErrorResponse(raw, err), nil
 			}
 		}
-		status, body, err := relay.send(ctx, payload, raw)
+		status, body, err := relay.send(ctx, payload, raw, notify)
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -498,20 +501,106 @@ func (s *stdioSession) dropRelay(relay *stdioRelay) {
 }
 
 // send posts payload to the server as the relay's agent and returns the
-// HTTP status and body.
-func (r *stdioRelay) send(ctx context.Context, payload []byte, raw *jsonrpc.RawRequest) (status int, body []byte, err error) {
+// HTTP status and the response body. A request that asks for progress may be
+// answered as an event stream: send passes each notification of the stream
+// to notify as it arrives, such as the phases of init_project, and returns
+// the stream's one response.
+func (r *stdioRelay) send(
+	ctx context.Context, payload []byte, raw *jsonrpc.RawRequest, notify func([]byte),
+) (status int, body []byte, err error) {
 	req, err := newStdioMCPRequest(ctx, r.endpoint, payload, raw)
 	if err != nil {
 		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+r.credential)
+	if stdioAsksProgress(raw) {
+		req.Header.Set("Accept", "application/json, text/event-stream")
+	}
 	resp, err := r.http.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer func() { err = errors.Join(err, resp.Body.Close()) }()
+	if media, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); media == "text/event-stream" {
+		body, err = readStdioEventStream(resp.Body, notify)
+		return resp.StatusCode, body, err
+	}
 	body, err = io.ReadAll(resp.Body)
 	return resp.StatusCode, body, err
+}
+
+// stdioAsksProgress reports whether the frame's _meta carries a progress
+// token, the client's request for progress notifications.
+func stdioAsksProgress(raw *jsonrpc.RawRequest) bool {
+	if raw == nil || raw.Invalid || len(raw.Params) == 0 {
+		return false
+	}
+	var params struct {
+		// Meta carries the client's progress token.
+		Meta map[string]json.RawMessage `json:"_meta"`
+	}
+	if json.Unmarshal(raw.Params, &params) != nil {
+		return false
+	}
+	token, asks := params.Meta["progressToken"]
+	return asks && !bytes.Equal(bytes.TrimSpace(token), []byte("null"))
+}
+
+// readStdioEventStream reads a server-sent event stream whose events each
+// hold one JSON-RPC message in their data. It passes every message without
+// an ID, a notification, to notify and returns the one message with an ID,
+// the response; data that is no JSON object is skipped. Comment lines, which the server sends to keep a long call
+// alive, and other fields are skipped. Only an event ended by its blank line
+// counts: data cut off by the end of the stream is dropped, as the server's
+// own reader drops it. The response ends the read at once, without waiting
+// for the stream to close, so a connection that fails afterwards cannot
+// discard it. A stream that ends without a complete response is an error:
+// the call's outcome is unknown.
+func readStdioEventStream(stream io.Reader, notify func([]byte)) ([]byte, error) {
+	reader := bufio.NewReader(stream)
+	var data, response []byte
+	flush := func() {
+		message := bytes.TrimSpace(data)
+		data = nil
+		if len(message) == 0 {
+			return
+		}
+		var envelope struct {
+			// ID is present on a response and absent on a notification.
+			ID json.RawMessage `json:"id"`
+		}
+		switch {
+		case json.Unmarshal(message, &envelope) != nil:
+			// Not a JSON-RPC message: neither forwarded nor a response.
+		case len(envelope.ID) == 0:
+			notify(message)
+		default:
+			response = message
+		}
+	}
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			// The stream ended: a line without its newline and an event
+			// without its blank line were both cut off, and are dropped.
+			if !errors.Is(err, io.EOF) {
+				return nil, err
+			}
+			return nil, errors.New("the server's event stream ended without a response")
+		}
+		line = bytes.TrimRight(line, "\r\n")
+		switch {
+		case len(line) == 0:
+			if flush(); response != nil {
+				return response, nil
+			}
+		case bytes.HasPrefix(line, []byte("data:")):
+			if len(data) > 0 {
+				data = append(data, '\n')
+			}
+			data = append(data, bytes.TrimPrefix(bytes.TrimPrefix(line, []byte("data:")), []byte(" "))...)
+		}
+	}
 }
 
 // serveStdioDiscovery answers one discovery request with the in-process
@@ -547,7 +636,7 @@ func serveStdioLoop(
 	ctx context.Context,
 	in io.Reader,
 	out io.Writer,
-	dispatch func(context.Context, []byte, *jsonrpc.RawRequest) ([]byte, error),
+	dispatch func(context.Context, []byte, *jsonrpc.RawRequest, func([]byte)) ([]byte, error),
 ) error {
 	frames := make(chan stdioFrame)
 	go readStdioFrames(ctx, in, frames)
@@ -596,7 +685,14 @@ loop:
 				if idKey != "" {
 					defer cancels.release(idKey, seq)
 				}
-				resp, err := dispatch(reqCtx, frame.payload, rawPtr)
+				// A notification the server sends while it works, such as
+				// progress, goes out at once, ahead of the response.
+				notify := func(message []byte) {
+					if line := compactStdioJSON(message); len(line) > 0 && reqCtx.Err() == nil {
+						writer.writeLine(line)
+					}
+				}
+				resp, err := dispatch(reqCtx, frame.payload, rawPtr, notify)
 				if reqCtx.Err() != nil {
 					return
 				}

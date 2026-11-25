@@ -129,6 +129,7 @@ func TestOneBuildPassRemainsReadableAfterItsBranchMovesOrDisappears(t *testing.T
 			assert.Equal(t, candidate, passed.CandidateCommit)
 			assert.Equal(t, branch, passed.CandidateBranch)
 			assert.True(t, passed.BaseInBranch)
+			assert.Nil(t, started.Builder.HeadCommit, "a passed build names its verified commit, not the branch's current one")
 			after, err := cp.ListChanges(user)
 			require.NoError(t, err)
 			assert.Equal(t, before.Version, after.Version)

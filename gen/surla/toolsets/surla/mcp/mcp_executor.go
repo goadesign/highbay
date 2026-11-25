@@ -91,6 +91,10 @@ func NewMCPExecutor(caller mcpruntime.Caller) runtime.ToolCallExecutor {
 			return runtime.ExecuteMCPTool(ctx, caller, call, "update_draft", gensurla.SpecUpdateDraft())
 		case gensurla.VerifyChange:
 			return runtime.ExecuteMCPTool(ctx, caller, call, "verify_change", gensurla.SpecVerifyChange())
+		case gensurla.WaitForBuilderAssignment:
+			return runtime.ExecuteMCPTool(ctx, caller, call, "wait_for_builder_assignment", gensurla.SpecWaitForBuilderAssignment())
+		case gensurla.WaitForTestWriterAssignment:
+			return runtime.ExecuteMCPTool(ctx, caller, call, "wait_for_test_writer_assignment", gensurla.SpecWaitForTestWriterAssignment())
 		default:
 			return runtime.Executed(failedMCPToolResult(
 				call.Name,

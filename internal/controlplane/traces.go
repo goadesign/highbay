@@ -63,6 +63,17 @@ type (
 	httpReadKey struct{}
 )
 
+// unsavedWaitSpans names the waiting reads' request boundary spans and inner
+// spans, which the diagnostics history never saves.
+var unsavedWaitSpans = map[string]bool{
+	"surla.request.wait_for_changes":                true,
+	waitForChangesSpan:                              true,
+	"surla.request.wait_for_builder_assignment":     true,
+	waitForBuilderAssignmentSpan:                    true,
+	"surla.request.wait_for_test_writer_assignment": true,
+	waitForTestWriterAssignmentSpan:                 true,
+}
+
 // ListTraces reads one bounded disk window belonging to the authenticated
 // caller. A missing Options.TracerProvider returns not_implemented with setup
 // instructions. An invalid cursor is a recoverable input error; storage
@@ -104,11 +115,11 @@ func (t diagnosticTracer) Start(
 ) (context.Context, trace.Span) {
 	principal, ok := PrincipalFromContext(ctx)
 	next, span := t.Tracer.Start(ctx, name, opts...)
-	// The browser waiting read stays in exported traces without adding periodic observations to local operation history.
-	// Both its request boundary span and its inner span are excluded, even when they end with an error, as a page
-	// closing its open wait does: the views page always keeps one waiting read open, and saving either would fill
-	// the history and push real operations out of view.
-	if !span.IsRecording() || !ok || name == "surla.request.wait_for_changes" || name == waitForChangesSpan {
+	// The waiting reads stay in exported traces without adding periodic observations to local operation history.
+	// Both their request boundary spans and their inner spans are excluded, even when they end with an error, as a
+	// page closing its open wait does: the views page always keeps one waiting read open and a waiting worker
+	// repeats its own, and saving either would fill the history and push real operations out of view.
+	if !span.IsRecording() || !ok || unsavedWaitSpans[name] {
 		return next, span
 	}
 	read, _ := ctx.Value(httpReadKey{}).(bool)
