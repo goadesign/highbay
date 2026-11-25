@@ -269,24 +269,26 @@ looks afterwards never sees them.
   be closed, Surla's own tab stayed open throughout and nothing was
   reopened: record closing and reopening the page as not exercised.
 
-**The Herdr window.** `herdr-app shot <file>` saves the window as a person
-sees it, including Surla's companion and any other overlay.
-`herdr-app status` prints the showing `space` and `tab`, the `focused_pane`,
-and the `overlays` and `errors`. Take both at every capture and look at
-the frame. Read each overlay in it: an error line in the companion is a
-finding even when the browser page looks fine.
+**The Herdr window.** `herdr-app status` prints the showing `space` and
+`tab`, the `focused_pane`, and the `overlays` and `errors`.
+`herdr-app shot <file>` saves the window as a person sees it, including
+Surla's companion and any other overlay. The window can be showing one of
+the person's other projects, so read the status before taking any image:
 
-Keep the status output. Of the frame, keep only what belongs to the study,
-and do not keep the uncropped file:
+- Take and keep the status output at every capture.
+- When the status says the study's space is the one showing, take the shot.
+  Crop it to the study's panes and Surla's overlays, leaving out the list of
+  the person's other spaces and tabs, before anyone views or receives it
+  where the tool can crop unseen. Never keep the uncropped file. Read each
+  overlay in the crop: an error line in the companion is a finding even
+  when the browser page looks fine.
+- When the status says another space is showing, take no shot. The status
+  already names the space, tab and pane, which is what a focus check needs,
+  and it lists the overlays and errors. Capture one of Surla's overlays only
+  if a tool can capture that overlay alone; otherwise record that its
+  contents could not be inspected.
 
-- When the study's space is the one showing, crop to its panes and Surla's
-  overlays, leaving out the list of the person's other spaces and tabs.
-- When another space is showing, keep no image of it. The status output
-  already says which space, tab and pane are showing, which is what a focus
-  check needs. If one of Surla's overlays is open, keep a crop of that
-  overlay alone.
-
-Give the participant the same cropped view.
+Give the participant the same rule and the same cropped view.
 
 A shot captures the app even when another window covers it, so it cannot
 show whether Herdr is in front; the application in front shows that. Do not
@@ -301,14 +303,14 @@ word for word, Herdr's `space`, `tab`, `focused_pane`, `overlays` and
 
 | When | Capture |
 | --- | --- |
-| Before the participant's first message | The Herdr window and status, and the application in front |
+| Before the participant's first message | Herdr's status, and its window when the rule above allows, and the application in front |
 | From the first message until Surla's tab appears | The application in front every 2 seconds |
-| When the agent's first Surla call returns | The Herdr window and status at about 2 and 10 seconds: is Surla's companion among `overlays`, and what does it show? |
+| When the agent's first Surla call returns | Herdr's status, and its window when the rule above allows at about 2 and 10 seconds: is Surla's companion among `overlays`, and what does it show? |
 | When the tab appears | The page at about 2, 5 and 10 seconds |
-| While an agent or Surla is working: project setup (`init_project`), the stretch between setup and the first proposal (`propose_change`), builds, tests, verification | The page's text every 15 seconds; a frame each time its heading or status changes, and at least one a minute. The Herdr window and status once a minute, and when `overlays` or `errors` change |
+| While an agent or Surla is working: project setup (`init_project`), the stretch between setup and the first proposal (`propose_change`), builds, tests, verification | The page's text every 15 seconds; a frame each time its heading or status changes, and at least one a minute. Herdr's status, and its window when the rule above allows once a minute, and when `overlays` or `errors` change |
 | Each proposal, revised proposal or other text the user must read before deciding | The page's complete text, saved word for word as a text file beside the frames, with every section, question, option and example expanded, and a frame of each part |
 | Each human decision on the page | The page just before and just after |
-| Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, the Herdr window and status, and the application in front. The row just before is the baseline: a click proves a change only against it |
+| Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, Herdr's status, and its window when the rule above allows, and the application in front. The row just before is the baseline: a click proves a change only against it |
 
 A script may take the captures. Viewing them is your job: look at every kept
 frame in the round it was taken. A saved file nobody looked at is not an
