@@ -53,8 +53,9 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 	prices := []designeval.StoryScenario{
 		{Story: "Prices", Key: "prices-cookie", Scenario: "prices_cookie", Hook: "PricesCookie"},
 	}
-	// errors is generated as package errors_, so it also proves the imports
-	// follow the package goa gen produced.
+	// errors is generated as package errors_, so the example's second case
+	// also proves its imports follow the package goa gen produced. The blank
+	// project imports no generated package, so one case covers it.
 	for _, tc := range []struct {
 		name      string
 		example   bool
@@ -64,7 +65,6 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 		required  []designeval.StoryScenario
 	}{
 		{name: "blank", service: "shop", scenarios: []string{"starts_and_listens"}},
-		{name: "blank renamed package", service: "errors", scenarios: []string{"starts_and_listens"}},
 		{name: "example", example: true, service: "shop", stories: []string{"Prices"}, required: prices,
 			scenarios: []string{"prices_tea", "prompt_override_reaches_model", "unknown_item", "prices_cookie"}},
 		{name: "example renamed package", example: true, service: "errors", stories: []string{"Prices"}, required: prices,

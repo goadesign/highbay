@@ -252,9 +252,10 @@ Questions only you can answer
 
 `deterministic` means code can check the outcome directly; `model_judged`
 means checking it needs judgment. This is a label saved with the example, for
-you and the test writer, not an automatic per-example model judge. Starter and
-written-test verification suites run their scenarios against a scripted model by
-default (no model API key needed), not the card's examples directly, while a
+you and the test writer, not an automatic per-example model judge.
+Verification runs the test module's scenarios, not the card's examples
+directly, and needs no model API key: a test of an agent plans with a
+scripted model kept in the test module. A
 stored custom [verification evaluator](REFERENCE.md#surla-verification-and-surla-promotion)
 can use configured model provider credentials: the label
 does not select how or whether a scenario runs, and configuring a **Live
@@ -600,7 +601,8 @@ processes with your file and network access, in one process group that the
 run owns and stops when it ends. A process that starts its own session leaves
 that group and keeps running. The test program starts with only `PATH`
 and a temporary folder in its environment: no model key and nothing else of
-yours. Surla's test layout plans with a scripted model during verification.
+yours. A test of an agent plans with a scripted model that the test module
+supplies.
 
 Every run records where its tests came from. For tests the test writer wrote,
 the run's result, as `verify_change`, `get_verification` and

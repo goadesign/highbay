@@ -69,9 +69,11 @@ Here is how that change reaches your branch:
    confirm. When an option requires changing the draft design, Story or
    examples (unlike the option marked **Matches current draft**), the page
    keeps your choice and gives you a one-click request for your coding agent to
-   revise the card before confirming. Starter and written-test verification
-   suites run against a **scripted model** by default with **no model API key
-   needed** (stored custom evaluators can use configured provider credentials).
+   revise the card before confirming. Verification needs **no model API
+   key**: the test program gets none, a new project's first test needs no
+   model, and a test of an agent plans with a **scripted model** kept in the
+   test module (stored custom evaluators can use configured provider
+   credentials).
    **Check: Deterministic** and **Check: Model-judged** are saved authoring
    labels for you and the test writer rather than an automatic per-example
    judge—check scenario coverage in **Build** to see how each example is
