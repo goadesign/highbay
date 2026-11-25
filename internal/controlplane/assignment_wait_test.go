@@ -166,3 +166,57 @@ func TestAssignmentWaitEndsWhenTheServerStops(t *testing.T) {
 		t.Fatal("the wait outlived the server")
 	}
 }
+
+// TestTestWriterWaitEndsOnEachVerdict follows a test writer's wait through
+// Surla's verdicts on its reports: findings keep the assignment in the list
+// with its new state, and acceptance removes it, so the wait returns an empty
+// list and the full assignment read says the tests were accepted.
+func TestTestWriterWaitEndsOnEachVerdict(t *testing.T) {
+	cp := newBuildControlPlane(t, Options{})
+	agreed := confirmAgreedTerms(t, cp, "chg")
+	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	require.NoError(t, err)
+	cp.assignmentWait, cp.assignmentPoll = time.Minute, 5*time.Millisecond
+	wait := func(since string, verdict map[string]any) *gensurla.TestWriterAssignmentWait {
+		t.Helper()
+		done := make(chan *gensurla.TestWriterAssignmentWait, 1)
+		failed := make(chan error, 1)
+		go func() {
+			got, err := cp.WaitForTestWriterAssignment(agreedTestWriter, &gensurla.WaitForTestWriterAssignmentPayload{SinceVersion: &since})
+			if err != nil {
+				failed <- err
+				return
+			}
+			done <- got
+		}()
+		editBuildFile(t, cp, "chg", savedTestWriter(verdict))
+		select {
+		case got := <-done:
+			return got
+		case err := <-failed:
+			require.NoError(t, err)
+			return nil
+		case <-time.After(10 * time.Second):
+			t.Fatal("the wait did not end on the verdict")
+			return nil
+		}
+	}
+	first, err := cp.WaitForTestWriterAssignment(agreedTestWriter, &gensurla.WaitForTestWriterAssignmentPayload{})
+	require.NoError(t, err)
+	require.Len(t, first.Assignments, 1)
+
+	at := "2026-11-13T09:30:00Z"
+	found := wait(first.Version, map[string]any{"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"}, "checked_at": at})
+	require.Len(t, found.Assignments, 1)
+	needs, ok := found.Assignments[0].Progress.Tests.AsNeedsChanges()
+	require.True(t, ok)
+	assert.Equal(t, 1, needs.FindingCount)
+
+	accepted := wait(found.Version, map[string]any{"state": "accepted", "findings": []string{}, "commit": "cccccccccccccccccccccccccccccccccccccccc", "checked_at": at})
+	assert.Empty(t, accepted.Assignments, "accepted tests leave the list")
+	assert.NotEqual(t, found.Version, accepted.Version)
+	full, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	require.NoError(t, err)
+	_, ok = full.Progress.Tests.AsAccepted()
+	assert.True(t, ok, "the full read gives the verdict the empty list does not")
+}

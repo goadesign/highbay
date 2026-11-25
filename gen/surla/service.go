@@ -511,12 +511,15 @@ type Service interface {
 	// call returned, the call waits until the list differs from it, for example
 	// because Surla's check of a report reached a verdict, the user built the
 	// change again or dropped the build, and otherwise returns the unchanged list
-	// after a bounded wait of about 30 seconds. Without since_version it returns
-	// at once. It records nothing and moves no working copy. A test writer uses it
-	// in place of repeated list calls while it waits, whether or not Chorus
-	// delivers reminders. Each call is traced but never saved in the diagnostics
-	// history list_traces reads, so a waiting test writer does not push real
-	// operations out of view.
+	// after a bounded wait of about 30 seconds. The list holds the assignment only
+	// while the role has work: a check that accepts the tests removes it, as a
+	// drop does, so an empty list alone does not say which happened;
+	// get_test_writer_assignment does. Without since_version it returns at once.
+	// It records nothing and moves no working copy. A test writer uses it in place
+	// of repeated list calls while it waits, whether or not Chorus delivers
+	// reminders. Each call is traced but never saved in the diagnostics history
+	// list_traces reads, so a waiting test writer does not push real operations
+	// out of view.
 	WaitForTestWriterAssignment(context.Context, *WaitForTestWriterAssignmentPayload) (res *TestWriterAssignmentWait, err error)
 	// Return the test writer's assignment for a change in full (the working
 	// folder, the design and Story as agreed at the built revision, the user's

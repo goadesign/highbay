@@ -338,7 +338,8 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"Run every go command as GOWORK=off",
 			"Never bring files or commits from another surla/ branch",
 			"Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Surla's verification builds and runs the application.",
-			"after reporting, do not stop and do not wait for a message: call wait_for_test_writer_assignment, passing the version it returned as since_version",
+			"after reporting, do not stop and do not wait for a message: call wait_for_test_writer_assignment, passing the version it returned as since_version, until the list it returns differs",
+			"The list is empty once your tests are accepted, and also after the user dropped or rebuilt the change, so when it differs read get_test_writer_assignment again",
 			"when your client does not offer that tool, call list_test_writer_assignments about every 30 seconds instead",
 		}},
 	} {
