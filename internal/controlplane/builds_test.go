@@ -84,7 +84,9 @@ func TestStartBuildOnlyAtTheConfirmedRevisionInForce(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, confirmed.RequestRevision, started.Build.RequestRevision)
 	assert.True(t, started.Build.InForce)
-	assert.Equal(t, &gensurla.BuilderProgress{Read: false}, started.Build.Builder)
+	branch := "surla/build-1"
+	assert.Equal(t, &gensurla.BuilderProgress{Read: false, Branch: &branch}, started.Build.Builder,
+		"a build that just started names its builder branch and has no branch commit or check yet")
 	assert.Equal(t, gensurla.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
 	assert.False(t, started.Build.TestWriter.Read)
 	startedAt, err := time.Parse(time.RFC3339Nano, started.Build.StartedAt)
