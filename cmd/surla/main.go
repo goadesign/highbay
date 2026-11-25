@@ -74,7 +74,7 @@ Commands:
                   then start Chorus when it is installed
   setup -global   register surla stdio and the /surla skill with every coding agent
                   found here, and install the companion window when Herdr is present
-  init            create a starter service with an agent and an evaluator suite
+  init            create a blank service and its evaluator suite (-example: a worked example)
   status          read this project's running server, checkpoint and team status
   stop            stop this project's server in order
   verification    set, show or remove this project's verification settings

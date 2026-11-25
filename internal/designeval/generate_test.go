@@ -801,7 +801,7 @@ func starterEvalModule(t *testing.T) (map[string]string, map[string]string, map[
 }
 
 // prepareStarterEvalModule renders the starter evaluator templates from
-// internal/scaffold/templates/eval for module example.com/shop/eval, tidies
+// internal/scaffold/templates/example/eval for module example.com/shop/eval, tidies
 // the module against Surla's own dependency versions, and returns both the
 // generator input snapshot (go.mod, go.sum, design/design.go and the
 // acceptance package, as surla init generates with it) and the complete

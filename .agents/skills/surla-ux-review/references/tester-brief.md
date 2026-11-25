@@ -225,7 +225,7 @@ the user no way forward on the screen:
   request that failed, whether or not the participant noticed it. A refusal
   the docs describe, shown with its recovery step, is not this case.
 - Text the user must read, answer or confirm told them about Surla's
-  starter sample or internals instead of their own product (see "Read the
+  starting files, worked example or internals instead of their own product (see "Read the
   page's words as the user" below). Rate it 4 when they could not answer or
   confirm without guessing. It is never cosmetic.
 
@@ -242,14 +242,18 @@ request could understand it. Text about the user's product fails when it
 only makes sense to a reader who knows what Surla starts from or how it
 works inside:
 
-- the starter sample, or that sample's features, endpoints or scenarios;
+- the blank project a new folder starts from, such as its one test that the
+  program starts;
+- Surla's worked example, a price-answering service, or its features,
+  endpoints or scenarios. A user gets it only by asking for it, so finding
+  it in a project whose user never asked is itself a finding;
 - file names, paths and generated code;
 - command-line flags of the program Surla builds and runs;
 - Goa, MCP or other framework terms the user never used.
 
 For example, a user who asked for a booking site should not be told that the
-change "replaces the starter's price lookup" or that the program "still
-takes -listen". A question in the user's own terms, such as whether a limit
+change "replaces the price lookup" or that the program "still takes
+-listen". A question in the user's own terms, such as whether a limit
 includes tax, is the page doing its job.
 
 Quote such text word for word from the saved page text. If a report gives

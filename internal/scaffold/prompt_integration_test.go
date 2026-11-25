@@ -19,7 +19,7 @@ import (
 // different generated package name without changing the prompt ID.
 func TestInitSendsRegisteredPromptReferences(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "errors")
-	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/errors", SurlaVersion: published}, RunCommand, starterGenerator(t))
+	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/errors", SurlaVersion: published, Example: true}, RunCommand, starterGenerator(t))
 	require.NoError(t, err, "Init vets the generated candidate and evaluator modules")
 	fixture, err := os.ReadFile("testdata/prompt_request_test.go.txt")
 	require.NoError(t, err)

@@ -283,10 +283,11 @@ from the folder name unless you specify one. Open product questions go onto the
 Change Card for you to answer on the page. Agent configuration folders can
 stay; the operation refuses conflicting project files.
 
-The starter has a Goa and Goa-AI service, architecture diagrams declared with
-[Model](https://github.com/goadesign/model), a first Story in
-`design/story.go`, and its required test in `eval/`. Your coding agent refines
-that Story with you and opens the browser window. You review, build, approve
+The starter is blank: a Goa and Goa-AI service with no methods yet, an
+architecture diagram declared with [Model](https://github.com/goadesign/model),
+an empty Story in `design/story.go`, and a test module in `eval/` with one
+test that the program starts. Nothing in it is about someone else's product.
+Your coding agent writes the Story with you and opens the browser window. You review, build, approve
 and merge there. To recover a closed or reloaded page, ask your coding agent to
 open it again, or use **Open Surla Window** in the Herdr companion.
 
@@ -304,7 +305,8 @@ separately installed `goa` is needed. They compile and run the design as an
 ordinary process with your file and network access.
 
 ```bash
-# Scaffold a starter service and its test module:
+# Scaffold a blank service and its test module
+# (add -example for Surla's worked example, a price-answering service):
 surla init -dir shop -module example.com/shop
 
 # Compile shop/design at 0 LLM tokens and print its

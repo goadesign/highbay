@@ -19,7 +19,7 @@ import (
 )
 
 // TestStarterRequiresAndShipsItsStory checks that newData copies the Story
-// module version Surla's go.mod requires, that the starter's go.mod requires
+// module version Surla's go.mod requires, that the example's go.mod requires
 // exactly that version, and that design/story.go, whose import of the Story
 // language is what keeps the requirement through go mod tidy, reaches the
 // generator with the other design files. It also checks that the starter
@@ -43,7 +43,7 @@ func TestStarterRequiresAndShipsItsStory(t *testing.T) {
 	run := func(_ context.Context, moduleDir, _ string, args ...string) error { return fakeGo(moduleDir, args) }
 	gen := &fakeGenerator{pkgs: []string{"shop"}, extra: map[string]string{quickstartGuide: "guide\n"}}
 	_, err = Init(t.Context(), Options{
-		Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published,
+		Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published, Example: true,
 	}, run, gen)
 	require.NoError(t, err)
 	raw, err := os.ReadFile(filepath.Join(dir, "go.mod"))
@@ -80,7 +80,7 @@ func TestStarterRequiresAndShipsItsStory(t *testing.T) {
 	// The test module's design holds the Story table rendered from the
 	// starter's Story, and its generation sees it.
 	require.Len(t, gen.inputs, 2)
-	want, requiredTests, err := designeval.StoryTests(os.DirFS(filepath.Join(dir, "eval")), starterStory)
+	want, requiredTests, err := designeval.StoryTests(os.DirFS(filepath.Join(dir, "eval")), exampleVariant.story)
 	require.NoError(t, err)
 	assert.Equal(t, []designeval.StoryScenario{
 		{Story: "Prices", Key: "prices-cookie", Scenario: "prices_cookie", Hook: "PricesCookie"},
@@ -93,20 +93,56 @@ func TestStarterRequiresAndShipsItsStory(t *testing.T) {
 }
 
 // TestStarterStoryMatchesTheShippedStory checks the literal summary Init
-// renders the starter's Story table from against the Story template, without
+// renders the example's Story table from against the Story template, without
 // evaluating it: each of its flows is declared there with its key and title,
 // and the template declares no other flow. The starter's scaffold-tagged
 // suite compares the literal with the evaluated Story.
 func TestStarterStoryMatchesTheShippedStory(t *testing.T) {
-	raw, err := templatesFS.ReadFile("templates/candidate/design/story.go.tmpl")
+	raw, err := templatesFS.ReadFile(exampleVariant.templates + "/candidate/design/story.go.tmpl")
 	require.NoError(t, err)
 	story := string(raw)
-	require.Len(t, starterStory, 1)
-	assert.Contains(t, story, fmt.Sprintf("Story(%q,", starterStory[0].Name))
-	assert.Equal(t, len(starterStory[0].Flows), strings.Count(story, "Flow("))
-	for _, flow := range starterStory[0].Flows {
+	require.Len(t, exampleVariant.story, 1)
+	assert.Contains(t, story, fmt.Sprintf("Story(%q,", exampleVariant.story[0].Name))
+	assert.Equal(t, len(exampleVariant.story[0].Flows), strings.Count(story, "Flow("))
+	for _, flow := range exampleVariant.story[0].Flows {
 		assert.Contains(t, story, fmt.Sprintf("Flow(%q, %q,", flow.Key, flow.Title))
 		assert.True(t, flow.Complete, "the starter's flow has a start, an outcome and no question")
 	}
 	assert.NotContains(t, story, "Question(", "no flow of the starter is unfinished")
+}
+
+// TestBlankStarterShipsAnEmptyStory checks the blank project's Story: its
+// design/story.go declares no Story but imports the Story language, which
+// keeps the module's requirement on it at Surla's version through go mod
+// tidy, and its test module's Story table, rendered from no flow, requires no
+// test. The Go command and the generator are stand-ins.
+func TestBlankStarterShipsAnEmptyStory(t *testing.T) {
+	raw, err := templatesFS.ReadFile(blankVariant.templates + "/candidate/design/story.go.tmpl")
+	require.NoError(t, err)
+	assert.Empty(t, blankVariant.story)
+	assert.NotContains(t, string(raw), "Story(", "the template declares no Story")
+	assert.NotContains(t, string(raw), "Flow(")
+
+	dir := filepath.Join(t.TempDir(), "shop")
+	run := func(_ context.Context, moduleDir, _ string, args ...string) error { return fakeGo(moduleDir, args) }
+	gen := &fakeGenerator{pkgs: []string{"shop"}, extra: map[string]string{quickstartGuide: "guide\n"}}
+	_, err = Init(t.Context(), Options{
+		Dir: dir, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published,
+	}, run, gen)
+	require.NoError(t, err)
+	d, err := newData(Options{Module: "example.com/shop", SurlaVersion: published})
+	require.NoError(t, err)
+	goMod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	require.NoError(t, err)
+	assert.Contains(t, string(goMod), storyModule+" "+d.StoryVersion, "the project requires the Story language Surla evaluates")
+	require.Len(t, gen.inputs, 2)
+	assert.Contains(t, gen.inputs[0]["design/story.go"], `import _ "github.com/goadesign/surla/story/dsl"`)
+
+	want, requiredTests, err := designeval.StoryTests(os.DirFS(filepath.Join(dir, "eval")), nil)
+	require.NoError(t, err)
+	assert.Empty(t, requiredTests, "a Story with no finished flow requires no test")
+	assert.Equal(t, string(want), gen.inputs[1][designeval.StoryTestsPath], "the test module is generated with its empty table")
+	shipped, err := os.ReadFile(filepath.Join(dir, "eval", filepath.FromSlash(designeval.StoryTestsPath)))
+	require.NoError(t, err)
+	assert.Equal(t, string(want), string(shipped), "the project holds the table the generator saw")
 }

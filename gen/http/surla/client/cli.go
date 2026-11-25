@@ -491,12 +491,19 @@ func BuildInitProjectPayload(surlaInitProjectBody *string) (*surla.InitProjectPa
 		}
 		err = json.Unmarshal([]byte(*surlaInitProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dir\": \".\",\n      \"module_path\": \"example.com/shop\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"dir\": \".\",\n      \"module_path\": \"example.com/shop\",\n      \"worked_example\": false\n   }'")
 		}
 	}
 	v := &surla.InitProjectPayload{
-		ModulePath: body.ModulePath,
-		Dir:        body.Dir,
+		ModulePath:    body.ModulePath,
+		Dir:           body.Dir,
+		WorkedExample: body.WorkedExample,
+	}
+	{
+		var zero bool
+		if v.WorkedExample == zero {
+			v.WorkedExample = false
+		}
 	}
 
 	return v, nil

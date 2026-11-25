@@ -3149,7 +3149,7 @@ paths:
             tags:
                 - surla
             summary: init_project surla
-            description: Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.
+            description: Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. The project is blank (a service with no methods and one test that the program starts) unless worked_example is true, which creates Surla's price-answering worked example instead. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.
             operationId: surla#init_project
             parameters:
                 - name: init_project_request_body
@@ -4275,7 +4275,7 @@ definitions:
                 type: array
                 items:
                     $ref: '#/definitions/CP1AnalysisAmbiguity'
-                description: 'Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla''s starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
+                description: 'Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla''s worked example or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
                 example:
                     - draft_option: "\U000161BE"
                       options:
@@ -4299,7 +4299,7 @@ definitions:
                 type: array
                 items:
                     $ref: '#/definitions/CP1AnalysisExample'
-                description: Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.
+                description: Concrete acceptance examples in plain domain terms, never placeholder text or leftovers of Surla's worked example; each becomes a check the change must pass.
                 example:
                     - expected_outcome: "\U0001195A"
                       input_summary: "\U00092B7A"
@@ -4316,7 +4316,7 @@ definitions:
                     type: string
                     example: "\U0005CE6E"
                     pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
-                description: Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.
+                description: 'Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project: a blank project has no behavior to keep, and Surla''s worked example is replaced rather than preserved) or when none apply.'
                 example:
                     - "\U0005CE6E"
                     - "\U000A550E"
@@ -4324,14 +4324,14 @@ definitions:
                     - "\U0002A06F"
             summary:
                 type: string
-                description: Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's starter sample.
+                description: Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's worked example.
                 example: "\U000FB38A"
                 pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
             ui_composition:
                 type: string
                 description: Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.
                 example: In optio et.
-        description: 'Product-level Change Card shown to the requester on the Surla browser page to confirm intent before code is written. Write every field for a requester who knows only their own goal, not the repository: use plain domain language about observable user behavior, never repository file paths (such as design/design.go), Surla candidate runner flags (such as -listen), or internal Goa/Goa-AI symbol names unless the requester explicitly asked about a CLI or API surface. When building a new product in a project created from Surla''s starter scaffold (init_project''s price-answering sample), replace that sample silently in your draft: never mention or ask about Surla''s starter sample on the Change Card. Surla checks structure and cross-field rules; it cannot judge whether the analysis is complete or correct.'
+        description: 'Product-level Change Card shown to the requester on the Surla browser page to confirm intent before code is written. Write every field for a requester who knows only their own goal, not the repository: use plain domain language about observable user behavior, never repository file paths (such as design/design.go), Surla candidate runner flags (such as -listen), or internal Goa/Goa-AI symbol names unless the requester explicitly asked about a CLI or API surface. When the project was created with Surla''s worked example (init_project with worked_example: true) and the requester is building their own product, replace that example silently in your draft: never mention or ask about it on the Change Card. Surla checks structure and cross-field rules; it cannot judge whether the analysis is complete or correct.'
         example:
             ambiguities:
                 - draft_option: "\U000161BE"
@@ -4455,7 +4455,7 @@ definitions:
                 type: array
                 items:
                     $ref: '#/definitions/CP1AnalysisAmbiguity'
-                description: 'Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla''s starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
+                description: 'Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla''s worked example or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.'
                 example:
                     - draft_option: "\U000161BE"
                       options:
@@ -4517,14 +4517,14 @@ definitions:
                     - u
             summary:
                 type: string
-                description: Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or starter-sample references.
+                description: Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or references to Surla's worked example.
                 example: "\U000AA915"
                 pattern: "[^\\t\\n\\v\\f\\r \N   - \L\P  　]"
             ui_composition:
                 type: string
                 description: Optional OpenUI Lang program that helps the requester decide the open questions, built only from the decision components the surla://golden-path resource lists. Refer to an ambiguity or example only by its 1-based position in this analysis (1 is the first); never invent identifiers. Surla saves it unchanged without checking it; the views page validates and renders it. Omit it when a plain card is clearer.
                 example: Sed tempora quos nobis odio ab.
-        description: 'Updated product-level Change Card shown to the requester on the Surla browser page, analyzed against the current Change Card (as get_change returns it at request_revision), the draft design, and surla://golden-path. Write every field for a requester who knows their own goal, not the repository: use plain domain language without file paths (such as design/design.go), Surla candidate runner flags (such as -listen), starter-sample references, or internal Goa/Goa-AI symbol names unless the requester explicitly asked about a CLI or API surface. A confirmed answer stays settled unless the revised request or design contradicts it: do not ask it again, and restate it in summary, examples or preserved_behaviors, because the revised card drops every answer. An explicit instruction in the revised request or design replaces the decisions, examples and preserved behaviors it affects. An unanswered question stays in ambiguities unless the revised request or design answers it or removes its scope. Everything else on the current card stays unless the revised request or design changes it. Surla checks the structure and the example accounting; it cannot judge whether the analysis is complete or correct.'
+        description: 'Updated product-level Change Card shown to the requester on the Surla browser page, analyzed against the current Change Card (as get_change returns it at request_revision), the draft design, and surla://golden-path. Write every field for a requester who knows their own goal, not the repository: use plain domain language without file paths (such as design/design.go), Surla candidate runner flags (such as -listen), references to Surla''s worked example, or internal Goa/Goa-AI symbol names unless the requester explicitly asked about a CLI or API surface. A confirmed answer stays settled unless the revised request or design contradicts it: do not ask it again, and restate it in summary, examples or preserved_behaviors, because the revised card drops every answer. An explicit instruction in the revised request or design replaces the decisions, examples and preserved behaviors it affects. An unanswered question stays in ambiguities unless the revised request or design answers it or removes its scope. Everything else on the current card stays unless the revised request or design changes it. Surla checks the structure and the example accounting; it cannot judge whether the analysis is complete or correct.'
         example:
             ambiguities:
                 - draft_option: "\U000161BE"
@@ -8028,9 +8028,15 @@ definitions:
                 description: 'Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.'
                 example: example.com/shop
                 minLength: 3
+            worked_example:
+                type: boolean
+                description: 'Omit it for the user''s own product: Surla creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Surla''s worked example, a price-answering service with a helper agent, a model gateway and its own tests.'
+                default: false
+                example: false
         example:
             dir: .
             module_path: example.com/shop
+            worked_example: false
     InitProjectResult:
         title: InitProjectResult
         type: object

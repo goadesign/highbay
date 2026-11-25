@@ -275,6 +275,7 @@ func (c *ControlPlane) InitProject(
 			WorkDir:      stageParentDir,
 			Module:       modulePath,
 			SurlaVersion: c.surlaVersion,
+			Example:      p.WorkedExample,
 			OnPhase:      reportPhase,
 		},
 		run,

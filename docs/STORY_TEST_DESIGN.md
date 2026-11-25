@@ -62,10 +62,12 @@ error. Actor names are the user's business roles: `warehouse-worker` and
 `insurance-agent` are valid, and no keyword rule refuses one.
 
 A project's design imports the language, so the project's `go.mod` must
-require the Story module. A starter project made by `surla init` requires it
-at the version Surla itself requires. It ships a first Story,
-`design/story.go`, with one finished flow, `prices-cookie`, and the hook
-method that flow requires, `PricesCookie` in `eval/acceptance`.
+require the Story module. A project made by `surla init` or `init_project`
+requires it at the version Surla itself requires. Its `design/story.go`
+imports the language and declares no Story, so its Story table requires no
+test. Surla's worked example (`surla init -example`) ships a first Story
+instead, with one finished flow, `prices-cookie`, and the hook method that
+flow requires, `PricesCookie` in `eval/acceptance`.
 
 The guide changes the Story by editing Go source in its draft, never in the
 project folder. The draft is the folder `.surla-draft` in the project folder,
@@ -148,9 +150,9 @@ such as `a-b` and `a_b`, or the same key in two Stories, are refused, naming
 both flows. `start_build` checks this before it saves anything and refuses
 with `unprocessable`; the guide then revises the Story. A finished flow whose
 scenario name repeats a scenario the test module's design declares by hand
-cannot be generated either: in a starter project, a flow `prices-tea` would
-repeat the suite's own `prices_tea`, and generating the required tests fails
-naming the duplicate.
+cannot be generated either: a flow `starts-and-listens` would repeat the
+scenario `starts_and_listens` that every new project's suite declares, and
+generating the required tests fails naming the duplicate.
 
 The required tests are declared in the project's test module, the `eval/`
 module that `surla init` creates in the project folder, by its Story table:
@@ -192,7 +194,8 @@ are still `assigned`, which is the test writer's first read after a build
 start, and again at each report. A build start itself writes nothing into
 the test writer's working copy. The table is replaced by renaming a new file
 over it, so a symbolic link at its path is replaced, not followed.
-`surla init` writes the starter's table from the starter's own Story. A
+`surla init` writes the new project's table from its own Story: no row for
+the blank project, one for the worked example. A
 project whose operator stored verification settings for another suite keeps
 whatever table its test module last received: no test writer has work there
 and a report is refused, and the operator may delete the table.

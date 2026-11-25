@@ -83,13 +83,16 @@ var DeclineRevisionPayload = Type("DeclineRevisionPayload", func() {
 
 // InitProjectPayload is the input to the init_project tool.
 var InitProjectPayload = Type("InitProjectPayload", func() {
-	Description("Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.")
+	Description("Optional Go module path, directory and starting content for initializing a new Surla project in the bound workspace.")
 	Attribute("module_path", String, "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.", func() {
 		MinLength(3)
 		Example("example.com/shop")
 	})
 	Attribute("dir", String, "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.", func() {
 		Example(".")
+	})
+	Attribute("worked_example", Boolean, "Omit it for the user's own product: Surla creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Surla's worked example, a price-answering service with a helper agent, a model gateway and its own tests.", func() {
+		Default(false)
 	})
 })
 
@@ -768,7 +771,7 @@ var _ = Service("surla", func() {
 		Error("conflict", ErrorResult, "A Change Card with this change_id already exists; use revise_change or a new change_id.")
 		Error("unprocessable", ErrorResult, "The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing. The message says which; nothing was saved.")
 		Error("drafted_before_drop", ErrorResult, "A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.")
-		Tool("propose_change", "Propose a feature change as a Checkpoint 1 Change Card for the user to review in the browser. Read surla://golden-path first. Draft only in the draft folder update_draft or refresh_story returns, then pass the succeeded op_id as story_refresh_op_id. Write every Change Card field in concise plain domain language for a user who knows only their goal—never mention Surla's starter price-answering sample, repository file paths (such as design/design.go), or Surla's -listen flag, and send preserved_behaviors: [] on a brand-new product replacing the starter. Every card awaits the user's confirmation, including a card without open questions.")
+		Tool("propose_change", "Propose a feature change as a Checkpoint 1 Change Card for the user to review in the browser. Read surla://golden-path first. Draft only in the draft folder update_draft or refresh_story returns, then pass the succeeded op_id as story_refresh_op_id. Write every Change Card field in concise plain domain language for a user who knows only their goal—never mention Surla's worked example, repository file paths (such as design/design.go), or Surla's -listen flag, and send preserved_behaviors: [] on a brand-new product. Every card awaits the user's confirmation, including a card without open questions.")
 		HTTP(func() {
 			POST("/changes/propose")
 			Response(StatusOK)
@@ -1063,13 +1066,13 @@ var _ = Service("surla", func() {
 	})
 
 	Method("init_project", func() {
-		Description("Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.")
+		Description("Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. The project is blank (a service with no methods and one test that the program starts) unless worked_example is true, which creates Surla's price-answering worked example instead. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.")
 		Payload(InitProjectPayload)
 		Result(InitProjectResult)
 		Error("conflict", ErrorResult, "The workspace or target directory is already initialized.")
 		Error("unprocessable", ErrorResult, "The module path or child directory name is invalid.")
 		Error("not_implemented", ErrorResult, "This control plane has no exact Surla module version configured for starter generation.")
-		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). Returns the created commit ID in commit for start_live_target and verify_change.")
+		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). The project starts blank; pass worked_example: true only when the user asks to see Surla's worked example. Returns the created commit ID in commit for start_live_target and verify_change.")
 		HTTP(func() {
 			POST("/workspace/init")
 			Response(StatusOK)

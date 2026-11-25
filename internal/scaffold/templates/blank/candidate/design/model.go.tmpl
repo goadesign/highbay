@@ -1,0 +1,21 @@
+package design
+
+import (
+	m "goa.design/model/dsl"
+)
+
+// The C4 model of the [[.Name]]. So far it holds only the process the
+// [[.Name]] runs: a change adds the people who use it and the systems it
+// calls. goa gen renders it, and surla preview shows it as containers and
+// connections.
+var _ = m.Design("[[.Name]]", "The [[.Name]] service.", func() {
+	m.SoftwareSystem("[[.Name]]", "The [[.Name]] service.", func() {
+		m.Container("[[.Name]] API", "Public HTTP API.", "Go, Goa")
+	})
+	m.Views(func() {
+		m.ContainerView("[[.Name]]", "Containers", "The [[.Name]]'s process and what it calls.", func() {
+			m.AddAll()
+			m.AutoLayout(m.RankLeftRight)
+		})
+	})
+})

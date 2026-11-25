@@ -1,0 +1,34 @@
+// Package design is the evaluator's own copy of the [[.Name]]'s public contract and
+// its acceptance suite. The evaluator generates its code from this copy and
+// never imports code from the [[.Name]] module it tests.
+package design
+
+import (
+	. "goa.design/goa-ai/dsl"
+	. "goa.design/goa-ai/eval/dsl"
+	. "goa.design/goa/v3/dsl"
+)
+
+var _ = API("[[.Name]]", func() {
+	Title("[[.Name]] (public contract as the evaluator sees it)")
+})
+
+// The [[.Name]] has no methods yet. A change that adds one to the [[.Name]]'s
+// design declares it here too, so the evaluator can call it.
+var _ = Service("[[.Name]]", func() {
+	Description("The [[.Name]] service, as the evaluator sees it.")
+})
+
+// This suite lives in the same repository as the [[.Name]], so anyone who can
+// read the [[.Name]]'s code can read its scenarios too; none of them is hidden.
+// Surla generates the suite's program, gen/cmd/[[.Name]]-evals, from this suite
+// and the acceptance package.
+var _ = Suite("[[.Name]]_acceptance", func() {
+	Description("Proves that the [[.Name]] starts and accepts connections. A change adds the scenarios that prove its behavior.")
+	Timeout("1m")
+
+	Scenario("starts_and_listens", func() {
+		Description("The [[.Name]] binary starts and accepts TCP connections on the address given with -listen.")
+		Tags("repair")
+	})
+})

@@ -1,0 +1,143 @@
+// Package acceptance runs the acceptance scenarios against a pinned [[.Name]]
+// binary. The one scenario so far starts the [[.Name]] and checks that it
+// accepts connections. A change adds a method here for each scenario it adds
+// to the suite in ../design.
+package acceptance
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
+
+	"goa.design/goa-ai/eval"
+	"goa.design/goa-ai/runtime/agent/model"
+
+	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/surla/verify/suite"
+)
+
+// Hooks implements the generated [[.Name]]_acceptance scenario hooks.
+type Hooks struct {
+	// binary is the pinned [[.Name]] binary under test.
+	binary candidate.Artifact
+}
+
+// Name is the binary name surla verify binds the [[.Name]] as (-binary [[.Name]]=...).
+const Name = "[[.Name]]"
+
+// errNoPrompt is what Live and LiveThroughGateway return while the [[.Name]]
+// calls no AI model.
+var errNoPrompt = errors.New("the [[.Name]] calls no AI model yet, so it has no prompt wording to try; " +
+	"a live copy becomes available once a change adds an agent")
+
+// New returns the scenario hooks for the pinned [[.Name]] binary.
+func New(binary candidate.Artifact) *Hooks {
+	return &Hooks{binary: binary}
+}
+
+// StartsAndListens checks that the [[.Name]] binary starts and accepts TCP
+// connections on the address given with -listen.
+func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err error) {
+	res.Artifacts = []eval.Artifact{h.binary.Evidence(Name)}
+	// work holds the [[.Name]]'s state directory and, outside it, its log file.
+	work, err := os.MkdirTemp("", "[[.Name]]-eval-*")
+	if err != nil {
+		return res, fmt.Errorf("create work directory: %w", err)
+	}
+	state := filepath.Join(work, "state")
+	if err := os.Mkdir(state, 0o700); err != nil {
+		return res, errors.Join(fmt.Errorf("create state directory: %w", err), os.RemoveAll(work))
+	}
+	port, err := freePort()
+	if err != nil {
+		return res, errors.Join(err, os.RemoveAll(work))
+	}
+	addr := "127.0.0.1:" + strconv.Itoa(port)
+	proc, err := candidate.Exec(ctx, h.binary, candidate.Spec{
+		Args:     []string{"-listen", addr},
+		StateDir: state,
+		LogFile:  filepath.Join(work, "[[.Name]].log"),
+	})
+	if err != nil {
+		return res, errors.Join(fmt.Errorf("start [[.Name]]: %w", err), os.RemoveAll(work))
+	}
+	defer func() {
+		// The state and log are kept when the [[.Name]] could not be killed
+		// and may still be using them.
+		if killErr := proc.Kill(); killErr != nil {
+			err = errors.Join(err, fmt.Errorf("kill [[.Name]]; its state is kept in %s: %w", work, killErr))
+			return
+		}
+		err = errors.Join(err, os.RemoveAll(work))
+	}()
+	listenErr := waitListening(ctx, addr, proc.Done())
+	tail := ""
+	if listenErr != nil {
+		tail, _, err = proc.Excerpt(4 << 10)
+	}
+	res.Output = addr
+	res.Checks = []eval.Check{
+		check("listens", listenErr == nil, "the [[.Name]] never accepted a connection on %s: %v\n%s", addr, listenErr, tail),
+	}
+	return res, err
+}
+
+// Live refuses: a live copy exists to try prompt wording, and the [[.Name]]
+// calls no AI model yet. A change that adds an agent replaces this with a
+// function that starts the [[.Name]] planning with provider and with key as
+// its live key.
+func Live(context.Context, candidate.Artifact, string, model.Provider) (suite.LiveTarget, error) {
+	return suite.LiveTarget{}, errNoPrompt
+}
+
+// LiveThroughGateway refuses for the same reason as Live. A change that adds
+// an agent replaces it with a function that starts the [[.Name]] planning
+// through the model gateway at the address it is given.
+func LiveThroughGateway(context.Context, candidate.Artifact, string, string) (suite.LiveTarget, error) {
+	return suite.LiveTarget{}, errNoPrompt
+}
+
+// check returns a deterministic check; a failing one carries the diagnostic.
+func check(name string, passed bool, format string, args ...any) eval.Check {
+	if passed {
+		return eval.Check{Name: name, Passed: true}
+	}
+	return eval.Check{Name: name, Diagnostic: fmt.Sprintf(format, args...)}
+}
+
+// freePort returns a loopback TCP port that was free a moment ago. Another
+// process can take it before the [[.Name]] listens; the scenario then fails
+// with the [[.Name]]'s log rather than testing the wrong server.
+func freePort() (int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, fmt.Errorf("find free port: %w", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	return port, ln.Close()
+}
+
+// waitListening waits up to 30 seconds for addr to accept TCP connections,
+// and stops early when exited is closed because the process ended.
+func waitListening(ctx context.Context, addr string, exited <-chan struct{}) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for {
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+		if err == nil {
+			return conn.Close()
+		}
+		select {
+		case <-exited:
+			return errors.New("the process exited")
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}

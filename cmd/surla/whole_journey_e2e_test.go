@@ -265,8 +265,9 @@ func newWholeJourney(t *testing.T) *wholeJourney {
 	return &wholeJourney{t: t, workspace: workspace}
 }
 
-// commitStarter creates the starter with surla init, which ships its Story,
-// and runs, in a POSIX shell from the workspace, exactly the commands surla
+// commitStarter creates the worked example with surla init -example, which
+// ships its Story and the helper agent this journey's changes extend, and
+// runs, in a POSIX shell from the workspace, exactly the commands surla
 // init prints to make the first commit: its first block of indented lines,
 // up to the closing surla, which starts the project's server and which the
 // next leg replaces with the in-process server. Those commands must commit
@@ -275,7 +276,7 @@ func (j *wholeJourney) commitStarter(t *testing.T) {
 	dir := filepath.Join(j.workspace, "shop")
 	var printed strings.Builder
 	require.NoError(t, runInit([]string{
-		"-dir", dir, "-module", "example.com/shop", "-surla-version", starterSurlaVersion,
+		"-dir", dir, "-module", "example.com/shop", "-surla-version", starterSurlaVersion, "-example",
 	}, &printed))
 	var commands []string
 	for _, line := range strings.Split(printed.String(), "\n") {

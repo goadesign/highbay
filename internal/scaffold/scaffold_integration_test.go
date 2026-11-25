@@ -18,37 +18,64 @@ import (
 	"github.com/goadesign/surla/internal/testwriter"
 )
 
-// TestInitBuildsForNamesThatCollideWithTemplatesOrGo creates real projects
-// (network needed) for names that match template identifiers or that Goa
-// generates under another package name; Init vets both modules.
+// TestInitBuildsForNamesThatCollideWithTemplatesOrGo creates real example
+// projects (network needed) for names that match the example's template
+// identifiers or that Goa generates under another package name; Init vets
+// both modules. The blank project's templates name nothing after the service
+// but its command, and TestInitCreatesAProjectWhoseSuitePasses covers its
+// renamed package.
 func TestInitBuildsForNamesThatCollideWithTemplatesOrGo(t *testing.T) {
 	for _, name := range []string{"helper", "service", "catalog", "errors", "string"} {
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), name)
-			_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + name, SurlaVersion: published}, RunCommand, starterGenerator(t))
+			_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + name, SurlaVersion: published, Example: true}, RunCommand, starterGenerator(t))
 			require.NoError(t, err, "Init runs go vet on both modules")
 		})
 	}
 }
 
-// TestInitCreatesAProjectWhoseSuitePasses creates real projects with the
-// published Surla version (it needs the network and macOS or Linux),
-// builds the service and its evaluator suite, and runs the suite against the
-// service: every scenario must pass, including the one the starter's Story
-// table requires for its finished flow, through the method the starter ships
-// for it. It then does what the first build of a change does with the
-// project's Story: it evaluates the design and prepares a test writer's
-// working copy from the evaluated Story. The Story table rendered from the
-// evaluated Story is the one the starter ships, and preparing changes no file
-// of the copy, so the starter's generated test program is what a build
-// prepares.
+// TestInitCreatesAProjectWhoseSuitePasses creates real projects of both
+// variants with the published Surla version (it needs the network and macOS
+// or Linux), builds the service and its evaluator suite, and runs the suite
+// against the service: every scenario must pass. For the blank project that
+// is the one scenario that starts the program; for the example it includes
+// the one the Story table requires for its finished flow, through the method
+// the example ships for it. It then does what the first build of a change
+// does with the project's Story: it evaluates the design and prepares a test
+// writer's working copy from the evaluated Story. The Story table rendered
+// from the evaluated Story is the one the project ships, and preparing
+// changes no file of the copy, so the project's generated test program is
+// what a build prepares.
+//
+// Each case creates one real project, which resolves, generates, vets and
+// tests two modules; no cheaper layer runs Goa's generator on the templates.
 func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
+	prices := []designeval.StoryScenario{
+		{Story: "Prices", Key: "prices-cookie", Scenario: "prices_cookie", Hook: "PricesCookie"},
+	}
 	// errors is generated as package errors_, so it also proves the imports
 	// follow the package goa gen produced.
-	for _, service := range []string{"shop", "errors"} {
-		t.Run(service, func(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		example   bool
+		service   string
+		scenarios []string
+		stories   []string
+		required  []designeval.StoryScenario
+	}{
+		{name: "blank", service: "shop", scenarios: []string{"starts_and_listens"}},
+		{name: "blank renamed package", service: "errors", scenarios: []string{"starts_and_listens"}},
+		{name: "example", example: true, service: "shop", stories: []string{"Prices"}, required: prices,
+			scenarios: []string{"prices_tea", "prompt_override_reaches_model", "unknown_item", "prices_cookie"}},
+		{name: "example renamed package", example: true, service: "errors", stories: []string{"Prices"}, required: prices,
+			scenarios: []string{"prices_tea", "prompt_override_reaches_model", "unknown_item", "prices_cookie"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			service, scenarios := tc.service, tc.scenarios
 			dir := filepath.Join(t.TempDir(), service)
-			name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + service, SurlaVersion: published}, RunCommand, starterGenerator(t))
+			name, err := Init(t.Context(), Options{
+				Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + service, SurlaVersion: published, Example: tc.example,
+			}, RunCommand, starterGenerator(t))
 			require.NoError(t, err)
 			bin := t.TempDir()
 			build := func(moduleDir, out, pkg string) {
@@ -65,7 +92,6 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 			require.NoError(t, err, "the generated evaluator's own tests pass:\n%s", testOut)
 			build(dir, name, "./cmd/"+name)
 
-			scenarios := []string{"prices_tea", "prompt_override_reaches_model", "unknown_item", "prices_cookie"}
 			runSuite := func(want []string) {
 				build(filepath.Join(dir, "eval"), name+"-evals", "./gen/cmd/"+name+"-evals")
 				out, err := exec.CommandContext(t.Context(), filepath.Join(bin, name+"-evals"),
@@ -93,13 +119,14 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 			require.NoError(t, err)
 			evaluated, err := ev.Evaluate(t.Context(), design)
 			require.NoError(t, err, "the starter's design, with its Story, evaluates")
-			require.Len(t, evaluated.Stories, 1)
-			assert.Equal(t, "Prices", evaluated.Stories[0].Name)
+			var stories []string
+			for _, s := range evaluated.Stories {
+				stories = append(stories, s.Name)
+			}
+			assert.Equal(t, tc.stories, stories)
 			table, required, err := designeval.StoryTests(os.DirFS(filepath.Join(dir, "eval")), evaluated.Stories)
 			require.NoError(t, err)
-			assert.Equal(t, []designeval.StoryScenario{
-				{Story: "Prices", Key: "prices-cookie", Scenario: "prices_cookie", Hook: "PricesCookie"},
-			}, required)
+			assert.Equal(t, tc.required, required)
 			shipped, err := os.ReadFile(filepath.Join(dir, "eval", filepath.FromSlash(designeval.StoryTestsPath)))
 			require.NoError(t, err)
 			assert.Equal(t, string(table), string(shipped), "the starter ships the table its evaluated Story gives")
