@@ -20,8 +20,8 @@ and brings back their step reports.
 - The complete text of each proposal the page showed, saved word for word
   beside the screen record's frames.
 - The screen record of each attempt, `{{TESTER}}/attempt-<N>/screen/`: timed
-  frames of the browser page, the Herdr window and the desktop, indexed in
-  `screen-log.md`. It holds only what a user could see. View the frames
+  frames of the browser page and the Herdr window, with the application in
+  front at each one, indexed in `screen-log.md`. It holds only what a user could see. View the frames
   themselves; the index is a guide to them.
 - Your own notes file, `{{TESTER}}/observations.md`, which you keep up to
   date after every report.
@@ -262,7 +262,7 @@ naming a button:
 
 | Task | Trigger | Text | Success sub-milestones |
 | --- | --- | --- | --- |
-| S1, back to the agent | A Herdr window is open, and a frame shows the page offering a way to the coding agent | "From the browser page, get back to your coding agent without typing a command or switching windows yourself. Tell us what your screen shows ten seconds later." | S1a: the participant found the control. S1b: within ten seconds the Herdr window is in front of the browser. S1c: the agent's space and tab are showing and its pane has the focus. |
+| S1, back to the agent | A Herdr window is open, and a frame shows the page offering a way to the coding agent | "From the browser page, get back to your coding agent without typing a command or switching windows yourself. Tell us what your screen shows ten seconds later." | S1a: the participant found the control. S1b: the browser was the application in front just before the click, and the Herdr window is in front within ten seconds after it. S1c: within those ten seconds the agent's space and tab are showing and its pane has the focus. |
 | S2, the page again | A first proposal is on the page | "Close the browser tab that shows your project. Then get the page back without typing a command in a terminal." | S2a: the participant found a way that the screen offered. S2b: the page came back on the same change and stage. S2c: nothing the participant had entered was lost. |
 | S3, the page from Herdr | S2 closed, a frame shows Surla's companion in the Herdr window, and the environment facts say something can click inside that window | "Close that tab once more. This time get the page back from the Herdr window, without typing anything." | S3a: the Herdr window showed a control for it. S3b: pressing it brought the page back within ten seconds. S3c: no error appeared in the companion. |
 
@@ -270,11 +270,27 @@ Hand over at most one screen task at a time, each once per attempt, and
 never while the participant is blocked, waiting on a hint, or working on an
 open change. The facilitator checks the text as it checks a change request.
 A screen task closes when the participant reports its result or says it
-cannot find a way. Record each as completed, completed with a typed command
-(which fails the task), not offered by the screen, or not exercised, with
-the reason: no Herdr window, nothing can click inside the Herdr window, or
-the trigger was never reached. Judge S1b, S1c and S3b from the frames and
-status rows around the click, not from the participant's account alone.
+cannot find a way. Record each as one of these:
+
+- completed;
+- completed with a typed command, which fails the task;
+- pressed and failed: the screen offered a control, the participant pressed
+  it, and a sub-milestone did not follow. Name that sub-milestone and the
+  rows just before and after the click;
+- not offered by the screen;
+- not exercised, with the reason: no Herdr window, nothing can click inside
+  the Herdr window, or the trigger was never reached.
+
+Judge S1b, S1c and S3b from the rows and frames around the click, not from
+the participant's account alone. A sub-milestone is met only by a change the
+click caused: the row just before the click must show a different state from
+the one the sub-milestone asks for. If Herdr was already in front, or the
+agent's pane already had the focus, record that sub-milestone as not
+exercised: already in that state. If the browser the participant clicks in
+cannot be in front, S1b is not exercised. For S2 and S3, record which tab or
+window was closed, and judge S2b and S3b from the row that shows Surla
+opening a tab again, not from a second window the facilitator opened after
+it.
 
 ## Mid-build changes
 

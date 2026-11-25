@@ -146,16 +146,22 @@ source out of its view.
   families and background-worker support, and any project choices or
   dismissed recommendations already present. Do not install a second family just to hide the one-family path;
 - **how the study sees and uses the screen** (section 2 depends on these).
-  Record the tool that captures each of these as an image: the tab Surla
-  opens in the default browser, the Herdr window (`herdr-app shot`), and
-  the desktop. Record how the participant clicks on the page, and whether
+  Record the tool that captures each study surface as an image: the tab
+  Surla opens in the default browser, and the Herdr window
+  (`herdr-app shot`). Record how the study learns which application is in
+  front without an image, how the participant clicks on the page, and whether
   anything can click inside the Herdr window. If no tool can see the tab
   Surla opens, record the second browser window the study uses instead
   (section 2). If nothing can click inside the Herdr window, record that
   the companion's buttons cannot be pressed in this run. A run that cannot
   capture the browser page as an image cannot grade the screen: stop and
-  say so. Desktop captures can show the person's other windows, so prefer
-  captures of one window and keep every frame in the tester's folder;
+  say so. Capture those two surfaces and nothing else. An image of the
+  whole desktop, or of a browser window with the person's other tabs, saves
+  things the study has no business with: take one only when the person
+  running the study has said that screen holds nothing but the study, and
+  otherwise rely on the name of the application in front. The Herdr window
+  can show the person's other spaces, so keep every frame in the tester's
+  folder and quote from a frame only what belongs to the study;
 - **which `surla` a program started from the desktop finds.** An app opened
   from the Dock, Finder or a desktop launcher does not read the shell
   startup files that add a Go or personal `bin` folder to `PATH`. A button
@@ -177,7 +183,9 @@ source out of its view.
   `surla version`) or "not found", never the `PATH` value. When the Herdr
   app is running, also record whether the folder holding `surla` is in the
   `PATH` entry of the app's own process, and whether the app was started
-  from the desktop or from a terminal. An app started from a terminal can
+  from the desktop or from a terminal. Read that one entry only: filter the
+  process's environment down to its `PATH` line inside the command, print
+  just yes or no, and never print or save the rest of the environment. An app started from a terminal can
   inherit that terminal's `PATH` and hide the difference; record then that
   the desktop-started path was not exercised. Do not repair a difference
   for the attempt: no symlink, no edited startup file, no relaunch from a
@@ -227,10 +235,12 @@ says it is done. The agent opens the page early and keeps working for
 minutes. Those minutes are what a user stares at, and a study that first
 looks afterwards never sees them.
 
-- From the participant's first message, capture the desktop, or the default
-  browser's window, every 2 seconds until Surla's tab appears. Record when it
-  appeared and which application was in front then. If no tab has appeared
-  after two minutes, capture every 15 seconds and say so in the log.
+- From the participant's first message, record the application in front
+  every 2 seconds until Surla's tab appears: the default browser comes to
+  the front, the agent's pane says it opened the page, or a tool that sees
+  the tab shows it. Record when it appeared and what was in front then. If
+  no tab has appeared after two minutes, check every 15 seconds and say so
+  in the log.
 - Use that tab for the rest of the attempt when a tool can both see it and
   click in it.
 - Otherwise open a second window on the same page within seconds of the tab
@@ -240,8 +250,15 @@ looks afterwards never sees them.
   the screen record shows Surla opening or reopening its tab, and at no
   other time. A second window the product did not open would hide a page the
   user lost.
-- The second window shows the same page but not which window is in front.
-  Keep capturing the desktop for that.
+- The second window shows the same page, but it is not the tab Surla
+  opened. Keep recording the application in front. A second window that is
+  not on the screen can never be in front, so a click in it cannot show
+  whether a button brings another window forward: record window focus as
+  not exercised.
+- When the participant closes its page, record what was closed: the tab
+  Surla opened, the second window, or both. Close Surla's own tab as well
+  when a tool can. Count the page as back only when the record shows Surla
+  opening a tab again, and record which tab that was.
 
 **The Herdr window.** `herdr-app shot <file>` saves the window as a person
 sees it, including Surla's companion and any other overlay.
@@ -250,8 +267,8 @@ and the `overlays` and `errors`. Save both at every capture. Read each
 overlay in the frame: an error line in the companion is a finding even when
 the browser page looks fine. A shot captures the app even when another
 window covers it, so it cannot show whether Herdr is in front; the
-application in front and the desktop capture show that. Do not start, stop
-or restart the person's Herdr app or its core for the study.
+application in front shows that. Do not start, stop or restart the person's
+Herdr app or its core for the study.
 
 **The screen record.** Save frames in `attempt-<N>/screen/`, named by time
 and surface, and index them in `attempt-<N>/screen/screen-log.md`. Each row
@@ -262,14 +279,14 @@ word for word, Herdr's `space`, `tab`, `focused_pane`, `overlays` and
 
 | When | Capture |
 | --- | --- |
-| Before the participant's first message | The Herdr window and status, and the desktop |
-| From the first message until Surla's tab appears | The desktop every 2 seconds |
+| Before the participant's first message | The Herdr window and status, and the application in front |
+| From the first message until Surla's tab appears | The application in front every 2 seconds |
 | When the agent's first Surla call returns | The Herdr window and status at about 2 and 10 seconds: is Surla's companion among `overlays`, and what does it show? |
 | When the tab appears | The page at about 2, 5 and 10 seconds |
 | While an agent or Surla is working: project setup (`init_project`), the stretch between setup and the first proposal (`propose_change`), builds, tests, verification | The page's text every 15 seconds; a frame each time its heading or status changes, and at least one a minute. The Herdr window and status once a minute, and when `overlays` or `errors` change |
 | Each proposal, revised proposal or other text the user must read before deciding | The page's complete text, saved word for word as a text file beside the frames, with every section, question, option and example expanded, and a frame of each part |
 | Each human decision on the page | The page just before and just after |
-| Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, the Herdr window and status, and the application in front |
+| Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, the Herdr window and status, and the application in front. The row just before is the baseline: a click proves a change only against it |
 
 A script may take the captures. Viewing them is your job: look at every kept
 frame in the round it was taken. A saved file nobody looked at is not an
