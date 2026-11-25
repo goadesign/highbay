@@ -2936,8 +2936,8 @@ matching versions in the profiles and refresh their checksums. For example,
 with the root requirements currently in this repository, run:
 
 ```sh
-GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125223710-b7bf4a7f4fa5 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
-GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125223710-b7bf4a7f4fa5 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
 GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
 GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null

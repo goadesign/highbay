@@ -62,7 +62,7 @@ type (
 		Module string
 		// HighbayVersion is the exact github.com/goadesign/highbay version the
 		// evaluator module requires, such as
-		// v0.0.0-20261118203415-bec57123a61f.
+		// v0.0.0-20261125231720-7e4be2233e61.
 		HighbayVersion string
 		// Example selects the worked example instead of the blank project:
 		// a price-answering service with a helper agent, a model gateway, a
@@ -509,7 +509,7 @@ func newData(o Options) (data, error) {
 		return data{}, fmt.Errorf("-module %w", err)
 	}
 	if !ValidVersion(o.HighbayVersion) {
-		return data{}, fmt.Errorf("Highbay version %q is not an exact module version such as v0.0.0-20261118203415-bec57123a61f", o.HighbayVersion)
+		return data{}, fmt.Errorf("Highbay version %q is not an exact module version such as v0.0.0-20261125231720-7e4be2233e61", o.HighbayVersion)
 	}
 	mod, err := modfile.Parse("go.mod", []byte(highbay.GoMod()), nil)
 	if err != nil {

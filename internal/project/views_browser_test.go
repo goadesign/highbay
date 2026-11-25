@@ -1106,7 +1106,7 @@ var _ = Story("Order Refunds", func() {
 `
 	return storyWorkspace(t, testmodule.Tidy(t, map[string]string{
 		"go.mod": "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-			"\tgithub.com/goadesign/highbay/story v0.0.0-20261125223710-b7bf4a7f4fa5\n" +
+			"\tgithub.com/goadesign/highbay/story v0.0.0-20261125231720-7e4be2233e61\n" +
 			"\tgoa.design/goa/v3 " + testmodule.HighbayVersion(t, "goa.design/goa/v3") + "\n)\n",
 		"design/design.go": design,
 	}))

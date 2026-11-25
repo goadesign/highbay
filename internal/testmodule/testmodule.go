@@ -19,7 +19,7 @@ const (
 	// PublishedHighbayVersion is the published github.com/goadesign/highbay
 	// module version that starter, test-writer, and build-report fixtures
 	// require on the module proxy.
-	PublishedHighbayVersion = "v0.0.0-20261118203415-bec57123a61f"
+	PublishedHighbayVersion = "v0.0.0-20261125231720-7e4be2233e61"
 
 	// CompleteSourcesGoaVersion is the first goa.design/goa/v3 version
 	// with generator.CompleteSources.

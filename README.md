@@ -335,7 +335,7 @@ hbay diff --old-dir examples/orders --new-dir examples/orders
 
 From a checkout you can also run `go run ./cmd/hbay`; `go run ./cmd/hbay init`
 then needs `-highbay-version` with a published version, such as
-`-highbay-version v0.0.0-20261118203415-bec57123a61f`.
+`-highbay-version v0.0.0-20261125231720-7e4be2233e61`.
 
 After you edit a module's `design/`, `hbay gen -dir <module>` regenerates its
 `gen/` and replaces it in one step. It needs `goa.design/goa/v3`

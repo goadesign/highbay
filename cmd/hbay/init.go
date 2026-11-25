@@ -77,7 +77,7 @@ func (runtime projectRuntime) init(args []string, stdout io.Writer) error {
 	if *version == "" {
 		*version = highbayBuildVersion()
 		if !scaffold.ValidVersion(*version) {
-			return fmt.Errorf("this hbay binary has no exact module version (%q); pass -highbay-version with a published version such as v0.0.0-20261118203415-bec57123a61f", buildVersion())
+			return fmt.Errorf("this hbay binary has no exact module version (%q); pass -highbay-version with a published version such as v0.0.0-20261125231720-7e4be2233e61", buildVersion())
 		}
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

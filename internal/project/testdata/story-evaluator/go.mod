@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	example.com/story-design v0.0.0-00010101000000-000000000000
-	github.com/goadesign/highbay/story v0.0.0-20261125223710-b7bf4a7f4fa5
+	github.com/goadesign/highbay/story v0.0.0-20261125231720-7e4be2233e61
 	goa.design/goa-ai v0.90.1-0.20261111075239-0114fb9d40d3
 	goa.design/goa/v3 v3.35.1-0.20261114184515-dee88e893eb3
 	goa.design/model v1.16.11-0.20261030164016-5e17c2e932fb
