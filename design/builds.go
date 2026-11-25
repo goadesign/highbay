@@ -94,7 +94,7 @@ var BuilderProgress = Type("BuilderProgress", func() {
 	Description("The builder's assignment for one build. It exists from the moment the user starts the build; verification of the build's revision, not the assignment, judges the builder's work. branch, head_commit and the last check are three independent recorded facts: none says that a check or a verification ran on head_commit.")
 	Attribute("read", Boolean, "True once the builder read this assignment in full with get_builder_assignment.")
 	Attribute("branch", String, "The build's builder branch, surla/build-<n>.")
-	Attribute("head_commit", String, "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.", func() {
+	Attribute("head_commit", String, "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. Omitted in other states. A passed build records its verified candidate_commit in taking.", func() {
 		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
 	})
 	Attribute("last_check_passed", Boolean, "Whether the builder's latest completed check_project in this build passed; absent until one completed. The check covered the builder's working folder as it was then, committed or not.")
@@ -363,14 +363,14 @@ func buildMethods() {
 	})
 
 	Method("get_build", func() {
-		Description("Return a change's build when it is the project's open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the builder's branch, its head_commit once the branch advances past the build's base, and its latest completed check_project verdict, the test writer's state with the number of Surla's findings (never their text), and whether the build is for the change's revision in force. Reading changes nothing; reading the branch tip and deciding merged read the project's repository.")
+		Description("Return a change's build when it is the project's open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the builder's branch, while the build is still building its head_commit once the branch advances past the build's base, and its latest completed check_project verdict, the test writer's state with the number of Surla's findings (never their text), and whether the build is for the change's revision in force. Reading changes nothing; reading the branch tip and deciding merged read the project's repository.")
 		Payload(func() {
 			Attribute("change_id", String, "Change Card identifier.", func() { MinLength(1) })
 			Required("change_id")
 		})
 		Result(ChangeBuild)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
-		Tool("get_build", "Read a change's usable build for its current test source: the revision built, whether each role read its assignment, the builder's branch, head_commit and latest check_project verdict, the test writer's state with the number of Surla's findings, and whether the build is for the change's revision in force. not_started means there is no usable build; the user starts a new build on the views page.")
+		Tool("get_build", "Read a change's usable build for its current test source: the revision built, whether each role read its assignment, the builder's branch, its head_commit while the build is still building, its latest check_project verdict, the test writer's state with the number of Surla's findings, and whether the build is for the change's revision in force. not_started means there is no usable build; the user starts a new build on the views page.")
 		HTTP(func() {
 			GET("/changes/{change_id}/build")
 			Response(StatusOK)

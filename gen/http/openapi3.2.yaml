@@ -3502,7 +3502,7 @@ paths:
             tags:
                 - surla
             summary: get_build surla
-            description: 'Return a change''s build when it is the project''s open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the builder''s branch, its head_commit once the branch advances past the build''s base, and its latest completed check_project verdict, the test writer''s state with the number of Surla''s findings (never their text), and whether the build is for the change''s revision in force. Reading changes nothing; reading the branch tip and deciding merged read the project''s repository.'
+            description: 'Return a change''s build when it is the project''s open build, with whether the user has taken it: building, passed with the commits to merge, merged, or dropped. not_started when it is not, including a builder-only build whose stored verification settings were removed; start a new build on the views page. Otherwise return the revision built, when, whether each role read its assignment, the builder''s branch, while the build is still building its head_commit once the branch advances past the build''s base, and its latest completed check_project verdict, the test writer''s state with the number of Surla''s findings (never their text), and whether the build is for the change''s revision in force. Reading changes nothing; reading the branch tip and deciding merged read the project''s repository.'
             operationId: surla#get_build
             parameters:
                 - name: change_id
@@ -19289,7 +19289,7 @@ components:
                     example: Sint dolores dolor.
                 head_commit:
                     type: string
-                    description: 'The commit the builder''s branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.'
+                    description: 'The commit the builder''s branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. Omitted in other states. A passed build records its verified candidate_commit in taking.'
                     example: 605fee6de743ec476364de17fd0d440780deb2f039a022ed2f0040cbfa33e964
                     pattern: ^([0-9a-f]{40}|[0-9a-f]{64})$
                 last_check_at:

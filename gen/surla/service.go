@@ -466,12 +466,12 @@ type Service interface {
 	// or dropped. not_started when it is not, including a builder-only build whose
 	// stored verification settings were removed; start a new build on the views
 	// page. Otherwise return the revision built, when, whether each role read its
-	// assignment, the builder's branch, its head_commit once the branch advances
-	// past the build's base, and its latest completed check_project verdict, the
-	// test writer's state with the number of Surla's findings (never their text),
-	// and whether the build is for the change's revision in force. Reading changes
-	// nothing; reading the branch tip and deciding merged read the project's
-	// repository.
+	// assignment, the builder's branch, while the build is still building its
+	// head_commit once the branch advances past the build's base, and its latest
+	// completed check_project verdict, the test writer's state with the number of
+	// Surla's findings (never their text), and whether the build is for the
+	// change's revision in force. Reading changes nothing; reading the branch tip
+	// and deciding merged read the project's repository.
 	GetBuild(context.Context, *GetBuildPayload) (res *ChangeBuild, err error)
 	// Return the text of Surla's findings on the tests of a change's build, which
 	// get_build only counts, with the build's revision and start time, the number
@@ -850,9 +850,8 @@ type BuilderProgress struct {
 	// reflected in list_changes.version (start_build omits it before any branch
 	// commit exists, and list_changes items carry no branch field): present while
 	// the build is still building, once the branch exists and points at another
-	// commit than the one the build started from. A build that has passed, was
-	// merged or was dropped names its commits in taking instead, and moving its
-	// branch afterwards changes nothing it returns.
+	// commit than the one the build started from. Omitted in other states. A
+	// passed build records its verified candidate_commit in taking.
 	HeadCommit *string
 	// Whether the builder's latest completed check_project in this build passed;
 	// absent until one completed. The check covered the builder's working folder
@@ -3838,9 +3837,8 @@ type jsonBuilderProgressTransport struct {
 	// reflected in list_changes.version (start_build omits it before any branch
 	// commit exists, and list_changes items carry no branch field): present while
 	// the build is still building, once the branch exists and points at another
-	// commit than the one the build started from. A build that has passed, was
-	// merged or was dropped names its commits in taking instead, and moving its
-	// branch afterwards changes nothing it returns.
+	// commit than the one the build started from. Omitted in other states. A
+	// passed build records its verified candidate_commit in taking.
 	HeadCommit *string `json:"head_commit,omitempty"`
 	// Whether the builder's latest completed check_project in this build passed;
 	// absent until one completed. The check covered the builder's working folder
@@ -34411,7 +34409,7 @@ func validateBuilderProgressJSONValue(path string, value any, description string
 		case "head_commit":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. A build that has passed, was merged or was dropped names its commits in taking instead, and moving its branch afterwards changes nothing it returns.",
+				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present while the build is still building, once the branch exists and points at another commit than the one the build started from. Omitted in other states. A passed build records its verified candidate_commit in taking.",
 			); err != nil {
 				return err
 			}
