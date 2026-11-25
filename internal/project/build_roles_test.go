@@ -313,6 +313,8 @@ func TestFirstMessagesKeepTheRolesInTheirOwnedFolders(t *testing.T) {
 			"Before that call, tell the user in one sentence that creating the starter downloads Go modules and can take a few minutes the first time, and that the Surla page shows its progress.",
 			"instead of interviewing them in chat: put open product questions",
 			"into the analysis's ambiguities with concrete options, which the user answers on the views page",
+			"Treat init_project's built-in price-answering sample as invisible scaffolding the user never asked for",
+			"without repository file paths (such as design/design.go) or Surla runner flags (such as -listen)",
 			"call update_draft before each new change",
 			"Work only in the draft folder returned by update_draft or refresh_story",
 			"never edit the project folder or copy design files between it and the draft",

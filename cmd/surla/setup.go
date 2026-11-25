@@ -121,6 +121,9 @@ const (
 	herdrShortcut = "cmd-alt-shift-s"
 	// herdrShortcutAction is Herdr's command shorthand that toggles the companion.
 	herdrShortcutAction = "mod.open:surla"
+	// herdrModCommandPlaceholder is the single declaration in skills/herdr/surla/main.js
+	// that setup replaces with the installed surla executable path.
+	herdrModCommandPlaceholder = `const SURLA_COMMAND = "surla";`
 )
 
 // runSetup implements `surla setup -global` for the CLI. It reads the
@@ -997,6 +1000,10 @@ func setupHerdrMod(env setupEnvironment, out io.Writer) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("read bundled %s: %w", name, err)
 		}
+		content, err = renderHerdrModFile(name, content, env.executable)
+		if err != nil {
+			return "", err
+		}
 		if _, err := writeIntegrationFile(filepath.Join(modDir, name), content); err != nil {
 			return "", err
 		}
@@ -1008,6 +1015,20 @@ func setupHerdrMod(env setupEnvironment, out io.Writer) (string, error) {
 		}
 	}
 	return modDir, nil
+}
+
+// renderHerdrModFile binds the installed surla executable path into main.js so
+// GUI-launched Herdr can run surla even when ~/go/bin is outside login PATH.
+func renderHerdrModFile(name string, content []byte, executable string) ([]byte, error) {
+	if name != "main.js" || executable == "" {
+		return content, nil
+	}
+	placeholder := []byte(herdrModCommandPlaceholder)
+	if count := bytes.Count(content, placeholder); count != 1 {
+		return nil, fmt.Errorf("bundled Herdr companion main.js expected 1 %q declaration, found %d", herdrModCommandPlaceholder, count)
+	}
+	configured := []byte("const SURLA_COMMAND = " + strconv.Quote(executable) + ";")
+	return bytes.Replace(content, placeholder, configured, 1), nil
 }
 
 // setupHerdrShortcut adds cmd-alt-shift-s to Herdr's global keyboard section

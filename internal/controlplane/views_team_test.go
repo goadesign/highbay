@@ -59,6 +59,37 @@ func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
 		next.Roles[0].State = "unknown"
 		f.snapshot = next
 	})
+	initMsg := "Resolving the service's Go modules"
+	owner := pageOwner
+	ps.act("init-running", func() { cp.initPhase.Store(&initMsg) })
+	ps.act("init-done", func() {
+		cp.initOwner.Store(&owner)
+		cp.initPhase.Store(nil)
+	})
+	setStoryState := func(id, state string) {
+		wsDir, wsDev, wsIno := cp.currentWorkspaceTarget()
+		cp.storyRefreshMu.Lock()
+		defer cp.storyRefreshMu.Unlock()
+		if cp.storyRefreshes == nil {
+			cp.storyRefreshes = make(map[storyRefreshKey]*storyRefreshOp)
+		}
+		cp.storyRefreshes[storyRefreshKey{
+			owner:        pageOwner,
+			workspaceDir: wsDir,
+			workspaceDev: wsDev,
+			workspaceIno: wsIno,
+		}] = &storyRefreshOp{id: id, state: state, snapshotDigest: "digest-" + id}
+	}
+	ps.act("story-evaluating", func() { setStoryState("op-eval", storyRefreshStateRunning) })
+	ps.act("story-ready", func() { setStoryState("op-ready", storyRefreshStateSucceeded) })
+	ps.act("story-failed", func() { setStoryState("op-failed", storyRefreshStateFailed) })
+	ps.act("draft-reset", func() {
+		cp.initOwner.Store(nil)
+		cp.draftOwner.Store(nil)
+		cp.storyRefreshMu.Lock()
+		clear(cp.storyRefreshes)
+		cp.storyRefreshMu.Unlock()
+	})
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 await control(origin, "hold", { key: "GET /team" });
 const page = await openPage(origin, { link: input.link });
@@ -89,6 +120,30 @@ await control(origin, "act", { key: "starting" });
 await until(() => next().includes("Wait for your coding agent to start"), "a starting coding agent did not tell the user to wait");
 await control(origin, "act", { key: "working" });
 await until(() => !page.$(".surla-frame-slots") && page.$("#surla-empty-show-guide"), "a working attached coding agent did not lead to its existing pane");
+expect(page.text("#surla-change-list-title") === "Working on your request" &&
+       !page.$(".surla-welcome-steps") &&
+       !page.$("#surla-empty-show-guide").classList.contains("shadcn-btn-primary"),
+       "a working coding agent showed the idle welcome prompt or primary CTA: " + page.text("#surla-change-list-title"));
+await control(origin, "act", { key: "init-running" });
+await until(() => page.text("#surla-change-list-title") === "Preparing your project", "init_project did not show Preparing your project");
+expect(page.doc.title.startsWith("Preparing project:"), "init_project left the Describe title: " + page.doc.title);
+await control(origin, "act", { key: "init-done" });
+await until(() => page.text("#surla-change-list-title") === "Drafting your Change Card", "finishing init_project snapped back instead of showing Drafting your Change Card");
+expect(page.text("#surla-change-list-empty").includes("Starter project ready") &&
+       page.doc.title.startsWith("Drafting Change Card:"),
+       "post-init working state did not explain draft progress: " + page.text("#surla-change-list-empty"));
+await control(origin, "act", { key: "story-evaluating" });
+await until(() => page.text("#surla-change-list-empty").includes("Checking the Story and Goa design"), "story evaluation progress was not shown");
+await control(origin, "act", { key: "story-ready" });
+await until(() => page.text("#surla-change-list-empty").includes("Story and design checked"), "succeeded story evaluation was not shown");
+await control(origin, "act", { key: "external-available" });
+await until(() => !page.$("#surla-empty-show-guide") && page.text("#surla-change-list-title") === "Drafting your Change Card",
+       "external coding agent snapped back to Describe after init_project and refresh_story");
+await control(origin, "act", { key: "story-failed" });
+await until(() => page.text("#surla-change-list-title") === "Story check needs attention" &&
+       attention() === "Story check needs attention.",
+       "failed story evaluation did not surface attention on external Describe");
+await control(origin, "act", { key: "draft-reset" });
 for (const mode of ["available", "unavailable"]) {
   await control(origin, "act", { key: "external-" + mode });
   await until(() => !page.$("#surla-empty-show-guide") && !page.$(".surla-frame-slots"), "external coding agent was treated as a Herdr pane");

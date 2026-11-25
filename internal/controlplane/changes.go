@@ -138,9 +138,12 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		return nil, errors.New("list changes: saved change cards could not be read")
 	}
 	saved, found, err := c.cards.loadOpenBuild()
-	var provenance madeFromRecord
+	var (
+		provenance    madeFromRecord
+		madeFromFound bool
+	)
 	if err == nil {
-		provenance, _, err = c.cards.loadMadeFrom()
+		provenance, madeFromFound, err = c.cards.loadMadeFrom()
 	}
 	activeFound := found && !buildDropped(provenance, saved)
 	c.mu.RUnlock()
@@ -198,7 +201,10 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 	// held above, makes this look at the phase and those reads one step.
 	initializing := c.initPhase.Load()
 	approvalAvailable := false
-	var story storyEvaluationVersion
+	var (
+		story      storyEvaluationVersion
+		draftState *string
+	)
 	if initializing == nil {
 		_, err = c.resolvePromotion(ctx)
 		if err != nil {
@@ -208,7 +214,17 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		// approve_merge refuses without verification, promotion target or not.
 		_, noVerif := c.verifier.(noVerification)
 		approvalAvailable = err == nil && !noVerif
-		story = c.storyEvaluation(owner)
+		var storyCurrent bool
+		story, storyCurrent = c.storyEvaluation(owner, provenance, madeFromFound)
+		if len(items) == 0 {
+			hasDraft := madeFromFound && c.draftOwner.Load() != nil && *c.draftOwner.Load() == owner
+			initCompleted := c.initOwner.Load() != nil && *c.initOwner.Load() == owner
+			storyState := storyRefreshStateNone
+			if storyCurrent {
+				storyState = story.State
+			}
+			draftState = firstChangeDraftState(storyState, hasDraft, initCompleted)
+		}
 	}
 	var team *gensurla.TeamSnapshot
 	if c.team.Owner == owner {
@@ -225,7 +241,8 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		StoryEvaluation   storyEvaluationVersion     `json:"story_evaluation"`
 		LiveTarget        liveTargetVersion          `json:"live_target"`
 		Initializing      *string                    `json:"initializing,omitempty"`
-	}{items, buildVersions, approvalAvailable, team, story, c.liveTargetVersion(), initializing})
+		DraftState        *string                    `json:"draft_state,omitempty"`
+	}{items, buildVersions, approvalAvailable, team, story, c.liveTargetVersion(), initializing, draftState})
 	if err != nil {
 		err = fmt.Errorf("encode change list version: %w", err)
 		span.RecordError(err)
@@ -238,7 +255,29 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		Version:           hex.EncodeToString(sum[:]),
 		ApprovalAvailable: approvalAvailable,
 		InitializingPhase: initializing,
+		DraftState:        draftState,
 	}, nil
+}
+
+// firstChangeDraftState reports the control plane's own progress toward a
+// project's first Change Card while no card is saved and init_project is idle.
+func firstChangeDraftState(storyState string, hasDraft, initCompleted bool) *string {
+	var state string
+	switch {
+	case storyState == storyRefreshStateRunning:
+		state = "evaluating_story"
+	case storyState == storyRefreshStateSucceeded:
+		state = "story_ready"
+	case storyState == storyRefreshStateFailed:
+		state = "story_failed"
+	case hasDraft:
+		state = "editing"
+	case initCompleted:
+		state = "initialized"
+	default:
+		return nil
+	}
+	return &state
 }
 
 // latestVerification reduces a run to the state the change list shows; a

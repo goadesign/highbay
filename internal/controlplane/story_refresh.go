@@ -242,18 +242,25 @@ func (c *ControlPlane) GetStoryRefresh(ctx context.Context) (*gensurla.StoryRefr
 }
 
 // storyEvaluation returns what the change list's version covers of owner's
-// current Story evaluation for the bound workspace. It reads the same slot
-// GetStoryRefresh reads, without starting anything.
-func (c *ControlPlane) storyEvaluation(owner string) storyEvaluationVersion {
+// current Story evaluation for the bound workspace, together with whether the
+// operation matches the current draft provenance read alongside the list. It
+// reads the same slot GetStoryRefresh reads, without starting anything.
+func (c *ControlPlane) storyEvaluation(
+	owner string, provenance madeFromRecord, madeFromFound bool,
+) (storyEvaluationVersion, bool) {
 	wsDir, wsDev, wsIno := c.currentWorkspaceTarget()
 	key := storyRefreshKey{owner: owner, workspaceDir: wsDir, workspaceDev: wsDev, workspaceIno: wsIno}
 	c.storyRefreshMu.Lock()
 	defer c.storyRefreshMu.Unlock()
 	op := c.storyRefreshes[key]
 	if op == nil {
-		return storyEvaluationVersion{State: storyRefreshStateNone}
+		return storyEvaluationVersion{State: storyRefreshStateNone}, false
 	}
-	return storyEvaluationVersion{OpID: op.id, State: op.state, SnapshotDigest: op.snapshotDigest}
+	return storyEvaluationVersion{
+		OpID:           op.id,
+		State:          op.state,
+		SnapshotDigest: op.snapshotDigest,
+	}, op.matchesProvenance(provenance, madeFromFound)
 }
 
 // runStoryRefresh executes one design evaluation for op on a
@@ -511,7 +518,17 @@ func (c *ControlPlane) suppressDraftDropNote(saved *madeFromSnapshot) {
 // reuse even if it left the canonical draft and immutable history unchanged.
 // storyRefreshMu protects op while callers compare it.
 func (op *storyRefreshOp) matchesDraft(digest string, list madeFromRecord) bool {
-	return op.snapshotDigest == digest && op.listWrite == list.Write &&
+	return op.snapshotDigest == digest && op.matchesProvenance(list, true)
+}
+
+// matchesProvenance reports whether op evaluated the same draft provenance
+// snapshot and list write count currently saved in made-from.json (or had no
+// saved provenance when made-from.json is absent).
+func (op *storyRefreshOp) matchesProvenance(list madeFromRecord, found bool) bool {
+	if !found {
+		return op.madeFrom == nil && op.listWrite == 0
+	}
+	return op.listWrite == list.Write &&
 		reflect.DeepEqual(op.madeFrom, &madeFromSnapshot{Start: list.Start, Entries: list.Entries})
 }
 

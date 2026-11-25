@@ -840,7 +840,7 @@ its named refusals. The types and every field's description are in
 #### `list_changes`
 
 `GET /changes`. **Input:** none. **Output:** `ChangeList` (`changes`,
-`version`, `approval_available`, `initializing_phase?`).
+`version`, `approval_available`, `initializing_phase?`, `draft_state?`).
 
 Lists the project's Change Cards, most recently saved first (ties by
 `change_id`). While [`init_project`](#init_project) is actively creating a
@@ -848,7 +848,11 @@ starter project, `initializing_phase` reports the current setup phase so an open
 views page can display live progress on the welcome card, and the read skips
 workspace promotion and Story-evaluation checks so it answers without waiting
 for `init_project` to release the workspace; `initializing_phase` is omitted
-otherwise. Each item has `change_id`, `summary`, `status`
+otherwise. While `changes` is empty and `initializing_phase` is omitted,
+`draft_state` reports progress toward the project's first Change Card
+(`initialized`, `editing`, `evaluating_story`, `story_ready`, or
+`story_failed`), and is omitted before starter/draft work begins or once a
+Change Card exists. Each item has `change_id`, `summary`, `status`
 (`needs_confirmation` or `confirmed`), the `request_revision` in force,
 `proposed_revision` while a proposed revision waits, `saved_at`, and
 `latest_verification`, absent when no run was started. `approval_available` is
@@ -861,7 +865,7 @@ recorded on the read's span
 on each of its polls). Outside initialization, a server started by `surla`
 always runs verification, with or without promotion settings, so there it is
 `true` unless resolving stored promotion settings fails.
-`version` changes whenever a listed value or `initializing_phase` changes, and also when a build, the
+`version` changes whenever a listed value, `initializing_phase` or `draft_state` changes, and also when a build, the
 team, the Story evaluation or the live target changes. A card, build or run
 that cannot be read fails the call instead of being left out.
 
@@ -2217,8 +2221,8 @@ covers these facts.
 
 ### `show_team_pane`
 
-`POST /team/pane`. **Input:** `role`. Shows this project's space and focuses
-that role's pane, only when the user asks.
+`POST /team/pane`. **Input:** `role`. Raises the Herdr window, selects this
+project's space and tab, and focuses that role's pane, only when the user asks.
 
 | Refusal | When |
 | --- | --- |
@@ -2508,7 +2512,7 @@ holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Describe / Changes** | The welcome card directs you to your coding agent (showing **Preparing your project** with the current `initializing_phase` while [`init_project`](#init_project) runs). The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
+| **Describe / Changes** | The welcome card directs you to your coding agent, showing **Preparing your project** with `initializing_phase` while [`init_project`](#init_project) runs and **Working on your request** / **Drafting your Change Card** while your coding agent or `draft_state` prepares the first Change Card. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
 | **Team** | Each registered role has a state, watcher, and any worker assignment. The project coding agent may be attached in its own session outside Herdr. **Show coding agent pane** appears for an attached Herdr pane; eligible workers have their own **Show … pane** actions. **Start workers** requests missing workers and reports the outcome and time. **Refresh team** reads the cached facts. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow. A finished flow is marked **will be tested end to end**. Other flows are marked **draft: not tested** with the reasons. Below it, see the current Story evaluation ([`get_story_refresh`](#get_story_refresh)) and how it differs from the change's Story. A draft joins the change when your coding agent proposes it and you confirm the new revision. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |

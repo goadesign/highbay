@@ -524,6 +524,13 @@ func TestInitProjectReportsItsPhaseOnTheChangeList(t *testing.T) {
 			after, err := cp.ListChanges(user)
 			require.NoError(t, err)
 			assert.Nil(t, after.InitializingPhase)
+			if outcome == "fails" {
+				assert.Nil(t, after.DraftState, "a failed initialization does not claim starter completion")
+			} else {
+				require.NotNil(t, after.DraftState)
+				assert.Equal(t, "initialized", *after.DraftState)
+				assert.False(t, seen[after.Version], "completing initialization gives the list a distinct version")
+			}
 		})
 	}
 }

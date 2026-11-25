@@ -472,6 +472,13 @@ func TestSetupHerdrModOutsideMacOSAddsNoShortcut(t *testing.T) {
 	manifest, err := os.ReadFile(filepath.Join(modDir, "mod.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), `"kind": "window"`)
+	script, err := os.ReadFile(filepath.Join(modDir, "main.js"))
+	require.NoError(t, err)
+	assert.Contains(t, string(script), `const SURLA_COMMAND = `+`"`+testExecutable+`";`)
+	assert.NotContains(t, string(script), herdrModCommandPlaceholder)
+
+	_, err = renderHerdrModFile("main.js", []byte("// missing placeholder\n"), testExecutable)
+	assert.ErrorContains(t, err, "expected 1")
 }
 
 func TestSetupHerdrModReportsMissingKeyboardFile(t *testing.T) {

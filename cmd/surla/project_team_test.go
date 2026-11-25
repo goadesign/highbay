@@ -110,9 +110,18 @@ func bindFixtureTeamEffects(runtime *projectRuntime) {
 }
 
 func TestTeamCommandProtocol(t *testing.T) {
-	var calls [][]string
-	c := teamCommands{core: "herdr-core", app: "herdr-app", chorus: "chorus", run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
+	var (
+		calls     [][]string
+		activated int
+	)
+	c := teamCommands{core: "herdr-core", app: "herdr-app", chorus: "chorus", activate: func(context.Context) error {
+		activated++
+		return nil
+	}, run: func(_ context.Context, _ []string, name string, args ...string) ([]byte, error) {
 		calls = append(calls, append([]string{name}, args...))
+		if len(args) == 0 {
+			return nil, nil
+		}
 		switch args[0] {
 		case "do":
 			if args[1] == "space.new" {
@@ -138,6 +147,13 @@ func TestTeamCommandProtocol(t *testing.T) {
 	assert.Equal(t, "s1", created.ID)
 	assert.JSONEq(t, `{"name":"project's team","folder":"/project with spaces","machine":"","focus":false}`, calls[1][3])
 	require.NoError(t, c.Focus(t.Context(), created))
+	assert.Equal(t, [][]string{
+		{"herdr-app", "do", "space.select", `{"id":"s1"}`},
+		{"herdr-app", "do", "tab.select", `{"id":"t1"}`},
+		{"herdr-app", "do", "pane.focus", `{"terminal":"term1"}`},
+		{"herdr-app"},
+	}, calls[2:6])
+	assert.Equal(t, 1, activated)
 	require.NoError(t, c.OpenCompanion(t.Context()))
 	require.NoError(t, c.LabelGuide(t.Context(), "term1", "/project with spaces", "swarm", "codex", "guide", "s1", "t1"))
 	assert.Equal(t, []string{
@@ -178,6 +194,24 @@ func TestTeamCommandProtocol(t *testing.T) {
 	}
 	assert.Equal(t, time.Second, projectHTTPClient().Timeout)
 	assert.Equal(t, 50*time.Second, teamHTTPClient().Timeout)
+}
+
+func TestHerdrMacOSAppBundleResolvesSymlinkedBundleExecutable(t *testing.T) {
+	root := t.TempDir()
+	bundle := filepath.Join(root, "Herdr.app")
+	exe := filepath.Join(bundle, "Contents", "MacOS", "Herdr")
+	require.NoError(t, os.MkdirAll(filepath.Dir(exe), 0o755))
+	require.NoError(t, os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755))
+	link := filepath.Join(root, "bin", "herdr-app")
+	require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o755))
+	require.NoError(t, os.Symlink(exe, link))
+
+	resolvedBundle, err := filepath.EvalSymlinks(bundle)
+	require.NoError(t, err)
+	assert.Equal(t, resolvedBundle, herdrMacOSAppBundle(exe))
+	assert.Equal(t, resolvedBundle, herdrMacOSAppBundle(link))
+	assert.Empty(t, herdrMacOSAppBundle(filepath.Join(root, "bin", "plain-herdr-app")))
+	assert.Empty(t, herdrMacOSAppBundle(""))
 }
 
 // TestAttachGuideTeamFailureIsFixed drives the CLI decoder with the team

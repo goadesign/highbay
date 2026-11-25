@@ -221,24 +221,42 @@ func TestListChangesSaysWhetherApprovalIsAvailable(t *testing.T) {
 func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	ws := t.TempDir()
 	writeWorkspaceFiles(t, ws, validWorkspaceStub("package design\n"))
+	gitForLayoutTest(t, ws, "init", "-q")
+	gitForLayoutTest(t, ws, "add", "go.mod", "go.sum", updateDesignFile)
+	gitForLayoutTest(t, ws, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial design")
 	cp := newControlPlane(t, Options{WorkspaceDir: ws})
 	cp.changesWait = 50 * time.Millisecond
 	cp.changesPoll = 10 * time.Millisecond
 	user := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "user-1", Kind: CallerUser})
-	version := func() string {
+	guide := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide})
+	readList := func() *gensurla.ChangeList {
 		list, err := cp.ListChanges(user)
 		require.NoError(t, err)
-		return list.Version
+		return list
 	}
-	none := version()
+	version := func() string { return readList().Version }
+	initial := readList()
+	none := initial.Version
+	assert.Nil(t, initial.DraftState)
 	assert.Equal(t, none, version(), "an unchanged project keeps its version")
 	seedStoryRefreshForTest(t, cp, "bob@example.com", storyRefreshStateRunning, nil, "")
 	assert.Equal(t, none, version(), "another owner's evaluation does not move this owner's version")
+	assert.Nil(t, readList().DraftState)
+
+	_, err := cp.UpdateDraft(guide)
+	require.NoError(t, err)
+	afterDraft := readList()
+	require.NotNil(t, afterDraft.DraftState)
+	assert.Equal(t, "editing", *afterDraft.DraftState)
+	assert.NotEqual(t, none, afterDraft.Version, "opening a draft moves the empty list's version")
 
 	seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateRunning, nil, "")
-	running := version()
-	assert.NotEqual(t, none, running, "an evaluation that starts moves the version")
-	waited, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: none})
+	runningList := readList()
+	running := runningList.Version
+	require.NotNil(t, runningList.DraftState)
+	assert.Equal(t, "evaluating_story", *runningList.DraftState)
+	assert.NotEqual(t, afterDraft.Version, running, "an evaluation that starts moves the version")
+	waited, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: afterDraft.Version})
 	require.NoError(t, err)
 	assert.Equal(t, running, waited.Version, "a waiting read ends on the evaluation's start")
 
@@ -249,16 +267,41 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 		}
 	}
 	cp.storyRefreshMu.Unlock()
-	finished := version()
+	finishedList := readList()
+	finished := finishedList.Version
+	require.NotNil(t, finishedList.DraftState)
+	assert.Equal(t, "story_ready", *finishedList.DraftState)
 	assert.NotEqual(t, running, finished, "an evaluation that finishes moves the version")
 
+	writeWorkspaceFiles(t, ws, map[string]string{updateDesignFile: "package design\n\nconst Updated = true\n"})
+	updated, err := cp.UpdateDraft(guide)
+	require.NoError(t, err)
+	assert.Equal(t, []string{updateDesignFile}, updated.Taken)
+	afterTake := readList()
+	require.NotNil(t, afterTake.DraftState)
+	assert.Equal(t, "editing", *afterTake.DraftState, "taking a changed design drops story_ready back to editing")
+	assert.NotEqual(t, finished, afterTake.Version, "invalidating story_ready moves the version")
+
 	seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateFailed, nil, "failed")
-	failed := version()
+	failedList := readList()
+	failed := failedList.Version
+	require.NotNil(t, failedList.DraftState)
+	assert.Equal(t, "story_failed", *failedList.DraftState)
 	seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateFailed, nil, "failed")
 	assert.NotEqual(t, failed, version(), "a replacement with the same snapshot and state moves the version")
 	unchanged, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: version()})
 	require.NoError(t, err)
 	assert.Equal(t, version(), unchanged.Version, "a waiting read with nothing changed returns the same version")
+
+	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
+	_, err = cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+		ChangeID:         "chg-after-draft",
+		Prompt:           "Refunds up to $50 are instant.",
+		StoryRefreshOpID: &opID,
+		Analysis:         refundAnalysis("Refunds up to $50 are instant."),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, readList().DraftState, "draft_state is omitted once the project has a Change Card")
 }
 
 // TestStoryEvaluationIsDescribedAsTheOwners checks the model-visible tool

@@ -947,8 +947,12 @@ export function bootstrapViewsPage() {
     }
     const initializing = next.initializing_phase !== undefined;
     const wasInitializing = previous?.initializing_phase !== undefined;
-    if (activeResult?.kind === "changes" && (previous === null || initializing !== wasInitializing)) {
+    const drafting = next.draft_state !== undefined;
+    const wasDrafting = previous?.draft_state !== undefined;
+    if (activeResult?.kind === "changes" &&
+      (previous === null || initializing !== wasInitializing || drafting !== wasDrafting)) {
       statusEl.textContent = initializing ? "Preparing the starter project."
+        : drafting ? "Drafting the project's first Change Card."
         : next.changes.length === 0 ? "This project has no changes yet."
         : "Showing this project's " + next.changes.length + " changes.";
     }
@@ -2601,9 +2605,11 @@ export function bootstrapViewsPage() {
         ? "#surla-confirm-revision-needed" : null;
     const showingInitialization = onDescribe && !editorOpen && listError === null &&
       changeList?.initializing_phase !== undefined && changeList.changes.length === 0;
+    const storyDraftAttention = changeList?.draft_state === "story_failed" &&
+      (!guideInHerdr || guide?.state !== "working");
     const showSlots = !showingInitialization && !(onDescribe && !editorOpen && listError === null &&
       (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)) &&
-      changeList !== null && changeList.changes.length === 0 && teamError === null &&
+      changeList !== null && changeList.changes.length === 0 && !storyDraftAttention && teamError === null &&
       !teamLoading && !teamStarting && teamSnapshot !== null && teamNeedsYou === undefined &&
       !teamStatusUnknown && guide !== undefined && (!guideInHerdr || guide.state !== "starting"));
     let attention = "Nothing now.";
@@ -2759,16 +2765,28 @@ export function bootstrapViewsPage() {
           step = "Wait for Surla to read the changes.";
         } else if (changeList.changes.length > 0) {
           step = "Open a change from the list below.";
+        } else if (changeList.initializing_phase !== undefined) {
+          step = "Wait for Surla to finish preparing the project.";
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
         } else if (guide === undefined) {
           if (teamNeedsYou === undefined) attention = "Coding agent needed.";
           step = connectGuide + " Then describe your change.";
         } else if (!guideInHerdr) {
-          step = guide.state === "needs_you" ? "Return to your coding agent to address its request."
-            : guide.state === "error" ? "Return to your coding agent to check its error."
-            : teamStatusUnknown && teamNeedsYou === undefined ? "Open Team to check role status."
-            : "Describe what you want to build in your coding agent.";
+          if (guide.state === "needs_you") {
+            step = "Return to your coding agent to address its request.";
+          } else if (guide.state === "error") {
+            step = "Return to your coding agent to check its error.";
+          } else if (teamStatusUnknown && teamNeedsYou === undefined) {
+            step = "Open Team to check role status.";
+          } else if (changeList.draft_state === "story_failed") {
+            if (teamNeedsYou === undefined) attention = "Story check needs attention.";
+            step = "Return to your coding agent so it can fix the Story and propose the Change Card.";
+          } else if (changeList.draft_state !== undefined) {
+            step = "Wait for your coding agent to propose the Change Card.";
+          } else {
+            step = "Describe what you want to build in your coding agent.";
+          }
         } else if (guide.state === "starting") {
           step = "Wait for your coding agent to start.";
         } else if (guide.state === "unknown" || guide.state === "error") {
@@ -2778,6 +2796,13 @@ export function bootstrapViewsPage() {
           step = "Open Team and refresh to check your coding agent’s status.";
         } else if (guide.state === "needs_you") {
           step = "In Team, choose Show coding agent pane to address its request.";
+        } else if (guide.state === "working" || changeList.draft_state === "evaluating_story") {
+          step = "Wait for your coding agent to propose the Change Card.";
+        } else if (changeList.draft_state === "story_failed") {
+          if (teamNeedsYou === undefined) attention = "Story check needs attention.";
+          step = "Choose Show coding agent pane below so it can fix the Story and propose the Change Card.";
+        } else if (changeList.draft_state !== undefined) {
+          step = "Choose Show coding agent pane below to check on your coding agent.";
         } else {
           step = "Choose Show coding agent pane below to describe your change.";
         }
@@ -2976,8 +3001,19 @@ export function bootstrapViewsPage() {
         }
       } else if (changeList === null) {
         step = "Opening project";
+      } else if (changeList.changes.length === 0) {
+        const guide = connectedGuide();
+        if (changeList.initializing_phase !== undefined) {
+          step = "Preparing project";
+        } else if (changeList.draft_state === "story_failed" && guide?.state !== "working") {
+          step = "Story check failed";
+        } else if (guide?.state === "working" || changeList.draft_state !== undefined) {
+          step = "Drafting Change Card";
+        } else {
+          step = "Describe your change";
+        }
       } else {
-        step = changeList.changes.length === 0 ? "Describe your change" : "Open a change";
+        step = "Open a change";
       }
     }
     return step + ": " + projectName;
@@ -3282,6 +3318,7 @@ export function bootstrapViewsPage() {
             busy={editorRequest !== null}
             guideConnected={connectedGuide() !== undefined}
             guideInHerdr={teamSnapshot?.herdr_mode === "attached"}
+            guideState={connectedGuide()?.state ?? null}
             disabled={sessionState !== "active"}
             showingGuide={hasPending("show_team_pane", "guide")}
             onShowGuidePane={() => showTeamPane("guide")}
