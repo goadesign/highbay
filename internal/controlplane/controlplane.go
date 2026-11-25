@@ -190,6 +190,11 @@ type (
 		// OpenViews mints and opens a browser session through the project credential owner.
 		// It must never return a private link in the operation's model-visible result.
 		OpenViews func(context.Context) error
+		// Stopping ends when the host begins to stop this server, before it
+		// stops serving requests and well before Close. The workers' waiting
+		// reads return then, so an open wait never holds the host's shutdown.
+		// Nil never ends.
+		Stopping context.Context
 	}
 
 	// storedChangeCard holds a versioned Change Card alongside its authenticated
@@ -445,7 +450,10 @@ type (
 		// reportWorker runs it and drains before stores close.
 		reports *reportChecker
 		// openViews is injected by the project composition root and owns private browser exchange.
-		openViews    func(context.Context) error
+		openViews func(context.Context) error
+		// stopping is closed when the host begins to stop the server; nil
+		// when the host gave no such signal.
+		stopping     <-chan struct{}
 		reportWorker sync.WaitGroup
 		// buildStartOps counts accepted starts, admitted through workspaceMu's
 		// existing shutdown barrier and drained before stores and evaluators close.
@@ -626,6 +634,9 @@ func newWithWorkspaceGitTimeout(
 		reportWake:             make(chan struct{}, 1),
 		team:                   *opts.Team,
 		openViews:              opts.OpenViews,
+	}
+	if opts.Stopping != nil {
+		cp.stopping = opts.Stopping.Done()
 	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())

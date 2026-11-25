@@ -140,31 +140,103 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 }
 
 // TestAssignmentWaitEndsWhenTheServerStops keeps surla stop from waiting on a
-// worker's open call: once the server's lifetime ends, the wait returns the
-// unchanged list without its bounded wait or another read.
+// worker's open call: when the host signals that the stop has begun, or the
+// server's own lifetime ends, an open wait returns the unchanged list at
+// once, without its bounded wait or another read.
 func TestAssignmentWaitEndsWhenTheServerStops(t *testing.T) {
+	for _, signal := range []string{"the host begins to stop", "the server's lifetime ends"} {
+		t.Run(signal, func(t *testing.T) {
+			stopping, stop := context.WithCancel(context.Background())
+			defer stop()
+			cp := newBuildControlPlane(t, Options{Stopping: stopping})
+			agreed := confirmAgreedTerms(t, cp, "chg")
+			_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+			require.NoError(t, err)
+			makeBuildFixtureBuilderCopy(t, cp)
+			cp.assignmentWait, cp.assignmentPoll = time.Minute, time.Minute
+			first, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{})
+			require.NoError(t, err)
+			done := make(chan *gensurla.BuilderAssignmentWait, 1)
+			failed := make(chan error, 1)
+			go func() {
+				got, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{SinceVersion: &first.Version})
+				if err != nil {
+					failed <- err
+					return
+				}
+				done <- got
+			}()
+			// The wait has read the list once and now waits out its minute.
+			time.Sleep(200 * time.Millisecond)
+			if signal == "the host begins to stop" {
+				stop()
+			} else {
+				cp.cancelServer()
+			}
+			select {
+			case got := <-done:
+				assert.Equal(t, first.Version, got.Version)
+				assert.Len(t, got.Assignments, 1)
+			case err := <-failed:
+				require.NoError(t, err)
+			case <-time.After(10 * time.Second):
+				t.Fatal("the wait outlived the stop")
+			}
+		})
+	}
+}
+
+// TestAssignmentWaitBoundsASlowRead holds the workspace so the list read
+// cannot finish, as a long operation on the workspace does: a wait that
+// already has a list returns it unchanged when its bounded wait ends, and a
+// wait whose first read never finishes fails then, instead of either
+// waiting for the workspace.
+func TestAssignmentWaitBoundsASlowRead(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
 	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
 	makeBuildFixtureBuilderCopy(t, cp)
-	cp.assignmentWait, cp.assignmentPoll = time.Minute, time.Minute
+	cp.assignmentWait, cp.assignmentPoll = time.Minute, 5*time.Millisecond
 	first, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{})
 	require.NoError(t, err)
+
+	cp.assignmentWait = 400 * time.Millisecond
 	done := make(chan *gensurla.BuilderAssignmentWait, 1)
+	failed := make(chan error, 1)
 	go func() {
 		got, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{SinceVersion: &first.Version})
-		if err == nil {
-			done <- got
+		if err != nil {
+			failed <- err
+			return
+		}
+		done <- got
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cp.workspaceMu.Lock()
+	held := true
+	defer func() {
+		if held {
+			cp.workspaceMu.Unlock()
 		}
 	}()
-	cp.cancelServer()
 	select {
 	case got := <-done:
-		assert.Equal(t, first.Version, got.Version)
+		assert.Equal(t, first.Version, got.Version, "the list read before the workspace was taken")
+	case err := <-failed:
+		require.NoError(t, err)
 	case <-time.After(10 * time.Second):
-		t.Fatal("the wait outlived the server")
+		t.Fatal("the wait waited for the workspace past its bound")
 	}
+
+	// A first read that cannot finish fails at the bound.
+	cp.assignmentWait = 100 * time.Millisecond
+	begun := time.Now()
+	_, err = cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{})
+	require.ErrorContains(t, err, "the read did not finish in time")
+	assert.Less(t, time.Since(begun), 5*time.Second)
+	cp.workspaceMu.Unlock()
+	held = false
 }
 
 // TestTestWriterWaitEndsOnEachVerdict follows a test writer's wait through

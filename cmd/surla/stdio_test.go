@@ -597,11 +597,15 @@ func TestStdioForwardsProgressAheadOfTheResponse(t *testing.T) {
 		}
 		close(lines)
 	}()
+	// A relay that waited for the stream to close would never return: the
+	// server keeps it open. The bound turns that into a failure.
+	bounded, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
 	done := make(chan error, 1)
 	go func() {
 		frame := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"init_project","arguments":{},"_meta":{"progressToken":"p"}}}`
-		err := serveStdioLoop(context.Background(), strings.NewReader(frame+"\n"), relayWrite, session.dispatch)
-		done <- errors.Join(err, relayWrite.Close())
+		err := serveStdioLoop(bounded, strings.NewReader(frame+"\n"), relayWrite, session.dispatch)
+		done <- errors.Join(err, bounded.Err(), relayWrite.Close())
 	}()
 	select {
 	case line := <-lines:

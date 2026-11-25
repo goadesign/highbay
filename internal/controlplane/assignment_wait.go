@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -65,39 +66,78 @@ func (c *ControlPlane) WaitForTestWriterAssignment(
 // waitForAssignments reads a role's assignment list until its version, the
 // SHA-256 of the list's generated encoding, differs from since. It returns
 // the newest list with changed false when the bounded wait ends or the
-// server stops first, so a stopping server never holds a worker's call, and
-// the context's error when the caller went away. A nil or empty since never
-// waits.
+// server begins to stop first, so neither a stopping server nor a slow read
+// holds a worker's call, and the context's error when the caller went away.
+// A nil or empty since never waits for a change.
+//
+// Each read runs beside the wait, not inside it: a read can wait for the
+// workspace or for Git, and the bounded wait covers that time too. A read
+// still running when the wait ends is abandoned with its context canceled.
+// Without any list to return, the wait fails.
 func waitForAssignments[T any](
 	ctx context.Context, c *ControlPlane, since *string,
 	read func(context.Context) (T, error), encode func(T) ([]byte, error),
 ) (list T, version string, changed bool, err error) {
+	type result struct {
+		// list and err are one read's outcome.
+		list T
+		err  error
+	}
+	readCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	start := func() <-chan result {
+		done := make(chan result, 1)
+		go func() {
+			list, err := read(readCtx)
+			done <- result{list, err}
+		}()
+		return done
+	}
 	deadline := time.NewTimer(cmp.Or(c.assignmentWait, defaultAssignmentWait))
 	defer deadline.Stop()
 	ticker := time.NewTicker(cmp.Or(c.assignmentPoll, defaultAssignmentPoll))
 	defer ticker.Stop()
+	var (
+		have    bool
+		tick    <-chan time.Time
+		pending = start()
+	)
+	// unchanged ends the wait with the newest list read, or fails when no
+	// read has finished yet.
+	unchanged := func(why string) (T, string, bool, error) {
+		if !have {
+			var none T
+			return none, "", false, errors.New("the assignment list could not be read: " + why + "; call again")
+		}
+		return list, version, false, nil
+	}
 	for {
-		if list, err = read(ctx); err != nil {
-			return list, "", false, err
-		}
-		raw, err := encode(list)
-		if err != nil {
-			return list, "", false, fmt.Errorf("encode assignment list version: %w", err)
-		}
-		sum := sha256.Sum256(raw)
-		version = hex.EncodeToString(sum[:])
-		if since == nil || *since == "" || *since != version {
-			return list, version, true, nil
-		}
 		select {
+		case got := <-pending:
+			if got.err != nil {
+				return list, "", false, got.err
+			}
+			raw, err := encode(got.list)
+			if err != nil {
+				return list, "", false, fmt.Errorf("encode assignment list version: %w", err)
+			}
+			sum := sha256.Sum256(raw)
+			list, version, have = got.list, hex.EncodeToString(sum[:]), true
+			if since == nil || *since == "" || *since != version {
+				return list, version, true, nil
+			}
+			pending, tick = nil, ticker.C
+		case <-tick:
+			pending, tick = start(), nil
 		case <-ctx.Done():
 			// The worker's client ended the call; nobody reads a result.
 			return list, "", false, ctx.Err()
+		case <-c.stopping:
+			return unchanged("the server is stopping")
 		case <-c.serverCtx.Done():
-			return list, version, false, nil
+			return unchanged("the server is stopping")
 		case <-deadline.C:
-			return list, version, false, nil
-		case <-ticker.C:
+			return unchanged("the read did not finish in time")
 		}
 	}
 }

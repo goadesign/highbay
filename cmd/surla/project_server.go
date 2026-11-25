@@ -564,6 +564,9 @@ func (runtime projectRuntime) serve(stateDir string) (err error) {
 	management.BindViewsOpener(runtime.openViews)
 	opts.OpenViews = management.OpenViews
 	opts.Team = &controlplane.TeamBinding{Owner: state.Record.Owner, Service: management}
+	// A worker's open waiting read must end when the stop begins, not when
+	// the HTTP server gives up waiting for it.
+	opts.Stopping = ctx
 	cp, err = controlplane.New(opts)
 	if err != nil {
 		return err
