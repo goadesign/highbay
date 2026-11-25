@@ -512,6 +512,7 @@ func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
 	installFakeDocker(t)
 	const (
 		timeLimit = "Stopped at its time limit of 1.5s. Call it again; a first run downloads modules and images."
+		deadline  = "Stopped at the caller's deadline before it finished. Call it again with more time."
 		canceled  = "Canceled before it finished: the caller went away or the server was stopping."
 		engine    = "The local container engine could not be used. The tool error says what to do; then call again."
 		helper    = "The check helper failed before it produced a result. Call it again."
@@ -524,6 +525,7 @@ func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
 		summary, status string
 	}{
 		{"time limit", timeLimit, "error"},
+		{"caller deadline", deadline, "error"},
 		{"canceled", canceled, "error"},
 		{"engine unavailable", engine, "error"},
 		{"helper failed", helper, "error"},
@@ -544,6 +546,12 @@ func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
 			switch tc.state {
 			case "time limit":
 				cp.checkTimeout = 1500 * time.Millisecond
+				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
+					time.Sleep(4 * time.Second)
+					return "", "", 0
+				})
+			case "caller deadline":
+				// The configured limit stays a minute; the caller allows less.
 				daemon.setOnStart(func(*recordedContainer) (string, string, int) {
 					time.Sleep(4 * time.Second)
 					return "", "", 0
@@ -571,6 +579,9 @@ func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
 			}
 			for name, call := range calls {
 				ctx, cancel := context.WithCancel(asCaller("alice@example.com", CallerBuilder))
+				if tc.state == "caller deadline" {
+					ctx, cancel = context.WithTimeout(ctx, 1500*time.Millisecond)
+				}
 				cancelCall.Store(&cancel)
 				_, err := call(ctx, nil)
 				cancel()

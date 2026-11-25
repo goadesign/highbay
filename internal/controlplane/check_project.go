@@ -201,7 +201,7 @@ func (c *ControlPlane) admitCheckOperation() error {
 // pull, every container) by the configured check timeout, and cancels it
 // when the server closes. The request context can only shorten it.
 func (c *ControlPlane) checkDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithTimeout(ctx, c.checkTimeout)
+	ctx, cancel := context.WithTimeoutCause(ctx, c.checkTimeout, errCheckTimeLimit)
 	stop := context.AfterFunc(c.serverCtx, cancel)
 	return ctx, func() { stop(); cancel() }
 }
@@ -800,7 +800,8 @@ func summarizeCheckFailure(request, span trace.Span, name string, operation cont
 // checkFailureSummary names why a check operation that ran its helper failed.
 // The time limit and a cancellation are read from the operation's own
 // context: the helper runs in another process and its error reaches this one
-// as text. The container engine's absence is carried from the helper as a
+// as text. Only the limit checkDeadline set names the configured duration; a
+// deadline the caller brought is reported as the caller's. The container engine's absence is carried from the helper as a
 // fact of its own. Any other failure that is not a refusal, whose tool error
 // is the caller's instruction, such as a busy working copy, is the helper's.
 // It returns "" for no failure and for such a refusal.
@@ -810,8 +811,11 @@ func checkFailureSummary(operation context.Context, err error, timeout time.Dura
 	}
 	var engine *engineUnavailableError
 	switch {
-	case errors.Is(operation.Err(), context.DeadlineExceeded):
+	case errors.Is(context.Cause(operation), errCheckTimeLimit):
 		return fmt.Sprintf("Stopped at its time limit of %s. Call it again; a first run downloads modules and images.", timeout)
+	case errors.Is(operation.Err(), context.DeadlineExceeded):
+		// A deadline the caller set, shorter than the check's own limit.
+		return "Stopped at the caller's deadline before it finished. Call it again with more time."
 	case operation.Err() != nil:
 		return "Canceled before it finished: the caller went away or the server was stopping."
 	case errors.As(err, &engine):

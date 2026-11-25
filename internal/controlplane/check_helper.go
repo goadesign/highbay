@@ -151,6 +151,11 @@ const (
 // its stdin ends: surla serve canceled the operation or exited.
 var errServeReleased = errors.New("surla serve canceled the operation or exited")
 
+// errCheckTimeLimit is the cancellation cause of a check operation that
+// reached the server's configured check timeout, which tells that limit from
+// a deadline the caller set.
+var errCheckTimeLimit = errors.New("the check reached its configured time limit")
+
 // RunCheckHelper runs as `surla check-run`, the check helper process of one
 // check_project or update_dependencies operation. runner resolves the
 // engine; tp receives the helper's spans. It reads the spec from stdin,
