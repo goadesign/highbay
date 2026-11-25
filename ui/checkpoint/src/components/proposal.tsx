@@ -23,6 +23,8 @@ export interface ProposedRevisionViewProps {
   busy: boolean;
   // error describes the last refused adopt or decline, or null.
   error: string | null;
+  // revisionAid explains and resolves a choice the proposal does not implement.
+  revisionAid: React.ReactNode | null;
   // buildRevisionNotice describes adoption's effect on the agreed build.
   buildRevisionNotice: string | null;
   // onAnswer records the user's choice for one proposal question.
@@ -31,6 +33,8 @@ export interface ProposedRevisionViewProps {
   onAdopt: () => void;
   // onDecline removes the proposal, keeping the agreed revision.
   onDecline: () => void;
+  // onDiscardAnswers clears only the unsubmitted answers to this proposal.
+  onDiscardAnswers: () => void;
 }
 
 // ProposedRevisionView renders the waiting proposal against the agreed
@@ -41,10 +45,12 @@ export function ProposedRevisionView({
   answers,
   busy,
   error,
+  revisionAid,
   buildRevisionNotice,
   onAnswer,
   onAdopt,
   onDecline,
+  onDiscardAnswers,
 }: ProposedRevisionViewProps) {
   const questions = proposal.ambiguities ?? [];
   const agreedQuestions = new Set((card.ambiguities ?? []).map((question) => question.question));
@@ -61,12 +67,13 @@ export function ProposedRevisionView({
       className="surla-card surla-proposal"
       role="region"
       aria-labelledby="surla-proposal-title"
+      tabIndex={-1}
       aria-busy={busy ? "true" : undefined}
       data-request-revision={proposal.request_revision}
     >
       <div className="surla-region-header">
         <div className="surla-region-title-group">
-          <h2 id="surla-proposal-title">Proposed revision</h2>
+          <h2 id="surla-proposal-title">Proposed revision <code>{proposal.request_revision.slice(0, 12)}</code></h2>
           <Badge variant="warning">Waiting for you</Badge>
         </div>
       </div>
@@ -216,13 +223,15 @@ export function ProposedRevisionView({
       {buildRevisionNotice !== null ? (
         <p id="surla-proposal-build-consequence">{buildRevisionNotice}</p>
       ) : null}
+      {revisionAid}
       <div className="surla-field-row">
         <Button
           id="surla-proposal-adopt"
           variant="primary"
-          disabled={busy || unanswered.length > 0}
+          disabled={busy || unanswered.length > 0 || revisionAid !== null}
           aria-describedby={[
             unanswered.length > 0 ? "surla-proposal-adopt-hint" : "",
+            revisionAid !== null ? "surla-proposal-revision-needed-label" : "",
             buildRevisionNotice !== null ? "surla-proposal-build-consequence" : "",
           ].filter(Boolean).join(" ") || undefined}
           onClick={onAdopt}
@@ -232,10 +241,19 @@ export function ProposedRevisionView({
         <Button id="surla-proposal-decline" disabled={busy} onClick={onDecline}>
           Decline
         </Button>
+        {Object.keys(answers).length > 0 ? (
+          <Button id="surla-proposal-discard-answers" variant="ghost" disabled={busy} onClick={onDiscardAnswers}>
+            Discard proposal answers
+          </Button>
+        ) : null}
       </div>
       {unanswered.length > 0 ? (
         <p id="surla-proposal-adopt-hint">Answer every question to adopt this revision.</p>
       ) : null}
+      <details className="surla-details">
+        <summary>Details</summary>
+        <p>Proposed revision: <code>{proposal.request_revision}</code></p>
+      </details>
     </Card>
   );
 }
@@ -260,7 +278,7 @@ function ProposalQuestion({
       <div>
         <strong>{question.question}</strong> {isNew ? <Badge variant="accent">New</Badge> : null}
       </div>
-      <ChoiceGroup label={question.question} options={question.options} selected={selected} disabled={busy}
+      <ChoiceGroup label={question.question} options={question.options} selected={selected} matchingOption={question.draft_option} disabled={busy}
         onSelect={(option) => onAnswer(question.id, option)}
         optionAttributes={(option) => ({ "data-option": option })} />
     </li>

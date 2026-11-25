@@ -58,7 +58,7 @@ func TestCheckpointTracesPreserveUnsavedEdits(t *testing.T) {
 			StartTime: "2026-01-02T03:04:05Z", EndTime: "2026-01-02T03:04:06Z",
 			DurationMs: 1000, Status: status,
 			Summary:    "Safe diagnostic <img src=x onerror=alert(1)>",
-			Attributes: map[string]string{"surla.change_id": "change-1"},
+			Attributes: map[string]string{"surla.change_id": "change-1", "surla.caller_kind": "test_writer"},
 		}
 	}
 	svc := &traceFixtures{ControlPlane: cp, pages: map[string]*gensurla.TraceList{
@@ -98,6 +98,7 @@ Array.from(region().querySelectorAll("button")).find((b) => b.textContent === "R
 expect(!last().has("cursor"), "retry reused an invalid older cursor");
 await until(() => region().getAttribute("aria-busy") === "false" && region().textContent.includes("Safe diagnostic <img src=x onerror=alert(1)>"), "summary was dropped");
 expect(!region().querySelector("img"), "diagnostic text became executable HTML");
+expect(region().querySelector(".surla-trace-heading").textContent.includes("Test writer"), "the trace did not name its recorded caller role");
 const details = region().querySelector("details");
 expect(details && !details.open, "opaque identifiers were not progressively disclosed");
 details.querySelector("summary").click();

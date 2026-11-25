@@ -63,7 +63,10 @@ expect(editor().dataset.requestRevision === r1.request_revision && !prior(), "ex
 const r2 = await revise(r1, "Refunds up to $50 are instant; refunds over $50 require approval.", twoExamples("Manager approval"));
 await until(() => editor().dataset.requestRevision === r2.request_revision, "R2 did not replace the clean R1");
 const onR2 = prior();
-expect(onR2 && onR2.textContent.includes("Previous Saved Revision") && onR2.textContent.includes(r1.request_revision) && onR2.textContent.includes(r1.summary) && onR2.textContent.includes("check_01") && onR2.textContent.includes("Kept") && !preserved() && !page.$("#surla-openui-workspace"), "expected R2 to show R1 with check_01 Kept and no preserved draft or OpenUI workspace");
+expect(onR2 && onR2.open && onR2.querySelector("summary").textContent.includes("Previous saved revision " + r1.request_revision.slice(0, 12)) &&
+       onR2.textContent.includes(r1.request_revision) && onR2.textContent.includes(r1.summary) && onR2.textContent.includes("check_01") &&
+       onR2.textContent.includes("Kept") && !preserved() && !page.$("#surla-openui-workspace"),
+       "expected R2 to show the previous saved revision with check_01 Kept and no preserved draft or OpenUI workspace");
 
 // 1b. A same-revision update (a new decision view) applies in place, keeping drafts and the previous revision.
 page.type(outcome("check_02"), "Draft edit kept across same-hash OpenUI update");

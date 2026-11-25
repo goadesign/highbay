@@ -345,7 +345,18 @@ await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").
 page.$('#surla-proposal [data-question-id="q-review"] [data-option="keep"]').click();
 page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep my local scenario");
 page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "earlier agreement did not ask for Build consent");
+expect(page.text("#surla-build-question").includes("Build the earlier agreed revision") &&
+       page.text("#surla-build-question").includes(card.request_revision.slice(0, 12)) &&
+       page.sent("POST", "/changes/chg-nav-next/build").length === 0, "the prompt failed to name its earlier agreement or started Build before consent");
+page.$("#surla-build-cancel").click();
+await until(() => !page.$("#surla-build-confirm") && page.doc.activeElement === page.$("#surla-build-start"), "Cancel lost focus or left consent open");
+page.$("#surla-build-start").click();
+await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "asking again did not recover Build confirmation");
+page.$("#surla-build-confirm").click();
 await until(() => page.$("#surla-build-open-blocking-change"), "other-change recovery action did not appear");
+const [start] = page.sent("POST", "/changes/chg-nav-next/build");
+expect(start.body.request_revision === card.request_revision && !("replaces" in start.body), "first Build submitted a different revision or replaced a start");
 page.$("#surla-build-open-blocking-change").click();
 await until(() => page.$("#surla-cp1-editor")?.dataset.changeId === "chg-nav-open", "open-blocking-change action did not show its subject");
 const preserved = page.text("#surla-preserved-draft");

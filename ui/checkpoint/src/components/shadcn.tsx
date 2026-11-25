@@ -100,6 +100,7 @@ interface ChoiceGroupProps {
   label: string;
   options: readonly string[];
   selected: string;
+  matchingOption?: string;
   disabled?: boolean;
   onSelect: (option: string) => void;
   optionAttributes?: (option: string) => { [name: `data-${string}`]: string };
@@ -107,7 +108,7 @@ interface ChoiceGroupProps {
 
 // ChoiceGroup gives one Tab stop to a set of exclusive choices. Arrow keys
 // move focus and select within the group, like a native single-choice field.
-export function ChoiceGroup({ label, options, selected, disabled, onSelect, optionAttributes }: ChoiceGroupProps) {
+export function ChoiceGroup({ label, options, selected, matchingOption, disabled, onSelect, optionAttributes }: ChoiceGroupProps) {
   const selectedIndex = Math.max(0, options.indexOf(selected));
   function moveChoice(event: React.KeyboardEvent<HTMLDivElement>) {
     const direction = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1
@@ -124,7 +125,9 @@ export function ChoiceGroup({ label, options, selected, disabled, onSelect, opti
   return <div className="shadcn-choice-group" role="group" aria-label={label} onKeyDown={moveChoice}>
     {options.map((option, index) => <ChoiceOption key={option} {...optionAttributes?.(option)}
       selected={selected === option} tabIndex={index === selectedIndex ? 0 : -1}
-      disabled={disabled} onClick={() => onSelect(option)}>{option}</ChoiceOption>)}
+      disabled={disabled} onClick={() => onSelect(option)}>
+      {option}{matchingOption === option ? <> <Badge variant="outline">Matches current draft</Badge></> : null}
+    </ChoiceOption>)}
   </div>;
 }
 

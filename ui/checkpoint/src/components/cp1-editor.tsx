@@ -38,6 +38,8 @@ export interface CP1EditorProps {
   cp4Open: boolean;
   preservedDraft: PreservedDraft | null;
   formError: string | null;
+  // revisionAid explains and resolves a choice the draft does not implement.
+  revisionAid: React.ReactNode | null;
   onSetAnswer: (ambiguityId: string, option: string) => void;
   onSetExampleField: (
     exampleId: string,
@@ -147,6 +149,7 @@ export function CP1EditorView({
   cp4Open,
   preservedDraft,
   formError,
+  revisionAid,
   onSetAnswer,
   onSetExampleField,
   onSubmitConfirm,
@@ -160,6 +163,7 @@ export function CP1EditorView({
   const stories = card.stories ?? [];
   const localExamplesEdited = areExamplesModified(card.examples, draftExamples);
   const draftDirty = isDraftDirty(card, draftAnswers, draftExamples);
+  const priorWasDraft = priorCard?.status === "needs_confirmation" && card.status === "confirmed";
   const ctxValue: CP1DraftContextValue = {
     card,
     draftAnswers,
@@ -234,12 +238,6 @@ export function CP1EditorView({
         <strong>Requested change: </strong>
         {card.prompt}
       </p> : null}
-      {card.revision_note ? (
-        <p id="surla-agreement-revision-note">
-          <strong>Revision note: </strong>
-          {card.revision_note}
-        </p>
-      ) : null}
       {card.confirmed_by ? (
         <p>
           <strong>
@@ -290,6 +288,12 @@ export function CP1EditorView({
             ) : null}
           </div>
         </div>
+        <p id="surla-agreement-revision">
+          {card.status === "confirmed" ? "Agreed revision" : "Draft revision"} <code>{card.request_revision.slice(0, 12)}</code>
+        </p>
+        {card.revision_note ? (
+          <p id="surla-agreement-revision-note"><strong>Revision note: </strong>{card.revision_note}</p>
+        ) : null}
         {card.status === "confirmed" ? (
           <details className="surla-details" id="surla-agreement-details">
             <summary>Agreement details</summary>
@@ -312,18 +316,17 @@ export function CP1EditorView({
       ) : null}
 
       {priorCard ? (
-        <Card
+        <details
           id="surla-prior-revision"
-          className="surla-card"
-          role="region"
-          aria-label="Previous Saved Revision"
+          className="surla-card surla-details"
+          key={priorCard.request_revision}
+          open={priorWasDraft ? undefined : true}
         >
-          <div className="surla-field-row">
-            <h3>Previous Saved Revision</h3>
-            <Badge>{priorCard.status === "confirmed" ? "Confirmed" : "Needs confirmation"}</Badge>
-            <code>{priorCard.request_revision}</code>
-          </div>
-          {priorCard.status === "needs_confirmation" && card.status === "confirmed" ? (
+          <summary>
+            {priorWasDraft ? "Previous unconfirmed draft" : "Previous saved revision"}{" "}
+            <code>{priorCard.request_revision.slice(0, 12)}</code>
+          </summary>
+          {priorWasDraft ? (
             <p>This is the proposal before confirmation. Your confirmed answers are saved in the current agreement.</p>
           ) : null}
           <p>
@@ -413,7 +416,11 @@ export function CP1EditorView({
           ) : (
             <p>None declared.</p>
           )}
-        </Card>
+          <details className="surla-details">
+            <summary>Details</summary>
+            <p>Previous saved revision: <code>{priorCard.request_revision}</code> · Status: <code>{priorCard.status}</code></p>
+          </details>
+        </details>
       ) : null}
 
       {preservedDraft && Array.isArray(preservedDraft.lines) ? (
@@ -443,7 +450,7 @@ export function CP1EditorView({
 
       <RefinementDisclosure
         confirmed={card.status === "confirmed"}
-        keepOpen={draftDirty || proposalWaiting || preservedDraft !== null || formError !== null}
+        keepOpen={draftDirty || preservedDraft !== null || formError !== null}
       >
         {openUINode}
 
@@ -461,7 +468,7 @@ export function CP1EditorView({
                 return <section className="surla-question" key={question.id}>
                   <h4>{question.question} {selected ? <Badge variant="outline">{edited ? "Edited" : "Selected"}</Badge> : null}</h4>
                   <ChoiceGroup label={"Question " + number + ". " + question.question}
-                    options={question.options} selected={selected} disabled={rpcInFlight}
+                    options={question.options} selected={selected} matchingOption={question.draft_option} disabled={rpcInFlight}
                     onSelect={(option) => onSetAnswer(question.id, option)}
                     optionAttributes={(option) => ({ "data-ambiguity-id": question.id, "data-option": option })} />
                 </section>;
@@ -471,6 +478,10 @@ export function CP1EditorView({
           </> : null}
 
           <h3>Concrete examples</h3>
+          {draftExamples.length > 0 ? <p className="surla-muted" id="surla-example-check-labels">
+            Check labels guide test writing. Verification reports suite scenario results. Use scenario coverage to find the tests for an example.
+            Starter tests use a scripted model and need no API key. Configure a model in Live target for live prompt trials.
+          </p> : null}
           <div className="surla-examples-list">
             {draftExamples.map((ex, idx) => (
               <section key={ex.id} className="surla-example-card" aria-label={"Example " + (idx + 1)}
@@ -559,12 +570,14 @@ export function CP1EditorView({
           {card.status === "confirmed" && draftDirty && !proposalWaiting && buildRevisionNotice !== null ? (
             <p id="surla-confirm-build-consequence">{buildRevisionNotice}</p>
           ) : null}
+          {revisionAid}
           <CardFooter>
             <Button
               id="surla-confirm-submit"
               variant={card.status === "confirmed" && draftDirty ? "primary" : "secondary"}
-              disabled={rpcInFlight || proposalWaiting}
+              disabled={rpcInFlight || proposalWaiting || revisionAid !== null}
               aria-describedby={proposalWaiting ? "surla-confirm-blocked" :
+                revisionAid !== null ? "surla-confirm-revision-needed-label" :
                 card.status === "confirmed" && draftDirty && buildRevisionNotice !== null
                   ? "surla-confirm-build-consequence" : undefined}
               onClick={onSubmitConfirm}

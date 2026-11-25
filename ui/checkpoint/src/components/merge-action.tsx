@@ -62,6 +62,56 @@ export function MergeFeedback({ idPrefix, controls }: { idPrefix: string; contro
   </section>;
 }
 
+// MergedBranchVerification binds a separate terminal check to the exact
+// build and known test inputs. The project settings remain operator inputs.
+export function MergedBranchVerification({
+  id, requestRevision, suiteCommit, approvedSuite, mergedCommit, storedEvaluator,
+}: {
+  id: string;
+  requestRevision: string;
+  suiteCommit: string | null;
+  approvedSuite: boolean;
+  mergedCommit: string | null;
+  storedEvaluator: boolean;
+}) {
+  const candidate = mergedCommit !== null ? shellWord(mergedCommit) : '"$(git rev-parse --verify HEAD)"';
+  const suite = shellWord(suiteCommit ?? "REPLACE_WITH_SUITE_COMMIT");
+  const candidateModule = storedEvaluator ? "REPLACE_WITH_CANDIDATE_MODULE" : ".";
+  const binary = storedEvaluator ? "REPLACE_WITH_BINARY_NAME=REPLACE_WITH_BINARY_PACKAGE" : "SERVICE=./cmd/SERVICE";
+  const suiteRepo = storedEvaluator ? "REPLACE_WITH_SUITE_REPO" : ".";
+  const suiteModule = storedEvaluator ? "REPLACE_WITH_SUITE_MODULE" : "eval";
+  const suiteCommand = storedEvaluator ? "REPLACE_WITH_SUITE_COMMAND" : "./gen/cmd/SERVICE-evals";
+  const command = 'VERIFY_DIR="$(mktemp -d)" &&\n' + [
+    "surla verify",
+    "-candidate-repo . -candidate-commit " + candidate,
+    "-candidate-module " + shellWord(candidateModule) + " -binary " + shellWord(binary),
+    "-suite-repo " + shellWord(suiteRepo) + " -suite-commit " + suite,
+    "-suite-module " + shellWord(suiteModule) + " -suite-command " + shellWord(suiteCommand),
+    "-request-revision " + shellWord(requestRevision),
+    '-work-dir "$VERIFY_DIR/work" -report-dir "$VERIFY_DIR/reports" -builder-view',
+  ].join(" \\\n  ");
+
+  return <details id={id} className="surla-details">
+    <summary>Verify the merged branch from the terminal</summary>
+    <p>{mergedCommit !== null
+      ? "Run from the project's repository root. This template checks the resulting commit from the merge receipt."
+      : "Check out the merged branch and run from its repository root. This template checks that branch's current commit."}
+      {" The command creates a separate verification report."}</p>
+    <p>{storedEvaluator
+      ? <>Use the settings shown by <code>surla verification show</code> to fill in the evaluator and candidate fields. Include a <code>-binary</code> flag for each candidate binary.</>
+      : <>Replace <code>SERVICE</code> with your service name. Adjust the module paths if your project or tests are outside the default directories.</>}</p>
+    <p>{approvedSuite ? "The suite commit comes from the saved approval."
+      : suiteCommit !== null ? "The suite commit identifies the currently accepted tests for this build."
+      : "Fill in the suite commit from the verification evidence you intend to rerun."}</p>
+    <pre tabIndex={0}><code>{command}</code></pre>
+  </details>;
+}
+
+// shellWord preserves an exact value as one literal shell argument.
+function shellWord(value: string): string {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
 // mergeRecovery explains only named server refusals. An unknown failure may
 // have lost its response after Git changed, so it never promises a rollback.
 function mergeRecovery(name: string | null): { title: string; step: string } {

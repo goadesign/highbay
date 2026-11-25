@@ -136,16 +136,31 @@ page.close();
 `)
 }
 
-// TestViewsPageLiveTargetShowsAStartInProgress draws a start that is still
-// building: the commit, since when, that it cannot be stopped yet, no Stop
-// control, and an announcement.
+// TestViewsPageLiveTargetShowsAStartInProgress follows a start that the first
+// change list already covers, even if the Live view read an earlier state.
 func TestViewsPageLiveTargetShowsAStartInProgress(t *testing.T) {
 	cp := pageLiveControlPlane(t, "prepare-hangs", Options{})
 	ps := startPageServer(t, cp)
+	// Cancel the pending start before the test server waits for its request.
+	defer func() { assert.NoError(t, cp.Close()) }()
 	runPageScript(t, ps, nil, liveScriptHelpers+`
+await control(origin, "hold", { key: "GET /changes" });
 const page = await openPage(origin, { link: input.link });
 await openLive(page);
+expect(liveState(page) === "none", "the early Live view did not read the empty state");
 void api(origin, "POST", "/live-target", { change_id: "chg-live", candidate_commit: commitA }, input.builder);
+let started = false;
+for (const deadline = performance.now() + 5000; performance.now() < deadline; ) {
+  const observed = await api(origin, "GET", "/live-target", undefined, input.builder);
+  expect(observed.status === 200, "the builder could not read the live target");
+  if (observed.body.live_target.state === "starting") {
+    started = true;
+    break;
+  }
+  await sleep(10);
+}
+expect(started, "the server did not begin the start before the first list read");
+await control(origin, "release", { key: "GET /changes" });
 await until(() => liveState(page) === "starting", "a start in progress was not drawn");
 expect(page.text("#surla-live-starting").includes(commitA) && page.text("#surla-live-starting").includes("cannot be stopped until the start finishes"), "the starting state is not described: " + page.text("#surla-live-starting"));
 expect(page.$("#surla-live-starting time"), "the start time is missing");
@@ -153,9 +168,6 @@ expect(!page.$("#surla-live-stop"), "Stop is offered while the start builds");
 await until(() => page.text("#surla-live-announcement").includes("is starting from commit"), "the start was not announced");
 page.close();
 `)
-	// Close ends the start the script left building, so the test server's
-	// own close does not wait for that request.
-	require.NoError(t, cp.Close())
 }
 
 // TestViewsPageStopsTheLiveTargetAfterConfirming checks the stop control
@@ -357,6 +369,7 @@ const links = ["", "-2", "-3", "-4"];
 const pages = [];
 for (const suffix of links) {
   const page = await openPage(origin, { link: input.link + suffix });
+  await until(() => page.sent("GET", "/change-updates").length > 0, "the initial change list was not read");
   await openLive(page);
   pages.push(page);
 }

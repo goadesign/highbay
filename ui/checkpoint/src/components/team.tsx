@@ -3,6 +3,7 @@
 
 import React, { useCallback, useLayoutEffect, useRef } from "react";
 import type { ProjectTeam, TeamRoleState, TeamSnapshot } from "../types";
+import { CopyPrompt } from "./copy-prompt";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
 // Role is a registered role from the generated team contract.
@@ -96,7 +97,7 @@ const attentionLabels: Record<TeamRoleState["attention"], string> = {
   permission: "permission",
   question: "question",
   auth: "sign-in required",
-  silent: "no status reported",
+  silent: "no status reported (may be waiting at a startup or folder-trust prompt)",
   assignment: "idle with an unread assignment.",
   unknown: "reason unknown",
 };
@@ -123,11 +124,12 @@ export function roleHasPane(role: Role, mode: TeamSnapshot["herdr_mode"] | undef
 }
 
 // attentionReason adds pane guidance only for a role with a pane action.
-function attentionReason(role: TeamRoleState, hasPane: boolean): string {
+function attentionReason(role: TeamRoleState, hasPane: boolean, chorusStatus: TeamSnapshot["chorus_status"]): string {
   const reason = attentionLabels[role.attention];
-  return role.attention === "assignment" && hasPane
-    ? reason + " Show its pane and tell it to read its assignments and to keep its Chorus watcher running."
-    : reason;
+  if (role.attention !== "assignment" || !hasPane) return reason;
+  return reason + (chorusStatus === "unavailable"
+    ? " Show its pane and ask it to read and wait for assignments through Surla."
+    : " Show its pane and tell it to read its assignments and to keep its Chorus watcher running.");
 }
 
 // TeamStageView shows only registered roles, retaining and labeling the last
@@ -200,7 +202,7 @@ export function TeamStageView({
             <ul id="surla-team-roles" className="surla-trace-list">
               {snapshot.roles.map((role) => {
                 const hasPane = roleHasPane(role.role, snapshot.herdr_mode);
-                const externalGuideUnknown = role.role === "guide" && !hasPane && role.state === "unknown";
+                const guidePaneUnlinked = role.role === "guide" && !hasPane && role.state === "unknown";
                 return <li key={role.role} id={"surla-team-role-" + role.role} data-state={role.state}>
                   <div className="surla-trace-heading">
                     <strong>{roleLabels[role.role]}</strong>
@@ -210,12 +212,12 @@ export function TeamStageView({
                         role.state === "error" ? "destructive" : "default"
                       }
                     >
-                      {externalGuideUnknown ? "Attached in coding agent" : stateLabels[role.state]}
+                      {guidePaneUnlinked ? "Coding agent registered · No Herdr pane linked" : stateLabels[role.state]}
                       {role.state === "needs_you" && attentionLabels[role.attention] !== ""
-                        ? ": " + attentionReason(role, hasPane) : ""}
+                        ? ": " + attentionReason(role, hasPane, snapshot.chorus_status) : ""}
                     </Badge>
                   </div>
-                  {externalGuideUnknown && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
+                  {guidePaneUnlinked && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
                   <p>{role.role === "guide" ? "No assignments" : assignmentLabels[role.assignment]}</p>
                   {hasPane ? <div className="surla-field-row">
                     <PaneButton
@@ -229,6 +231,7 @@ export function TeamStageView({
                   </div> : null}
                   <details className="surla-details">
                     <summary>{roleLabels[role.role]} details</summary>
+                    {guidePaneUnlinked ? <p>To link a pane, open a project tab in Herdr and run <code>/surla</code> there.</p> : null}
                     <p>Registered handle: <code>{role.handle}</code></p>
                   </details>
                 </li>;
@@ -262,14 +265,21 @@ export function GlobalTeamAttention({
   onFocusedControlRemoved,
 }: GlobalTeamAttentionProps) {
   const roles = snapshot?.roles.filter((role) => role.state === "needs_you") ?? [];
+  const chorusStatus = snapshot?.chorus_status;
+  const chorusUnavailable = chorusStatus === "unavailable";
   return (
     <div id="surla-team-attention" role="status" aria-live="polite">
+      {chorusUnavailable ? <p id="surla-team-chorus-status">
+        {lastRead ? "Last read: " : ""}Chorus can’t be reached for this team. Running workers can wait for assignments through Surla.
+      </p> : null}
       {roles.map((role) => {
         const hasPane = roleHasPane(role.role, snapshot?.herdr_mode);
+        const canNudge = !lastRead && chorusStatus !== "not_used" && role.role !== "guide" && role.attention === "assignment" &&
+          (chorusUnavailable || role.watcher === "gone");
         return <div key={role.role} className="surla-field-row" id={"surla-team-attention-" + role.role}>
           <span className="surla-live-wrap">
             {lastRead ? "Last read: " : ""}
-            {teamAttentionText(role, hasPane)}
+            {teamAttentionText(role, hasPane, chorusStatus)}
           </span>
           {hasPane ? <PaneButton
             role={role}
@@ -279,16 +289,32 @@ export function GlobalTeamAttention({
             onFocusedControlRemoved={onFocusedControlRemoved}
             global={true}
           /> : null}
+          {canNudge ? <CopyPrompt label={"Copy " + roleLabels[role.role].toLowerCase() + " prompt"}
+            text={workerAssignmentPrompt(role.role, chorusUnavailable)} /> : null}
         </div>;
       })}
     </div>
   );
 }
 
+// workerAssignmentPrompt gives the operator the role's read and wait path.
+// A Chorus outage uses Surla's wait tool instead of a Chorus reminder.
+function workerAssignmentPrompt(role: Role, chorusUnavailable: boolean) {
+  if (!chorusUnavailable) {
+    return "Read your current Surla assignments and continue your work. Keep your project’s Chorus watcher running while waiting.";
+  }
+  const [waitTool, listTool] = role === "test_writer"
+    ? ["wait_for_test_writer_assignment", "list_test_writer_assignments"]
+    : ["wait_for_builder_assignment", "list_builder_assignments"];
+  return "Read your current Surla assignments and continue your work. Use " + waitTool +
+    " when waiting for changes. Pass its version as since_version on the next wait." +
+    " If the wait tool is unavailable, use " + listTool + " about every 30 seconds while waiting.";
+}
+
 // teamAttentionText supplies the same sentence to the live global notice and
 // the project title. Callers select needs_you roles first.
-export function teamAttentionText(role: TeamRoleState, hasPane: boolean): string {
-  const reason = attentionReason(role, hasPane);
+export function teamAttentionText(role: TeamRoleState, hasPane: boolean, chorusStatus: TeamSnapshot["chorus_status"]): string {
+  const reason = attentionReason(role, hasPane, chorusStatus);
   const label = role.role === "guide" ? "Coding agent" : roleLabels[role.role];
   return label + " needs you" + (reason !== "" ? ": " + reason : "");
 }

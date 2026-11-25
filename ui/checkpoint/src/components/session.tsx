@@ -2,7 +2,26 @@
 // what to do when the session ends.
 
 import React from "react";
+import { CopyPrompt } from "./copy-prompt";
 import { Alert, Card } from "./shadcn";
+
+// The recovery prompt contains no project link or browser credential.
+const openViewsPrompt = "Open Surla views";
+
+// SessionRecovery offers the same fresh-session routes on either side of a
+// session. The visible prompt remains selectable if clipboard access fails.
+function SessionRecovery() {
+  return <>
+    <p>
+      Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.
+    </p>
+    <CopyPrompt text={openViewsPrompt} label="Copy prompt for coding agent" showText />
+    <details>
+      <summary>Open from a terminal without a coding agent</summary>
+      <p>In the project folder, use <code>surla --print-link</code>. Open the one-use link privately within two minutes.</p>
+    </details>
+  </>;
+}
 
 // SignedOutReason says why the page has no session.
 export type SignedOutReason = "no-link" | "link-used" | "link-failed";
@@ -30,9 +49,7 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
           {message}
         </Alert>
       ) : null}
-      <p>
-        Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.
-      </p>
+      <SessionRecovery />
       <p className="surla-muted">
         Reloading or reopening this page, or opening it in another tab, needs a fresh session
         through one of those routes.
@@ -49,7 +66,7 @@ export function SessionEndedNotice({ unsavedLines }: { unsavedLines: string[] })
     <Alert id="surla-session-ended" variant="warning" role="alert">
       <strong>This page's Surla session has ended. </strong>
       The Surla server no longer accepts it, for example because the server restarted.
-      {" "}Ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion.
+      <SessionRecovery />
       {unsavedLines.length > 0 ? (
         <>
           <p>

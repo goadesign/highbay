@@ -61,17 +61,20 @@ export function ChangeListView({
   onRetry,
 }: ChangeListViewProps) {
   if (list !== null && list.changes.length === 0 && error === null && openError === null) {
+    const phase = list.initializing_phase;
     return (
       <Card id="surla-change-list" className="surla-card surla-welcome-card"
         aria-labelledby="surla-change-list-title" aria-busy={loading ? "true" : undefined}>
         <h2 id="surla-change-list-title">
-          {guideConnected ? "Describe what you want to build in your coding agent" : "Start in your coding agent with /surla"}
+          {phase !== undefined ? "Preparing your project"
+            : guideConnected ? "Describe what you want to build in your coding agent"
+            : "Start in your coding agent with /surla"}
         </h2>
-        <p id="surla-change-list-empty">
-          {guideConnected
+        <p id="surla-change-list-empty" role={phase !== undefined ? "status" : undefined}>
+          {phase ?? (guideConnected
             ? "Your coding agent drafts the Change Card. It opens here when it’s ready."
             : <>Open your coding agent in this folder and invoke <code>/surla</code> (<code>$surla</code> in Codex)
-                to connect it, then describe what you want to build. Your Change Card will appear here automatically.</>}
+                to connect it, then describe what you want to build. Your Change Card will appear here automatically.</>)}
         </p>
         {guideConnected && guideInHerdr ? (
           <div className="surla-field-row">
@@ -81,11 +84,11 @@ export function ChangeListView({
             </Button>
           </div>
         ) : null}
-        <ol className="surla-welcome-steps">
+        {phase === undefined ? <ol className="surla-welcome-steps">
           <li><strong>Confirm intent</strong> Answer open questions and lock concrete examples before code is written.</li>
           <li><strong>Build &amp; verify</strong> Surla coordinates implementation and independent checks.</li>
           <li><strong>Approve &amp; merge</strong> Review the verified evidence and merge the change into your branch.</li>
-        </ol>
+        </ol> : null}
       </Card>
     );
   }
@@ -150,6 +153,7 @@ function ChangeListRow({
   busy: boolean;
   onOpen: (changeId: string) => void;
 }) {
+  const openLabel = "Open: " + item.summary;
   // IDs are application data and may contain whitespace; React owns this
   // accessibility reference so it remains one valid, unique ID token.
   const inputsDescriptionId = React.useId();
@@ -158,11 +162,12 @@ function ChangeListRow({
       <Button
         id={"surla-open-change-" + item.change_id}
         className="surla-change-open"
+        aria-label={openLabel + " (" + item.change_id + ")"}
         aria-current={open ? "true" : undefined}
         disabled={busy}
         onClick={() => onOpen(item.change_id)}
       >
-        {"Open: " + item.summary}
+        {openLabel}
       </Button>{" "}
       <Badge variant={item.status === "confirmed" ? "success" : "warning"}>
         {item.status === "confirmed" ? "Confirmed" : "Needs confirmation"}
@@ -199,6 +204,10 @@ function ChangeListRow({
       <span className="surla-muted">
         Saved <time dateTime={item.saved_at}>{new Date(item.saved_at).toLocaleString()}</time>
       </span>
+      <p className="surla-muted">
+        {item.status === "confirmed" ? "Agreed revision" : "Draft revision"} <code>{item.request_revision.slice(0, 12)}</code>
+        {item.proposed_revision ? <> · Proposed revision <code>{item.proposed_revision.slice(0, 12)}</code></> : null}
+      </p>
       <details className="surla-details">
         <summary>Details</summary>
         <p>

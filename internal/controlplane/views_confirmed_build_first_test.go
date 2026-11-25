@@ -115,20 +115,21 @@ page.close();
 `)
 }
 
-// TestViewsPageConfirmedProposalOpensRefinement makes the proposal's blocked
-// refinement path visible even when the user had not opened the saved form.
-func TestViewsPageConfirmedProposalOpensRefinement(t *testing.T) {
+// TestViewsPageConfirmedProposalKeepsRefinementClosed lets the proposal stay in
+// focus while the untouched agreement's refinement form remains collapsed.
+func TestViewsPageConfirmedProposalKeepsRefinementClosed(t *testing.T) {
 	ps, agreed := proposalPage(t)
 	runPageScript(t, ps, map[string]any{"agreed": agreed}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-refine-agreement"), "the agreed change did not open");
 expect(!page.$("#surla-refine-agreement").open, "an unchanged form was expanded");
 await control(origin, "act", { key: "propose" });
-await until(() => page.$("#surla-proposal") && page.$("#surla-refine-agreement").open, "the proposal's refinement path stayed hidden");
+await until(() => page.$("#surla-proposal"), "the proposal did not appear");
+expect(!page.$("#surla-refine-agreement").open, "the proposal opened a clean agreement form");
 expect(page.$("#surla-confirm-submit").disabled && page.$("#surla-confirm-blocked") && page.$("#surla-cp1-editor").dataset.requestRevision === input.agreed, "the proposal replaced the agreement or lost its explanation");
 page.$("#surla-proposal-decline").click();
 await until(() => !page.$("#surla-proposal") && !page.$("#surla-confirm-submit").disabled, "declining did not restore refinement");
-expect(page.$("#surla-refine-agreement").open, "resolving the proposal collapsed the refinement path");
+expect(!page.$("#surla-refine-agreement").open, "resolving the proposal opened the untouched refinement form");
 page.close();
 `)
 }
@@ -143,6 +144,9 @@ const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-cp1-form-card"), "the proposed card did not open");
 expect(!page.$("#surla-refine-agreement") && !page.$("#surla-agreement-details") && !page.$("#surla-cp1-form-card").closest("details"), "the first confirmation form was folded");
 expect(page.text("#surla-cp1-form-card").includes("Open Questions (1)"), "the unconfirmed questions changed meaning");
+expect(page.text("#surla-example-check-labels").includes("Check labels guide test writing") &&
+       page.text("#surla-example-check-labels").includes("Starter tests use a scripted model and need no API key") &&
+       page.text("#surla-example-check-labels").includes("Live target"), "the form did not distinguish test-writing labels, starter tests and live trials");
 expect(!page.$("#surla-read-full-summary"), "an unconfirmed proposal offers an agreed summary");
 page.$('[data-ambiguity-id="chg-unconfirmed-fold-ambiguity-01"][data-option="subtotal_only"]').click();
 const field = page.$('textarea[data-field="expected_outcome"]');
@@ -154,6 +158,10 @@ await until(() => page.$("#surla-agreement-details"), "confirmation did not show
 const sent = page.sent("POST", "/changes/confirm");
 expect(sent.length === 1 && sent[0].body.answers[card.ambiguities[0].id] === "subtotal_only" && sent[0].body.examples[0].expected_outcome === "Manager approval", "confirmation lost the chosen answer or edited example");
 const prior = page.text("#surla-prior-revision");
+const priorDetails = page.$("#surla-prior-revision");
+expect(!priorDetails.open && priorDetails.querySelector("summary").textContent.includes("Previous unconfirmed draft") &&
+       priorDetails.querySelector("summary code").textContent === card.request_revision.slice(0, 12),
+       "the previous draft was not collapsed under its short revision");
 expect(prior.includes(card.request_revision) && prior.includes("This is the proposal before confirmation. Your confirmed answers are saved in the current agreement.") && prior.includes("Not yet answered in that proposal (options: subtotal_only, total_with_tax)") && !prior.includes("Confirmed answer:"), "confirmation history misrepresents the earlier unanswered proposal");
 expect(page.text("#surla-confirmed-decisions").includes("subtotal_only"), "the current agreement lost its confirmed answer");
 page.close();

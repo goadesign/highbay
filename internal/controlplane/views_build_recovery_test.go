@@ -6,6 +6,7 @@ package controlplane
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,11 +28,25 @@ func TestViewsPageBuildIgnoresThePreviousChangesDelayedRead(t *testing.T) {
 		ChangeID: second.ChangeID, RequestRevision: second.RequestRevision,
 	})
 	require.NoError(t, err)
+	current, err := cp.GetBuild(asCaller(pageOwner, CallerUser), &gensurla.GetBuildPayload{ChangeID: second.ChangeID})
+	require.NoError(t, err)
+	recent, ok := current.Build.AsStarted()
+	require.True(t, ok)
+	branchTip, checkTime, checkPassed := strings.Repeat("d", 40), "2026-11-24T14:02:21Z", false
+	recent.Builder.HeadCommit = &branchTip
+	recent.Builder.LastCheckAt = &checkTime
+	recent.Builder.LastCheckPassed = &checkPassed
+	encoded, err := gensurla.EncodeChangeBuild(current)
+	require.NoError(t, err)
 	ps := startPageServer(t, cp)
 
-	runPageScript(t, ps, map[string]any{"revision": second.RequestRevision, "started": started.Build.StartedAt}, `
+	runPageScript(t, ps, map[string]any{
+		"revision": second.RequestRevision, "started": started.Build.StartedAt,
+		"build": string(encoded), "tip": branchTip, "checked": checkTime,
+	}, `
 const firstPath = "/changes/chg-first/build";
 await control(origin, "answer-later", { key: "GET " + firstPath });
+await control(origin, "reply", { key: "GET /changes/chg-second/build", status: 200, body: JSON.parse(input.build) });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#surla-open-change-chg-first"), "the change list did not open");
 page.$("#surla-open-change-chg-first").click();
@@ -40,6 +55,13 @@ page.$("#surla-nav-changes").click();
 page.$("#surla-open-change-chg-second").click();
 await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-second" && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "the second change's current build did not open");
 expect(page.text("#surla-build-details").includes(input.revision) && page.text("#surla-build-details").includes(input.started), "the selected build's revision and start are missing");
+expect(page.text("#surla-build-builder-branch").includes("surla/build-1") &&
+       page.text("#surla-build-branch-tip") === "Branch tip " + input.tip.slice(0, 12) &&
+       page.text("#surla-build-details").includes(input.tip), "Build did not identify the branch and its exact tip");
+expect(page.text("#surla-build-last-project-check").includes("Last project check did not pass") &&
+       page.$("#surla-build-last-project-check time")?.dateTime === input.checked &&
+       !page.text("#surla-build-last-project-check").includes(input.tip.slice(0, 12)),
+       "the last project check lost its reported result or was bound to the branch tip");
 const replaced = [];
 const observer = new page.win.MutationObserver(() => {
   if (page.$("#surla-build-start") || page.$("#surla-build-error") || page.$("#surla-build-section").dataset.state !== "started") replaced.push(page.text("#surla-build-section"));
@@ -52,6 +74,8 @@ await sleep(0);
 observer.disconnect();
 expect(replaced.length === 0, "the previous change's delayed answer replaced the current build: " + JSON.stringify(replaced));
 expect(page.text("#surla-build-details").includes(input.started), "the selected build lost its saved start");
+expect(page.text("#surla-build-branch-tip").includes(input.tip.slice(0, 12)) &&
+       page.$("#surla-build-last-project-check time")?.dateTime === input.checked, "the delayed read replaced the selected builder progress");
 expect(page.sent("POST", firstPath).length === 0 && page.sent("POST", "/changes/chg-second/build").length === 0, "navigation started a build");
 page.close();
 `)
