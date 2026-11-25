@@ -312,6 +312,35 @@ func TestInitProjectEmptyDirStillUsesChild(t *testing.T) {
 	assert.Equal(t, result.Dir, newControlPlane(t, opts).currentWorkspaceDir())
 }
 
+// TestInitProjectCreatesABlankProjectUnlessAskedForTheWorkedExample verifies
+// that init_project passes worked_example on to the scaffold, which owns what
+// each project holds: by default the published design declares no method, and
+// with worked_example it is the price-answering example's.
+func TestInitProjectCreatesABlankProjectUnlessAskedForTheWorkedExample(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		example bool
+	}{
+		{name: "default"},
+		{name: "worked example", example: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cp := newControlPlane(t, inPlaceInitOptions(t))
+			shopModule := "example.com/shop"
+			result, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{
+				ModulePath: &shopModule, WorkedExample: tc.example,
+			})
+			require.NoError(t, err)
+			design, err := os.ReadFile(filepath.Join(result.Dir, "design", "design.go"))
+			require.NoError(t, err)
+			assert.Equal(t, tc.example, strings.Contains(string(design), `Method("ask"`), "the example's ask method")
+			assert.Equal(t, !tc.example, !strings.Contains(string(design), "Method("), "the blank service declares no method")
+		})
+	}
+}
+
 // TestInitProjectDerivesDefaultModulePath verifies omitted module_path
 // derivation across in-place and child directories, reserved/version folder
 // names, and the 48-character length threshold.

@@ -1,0 +1,19 @@
+// Package design declares the [[.Name]] service. It has no methods yet: the
+// first change adds them here. goa gen generates the service's transport
+// code and the C4 model from this package.
+package design
+
+import (
+	// goa-ai's DSL declares agents and their tools. Nothing here uses it yet;
+	// the import keeps goa-ai at the version this project was created with.
+	_ "goa.design/goa-ai/dsl"
+	. "goa.design/goa/v3/dsl"
+)
+
+var _ = API("[[.Name]]", func() {
+	Title("[[.Name]]")
+})
+
+var _ = Service("[[.Name]]", func() {
+	Description("The [[.Name]] service.")
+})

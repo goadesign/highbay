@@ -236,6 +236,26 @@ func TestWholeJourneyThroughTheProjectServer(t *testing.T) {
 	}
 }
 
+// printedFirstCommit returns the commands surla init printed to make the
+// first commit: its first block of indented lines, which ends with surla,
+// the command that starts the project's server.
+func printedFirstCommit(t *testing.T, printed string) []string {
+	t.Helper()
+	var commands []string
+	for _, line := range strings.Split(printed, "\n") {
+		command, indented := strings.CutPrefix(line, "  ")
+		if !indented && len(commands) > 0 {
+			break
+		}
+		if indented {
+			commands = append(commands, command)
+		}
+	}
+	require.NotEmpty(t, commands, "surla init prints the first commit's commands:\n%s", printed)
+	require.Equal(t, "surla", commands[len(commands)-1], "the commands end by starting Surla")
+	return commands
+}
+
 // newWholeJourney isolates the journey from the user's Surla configuration,
 // the Git identity of the commits the test and the server make, model keys,
 // trace export and the caller's Herdr terminal, and moves into an empty
@@ -265,8 +285,9 @@ func newWholeJourney(t *testing.T) *wholeJourney {
 	return &wholeJourney{t: t, workspace: workspace}
 }
 
-// commitStarter creates the starter with surla init, which ships its Story,
-// and runs, in a POSIX shell from the workspace, exactly the commands surla
+// commitStarter creates the worked example with surla init -example, which
+// ships its Story and the helper agent this journey's changes extend, and
+// runs, in a POSIX shell from the workspace, exactly the commands surla
 // init prints to make the first commit: its first block of indented lines,
 // up to the closing surla, which starts the project's server and which the
 // next leg replaces with the in-process server. Those commands must commit
@@ -275,20 +296,9 @@ func (j *wholeJourney) commitStarter(t *testing.T) {
 	dir := filepath.Join(j.workspace, "shop")
 	var printed strings.Builder
 	require.NoError(t, runInit([]string{
-		"-dir", dir, "-module", "example.com/shop", "-surla-version", starterSurlaVersion,
+		"-dir", dir, "-module", "example.com/shop", "-surla-version", starterSurlaVersion, "-example",
 	}, &printed))
-	var commands []string
-	for _, line := range strings.Split(printed.String(), "\n") {
-		command, indented := strings.CutPrefix(line, "  ")
-		if !indented && len(commands) > 0 {
-			break
-		}
-		if indented {
-			commands = append(commands, command)
-		}
-	}
-	require.NotEmpty(t, commands, "surla init prints the first commit's commands:\n%s", printed.String())
-	require.Equal(t, "surla", commands[len(commands)-1], "the commands end by starting Surla")
+	commands := printedFirstCommit(t, printed.String())
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 	defer cancel()
 	shell := exec.CommandContext(ctx, "/bin/sh", "-c", strings.Join(commands[:len(commands)-1], " && "))

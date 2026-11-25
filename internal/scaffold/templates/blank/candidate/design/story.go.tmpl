@@ -1,0 +1,19 @@
+package design
+
+// The [[.Name]]'s Story says, in Surla's Story language, who uses the
+// [[.Name]] and which paths their requests take. It is empty: the first
+// change declares it in this file with Story, after changing the import below
+// to
+//
+//	import . "github.com/goadesign/surla/story/dsl"
+//
+// Surla evaluates the Story when the guide calls refresh_story, and keeps it
+// with a change when the guide proposes or revises that change with the
+// refresh's op_id (story_refresh_op_id). Every finished flow (one with a
+// start, an outcome and no open question) is a test each build of a change
+// requires: a flow with the key places-order becomes the scenario
+// places_order of the evaluation suite in eval/, which the method PlacesOrder
+// of package eval/acceptance runs. A flow's key must not repeat a scenario
+// the suite in eval/ already declares by hand. The command
+// go doc github.com/goadesign/surla/story/dsl lists the language.
+import _ "github.com/goadesign/surla/story/dsl"

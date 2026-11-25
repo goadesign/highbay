@@ -72,7 +72,7 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	buildCache := testmodule.CompilerCache(t)
 	generator, err := designeval.NewEvaluatorWithCache(t.TempDir(), buildCache)
 	require.NoError(t, err)
-	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published}, scaffold.RunCommand, generator)
+	name, err := scaffold.Init(t.Context(), scaffold.Options{Dir: seed, WorkDir: t.TempDir(), Module: "example.com/shop", SurlaVersion: published, Example: true}, scaffold.RunCommand, generator)
 	require.NoError(t, err)
 	commit := commitAll(t, seed)
 

@@ -1,0 +1,92 @@
+# [[.Name]]
+
+A Goa / Goa-AI service created by `surla init` or the `init_project` MCP tool.
+It is a blank starting point: the service has no methods yet, and its test
+suite only checks that the program starts. Each change you agree to in Surla
+adds behavior and the tests that prove it.
+
+## What is here
+
+- `design/` declares the `[[.Name]]` service (`design/design.go`), its C4
+  architecture model (`design/model.go`) and its Story (`design/story.go`):
+  who uses the service and the flows their requests take. The service has no
+  methods and the Story has no flows yet.
+- `gen/` is generated from `design/`. The guide edits the next design in its
+  draft and proposes a revision for you to adopt. The builder calls the
+  `generate_code` MCP tool on the Surla project server to write that agreed
+  design into its working copy's `design/` and regenerate `gen/`; it edits
+  neither directory. An operator can run `surla gen` in this directory: it
+  runs Goa's generator for this module with the module's own versions. Never
+  edit `gen/`. Once the design declares an agent, generation also writes
+  `AGENTS_QUICKSTART.md` here for coding agents; commit it with `gen/`.
+- `cmd/[[.Name]]` serves the API on the address given with `-listen host:port`
+  and prints the address once it has bound it. Nothing is mounted on it yet.
+- `eval/` is a separate Go module: the evaluator suite. Its one scenario,
+  `starts_and_listens`, starts the `[[.Name]]` binary and checks that it
+  binds an address and accepts connections on it. Its program, `eval/gen/cmd/[[.Name]]-evals`, is
+  generated with the rest of `eval/gen/` from `eval/design/` and calls
+  `eval/acceptance`: its `Name`, `Hooks`, `New`, `Live` and
+  `LiveThroughGateway`. `Live` and `LiveThroughGateway` refuse until a change
+  adds an agent, because a live copy exists to try prompt wording and this
+  service calls no AI model yet. `eval/design/story_tests.go` lists the tests
+  the Story requires, one scenario per finished flow; Surla writes it again
+  from the agreed Story during a build, so leave it as it is.
+
+The evaluator suite lives in this repository, so anyone who can read the code
+can read its scenarios; none of them is hidden. Keep scenarios that must stay
+hidden from builders in an evaluator repository they cannot read.
+
+## Next steps
+
+If you created this project with `surla init`, make the first commit and start
+Surla in this directory:
+
+```sh
+git init
+git add .gitignore README.md go.mod go.sum design gen cmd eval
+git commit -m "Start [[.Name]] from surla init"
+surla
+```
+
+`surla` starts this project's server, or attaches to it when it is already
+running, and opens the project's views page in your browser. If the guide
+created this project with `init_project`, the Surla project server has already
+initialized the Git repository, created the initial commit and bound itself to
+this directory.
+
+For each change:
+
+1. You describe what you want to your coding agent, the guide. It drafts the
+   design and the Story and proposes a Change Card, which you confirm on the
+   views page.
+2. You start the build there. The builder writes the service in its own
+   working copy and, without stored verification settings, a test writer
+   writes the tests the Story requires in `eval/`.
+3. The builder checks its uncommitted files with `check_project`, commits on
+   its own branch and calls `verify_change`.
+4. When a verification passes, you review its result and approve it on the
+   views page.
+
+See the
+[MCP tools reference](https://github.com/goadesign/surla/blob/main/docs/REFERENCE.md#mcp-tools)
+for each tool's inputs and results. Coding agents read the architecture and
+evaluator guide at `surla://golden-path`.
+
+`surla verify` and `surla approve` are operator tools that check a commit
+outside the server. To verify the current commit against the evaluator suite
+yourself:
+
+```sh
+VERIFY_DIR="$(mktemp -d)"
+WORK_DIR="$VERIFY_DIR/work"
+REPORT_DIR="$VERIFY_DIR/reports"
+surla verify \
+  -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary [[.Name]]=./cmd/[[.Name]] \
+  -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/[[.Name]]-evals \
+  -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
+```
+
+`surla verify` keeps `$WORK_DIR` after the run: it holds the clones, the
+built binaries, and the evaluator's private evidence. Do not share
+`$WORK_DIR`, `$REPORT_DIR`, or setup and execution failure output with coding
+agents that build the service.

@@ -3,7 +3,7 @@
 // tests at runtime.
 //
 // Real starter-template initialization (scaffold.Init and scaffold.Prepare with
-// scaffold.RunCommand on internal/scaffold/templates/{candidate,eval}) is
+// scaffold.RunCommand on internal/scaffold/templates/{blank,example}) is
 // intentionally out of scope: those paths exercise a user's real networked
 // first run and belong to the non-PR Full / starter (-tags=scaffold
 // ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/surla) jobs in

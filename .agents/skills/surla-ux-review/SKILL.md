@@ -22,8 +22,9 @@ happening, and they lose patience quickly. So the study keeps a timed record
 of those screens from the first second, and the participant waits the way
 that person waits: by looking.
 
-That person also knows only what they asked for. They have never seen
-Surla's starter sample, its generated files, or the frameworks underneath.
+That person also knows only what they asked for. A new project starts
+blank, and they have never seen its starting files, Surla's worked example,
+its generated files, or the frameworks underneath.
 So the study saves the words Surla shows them exactly as shown, and judges
 each sentence by whether someone who knows only their own request could
 understand it and answer it.
@@ -326,9 +327,9 @@ not explain it from the source.
   same page, the same application in front, the same focused pane.
 - Error text on the page, in an overlay, or in the companion.
 - Text the user must read, answer or confirm that names something the
-  participant never asked for and Surla never explained: the starter sample
-  or its features, a file path, a command-line flag, a framework term. Quote
-  it from the saved page text.
+  participant never asked for and Surla never explained: the project's
+  starting files, Surla's worked example or its features, a file path, a
+  command-line flag, a framework term. Quote it from the saved page text.
 - No visible change and no explanation for two minutes while an agent is
   working.
 

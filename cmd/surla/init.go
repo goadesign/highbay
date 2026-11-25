@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"syscall"
 
 	"github.com/goadesign/surla/internal/designeval"
@@ -18,15 +19,18 @@ import (
 )
 
 // initNextSteps is what `surla init` prints after creating a project; the
-// verbs are the shell-quoted project directory and the service name. The
+// verbs are the shell-quoted project directory, the service name, the
+// sentence saying what was created (initCreatedBlank or initCreatedExample,
+// which take the service name) and the entries the first commit stages
+// (scaffold.FirstCommitPaths: fixed names that need no shell quoting). The
 // commands end at `surla`, which starts the project's server and opens its
 // views page; the operator tools come after them.
-const initNextSteps = `Created the %[2]s service, its Story (design/story.go) and its starter evaluator suite (eval/).
+const initNextSteps = `%[3]s
 
 Next, make the first commit and start Surla in the project:
   cd %[1]s
   git init
-  git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen internal cmd eval
+  git add %[4]s
   git commit -m "Start %[2]s from surla init"
   surla
 
@@ -40,11 +44,19 @@ architecture and evaluator guide at surla://golden-path. Tool inputs and results
 https://github.com/goadesign/surla/blob/main/docs/REFERENCE.md#mcp-tools
 
 Operator tools: surla verify and surla approve check a commit outside the
-server; README.md shows the surla verify command for the starter suite.
+server; README.md shows the surla verify command for the evaluator suite.
 `
 
+const (
+	// initCreatedBlank says what `surla init` created by default.
+	initCreatedBlank = "Created the %s service as a blank project: no methods yet, an empty Story (design/story.go) and an evaluator suite (eval/) with one test that the program starts."
+	// initCreatedExample says what `surla init -example` created.
+	initCreatedExample = "Created the %s service as Surla's worked example: a price-answering service with a helper agent, its Story (design/story.go) and its evaluator suite (eval/)."
+)
+
 // init creates a starter project with scaffold.Init and prints the commands
-// that commit it and start Surla in it. The evaluator module requires the
+// that commit it and start Surla in it. The project is blank unless -example
+// asks for the worked example. The evaluator module requires the
 // Surla version this binary was built from unless -surla-version names
 // another exact version. SIGINT and SIGTERM cancel it, leaving -dir unchanged.
 func (runtime projectRuntime) init(args []string, stdout io.Writer) error {
@@ -52,6 +64,7 @@ func (runtime projectRuntime) init(args []string, stdout io.Writer) error {
 	dir := fs.String("dir", "", "directory to create; it must not exist (required)")
 	modulePath := fs.String("module", "", "Go module path of the new service, such as example.com/shop; its last element names the service (required)")
 	version := fs.String("surla-version", "", "exact github.com/goadesign/surla version the evaluator suite requires (default: the version of this surla binary)")
+	example := fs.Bool("example", false, "create Surla's worked example, a price-answering service with a helper agent, instead of a blank project")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -82,12 +95,17 @@ func (runtime projectRuntime) init(args []string, stdout io.Writer) error {
 		return err
 	}
 	name, err := scaffold.Init(ctx, scaffold.Options{
-		Dir: target, Module: *modulePath, SurlaVersion: *version, WorkDir: workDir,
+		Dir: target, Module: *modulePath, SurlaVersion: *version, WorkDir: workDir, Example: *example,
 	}, scaffold.RunCommand, designeval.NewEvaluatorInDir(evalWorkDir))
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(stdout, initNextSteps, shquote.Quote(*dir), name)
+	created := initCreatedBlank
+	if *example {
+		created = initCreatedExample
+	}
+	staged := strings.Join(scaffold.FirstCommitPaths(*example), " ")
+	_, err = fmt.Fprintf(stdout, initNextSteps, shquote.Quote(*dir), name, fmt.Sprintf(created, name), staged)
 	return err
 }
 

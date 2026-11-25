@@ -199,9 +199,10 @@ manager approves it."
    server found: actors, finished and draft flows, steps and open questions. The
    Story view shows that draft while the guide works. Where the Story starts
    from depends on the project:
-   - A starter project already has a Story, in `design/story.go`, with one
-     finished flow, `prices-cookie`, and the test that flow requires. The
-     guide adds your flows to `design/story.go` in `.surla-draft`.
+   - A new project's Story file, `design/story.go`, declares no Story yet.
+     The guide writes your Story and its flows there, in `.surla-draft`. A
+     project created as Surla's worked example already has a Story with one
+     finished flow, `prices-cookie`, and the test that flow requires.
    - In a folder with no service, the guide first creates the starter
      project with [`init_project`](REFERENCE.md#init_project). It can pass
      `dir: "."` (and omit `module_path`, so Surla derives one from the folder
@@ -251,9 +252,10 @@ Questions only you can answer
 
 `deterministic` means code can check the outcome directly; `model_judged`
 means checking it needs judgment. This is a label saved with the example, for
-you and the test writer, not an automatic per-example model judge. Starter and
-written-test verification suites run their scenarios against a scripted model by
-default (no model API key needed), not the card's examples directly, while a
+you and the test writer, not an automatic per-example model judge.
+Verification runs the test module's scenarios, not the card's examples
+directly, and needs no model API key: a test of an agent plans with a
+scripted model kept in the test module. A
 stored custom [verification evaluator](REFERENCE.md#surla-verification-and-surla-promotion)
 can use configured model provider credentials: the label
 does not select how or whether a scenario runs, and configuring a **Live
@@ -423,9 +425,10 @@ binary itself—Surla's verification builds and runs the candidate.
 Then it calls `report_tests_finished`, including which agreed answers and
 examples each scenario is stated to cover and an explanation; an empty
 statement list means **Not stated**. The report returns at once with the
-report's number; the build shows the test writer as **Reported**. In a
-starter project the test of the starter's own flow, the method `PricesCookie`
-in `eval/acceptance`, is already written and shows the form to follow.
+report's number; the build shows the test writer as **Reported**. The
+project's first test, the method `StartsAndListens` in `eval/acceptance`,
+shows the form to follow; Surla's worked example also has `PricesCookie`, the
+test of its own flow.
 
 After acceptance, Build shows **Test writer's stated coverage** against your
 agreed answers and examples. Surla validates the references and checks that the
@@ -598,7 +601,8 @@ processes with your file and network access, in one process group that the
 run owns and stops when it ends. A process that starts its own session leaves
 that group and keeps running. The test program starts with only `PATH`
 and a temporary folder in its environment: no model key and nothing else of
-yours. Surla's test layout plans with a scripted model during verification.
+yours. A test of an agent plans with a scripted model that the test module
+supplies.
 
 Every run records where its tests came from. For tests the test writer wrote,
 the run's result, as `verify_change`, `get_verification` and

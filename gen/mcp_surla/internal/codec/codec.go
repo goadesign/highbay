@@ -5856,6 +5856,12 @@ type InitProjectPayloadTransport struct {
 	// defaults to . when module_path is omitted, or to the service name derived
 	// from module_path when module_path is given.
 	Dir *string `json:"dir,omitempty"`
+	// Omit it for the user's own product: Surla creates a blank service with no
+	// methods, no Story flows and one test that the program starts, ready for the
+	// first change. Set true only when the user asks to see Surla's worked
+	// example, a price-answering service with a helper agent, a model gateway and
+	// its own tests.
+	WorkedExample *bool `json:"worked_example,omitempty"`
 }
 
 // ValidateInitProjectPayloadTransport checks decoded JSON before it becomes a service value.
@@ -7588,22 +7594,24 @@ type ProposeChangePayloadCP1AnalysisTransport struct {
 	// Concise plain-English description (2–4 sentences) of what the product or
 	// change will do for its users and the key product defaults your draft
 	// settles. Never describe file paths, candidate runner flags, or removal of
-	// Surla's starter sample.
+	// Surla's worked example.
 	Summary *string `json:"summary"`
 	// Open questions only the requester can answer: product, domain, or
 	// operational choices that change user-visible behavior. Never ask whether to
-	// replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not
+	// replace Surla's worked example or ask about internal Go/Goa plumbing. Do not
 	// ask about details the request already settles; state settled product
 	// defaults in summary, or in examples when they change an observable outcome.
 	// Send an empty list when nothing is open.
 	Ambiguities []*ProposeChangePayloadCP1AnalysisAmbiguityTransport `json:"ambiguities"`
 	// Concrete acceptance examples in plain domain terms, never placeholder text
-	// or starter-sample leftovers; each becomes a check the change must pass.
+	// or leftovers of Surla's worked example; each becomes a check the change must
+	// pass.
 	Examples []*ProposeChangePayloadCP1AnalysisExampleTransport `json:"examples"`
 	// Existing user-facing behaviors of an established product that this change
 	// must keep, each stated in plain domain terms; send an empty list ([]) on a
-	// new product (including the first change after init_project, where the
-	// starter sample is replaced rather than preserved) or when none apply.
+	// new product (including the first change after init_project: a blank project
+	// has no behavior to keep, and Surla's worked example is replaced rather than
+	// preserved) or when none apply.
 	PreservedBehaviors []*string `json:"preserved_behaviors"`
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -10420,11 +10428,11 @@ func ValidateReviseChangePayloadCP1RevisionAnalysisExampleTransport(value *Revis
 type ReviseChangePayloadCP1RevisionAnalysisTransport struct {
 	// Concise plain-English description (2–4 sentences) of the revised product
 	// behavior and settled product defaults, without file paths, candidate runner
-	// flags, or starter-sample references.
+	// flags, or references to Surla's worked example.
 	Summary *string `json:"summary"`
 	// Open questions only the requester can answer: product, domain, or
 	// operational choices that change user-visible behavior. Never ask about
-	// Surla's starter sample or internal Go/Goa plumbing. Do not ask about details
+	// Surla's worked example or internal Go/Goa plumbing. Do not ask about details
 	// the request, the design or a confirmed answer already settle; state settled
 	// product defaults in summary, or in examples when they change an observable
 	// outcome. Send an empty list when nothing is open.
@@ -17904,6 +17912,12 @@ func DecodeInitProjectPayload(data []byte) (out *surla.InitProjectPayload, err e
 		out = &surla.InitProjectPayload{
 			ModulePath: body.ModulePath,
 			Dir:        body.Dir,
+		}
+		if body.WorkedExample != nil {
+			out.WorkedExample = *body.WorkedExample
+		}
+		if body.WorkedExample == nil {
+			out.WorkedExample = false
 		}
 	}
 	return out, nil

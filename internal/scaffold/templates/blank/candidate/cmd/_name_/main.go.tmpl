@@ -1,0 +1,62 @@
+// Command [[.Name]] serves the [[.Name]] API, which has no methods yet.
+//
+// Usage:
+//
+//	[[.Name]] -listen 127.0.0.1:8080
+//
+// Once it has bound the address, it prints one line, "listening on" followed
+// by the address it bound, which names the port chosen for -listen
+// 127.0.0.1:0. The test in eval/acceptance reads that line.
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	goahttp "goa.design/goa/v3/http"
+)
+
+func main() {
+	listen := flag.String("listen", "127.0.0.1:8080", "HTTP listen address")
+	flag.Parse()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, *listen); err != nil {
+		fmt.Fprintln(os.Stderr, "[[.Name]]:", err)
+		os.Exit(1)
+	}
+}
+
+// run serves the [[.Name]] API on listen until ctx ends. The muxer has no
+// routes yet: a change mounts the server Goa generates for each service on
+// it.
+func run(ctx context.Context, listen string) error {
+	mux := goahttp.NewMuxer()
+	// otelhttp starts a span for every request; it records to the global
+	// OpenTelemetry tracer provider, which discards spans until one is set.
+	srv := &http.Server{Handler: otelhttp.NewHandler(mux, "[[.Name]]"), ReadHeaderTimeout: 10 * time.Second}
+	ln, err := net.Listen("tcp", listen)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", listen, err)
+	}
+	// Printed only after the address is bound, and as the address bound.
+	fmt.Println("listening on", ln.Addr())
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(ln) }()
+	select {
+	case err := <-errc:
+		return fmt.Errorf("serve: %w", err)
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
+	}
+}

@@ -7966,7 +7966,7 @@ var getVerificationResultFields = []tools.FieldMetadata{
 var initProjectPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Optional Go module path and directory for initializing a new Surla starter project in the bound workspace.",
+		Description: "Optional Go module path, directory and starting content for initializing a new Surla project in the bound workspace.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("module_path")},
@@ -7977,6 +7977,11 @@ var initProjectPayloadFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("dir")},
 		JSONType:    "string",
 		Description: "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("worked_example")},
+		JSONType:    "boolean",
+		Description: "Omit it for the user's own product: Surla creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Surla's worked example, a price-answering service with a helper agent, a model gateway and its own tests.",
 	},
 }
 var initProjectResultFields = []tools.FieldMetadata{
@@ -9323,17 +9328,17 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("summary")},
 		JSONType:    "string",
-		Description: "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's starter sample.",
+		Description: "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's worked example.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities")},
 		JSONType:    "array",
-		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's worked example or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities"), tools.DynamicField{}},
 		JSONType:    "object",
-		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's worked example or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
@@ -9358,12 +9363,12 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("examples")},
 		JSONType:    "array",
-		Description: "Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.",
+		Description: "Concrete acceptance examples in plain domain terms, never placeholder text or leftovers of Surla's worked example; each becomes a check the change must pass.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("examples"), tools.DynamicField{}},
 		JSONType:    "object",
-		Description: "Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.",
+		Description: "Concrete acceptance examples in plain domain terms, never placeholder text or leftovers of Surla's worked example; each becomes a check the change must pass.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("examples"), tools.DynamicField{}, tools.FixedField("scenario")},
@@ -9388,12 +9393,12 @@ var proposeChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("preserved_behaviors")},
 		JSONType:    "array",
-		Description: "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.",
+		Description: "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project: a blank project has no behavior to keep, and Surla's worked example is replaced rather than preserved) or when none apply.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("preserved_behaviors"), tools.DynamicField{}},
 		JSONType:    "string",
-		Description: "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.",
+		Description: "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project: a blank project has no behavior to keep, and Surla's worked example is replaced rather than preserved) or when none apply.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ui_composition")},
@@ -12704,17 +12709,17 @@ var reviseChangePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("summary")},
 		JSONType:    "string",
-		Description: "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or starter-sample references.",
+		Description: "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or references to Surla's worked example.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities")},
 		JSONType:    "array",
-		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's worked example or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities"), tools.DynamicField{}},
 		JSONType:    "object",
-		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+		Description: "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's worked example or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("analysis"), tools.FixedField("ambiguities"), tools.DynamicField{}, tools.FixedField("question")},
@@ -20152,8 +20157,9 @@ func MarshalInitProjectPayload(v *InitProjectPayload) ([]byte, error) {
 	_ = in
 	var out *toolhttp.InitProjectPayloadTransport
 	out = &toolhttp.InitProjectPayloadTransport{
-		ModulePath: in.ModulePath,
-		Dir:        in.Dir,
+		ModulePath:    in.ModulePath,
+		Dir:           in.Dir,
+		WorkedExample: &in.WorkedExample,
 	}
 	return json.Marshal(out)
 }
@@ -20181,6 +20187,12 @@ func UnmarshalInitProjectPayload(data []byte) (*InitProjectPayload, error) {
 	out = &InitProjectPayload{
 		ModulePath: in.ModulePath,
 		Dir:        in.Dir,
+	}
+	if in.WorkedExample != nil {
+		out.WorkedExample = *in.WorkedExample
+	}
+	if in.WorkedExample == nil {
+		out.WorkedExample = false
 	}
 	return out, nil
 }
@@ -23298,28 +23310,28 @@ func validateProposeChangePayloadCP1AnalysisTransportJSONValue(path string, valu
 		case "ambiguities":
 			if err := validateProposeChangePayloadCP1AnalysisTransportAmbiguitiesJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's worked example or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 			); err != nil {
 				return err
 			}
 		case "examples":
 			if err := validateProposeChangePayloadCP1AnalysisTransportExamplesJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.",
+				typed[key], "Concrete acceptance examples in plain domain terms, never placeholder text or leftovers of Surla's worked example; each becomes a check the change must pass.",
 			); err != nil {
 				return err
 			}
 		case "preserved_behaviors":
 			if err := validateProposeChangePayloadCP1AnalysisAmbiguityTransportOptionsJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.",
+				typed[key], "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project: a blank project has no behavior to keep, and Surla's worked example is replaced rather than preserved) or when none apply.",
 			); err != nil {
 				return err
 			}
 		case "summary":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's starter sample.",
+				typed[key], "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's worked example.",
 			); err != nil {
 				return err
 			}
@@ -24883,7 +24895,7 @@ func validateReviseChangePayloadCP1RevisionAnalysisTransportJSONValue(path strin
 		case "ambiguities":
 			if err := validateProposeChangePayloadCP1AnalysisTransportAmbiguitiesJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's worked example or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 			); err != nil {
 				return err
 			}
@@ -24911,7 +24923,7 @@ func validateReviseChangePayloadCP1RevisionAnalysisTransportJSONValue(path strin
 		case "summary":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or starter-sample references.",
+				typed[key], "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or references to Surla's worked example.",
 			); err != nil {
 				return err
 			}
@@ -27545,10 +27557,18 @@ func validateInitProjectPayloadJSONValue(path string, value any, description str
 			); err != nil {
 				return err
 			}
+		case "worked_example":
+			if err := validateBooleanJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Omit it for the user's own product: Surla creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Surla's worked example, a price-answering service with a helper agent, a model gateway and its own tests.",
+			); err != nil {
+				return err
+			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"dir",
 				"module_path",
+				"worked_example",
 			})
 		}
 	}

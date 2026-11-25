@@ -28,7 +28,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Build** | The user's decision to build one agreed revision as the project's one open build (numbered `n`, with `taking` state `building`, `passed`, `merged` or `dropped`). It saves that revision's Story, design, base commit and confirmed answers, examples and preserved behaviors, and gives the builder and the test writer their assignments. |
 | **The build working copies** | Linked Git working copies of the project at `.surla-build` on `surla/build-<n>` (where the builder works and commits) and `.surla-tests` on `surla/tests-<n>` (where the test writer works and where Surla commits accepted tests). |
 | **Evaluator** | A test program that follows the [evaluator suite command contract](#evaluator-suite-command-contract): it declares its scenarios, runs them against the application's binaries and prints a report. Surla generates the evaluator of a Surla test module, such as the one the test writer works in, from that module's tests; stored verification settings name an evaluator the user maintains. |
-| **Scenario** | One named test in an evaluator, such as `prices_tea`. A report gives each scenario's outcome: passed, failed, not run or a harness error. |
+| **Scenario** | One named test in an evaluator, such as `starts_and_listens`. A report gives each scenario's outcome: passed, failed, not run or a harness error. |
 | **Tests commit** | The commit at which Surla accepted a build's tests, or the evaluator commit named in stored verification settings. Verification runs those tests. |
 | **Stored verification settings** | An evaluator the user stores with `surla verification set`. With them, every change verifies with that evaluator and builds add no test writer. |
 | **Live target** | A running copy of the application, built from a commit by the server, on which the builder tries prompt wording. Surla never changes an application the user runs or deployed. |
@@ -390,8 +390,9 @@ branch, including a manual merge. A status read never starts or stops agents.
 
 ### `surla init`
 
-Creates a starter project in `<dir>`: a Goa and Goa-AI service with an agent
-and a `goa.design/model` architecture, and a test module in `<dir>/eval`. It
+Creates a starter project in `<dir>`: a Goa and Goa-AI service with a
+`goa.design/model` architecture, and a test module in `<dir>/eval`. The
+project is blank unless `-example` asks for Surla's worked example. It
 resolves dependencies, generates each module's code with the generator
 [`surla gen`](#surla-gen) uses, runs `go vet ./...` and
 `go test ./...` in both modules, and prints the commands that make the first
@@ -408,31 +409,38 @@ absent, and it never replaces an existing entry.
   `github.com/goadesign/surla` that `eval/go.mod` requires. It defaults to the
   version the `surla` binary was built from and is required for a `(devel)` or
   `+dirty` build; `latest` and branch names are refused.
+- `-example`: create Surla's worked example instead of the blank project.
 
-**What the starter holds.** `cmd/<name>` runs a `helper` agent that prices
-items through a tool and reaches a model through `-model-gateway <host:port>`;
-it registers the prompt `<name>.helper.system`.
-
-`design/story.go` declares the service's Story with one finished flow,
-`prices-cookie`. The service's `go.mod` requires the Story language's module,
+**What the blank project holds.** The service in `design/design.go` has no
+methods, and `cmd/<name>` serves it on `-listen <host:port>` with nothing
+mounted. `design/model.go` declares the service's one container.
+`design/story.go` imports the Story language and declares no Story. The
+service's `go.mod` requires the Story language's module,
 `github.com/goadesign/surla/story`, at the version Surla itself requires.
 
-`eval/` is the test module. Its suite declares three scenarios, all tagged
-`repair` (`prices_tea`, `unknown_item` and `prompt_override_reaches_model`),
-and its Story table, `eval/design/story_tests.go`, adds `prices_cookie`, the
-test the Story's finished flow requires; `surla init` writes the table from
-`design/story.go`. The module runs these scenarios against a scripted model
-and implements the
-[live target prompt contract](#live-target-prompt-contract). Its hand-written
-parts are `eval/design` (its own copy of the service's public contract and
-the scenarios, apart from the Story table), `eval/acceptance` (the
-scenarios' implementation and the program's entry points) and
-`eval/scripted` (the scripted model); its
-program, `eval/gen/cmd/<name>-evals`, is generated with the rest of
-`eval/gen/`. `eval/acceptance` also holds the test the Story's finished flow
-requires, the method `PricesCookie`, so the first build of a change needs
-only the tests of the flows the guide adds. This test module is the layout
-builds and verification rely on.
+`eval/` is the test module. Its suite declares one scenario,
+`starts_and_listens`, tagged `repair`: it starts the program and checks that
+it accepts connections. Its Story table, `eval/design/story_tests.go`, has no
+row, because the Story has no flow. Its hand-written parts are `eval/design`
+(its own copy of the service's public contract and the scenario, apart from
+the Story table) and `eval/acceptance` (the scenario's implementation and the
+program's entry points); its program, `eval/gen/cmd/<name>-evals`, is
+generated with the rest of `eval/gen/`. This test module is the layout builds
+and verification rely on. Its `Live` and `LiveThroughGateway` functions
+refuse, because the service calls no AI model yet: a change that adds an
+agent replaces them to implement the
+[live target prompt contract](#live-target-prompt-contract).
+
+**What the worked example holds.** With `-example`, `cmd/<name>` runs a
+`helper` agent that prices items through a tool and reaches a model through
+`-model-gateway <host:port>`; it registers the prompt `<name>.helper.system`.
+`design/story.go` declares a Story with one finished flow, `prices-cookie`.
+The test module's suite declares three scenarios, all tagged `repair`
+(`prices_tea`, `unknown_item` and `prompt_override_reaches_model`), and its
+Story table adds `prices_cookie`, the test the Story's finished flow
+requires, which the method `PricesCookie` of `eval/acceptance` implements.
+The module runs these scenarios against a scripted model (`eval/scripted`)
+and implements the live target prompt contract.
 
 ### `surla verification` and `surla promotion`
 
@@ -1187,10 +1195,12 @@ and session credential stay with the server and browser.
 
 #### `init_project`
 
-`POST /workspace/init`. **Input:** `module_path?`, `dir?`. **Output:**
+`POST /workspace/init`. **Input:** `module_path?`, `dir?`,
+`worked_example?`. **Output:**
 `InitProjectResult` (`dir`, `module_path`, `service_name`, `commit`).
 
-Creates the [`surla init`](#surla-init) starter and runs `go mod tidy`,
+Creates the [`surla init`](#surla-init) starter, blank unless
+`worked_example` is `true`, and runs `go mod tidy`,
 `go vet ./...` and `go test ./...` in both modules. The server saves
 `Initial scaffold` with its Git identity and makes the starter its active
 workspace. With an MCP `progressToken`, the server reports each phase.
@@ -2424,8 +2434,8 @@ the target declares the same method in its own Goa design and implements it:
   escaped, or rewritten by a URL parser or an
   SDK, is not recognized and is exported as printed; a custom-headers value
   is recognized only as a whole, not header by header.
-- The starter's test module implements this contract: `override_prompt`
-  replaces `<name>.helper.system`. As accepted written tests, its
+- The worked example's test module (`surla init -example`) implements this
+  contract: `override_prompt` replaces `<name>.helper.system`. As accepted written tests, its
   `LiveThroughGateway` function uses the model gateway, keeping provider
   settings out of the test program's and application's environments. Its
   `Live` function still serves a direct provider when an operator stores that module as the

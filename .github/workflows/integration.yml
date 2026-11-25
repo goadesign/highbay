@@ -380,7 +380,7 @@ jobs:
           - suite: generation
             module: .
             # Ordinary CLI tests belong to full-root; journey owns its tagged root.
-            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/surla
+            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|SurlaInitBlankProjectCommitsAndRegeneratesUnchanged|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/surla
             test_timeout: 60m
             job_timeout: 70
           - suite: journey

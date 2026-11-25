@@ -249,9 +249,12 @@ type Service interface {
 	// Initialize a new Surla starter project directory inside the server's bound
 	// workspace, generating the candidate Go module, Goa and Goa-AI code, and the
 	// eval/ verification harness, creating the initial Git commit, and switching
-	// the server's active workspace to that project. When the request includes a
-	// progressToken, the tool sends MCP progress updates as starter
-	// generation/tests, initial commit creation, and publication start.
+	// the server's active workspace to that project. The project is blank (a
+	// service with no methods and one test that the program starts) unless
+	// worked_example is true, which creates Surla's price-answering worked example
+	// instead. When the request includes a progressToken, the tool sends MCP
+	// progress updates as starter generation/tests, initial commit creation, and
+	// publication start.
 	InitProject(context.Context, *InitProjectPayload) (res *InitProjectResult, err error)
 	// Write the open build's agreed design into the builder's working folder and
 	// regenerate its code. Surla replaces, creates or removes the Go files under
@@ -908,31 +911,34 @@ type C4EdgeItem struct {
 // about observable user behavior, never repository file paths (such as
 // design/design.go), Surla candidate runner flags (such as -listen), or
 // internal Goa/Goa-AI symbol names unless the requester explicitly asked about
-// a CLI or API surface. When building a new product in a project created from
-// Surla's starter scaffold (init_project's price-answering sample), replace
-// that sample silently in your draft: never mention or ask about Surla's
-// starter sample on the Change Card. Surla checks structure and cross-field
-// rules; it cannot judge whether the analysis is complete or correct.
+// a CLI or API surface. When the project was created with Surla's worked
+// example (init_project with worked_example: true) and the requester is
+// building their own product, replace that example silently in your draft:
+// never mention or ask about it on the Change Card. Surla checks structure and
+// cross-field rules; it cannot judge whether the analysis is complete or
+// correct.
 type CP1Analysis struct {
 	// Concise plain-English description (2–4 sentences) of what the product or
 	// change will do for its users and the key product defaults your draft
 	// settles. Never describe file paths, candidate runner flags, or removal of
-	// Surla's starter sample.
+	// Surla's worked example.
 	Summary string
 	// Open questions only the requester can answer: product, domain, or
 	// operational choices that change user-visible behavior. Never ask whether to
-	// replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not
+	// replace Surla's worked example or ask about internal Go/Goa plumbing. Do not
 	// ask about details the request already settles; state settled product
 	// defaults in summary, or in examples when they change an observable outcome.
 	// Send an empty list when nothing is open.
 	Ambiguities []*CP1AnalysisAmbiguity
 	// Concrete acceptance examples in plain domain terms, never placeholder text
-	// or starter-sample leftovers; each becomes a check the change must pass.
+	// or leftovers of Surla's worked example; each becomes a check the change must
+	// pass.
 	Examples []*CP1AnalysisExample
 	// Existing user-facing behaviors of an established product that this change
 	// must keep, each stated in plain domain terms; send an empty list ([]) on a
-	// new product (including the first change after init_project, where the
-	// starter sample is replaced rather than preserved) or when none apply.
+	// new product (including the first change after init_project: a blank project
+	// has no behavior to keep, and Surla's worked example is replaced rather than
+	// preserved) or when none apply.
 	PreservedBehaviors []string
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -984,25 +990,26 @@ type CP1AnalysisExample struct {
 // Write every field for a requester who knows their own goal, not the
 // repository: use plain domain language without file paths (such as
 // design/design.go), Surla candidate runner flags (such as -listen),
-// starter-sample references, or internal Goa/Goa-AI symbol names unless the
-// requester explicitly asked about a CLI or API surface. A confirmed answer
-// stays settled unless the revised request or design contradicts it: do not
-// ask it again, and restate it in summary, examples or preserved_behaviors,
-// because the revised card drops every answer. An explicit instruction in the
-// revised request or design replaces the decisions, examples and preserved
-// behaviors it affects. An unanswered question stays in ambiguities unless the
-// revised request or design answers it or removes its scope. Everything else
-// on the current card stays unless the revised request or design changes it.
-// Surla checks the structure and the example accounting; it cannot judge
-// whether the analysis is complete or correct.
+// references to Surla's worked example, or internal Goa/Goa-AI symbol names
+// unless the requester explicitly asked about a CLI or API surface. A
+// confirmed answer stays settled unless the revised request or design
+// contradicts it: do not ask it again, and restate it in summary, examples or
+// preserved_behaviors, because the revised card drops every answer. An
+// explicit instruction in the revised request or design replaces the
+// decisions, examples and preserved behaviors it affects. An unanswered
+// question stays in ambiguities unless the revised request or design answers
+// it or removes its scope. Everything else on the current card stays unless
+// the revised request or design changes it. Surla checks the structure and the
+// example accounting; it cannot judge whether the analysis is complete or
+// correct.
 type CP1RevisionAnalysis struct {
 	// Concise plain-English description (2–4 sentences) of the revised product
 	// behavior and settled product defaults, without file paths, candidate runner
-	// flags, or starter-sample references.
+	// flags, or references to Surla's worked example.
 	Summary string
 	// Open questions only the requester can answer: product, domain, or
 	// operational choices that change user-visible behavior. Never ask about
-	// Surla's starter sample or internal Go/Goa plumbing. Do not ask about details
+	// Surla's worked example or internal Go/Goa plumbing. Do not ask about details
 	// the request, the design or a confirmed answer already settle; state settled
 	// product defaults in summary, or in examples when they change an observable
 	// outcome. Send an empty list when nothing is open.
@@ -1518,6 +1525,12 @@ type InitProjectPayload struct {
 	// defaults to . when module_path is omitted, or to the service name derived
 	// from module_path when module_path is given.
 	Dir *string
+	// Omit it for the user's own product: Surla creates a blank service with no
+	// methods, no Story flows and one test that the program starts, ready for the
+	// first change. Set true only when the user asks to see Surla's worked
+	// example, a price-answering service with a helper agent, a model gateway and
+	// its own tests.
+	WorkedExample bool
 }
 
 // InitProjectResult is the result type of the surla service init_project
@@ -4110,22 +4123,24 @@ type jsonCP1AnalysisTransport struct {
 	// Concise plain-English description (2–4 sentences) of what the product or
 	// change will do for its users and the key product defaults your draft
 	// settles. Never describe file paths, candidate runner flags, or removal of
-	// Surla's starter sample.
+	// Surla's worked example.
 	Summary *string `json:"summary"`
 	// Open questions only the requester can answer: product, domain, or
 	// operational choices that change user-visible behavior. Never ask whether to
-	// replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not
+	// replace Surla's worked example or ask about internal Go/Goa plumbing. Do not
 	// ask about details the request already settles; state settled product
 	// defaults in summary, or in examples when they change an observable outcome.
 	// Send an empty list when nothing is open.
 	Ambiguities []*jsonCP1AnalysisAmbiguityTransport `json:"ambiguities"`
 	// Concrete acceptance examples in plain domain terms, never placeholder text
-	// or starter-sample leftovers; each becomes a check the change must pass.
+	// or leftovers of Surla's worked example; each becomes a check the change must
+	// pass.
 	Examples []*jsonCP1AnalysisExampleTransport `json:"examples"`
 	// Existing user-facing behaviors of an established product that this change
 	// must keep, each stated in plain domain terms; send an empty list ([]) on a
-	// new product (including the first change after init_project, where the
-	// starter sample is replaced rather than preserved) or when none apply.
+	// new product (including the first change after init_project: a blank project
+	// has no behavior to keep, and Surla's worked example is replaced rather than
+	// preserved) or when none apply.
 	PreservedBehaviors []*string `json:"preserved_behaviors"`
 	// Optional OpenUI Lang program that helps the requester decide the open
 	// questions, built only from the decision components the surla://golden-path
@@ -4251,11 +4266,11 @@ func validatejsonCP1RevisionAnalysisExampleTransport(value *jsonCP1RevisionAnaly
 type jsonCP1RevisionAnalysisTransport struct {
 	// Concise plain-English description (2–4 sentences) of the revised product
 	// behavior and settled product defaults, without file paths, candidate runner
-	// flags, or starter-sample references.
+	// flags, or references to Surla's worked example.
 	Summary *string `json:"summary"`
 	// Open questions only the requester can answer: product, domain, or
 	// operational choices that change user-visible behavior. Never ask about
-	// Surla's starter sample or internal Go/Goa plumbing. Do not ask about details
+	// Surla's worked example or internal Go/Goa plumbing. Do not ask about details
 	// the request, the design or a confirmed answer already settle; state settled
 	// product defaults in summary, or in examples when they change an observable
 	// outcome. Send an empty list when nothing is open.
@@ -5353,6 +5368,12 @@ type jsonInitProjectPayloadTransport struct {
 	// defaults to . when module_path is omitted, or to the service name derived
 	// from module_path when module_path is given.
 	Dir *string `json:"dir,omitempty"`
+	// Omit it for the user's own product: Surla creates a blank service with no
+	// methods, no Story flows and one test that the program starts, ready for the
+	// first change. Set true only when the user asks to see Surla's worked
+	// example, a price-answering service with a helper agent, a model gateway and
+	// its own tests.
+	WorkedExample *bool `json:"worked_example,omitempty"`
 }
 
 // validatejsonInitProjectPayloadTransport checks decoded JSON before it becomes a service value.
@@ -19713,8 +19734,9 @@ func EncodeInitProjectPayload(in *InitProjectPayload) ([]byte, error) {
 	var body *jsonInitProjectPayloadTransport
 	{
 		body = &jsonInitProjectPayloadTransport{
-			ModulePath: in.ModulePath,
-			Dir:        in.Dir,
+			ModulePath:    in.ModulePath,
+			Dir:           in.Dir,
+			WorkedExample: &in.WorkedExample,
 		}
 	}
 	if err := validatejsonInitProjectPayloadTransport(body); err != nil {
@@ -19745,8 +19767,9 @@ func ValidateInitProjectPayloadValue(in *InitProjectPayload) error {
 	var body *jsonInitProjectPayloadTransport
 	{
 		body = &jsonInitProjectPayloadTransport{
-			ModulePath: in.ModulePath,
-			Dir:        in.Dir,
+			ModulePath:    in.ModulePath,
+			Dir:           in.Dir,
+			WorkedExample: &in.WorkedExample,
 		}
 	}
 	if err := validatejsonInitProjectPayloadTransport(body); err != nil {
@@ -19783,6 +19806,12 @@ func DecodeInitProjectPayload(data []byte) (out *InitProjectPayload, err error) 
 		out = &InitProjectPayload{
 			ModulePath: body.ModulePath,
 			Dir:        body.Dir,
+		}
+		if body.WorkedExample != nil {
+			out.WorkedExample = *body.WorkedExample
+		}
+		if body.WorkedExample == nil {
+			out.WorkedExample = false
 		}
 	}
 	return out, nil
@@ -34828,28 +34857,28 @@ func validateCP1AnalysisJSONValue(path string, value any, description string) er
 		case "ambiguities":
 			if err := validateCP1AnalysisJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's starter sample or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask whether to replace Surla's worked example or ask about internal Go/Goa plumbing. Do not ask about details the request already settles; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 			); err != nil {
 				return err
 			}
 		case "examples":
 			if err := validateCP1AnalysisJSONValue5(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concrete acceptance examples in plain domain terms, never placeholder text or starter-sample leftovers; each becomes a check the change must pass.",
+				typed[key], "Concrete acceptance examples in plain domain terms, never placeholder text or leftovers of Surla's worked example; each becomes a check the change must pass.",
 			); err != nil {
 				return err
 			}
 		case "preserved_behaviors":
 			if err := validateCP1AnalysisJSONValue7(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project, where the starter sample is replaced rather than preserved) or when none apply.",
+				typed[key], "Existing user-facing behaviors of an established product that this change must keep, each stated in plain domain terms; send an empty list ([]) on a new product (including the first change after init_project: a blank project has no behavior to keep, and Surla's worked example is replaced rather than preserved) or when none apply.",
 			); err != nil {
 				return err
 			}
 		case "summary":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's starter sample.",
+				typed[key], "Concise plain-English description (2–4 sentences) of what the product or change will do for its users and the key product defaults your draft settles. Never describe file paths, candidate runner flags, or removal of Surla's worked example.",
 			); err != nil {
 				return err
 			}
@@ -35104,7 +35133,7 @@ func validateCP1RevisionAnalysisJSONValue(path string, value any, description st
 		case "ambiguities":
 			if err := validateCP1RevisionAnalysisJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's starter sample or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
+				typed[key], "Open questions only the requester can answer: product, domain, or operational choices that change user-visible behavior. Never ask about Surla's worked example or internal Go/Goa plumbing. Do not ask about details the request, the design or a confirmed answer already settle; state settled product defaults in summary, or in examples when they change an observable outcome. Send an empty list when nothing is open.",
 			); err != nil {
 				return err
 			}
@@ -35132,7 +35161,7 @@ func validateCP1RevisionAnalysisJSONValue(path string, value any, description st
 		case "summary":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or starter-sample references.",
+				typed[key], "Concise plain-English description (2–4 sentences) of the revised product behavior and settled product defaults, without file paths, candidate runner flags, or references to Surla's worked example.",
 			); err != nil {
 				return err
 			}
@@ -38926,10 +38955,18 @@ func validateInitProjectPayloadJSONValue(path string, value any, description str
 			); err != nil {
 				return err
 			}
+		case "worked_example":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Omit it for the user's own product: Surla creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Surla's worked example, a price-answering service with a helper agent, a model gateway and its own tests.",
+			); err != nil {
+				return err
+			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"dir",
 				"module_path",
+				"worked_example",
 			})
 		}
 	}

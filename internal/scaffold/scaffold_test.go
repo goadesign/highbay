@@ -271,6 +271,72 @@ func TestInitStopsAndCleansUpWhenCanceled(t *testing.T) {
 	assertOnly(t, parent)
 }
 
+// TestInitWritesABlankProjectByDefault checks what Init writes when Example is
+// not set: a service with no methods and no agent, a Story file that declares
+// no Story, a command that takes only -listen, and a test module whose one
+// scenario starts the program and whose live hooks refuse. Nothing of the
+// worked example is written. The Go command and the generator are stand-ins;
+// the generator writes no guide for coding agents, as goa-ai writes none for
+// a design without an agent.
+func TestInitWritesABlankProjectByDefault(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "bakery")
+	run := func(_ context.Context, dir, _ string, args ...string) error { return fakeGo(dir, args) }
+	gen := &fakeGenerator{pkgs: []string{"bakery"}}
+	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published}, run, gen)
+	require.NoError(t, err)
+	assert.Equal(t, "bakery", name)
+	require.Len(t, gen.inputs, 2, "one generation per module")
+	assert.Equal(t, []string{"design/design.go", "design/model.go", "design/story.go", "go.mod", "go.sum"}, slices.Sorted(maps.Keys(gen.inputs[0])))
+	assert.Equal(t, []string{
+		"acceptance/acceptance.go", "design/design.go", "design/story_tests.go", "go.mod", "go.sum",
+	}, slices.Sorted(maps.Keys(gen.inputs[1])), "the test module is generated with its acceptance package and Story table")
+	assertOnly(t, dir, FirstCommitPaths(false)...)
+	assertOnly(t, filepath.Join(dir, "eval"), "go.mod", "go.sum", "design", "gen", "acceptance")
+	assertReadmeStagesTheProject(t, dir)
+
+	read := func(rel string) string {
+		raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), "[[", "%s: every template field is rendered", rel)
+		return string(raw)
+	}
+	design := read("design/design.go")
+	assert.Contains(t, design, `Service("bakery"`)
+	for _, absent := range []string{"Method(", "Agent(", "Toolset(", "Security("} {
+		assert.NotContains(t, design, absent, "the blank service declares nothing to call")
+	}
+	main := read("cmd/bakery/main.go")
+	assert.Equal(t, 1, strings.Count(main, "flag.String("), "the command takes only -listen")
+	assert.Contains(t, main, `flag.String("listen"`)
+	assert.NotContains(t, main, "example.com/bakery/", "the command imports no project package yet")
+	evalDesign := read("eval/design/design.go")
+	assert.Equal(t, []string{"starts_and_listens"}, scenarioNames(evalDesign))
+	acceptance := read("eval/acceptance/acceptance.go")
+	assert.Contains(t, acceptance, "func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err error)")
+	assert.Contains(t, acceptance, `Args:     []string{"-listen", loopback.String() + ":0"},`,
+		"the scenario starts the program with -listen alone and lets it choose the port")
+	assert.Contains(t, acceptance, `var loopback = netip.MustParseAddr("127.0.0.1")`)
+	assert.Contains(t, main, `fmt.Println("listening on", ln.Addr())`, "the program reports the address it bound, which the scenario dials")
+	assert.Less(t, strings.Index(main, "net.Listen("), strings.Index(main, `fmt.Println("listening on"`), "only after binding it")
+	for _, refuses := range []string{
+		"func Live(context.Context, candidate.Artifact, string, model.Provider) (suite.LiveTarget, error) {\n\treturn suite.LiveTarget{}, errNoPrompt\n}",
+		"func LiveThroughGateway(context.Context, candidate.Artifact, string, string) (suite.LiveTarget, error) {\n\treturn suite.LiveTarget{}, errNoPrompt\n}",
+	} {
+		assert.Contains(t, acceptance, refuses, "a service that calls no model has no live copy")
+	}
+	readme := read("README.md")
+	assert.Contains(t, readme, "`starts_and_listens`", "the README names the one scenario")
+	assert.Contains(t, readme, "-suite-command ./gen/cmd/bakery-evals")
+	first := between(t, readme, "## Next steps", "For each change:")
+	assertInOrder(t, first, "git commit -m", "\nsurla\n```", "views page")
+	for _, f := range []string{design, read("design/model.go"), read("design/story.go"), main, evalDesign, acceptance, readme} {
+		for _, example := range []string{"price", "Price", "helper", "catalog", "cookie", "model-gateway", "override_prompt"} {
+			assert.NotContains(t, f, example, "the blank project holds nothing of the worked example")
+		}
+	}
+}
+
 func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	parent := t.TempDir()
 	dir := filepath.Join(parent, "bakery")
@@ -282,7 +348,7 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 	gen := &fakeGenerator{pkgs: []string{"bakery"}, extra: map[string]string{quickstartGuide: "guide\n"}}
-	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published}, run, gen)
+	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published, Example: true}, run, gen)
 	require.NoError(t, err)
 	assertOnly(t, tmp)
 	assert.Equal(t, "bakery", name)
@@ -346,6 +412,8 @@ func TestInitWritesTheProjectWithTheServiceName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(main), `genbakery "example.com/bakery/gen/bakery"`)
 	assert.NotContains(t, string(main), "[[")
+	assertOnly(t, dir, FirstCommitPaths(true)...)
+	assertReadmeStagesTheProject(t, dir)
 	assertOnly(t, parent, "bakery")
 }
 
@@ -357,7 +425,7 @@ func TestInitImportsThePackageGoaGenerated(t *testing.T) {
 	run := func(_ context.Context, moduleDir, _ string, args ...string) error {
 		return fakeGo(moduleDir, args)
 	}
-	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/errors", SurlaVersion: published}, run, &fakeGenerator{pkgs: []string{"errors_"}})
+	name, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/errors", SurlaVersion: published, Example: true}, run, &fakeGenerator{pkgs: []string{"errors_"}})
 	require.NoError(t, err)
 	assert.Equal(t, "errors", name)
 	main, err := os.ReadFile(filepath.Join(dir, "cmd", "errors", "main.go"))
@@ -438,7 +506,7 @@ func TestInitLeavesNoProjectWhenGenerationFails(t *testing.T) {
 	}
 }
 
-// TestInitReadmeFirstRunSnippetsMatchTheProject verifies the starter's declared
+// TestInitReadmeFirstRunSnippetsMatchTheProject verifies the example's declared
 // scenarios, a first run that ends by starting surla, the roles in the
 // build-before-commit tool journey, private verification reports, and the
 // ignore file.
@@ -449,7 +517,7 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	}
 	t.Setenv("TMPDIR", t.TempDir())
 	gen := &fakeGenerator{pkgs: []string{"bakery"}, extra: map[string]string{quickstartGuide: "guide\n"}}
-	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published}, run, gen)
+	_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/bakery", SurlaVersion: published, Example: true}, run, gen)
 	require.NoError(t, err)
 	readmeRaw, err := os.ReadFile(filepath.Join(dir, "README.md"))
 	require.NoError(t, err)
@@ -457,10 +525,10 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	evalDesign, err := os.ReadFile(filepath.Join(dir, "eval", "design", "design.go"))
 	require.NoError(t, err)
 
-	scenarios := regexp.MustCompile(`Scenario\("([a-z_]+)"`).FindAllStringSubmatch(string(evalDesign), -1)
+	scenarios := scenarioNames(string(evalDesign))
 	require.NotEmpty(t, scenarios)
-	for _, m := range scenarios {
-		assert.Contains(t, readme, "`"+m[1]+"`", "README names scenario %s", m[1])
+	for _, name := range scenarios {
+		assert.Contains(t, readme, "`"+name+"`", "README names scenario %s", name)
 	}
 
 	assert.Contains(t, readme, "REPORT_DIR=\"$VERIFY_DIR/reports\"")
@@ -844,6 +912,28 @@ func assertInOrder(t *testing.T, s string, parts ...string) {
 	}
 }
 
+// scenarioNames returns the scenarios a test module's design declares, in
+// source order.
+func scenarioNames(evalDesign string) []string {
+	var names []string
+	for _, m := range regexp.MustCompile(`Scenario\("([a-z_]+)"`).FindAllStringSubmatch(evalDesign, -1) {
+		names = append(names, m[1])
+	}
+	return names
+}
+
+// assertReadmeStagesTheProject checks that the first commit the project's
+// README shows stages exactly the entries Init wrote in dir, so the command
+// neither fails on a missing path nor leaves a folder out.
+func assertReadmeStagesTheProject(t *testing.T, dir string) {
+	t.Helper()
+	readme, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	require.NoError(t, err)
+	m := regexp.MustCompile(`(?m)^git add (.+)$`).FindStringSubmatch(string(readme))
+	require.NotNil(t, m, "the README shows the first commit's git add")
+	assertOnly(t, dir, strings.Fields(m[1])...)
+}
+
 // between returns the text of s after the first start and before the next
 // end, failing the test when either marker is missing.
 func between(t *testing.T, s, start, end string) string {
@@ -855,7 +945,7 @@ func between(t *testing.T, s, start, end string) string {
 	return body
 }
 
-// TestStarterHidesNoScenarioAndWritesNoProgram reads the starter's templates:
+// TestStarterHidesNoScenarioAndWritesNoProgram reads both variants' templates:
 // no scenario is tagged holdout, because tests in files a builder can read are
 // not hidden, and the evaluator module has no hand-written program, because
 // the generator writes its only one.
@@ -865,7 +955,7 @@ func TestStarterHidesNoScenarioAndWritesNoProgram(t *testing.T) {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		assert.False(t, strings.HasPrefix(p, "templates/eval/cmd/"), "%s is a hand-written evaluator program", p)
+		assert.NotContains(t, p, "/eval/cmd/", "%s is a hand-written evaluator program", p)
 		raw, err := templatesFS.ReadFile(p)
 		if err != nil {
 			return err

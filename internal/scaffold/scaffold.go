@@ -1,6 +1,9 @@
-// Package scaffold creates a new Surla starter project for `surla init`: a
-// Goa / Goa-AI service whose helper agent prices items through a tool, plus a
-// starter evaluator suite that `surla verify` runs against it.
+// Package scaffold creates a new Surla starter project for `surla init` and
+// the init_project tool: a Goa / Goa-AI service module and the evaluator suite
+// that `surla verify` runs against it. By default the project is blank: a
+// service with no methods, a Story with no flows, and one scenario that checks
+// the program starts and listens. With Options.Example it is a worked example
+// instead, whose helper agent prices items through a tool.
 //
 // Init builds the whole project in the operator-provided work directory,
 // running `go mod tidy` in each module and generating its code with a
@@ -61,6 +64,11 @@ type (
 		// evaluator module requires, such as
 		// v0.0.0-20261118203415-bec57123a61f.
 		SurlaVersion string
+		// Example selects the worked example instead of the blank project:
+		// a price-answering service with a helper agent, a model gateway, a
+		// prompt override method, one Story flow and four scenarios. The
+		// zero value creates the blank project.
+		Example bool
 		// OnPhase, when set, is called as each slow part of the preparation
 		// begins, with a short sentence for the user naming it: resolving a
 		// module's dependencies, generating its code, building and testing
@@ -121,6 +129,19 @@ type (
 		// Surla's own go.mod requires: the Story language this Surla
 		// evaluates, which the starter's design/story.go imports.
 		StoryVersion string
+	}
+
+	// variant is one of the two projects Init can create.
+	variant struct {
+		// templates is the folder in templatesFS holding its candidate/ and
+		// eval/ template trees.
+		templates string
+		// story summarizes the Story its design/story.go declares, as an
+		// evaluation reports it. Init renders the test module's Story table
+		// from it, as a build renders it from the evaluated Story, so the
+		// starter's generated test program equals what the first build
+		// prepares.
+		story []designeval.StorySummary
 	}
 
 	// moduleStep is one module of the project and the files it is built
@@ -187,9 +208,10 @@ const (
 )
 
 var (
-	// templatesFS holds the project files. Files end in .tmpl so the Go
-	// tooling ignores them here; "_name_" in a path is the service name, and
-	// "gitignore.tmpl" becomes ".gitignore".
+	// templatesFS holds the project files of both variants, each under its
+	// own folder. Files end in .tmpl so the Go tooling ignores them here;
+	// "_name_" in a path is the service name, and "gitignore.tmpl" becomes
+	// ".gitignore".
 	//
 	//go:embed all:templates
 	templatesFS embed.FS
@@ -198,15 +220,20 @@ var (
 	// commit ID.
 	commitHexPattern = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
 
-	// starterStory summarizes the Story the starter ships in design/story.go
-	// (templates/candidate/design/story.go.tmpl) as an evaluation reports it:
-	// its one finished flow. Init renders the test module's Story table from
-	// it, as a build renders it from the evaluated Story, so the starter's
-	// generated test program equals what the first build prepares.
-	starterStory = []designeval.StorySummary{{
-		Name:  "Prices",
-		Flows: []designeval.StoryFlow{{Key: "prices-cookie", Title: "Price a cookie", Complete: true}},
-	}}
+	// blankVariant is the default project. Its Story declares nothing, so
+	// its Story table has no rows.
+	blankVariant = variant{templates: "templates/blank"}
+
+	// exampleVariant is the worked example. Its Story
+	// (templates/example/candidate/design/story.go.tmpl) has one finished
+	// flow.
+	exampleVariant = variant{
+		templates: "templates/example",
+		story: []designeval.StorySummary{{
+			Name:  "Prices",
+			Flows: []designeval.StoryFlow{{Key: "prices-cookie", Title: "Price a cookie", Complete: true}},
+		}},
+	}
 )
 
 // Init creates the project described by o, running every command with run
@@ -240,6 +267,18 @@ func Prepare(ctx context.Context, o Options, run Runner, gen Generator) (name, s
 		return "", "", "", err
 	}
 	return name, stage.path, commit, nil
+}
+
+// FirstCommitPaths returns the top-level entries of the project Init writes
+// for the blank project, or with example for the worked example: what the
+// project's first commit stages. The worked example also has hand-written
+// packages under internal/ and, because its design declares an agent, the
+// guide goa-ai generates for coding agents.
+func FirstCommitPaths(example bool) []string {
+	if example {
+		return []string{".gitignore", "README.md", quickstartGuide, "go.mod", "go.sum", "design", "gen", "internal", "cmd", "eval"}
+	}
+	return []string{".gitignore", "README.md", "go.mod", "go.sum", "design", "gen", "cmd", "eval"}
 }
 
 // RunCommand runs args in dir as its own process group with GOWORK=off, so a
@@ -418,7 +457,11 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 	if phase == nil {
 		phase = func(string) error { return nil }
 	}
-	if err := build(ctx, staging, logs, d, run, gen, phase); err != nil {
+	v := blankVariant
+	if o.Example {
+		v = exampleVariant
+	}
+	if err := build(ctx, staging, logs, d, v, run, gen, phase); err != nil {
 		var stuck *stuckError
 		if errors.As(err, &stuck) {
 			return "", nil, "", fmt.Errorf("%w; the staging directory %s is kept because processes may still use it", err, staging)
@@ -494,7 +537,7 @@ func newData(o Options) (data, error) {
 	return d, nil
 }
 
-// build creates both modules under root. For each module it writes go.mod and
+// build creates both modules of variant v under root. For each module it writes go.mod and
 // design/ (for the test module with its Story table, writeStoryTests),
 // resolves the design's dependencies, writes the test module's
 // acceptance package, generates code with gen, writes the remaining files,
@@ -510,10 +553,10 @@ func newData(o Options) (data, error) {
 // service package the service module's generation named, the package the
 // test module's design declares too, and the test module's own generation
 // must name the same one.
-func build(ctx context.Context, root, logs string, d data, run Runner, gen Generator, phase func(string) error) error {
+func build(ctx context.Context, root, logs string, d data, v variant, run Runner, gen Generator, phase func(string) error) error {
 	for _, m := range []moduleStep{
-		{dir: ".", templates: "templates/candidate", path: d.Module, label: "service"},
-		{dir: SuiteDir, templates: "templates/eval", path: d.Module + "/" + SuiteDir, requireSurla: true, label: "test module"},
+		{dir: ".", templates: v.templates + "/candidate", path: d.Module, label: "service"},
+		{dir: SuiteDir, templates: v.templates + "/eval", path: d.Module + "/" + SuiteDir, requireSurla: true, label: "test module"},
 	} {
 		dir := filepath.Join(root, m.dir)
 		designFiles, err := render(dir, m.templates, d, isDesignFile)
@@ -521,7 +564,7 @@ func build(ctx context.Context, root, logs string, d data, run Runner, gen Gener
 			return err
 		}
 		if m.requireSurla {
-			if err := writeStoryTests(dir); err != nil {
+			if err := writeStoryTests(dir, v.story); err != nil {
 				return err
 			}
 			designFiles = append(designFiles, designeval.StoryTestsPath)
@@ -682,11 +725,11 @@ func runAll(ctx context.Context, dir, moduleDir, logs string, steps [][]string, 
 }
 
 // writeStoryTests writes the Story table of the test module in dir, rendered
-// from starterStory with the package its rendered design files declare, before
-// the module is tidied and generated, so both see it. dir is a new,
+// from the variant's story with the package its rendered design files declare,
+// before the module is tidied and generated, so both see it. dir is a new,
 // unpublished module, so there is nothing to replace.
-func writeStoryTests(dir string) error {
-	table, _, err := designeval.StoryTests(os.DirFS(dir), starterStory)
+func writeStoryTests(dir string, story []designeval.StorySummary) error {
+	table, _, err := designeval.StoryTests(os.DirFS(dir), story)
 	if err != nil {
 		return fmt.Errorf("render the test module's Story table: %w", err)
 	}

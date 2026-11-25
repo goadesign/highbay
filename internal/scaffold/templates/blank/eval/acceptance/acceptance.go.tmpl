@@ -1,0 +1,168 @@
+// Package acceptance runs the acceptance scenarios against a pinned [[.Name]]
+// binary. The one scenario so far starts the [[.Name]] and checks that it
+// binds an address and accepts connections on it. A change adds a method here for each scenario it adds
+// to the suite in ../design.
+package acceptance
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"regexp"
+	"time"
+
+	"goa.design/goa-ai/eval"
+	"goa.design/goa-ai/runtime/agent/model"
+
+	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/surla/verify/suite"
+)
+
+// Hooks implements the generated [[.Name]]_acceptance scenario hooks.
+type Hooks struct {
+	// binary is the pinned [[.Name]] binary under test.
+	binary candidate.Artifact
+}
+
+// Name is the binary name surla verify binds the [[.Name]] as (-binary [[.Name]]=...).
+const Name = "[[.Name]]"
+
+// errNoPrompt is what Live and LiveThroughGateway return while the [[.Name]]
+// calls no AI model.
+var errNoPrompt = errors.New("the [[.Name]] calls no AI model yet, so it has no prompt wording to try; " +
+	"a live copy becomes available once a change adds an agent")
+
+// New returns the scenario hooks for the pinned [[.Name]] binary.
+func New(binary candidate.Artifact) *Hooks {
+	return &Hooks{binary: binary}
+}
+
+// StartsAndListens checks that the [[.Name]] binary starts, binds an address
+// and accepts TCP connections on it. The [[.Name]] chooses the port (-listen
+// 127.0.0.1:0) and prints the address it bound, so the scenario dials only an
+// address this process reported and can never pass against another program's
+// listener.
+func (h *Hooks) StartsAndListens(ctx context.Context) (res eval.Result, err error) {
+	res.Artifacts = []eval.Artifact{h.binary.Evidence(Name)}
+	// work holds the [[.Name]]'s state directory and, outside it, its log file.
+	work, err := os.MkdirTemp("", "[[.Name]]-eval-*")
+	if err != nil {
+		return res, fmt.Errorf("create work directory: %w", err)
+	}
+	state := filepath.Join(work, "state")
+	if err := os.Mkdir(state, 0o700); err != nil {
+		return res, errors.Join(fmt.Errorf("create state directory: %w", err), os.RemoveAll(work))
+	}
+	proc, err := candidate.Exec(ctx, h.binary, candidate.Spec{
+		Args:     []string{"-listen", loopback.String() + ":0"},
+		StateDir: state,
+		LogFile:  filepath.Join(work, "[[.Name]].log"),
+	})
+	if err != nil {
+		return res, errors.Join(fmt.Errorf("start [[.Name]]: %w", err), os.RemoveAll(work))
+	}
+	defer func() {
+		// The state and log are kept when the [[.Name]] could not be killed
+		// and may still be using them.
+		if killErr := proc.Kill(); killErr != nil {
+			err = errors.Join(err, fmt.Errorf("kill [[.Name]]; its state is kept in %s: %w", work, killErr))
+			return
+		}
+		err = errors.Join(err, os.RemoveAll(work))
+	}()
+	addr, boundErr := boundAddress(ctx, proc)
+	var dialErr error
+	if boundErr == nil {
+		dialErr = dial(ctx, addr, proc.Done())
+	}
+	tail, _, err := proc.Excerpt(4 << 10)
+	res.Output = addr
+	res.Checks = []eval.Check{
+		check("reports_bound_address", boundErr == nil, "the [[.Name]] did not report an address it bound: %v\n%s", boundErr, tail),
+		check("accepts_connections", boundErr == nil && dialErr == nil, "the [[.Name]] did not accept a connection on %q: %v\n%s", addr, dialErr, tail),
+	}
+	return res, err
+}
+
+// Live refuses: a live copy exists to try prompt wording, and the [[.Name]]
+// calls no AI model yet. A change that adds an agent replaces this with a
+// function that starts the [[.Name]] planning with provider and with key as
+// its live key.
+func Live(context.Context, candidate.Artifact, string, model.Provider) (suite.LiveTarget, error) {
+	return suite.LiveTarget{}, errNoPrompt
+}
+
+// LiveThroughGateway refuses for the same reason as Live. A change that adds
+// an agent replaces it with a function that starts the [[.Name]] planning
+// through the model gateway at the address it is given.
+func LiveThroughGateway(context.Context, candidate.Artifact, string, string) (suite.LiveTarget, error) {
+	return suite.LiveTarget{}, errNoPrompt
+}
+
+// check returns a deterministic check; a failing one carries the diagnostic.
+func check(name string, passed bool, format string, args ...any) eval.Check {
+	if passed {
+		return eval.Check{Name: name, Passed: true}
+	}
+	return eval.Check{Name: name, Diagnostic: fmt.Sprintf(format, args...)}
+}
+
+// listeningLine matches the line the [[.Name]] prints once it has bound its
+// address (see cmd/[[.Name]]/main.go).
+var listeningLine = regexp.MustCompile(`(?m)^listening on (\S+)$`)
+
+// loopback is the only address StartsAndListens asks the [[.Name]] to bind
+// and the only one it dials.
+var loopback = netip.MustParseAddr("127.0.0.1")
+
+// boundAddress waits up to 30 seconds for the [[.Name]] to print the address
+// it bound and returns it. It stops early when the process exits, which is
+// how a program that cannot bind fails this scenario. The scenario asked for
+// 127.0.0.1, so any other report is refused before anything is dialed: a
+// program's output never sends the scenario to another host.
+func boundAddress(ctx context.Context, proc *candidate.Process) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for {
+		out, _, err := proc.Excerpt(4 << 10)
+		if err != nil {
+			return "", err
+		}
+		if m := listeningLine.FindStringSubmatch(out); m != nil {
+			reported, err := netip.ParseAddrPort(m[1])
+			if err != nil || reported.Addr() != loopback || reported.Port() == 0 {
+				return "", fmt.Errorf("it reported %q, which is not a port on %s", m[1], loopback)
+			}
+			return reported.String(), nil
+		}
+		select {
+		case <-proc.Done():
+			return "", errors.New("the process exited before it bound an address")
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// dial connects to addr once and closes the connection. It fails when the
+// process has exited, so a connection never counts for a program that is no
+// longer running.
+func dial(ctx context.Context, addr string, exited <-chan struct{}) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-exited:
+		return errors.Join(errors.New("the process exited"), conn.Close())
+	default:
+		return conn.Close()
+	}
+}
