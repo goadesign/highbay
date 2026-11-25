@@ -221,10 +221,14 @@ func TestListChangesSaysWhetherApprovalIsAvailable(t *testing.T) {
 func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	ws := t.TempDir()
 	writeWorkspaceFiles(t, ws, validWorkspaceStub("package design\n"))
+	gitForLayoutTest(t, ws, "init", "-q")
+	gitForLayoutTest(t, ws, "add", "go.mod", "go.sum", updateDesignFile)
+	gitForLayoutTest(t, ws, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Initial design")
 	cp := newControlPlane(t, Options{WorkspaceDir: ws})
 	cp.changesWait = 50 * time.Millisecond
 	cp.changesPoll = 10 * time.Millisecond
 	user := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "user-1", Kind: CallerUser})
+	guide := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide})
 	readList := func() *gensurla.ChangeList {
 		list, err := cp.ListChanges(user)
 		require.NoError(t, err)
@@ -239,9 +243,8 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	assert.Equal(t, none, version(), "another owner's evaluation does not move this owner's version")
 	assert.Nil(t, readList().DraftState)
 
-	aliceOwner := "alice@example.com"
-	require.NoError(t, cp.cards.saveMadeFrom(madeFromRecord{Write: 1, Start: madeFromStart{Write: 1}}))
-	cp.draftOwner.Store(&aliceOwner)
+	_, err := cp.UpdateDraft(guide)
+	require.NoError(t, err)
 	afterDraft := readList()
 	require.NotNil(t, afterDraft.DraftState)
 	assert.Equal(t, "editing", *afterDraft.DraftState)
@@ -270,6 +273,15 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	assert.Equal(t, "story_ready", *finishedList.DraftState)
 	assert.NotEqual(t, running, finished, "an evaluation that finishes moves the version")
 
+	writeWorkspaceFiles(t, ws, map[string]string{updateDesignFile: "package design\n\nconst Updated = true\n"})
+	updated, err := cp.UpdateDraft(guide)
+	require.NoError(t, err)
+	assert.Equal(t, []string{updateDesignFile}, updated.Taken)
+	afterTake := readList()
+	require.NotNil(t, afterTake.DraftState)
+	assert.Equal(t, "editing", *afterTake.DraftState, "taking a changed design drops story_ready back to editing")
+	assert.NotEqual(t, finished, afterTake.Version, "invalidating story_ready moves the version")
+
 	seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateFailed, nil, "failed")
 	failedList := readList()
 	failed := failedList.Version
@@ -282,7 +294,6 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	assert.Equal(t, version(), unchanged.Version, "a waiting read with nothing changed returns the same version")
 
 	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	guide := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide})
 	_, err = cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
 		ChangeID:         "chg-after-draft",
 		Prompt:           "Refunds up to $50 are instant.",

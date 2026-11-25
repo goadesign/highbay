@@ -214,11 +214,16 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		// approve_merge refuses without verification, promotion target or not.
 		_, noVerif := c.verifier.(noVerification)
 		approvalAvailable = err == nil && !noVerif
-		story = c.storyEvaluation(owner)
+		var storyCurrent bool
+		story, storyCurrent = c.storyEvaluation(owner, provenance, madeFromFound)
 		if len(items) == 0 {
 			hasDraft := madeFromFound && c.draftOwner.Load() != nil && *c.draftOwner.Load() == owner
 			initCompleted := c.initOwner.Load() != nil && *c.initOwner.Load() == owner
-			draftState = firstChangeDraftState(story.State, hasDraft, initCompleted)
+			storyState := storyRefreshStateNone
+			if storyCurrent {
+				storyState = story.State
+			}
+			draftState = firstChangeDraftState(storyState, hasDraft, initCompleted)
 		}
 	}
 	var team *gensurla.TeamSnapshot

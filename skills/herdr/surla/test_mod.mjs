@@ -393,7 +393,7 @@ test('a Start Surla failure stays with the folder it was for', async () => {
   assert.ok(texts(view.render(cx)).includes('Could not run surla: not installed'));
 });
 
-test('uses the setup-configured surla executable path and falls back to PATH when moved', async () => {
+test('uses the setup-configured surla executable path without retrying bare surla on failure', async () => {
   const configured = '/opt/go/bin/surla';
   const { mod, calls } = load({
     executable: configured,
@@ -401,10 +401,10 @@ test('uses the setup-configured surla executable path and falls back to PATH whe
     byCommand: {
       [configured]: {
         'status --json': { code: 0, stdout: JSON.stringify(running), stderr: '' },
-        '': new Error('No such file or directory (os error 2)'),
+        '': new Error('timed out after 60000ms'),
       },
       surla: {
-        '': { code: 0, stdout: '', stderr: '' },
+        '': new Error('No such file or directory (os error 2)'),
       },
     },
   });
@@ -421,9 +421,8 @@ test('uses the setup-configured surla executable path and falls back to PATH whe
     calls.exec.slice(1).map(call => [call.command, call.args]),
     [
       [configured, []],
-      ['surla', []],
       [configured, ['status', '--json']],
     ],
   );
-  assert.ok(texts(view.render(cx)).includes('Opened in browser'));
+  assert.ok(texts(view.render(cx)).includes('Could not run surla: timed out after 60000ms'));
 });
