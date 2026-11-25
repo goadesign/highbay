@@ -1072,8 +1072,12 @@ type MergeChangeResponseBody struct {
 type ListChangesResponseBody struct {
 	// Saved Change Cards, most recently saved first.
 	Changes []*ChangeListItemResponseBody `form:"changes" json:"changes" xml:"changes"`
-	// Opaque value for change detection. Compare it only for equality; the
-	// returned fields contain the facts this operation makes readable.
+	// Opaque value for change detection. It changes whenever the listed cards, a
+	// card's get_build view (including the builder's branch head_commit and latest
+	// check), approval_available, initializing_phase, the owner's Story
+	// evaluation, get_team, or get_live_target changes; list_changes items carry
+	// no build or branch fields, so read get_build for those facts. Compare it
+	// only for equality.
 	Version string `form:"version" json:"version" xml:"version"`
 	// Whether approve_merge can record approvals on this server: true when the
 	// server runs Checkpoint 4 verification, as every server surla starts does,
@@ -5636,9 +5640,11 @@ type BuilderProgressResponseBody struct {
 	Read bool `form:"read" json:"read" xml:"read"`
 	// The build's builder branch, surla/build-<n>.
 	Branch *string `form:"branch,omitempty" json:"branch,omitempty" xml:"branch,omitempty"`
-	// The commit the builder's branch points at, in get_build and list_changes
-	// only: present once the branch exists and points at another commit than the
-	// one the build started from.
+	// The commit the builder's branch points at, returned by get_build and
+	// reflected in list_changes.version (start_build omits it before any branch
+	// commit exists, and list_changes items carry no branch field): present once
+	// the branch exists and points at another commit than the one the build
+	// started from.
 	HeadCommit *string `form:"head_commit,omitempty" json:"head_commit,omitempty" xml:"head_commit,omitempty"`
 	// Whether the builder's latest completed check_project in this build passed;
 	// absent until one completed. The check covered the builder's working folder

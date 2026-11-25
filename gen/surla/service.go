@@ -413,13 +413,14 @@ type Service interface {
 	ListChanges(context.Context) (res *ChangeList, err error)
 	// Return the current change list's version as soon as it differs from since,
 	// the version of the list the caller last read, or after a bounded wait of a
-	// few seconds when nothing changed. The version also changes when the owner's
-	// Story evaluation starts, finishes or is replaced, or a public fact in
-	// get_team changes. The views page keeps one such read open and, only when the
-	// version changed, calls list_changes again and, while it shows the Story,
-	// get_story_refresh. Each call is traced but never saved in the diagnostics
-	// history list_traces reads, so an open page does not push real operations out
-	// of view.
+	// few seconds when nothing changed. The version also changes when a card's
+	// get_build view changes (including the builder's branch head_commit or latest
+	// check), the owner's Story evaluation starts, finishes or is replaced, or a
+	// public fact in get_team or get_live_target changes. The views page keeps one
+	// such read open and, only when the version changed, calls list_changes again
+	// and, while it shows the Story, get_story_refresh. Each call is traced but
+	// never saved in the diagnostics history list_traces reads, so an open page
+	// does not push real operations out of view.
 	WaitForChanges(context.Context, *WaitForChangesPayload) (res *ChangeListVersion, err error)
 	// The user starts building a confirmed change at its agreed revision, the one
 	// in force, on the project owner's bound team. A project has one open build.
@@ -465,9 +466,11 @@ type Service interface {
 	// or dropped. not_started when it is not, including a builder-only build whose
 	// stored verification settings were removed; start a new build on the views
 	// page. Otherwise return the revision built, when, whether each role read its
-	// assignment, the test writer's state with the number of Surla's findings
-	// (never their text), and whether the build is for the change's revision in
-	// force. Reading changes nothing; deciding merged reads the project's
+	// assignment, the builder's branch, its head_commit once the branch advances
+	// past the build's base, and its latest completed check_project verdict, the
+	// test writer's state with the number of Surla's findings (never their text),
+	// and whether the build is for the change's revision in force. Reading changes
+	// nothing; reading the branch tip and deciding merged read the project's
 	// repository.
 	GetBuild(context.Context, *GetBuildPayload) (res *ChangeBuild, err error)
 	// Return the text of Surla's findings on the tests of a change's build, which
@@ -843,9 +846,11 @@ type BuilderProgress struct {
 	Read bool
 	// The build's builder branch, surla/build-<n>.
 	Branch *string
-	// The commit the builder's branch points at, in get_build and list_changes
-	// only: present once the branch exists and points at another commit than the
-	// one the build started from.
+	// The commit the builder's branch points at, returned by get_build and
+	// reflected in list_changes.version (start_build omits it before any branch
+	// commit exists, and list_changes items carry no branch field): present once
+	// the branch exists and points at another commit than the one the build
+	// started from.
 	HeadCommit *string
 	// Whether the builder's latest completed check_project in this build passed;
 	// absent until one completed. The check covered the builder's working folder
@@ -1108,8 +1113,12 @@ type ChangeCardResult struct {
 type ChangeList struct {
 	// Saved Change Cards, most recently saved first.
 	Changes []*ChangeListItem
-	// Opaque value for change detection. Compare it only for equality; the
-	// returned fields contain the facts this operation makes readable.
+	// Opaque value for change detection. It changes whenever the listed cards, a
+	// card's get_build view (including the builder's branch head_commit and latest
+	// check), approval_available, initializing_phase, the owner's Story
+	// evaluation, get_team, or get_live_target changes; list_changes items carry
+	// no build or branch fields, so read get_build for those facts. Compare it
+	// only for equality.
 	Version string
 	// Whether approve_merge can record approvals on this server: true when the
 	// server runs Checkpoint 4 verification, as every server surla starts does,
@@ -3823,9 +3832,11 @@ type jsonBuilderProgressTransport struct {
 	Read *bool `json:"read"`
 	// The build's builder branch, surla/build-<n>.
 	Branch *string `json:"branch,omitempty"`
-	// The commit the builder's branch points at, in get_build and list_changes
-	// only: present once the branch exists and points at another commit than the
-	// one the build started from.
+	// The commit the builder's branch points at, returned by get_build and
+	// reflected in list_changes.version (start_build omits it before any branch
+	// commit exists, and list_changes items carry no branch field): present once
+	// the branch exists and points at another commit than the one the build
+	// started from.
 	HeadCommit *string `json:"head_commit,omitempty"`
 	// Whether the builder's latest completed check_project in this build passed;
 	// absent until one completed. The check covered the builder's working folder
@@ -4551,8 +4562,12 @@ func validatejsonChangeListItemTransport(value *jsonChangeListItemTransport) (er
 type jsonChangeListTransport struct {
 	// Saved Change Cards, most recently saved first.
 	Changes []*jsonChangeListItemTransport `json:"changes"`
-	// Opaque value for change detection. Compare it only for equality; the
-	// returned fields contain the facts this operation makes readable.
+	// Opaque value for change detection. It changes whenever the listed cards, a
+	// card's get_build view (including the builder's branch head_commit and latest
+	// check), approval_available, initializing_phase, the owner's Story
+	// evaluation, get_team, or get_live_target changes; list_changes items carry
+	// no build or branch fields, so read get_build for those facts. Compare it
+	// only for equality.
 	Version *string `json:"version"`
 	// Whether approve_merge can record approvals on this server: true when the
 	// server runs Checkpoint 4 verification, as every server surla starts does,
@@ -34392,7 +34407,7 @@ func validateBuilderProgressJSONValue(path string, value any, description string
 		case "head_commit":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.",
+				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.",
 			); err != nil {
 				return err
 			}
@@ -37258,7 +37273,7 @@ func validateChangeListJSONValue(path string, value any, description string) err
 		case "version":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.",
+				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 			); err != nil {
 				return err
 			}

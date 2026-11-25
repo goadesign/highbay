@@ -4597,7 +4597,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("builder"), tools.FixedField("head_commit")},
 		JSONType:    "string",
-		Description: "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.",
+		Description: "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -8209,7 +8209,7 @@ var listChangesResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("version")},
 		JSONType:    "string",
-		Description: "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.",
+		Description: "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval_available")},
@@ -28475,7 +28475,7 @@ func validateListChangesResultJSONValue(path string, value any, description stri
 		case "version":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Opaque value for change detection. Compare it only for equality; the returned fields contain the facts this operation makes readable.",
+				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 			); err != nil {
 				return err
 			}
@@ -28959,7 +28959,7 @@ func validateGetBuildResultBuilderProgressTransportJSONValue(path string, value 
 		case "head_commit":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The commit the builder's branch points at, in get_build and list_changes only: present once the branch exists and points at another commit than the one the build started from.",
+				typed[key], "The commit the builder's branch points at, returned by get_build and reflected in list_changes.version (start_build omits it before any branch commit exists, and list_changes items carry no branch field): present once the branch exists and points at another commit than the one the build started from.",
 			); err != nil {
 				return err
 			}
