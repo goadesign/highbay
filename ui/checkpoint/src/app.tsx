@@ -910,10 +910,8 @@ export function bootstrapViewsPage() {
           readBuild(activeEditor.card.change_id);
           refreshVerificationObservations(activeEditor.card.change_id);
         }
-      }
-      if (previous !== null && previous.version !== outcome.result.version) {
-        // The version also covers the owner's Story evaluation. It is read
-        // after the list, so it is never older than the version just read.
+        // Story and Live can open before the first list arrives. Refresh
+        // their observations after each new version, including the first.
         if (activeResult?.kind === "story") {
           readStoryEvaluation();
         } else {
