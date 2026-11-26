@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/img/highbay-banner-dark.png">
-    <img alt="Highbay — one compiled contract every coding agent builds to and an independent verifier checks against." src="docs/img/highbay-banner.png" width="960">
+    <img alt="Highbay" src="docs/img/highbay-banner.png" width="960">
   </picture>
 </p>
 
@@ -13,243 +13,260 @@
 
 # Highbay
 
-**An agentic software factory that builds, verifies, and evolves production services at a fraction of the token cost.**
+**Your agent's tests pass. Did it build what you meant?**
 
-A coding agent left alone writes the code and also the tests that judge it, so
-its mistakes pass. Hand-written routing, auth middleware and workflow plumbing
-drift with every feature, and each later edit costs more tokens.
+Highbay builds Go services and AI agents with the coding agents you already
+use, such as Claude Code, Codex or Cursor. It is free, open source, and runs
+on your machine.
 
-Highbay organizes the coding agents you already use into a team with separate
-jobs, and pairs them with a deterministic compiler. Agents write a compact
-service design and the business logic. [Goa](https://github.com/goadesign/goa)
-and [Goa-AI](https://github.com/goadesign/goa-ai) generate the transports,
-schemas, validation, durable workflows and tool guardrails from that design at
-**0 LLM tokens**. One agent writes the code; a different agent writes the
-tests; Highbay itself judges those tests and runs them against the code. You agree
-what is built, approve the result, and merge the approved commits into your
-local branch in your browser.
+A coding agent working alone answers the questions your request left open,
+then writes tests that agree with its own answers. The tests pass, and nobody
+checked the answers.
 
-## One change from start to finish
+Highbay splits that job. You choose the behavior on a page in your browser.
+[Goa](https://github.com/goadesign/goa) and
+[Goa-AI](https://github.com/goadesign/goa-ai) generate the transports, schemas
+and validation from a Go design, so no model writes them. One agent writes the
+service code, a different agent writes the scenario tests, and Highbay runs
+the accepted tests against the exact commit you then approve and merge.
 
-Install Highbay and run [`hbay up`](#install) once. Then open your project
-folder in your coding agent and say:
+```bash
+go install github.com/goadesign/highbay/cmd/hbay@latest
+hbay up
+```
+
+Run `hbay up` once. After that, open a project folder in your coding agent and
+say `/highbay` (`$highbay` in Codex). That call starts the project's Highbay
+server when one is needed; there is nothing to start per session.
+[Install](#install) lists what Highbay needs.
+
+## One change, start to finish
+
+Open an empty folder in your coding agent and say:
 
 > `/highbay` — build a refund assistant: refunds up to $50 get instant store
 > credit; larger ones wait for a manager.
 
-Use `$highbay` in Codex. Your current coding agent (which Highbay registers under
-its internal **guide** role) starts or attaches to the project's server and
-opens the browser window where you make the human decisions. In an empty
-folder, it creates the starter and first Git commit through Highbay. You can keep
-working in that conversation through the merge.
+The request leaves one thing unsaid: does $50 count sales tax? One order tells
+the two readings apart.
 
-Here is how that change reaches your branch:
+| Order | If $50 means the items, before tax | If $50 means the total charged |
+| --- | --- | --- |
+| $48.00 items + $4.32 tax = $52.32 | Instant $52.32 credit | Waits for a manager |
 
-1. **Start in your agent.** Invoke `/highbay` (or `$highbay`) in the project
-   folder and describe what you want. The first Highbay tool call attaches
-   this session as the guide and starts the server when needed. In Herdr, when
-   Highbay can identify your coding agent's live pane in the project folder and
-   its project and team ownership are compatible, Highbay can link that pane and
-   space; when no Herdr pane is linked, your coding agent still registers with
-   the project (**Coding agent registered · No Herdr pane linked**).
-2. **Open the page.** Your coding agent calls `open_views` to open the project's
-   browser page in your default browser. In an empty folder, first-time Go
-   module setup takes a couple of minutes while the welcome card shows the
-   current initialization phase. If you close or reload the tab, ask your coding agent
-   to open Highbay views again, click **Open Highbay Window** in the Herdr
-   companion (`Cmd+Alt+Shift+H` on macOS), or run `hbay --print-link` for
-   headless or automated browsers.
-3. **Describe.** Your coding agent writes the Story, a description of your
-   system's flows in Go, and proposes a Change Card: the saved request,
-   questions, examples and behavior to preserve. It appears on the page by
-   itself.
-   For the refund rule, the card might ask “Does $50 mean the item subtotal, or the total with
-   tax and shipping?” and “Does exactly $50.00 get instant credit?”
-4. **Agree.** On the page, answer the questions, check the examples and
-   confirm. When an option requires changing the draft design, Story or
-   examples (unlike the option marked **Matches current draft**), the page
-   keeps your choice and gives you a one-click request for your coding agent to
-   revise the card before confirming. Verification needs **no model API
-   key**: the test program gets none, a new project's first test needs no
-   model, and a test of an agent plans with a **scripted model** kept in the
-   test module (stored custom evaluators can use configured provider
-   credentials).
-   **Check: Deterministic** and **Check: Model-judged** are saved authoring
-   labels for you and the test writer rather than an automatic per-example
-   judge—check scenario coverage in **Build** to see how each example is
-   tested—while **Live target** uses a configured model provider key or gateway
-   so the builder can try prompt wording live. If your coding agent later
-   revises a confirmed change, its proposed revision waits beside the agreed
-   revision until you adopt or decline it.
-5. **Review the architecture.** Open **Architecture** in the journey bar on the
-   page to inspect the agreed revision's saved design (**Inspect** opens
-   **Story**, **Team**, **Live target** and **Diagnostics**). If it needs a
-   change, ask your coding agent to revise the change, then review and adopt its
-   proposal before building.
-6. **Build.** Choose agents, models and permissions inline in **Build**,
-   then press **Build this change**. Highbay remembers your choices for this
-   project and pre-populates missing user-scoped folder trust for the project
-   and worker copies (while honoring any explicit untrusted folder rule).
-   Defaults prefer different coding-agent families for the worker roles; one
-   installed family can fill both. The builder and test writer work in separate
-   Git working copies, `.highbay-build` and `.highbay-tests`. Highbay gives the test
-   writer one required test per finished Story flow, plus the confirmed answers,
-   examples and preserved behaviors.
+An agent working alone picks one reading, then tests a $40 order and a $60
+order. Both tests pass under either reading, so they cannot tell you which one
+it built. Highbay asks you, then tests the $48 order.
 
-   | Worker mode | When Highbay uses it | What it needs |
-   | --- | --- | --- |
-   | **Herdr panes** | Highbay finds both Herdr commands (`herdr-core` and `herdr-app`) | Herdr creates side-by-side worker panes; Chorus (`chorus up`) coordinates them and is required at initial Herdr worker startup. If Chorus becomes unreachable or cannot join a swarm afterwards, already-running workers keep waiting through Highbay's assignment-wait tools and the page offers copyable nudges. |
-   | **Background workers** | Highbay cannot find both Herdr commands | No Herdr or Chorus needed. Requires a supported coding-agent CLI with non-interactive execution, **Skip permission prompts (YOLO)** enabled per role when the client offers it (otherwise configured client permissions), and **I agree to run these workers in the background.** |
+Here is how the change reaches your branch:
 
-7. **Tests.** The test writer writes those tests in `eval/`, checks that
-   `eval/` compiles (`GOWORK=off go build ./...`), and reports without running
-   the application itself. Highbay does not take its word for it: it writes the
-   required tests into the copy again, checks that nothing changed outside
-   `eval/`, and builds and lists the test program. Problems go
-   back to the test writer as findings. Build shows them beside the saved
-   required tests; Next names the test writer’s next step.
-   When the tests pass the check, Highbay accepts them at one commit on
-   `highbay/tests-<n>`. Build shows which agreed answers and examples the test
-   writer says each scenario covers. Highbay validates those references but does
-   not judge the statements; anything without one says **Not stated**.
-8. **Code and verify.** Meanwhile the builder writes the code, runs isolated
-   container checks, and commits on its build branch, with the branch, live
-   branch tip while building (and saved verified commit once passed), and check
-   status shown in **Build**. If the application calls a
-   model and you exported a provider key or attached a model gateway, the
-   builder can try prompt wording after Highbay accepts the tests on a *live
-   target*: a running copy of the application that the server starts from a
-   commit. The builder then asks Highbay to verify its commit. Highbay builds that
-   commit and runs the tests accepted for that exact revision against it; it
-   refuses to verify until those tests are accepted. The result appears in the
-   page's **Check** view.
-9. **Approve and merge.** Open the run in **Approve** to review its recorded
-   Story flows, test outcomes, excluded drafts and unknown coverage. When the
-   server says approval is available, Next offers **Approve this result**.
-   Highbay checks that the run passed and ran the tests accepted
-   for the agreed revision, then records the approval with the builder's
-   commit, the tests commit and the report. On **Approve**, press
-   **Merge into current branch** to merge into the checked-out local branch.
-   Highbay rechecks the current approval and requires clean tracked files. If Git refuses the merge, read
-   the recovery shown on the page; manual merge instructions remain available.
-   See [`merge_change`](docs/REFERENCE.md#merge_change) for the Git checks and
-   recovery contract. Once your branch holds the verified
-   work, the build shows **Merged** and Highbay stops that build's workers.
-   Verification covered the commits in the passed run before the merge;
-   **Verify the merged branch from the terminal** discloses a pre-filled
-   [`hbay verify`](docs/REFERENCE.md#hbay-verify) template when you want to
-   verify the merged commit or checked-out branch separately.
-   Approval needs no settings. A project that stores
-   [promotion settings](docs/REFERENCE.md#hbay-verification-and-hbay-promotion)
-   (a release folder and the names of its binaries) gets one more check at
-   approval: the files in the release folder must be the binaries the run
-   built.
+1. **Describe.** Your coding agent starts or joins the project's Highbay
+   server and opens its page in your browser. In an empty folder it first
+   creates a blank Go project and its first commit, which takes a couple of
+   minutes. It then writes a *Story*, a description of the system's flows in
+   Go, and proposes a *Change Card*: your request, the questions it leaves
+   open, concrete examples, and the behavior to keep.
+2. **Agree.** On the page, answer the questions and confirm. For the refund
+   rule, the card shows the $48 order under each answer. If your answer
+   differs from the draft, your coding agent revises the card before you
+   confirm.
+3. **Review the architecture.** The page draws the services, agents and tools
+   that the agreed design declares, before any of them is implemented.
+4. **Build.** Choose a coding agent and a model for two roles, then press
+   **Build this change**. The *builder* writes the service. The *test writer*
+   writes one scenario test for each finished flow, in its own working copy.
+   Highbay accepts those tests only after it compiles them and confirms that
+   nothing outside the test module changed.
+5. **Verify.** The builder asks Highbay to verify its commit. Highbay builds
+   that commit and runs the accepted tests against it. A failed run goes back
+   to the builder, and nothing can be approved until a run passes.
+6. **Approve and merge.** Read the report, press **Approve this result**, then
+   **Merge into current branch**.
 
-Only you confirm a change, start a build and approve a result, and you do it on
-the page. Each agent has its own connection to the server with only its own
-role's permissions. While the team works, the page's **Team** view shows each
-agent's state. If a Herdr agent needs you, the page shows an action such as
-**Show guide pane**. The server can send a Chorus message when a worker owes
-an assignment read. After 90 seconds of idling with that assignment unread,
-the page says what to tell it.
+Only you can confirm a change, start a build, approve a result or merge. Each
+agent connects to the server with the permissions of its own role. You can go
+back at any step: revise the change, build again, or have the tests reported
+again. [How Highbay works](docs/HOW_IT_WORKS.md) covers every step, and
+[Going back](docs/HOW_IT_WORKS.md#going-back) says what stays valid when you
+do.
 
-In Herdr, workers appear beside the guide and close after the build is merged
-or dropped. The optional Highbay companion shows the current stage and roles
-that need you, focuses their panes, and opens the page. Outside Herdr, the
-browser remains the place for your decisions. Recommendations for Herdr are
-dismissible. When a build needs both workers, Highbay also recommends a second
-agent family if only one suitable family is available. It remembers these dismissals for
-this project.
+In one moderated trial, an AI agent played a first-time developer on a sample
+property-listing app. The test writer's scenario for withdrawing a listing had
+32 named checks, and the builder's first commit failed two of them. Highbay
+reported seven of eight scenarios passing, the builder fixed it, and the same
+tests passed eight of eight about three minutes later. That was a trial with a
+scripted model, not a production incident.
 
-You can go back at any point: adopt a revised change, build again, or the test
-writer reports again after findings. Adopting changed content gives it a new
-`request_revision`, which starts without an approval, and verification then
-needs a build of that revision: before you adopt, the page says that the
-existing build stays on the earlier revision. Building again replaces the
-build and requires the tests to be reported, judged and accepted again before
-verification or a new live target. After merging the current agreement, build
-another change or refine this one when there is more to do. **Build again…**
-remains available as a secondary action: it asks before starting a new build
-number from your branch as it is now, for the same agreement, with fresh
-assignments. Earlier reports do not establish that the new build passed.
+## The agreement is code
 
-Two limits hold. All agents run as you on one machine, so they are separated
-by job, not walled off from each other. Highbay runs the code the agents write
-(the design at each refresh, the builder's programs and the test writer's
-test program) as ordinary processes with your file and network access, reusing
-compiled Go packages across operations without treating a cache hit as a passed
-check; see [project storage and cache trust](docs/REFERENCE.md#project-state-folder). The
-page states the second limit next to **Build this change**. Each verification
-run records where its tests came from. For the test writer's tests, the
-**Check** view shows with the run, and the agents read in its result, the
-server's notice that the tests were written by a separate agent on this
-machine and are not isolated from the builder.
+What you agree to becomes three small pieces of Go that use the same order and
+the same numbers. These excerpts illustrate the refund example; they are not
+files in this repository.
 
-These words appear throughout:
+```go
+// design/story.go
+// 1. The flow you confirmed, drafted by your coding agent.
+package design
+
+import . "github.com/goadesign/highbay/story/dsl"
+
+var _ = Story("Refunds", func() {
+	Actor("customer", "Customer")
+	// A flow with a start, an outcome and no open question is finished.
+	// Every finished flow needs a scenario test before a build counts.
+	Flow("instant_credit", "Up to $50 subtotal", func() {
+		StartsWith("ask", "customer", "$48.00 + $4.32 tax")
+		Outcome("credit", "customer", "Instant $52.32 credit")
+	})
+})
+```
+
+```go
+// eval/acceptance/refunds.go
+// 2. The scenario, written by the test writer from your answer.
+func (h *Hooks) InstantCredit(ctx context.Context) (eval.Result, error) {
+	// $48.00 + $4.32 tax = $52.32: the order that tells the readings apart.
+	out, err := h.refund(ctx, 4800, 432)
+	if err != nil {
+		return eval.Result{}, err
+	}
+	return eval.Result{Checks: []eval.Check{
+		check("status", out.Status == "credit"),
+		check("cents", out.Cents == 5232),
+	}}, nil
+}
+```
+
+```go
+// internal/refunds/service.go
+// 3. The rule, written by the builder against the payload and result types
+//    that Goa generated from the design.
+func (s *Service) RequestRefund(
+	ctx context.Context, req *genrefunds.RequestPayload,
+) (*genrefunds.RefundResult, error) {
+	total := req.SubtotalCents + req.TaxCents
+	if req.SubtotalCents <= 5000 { // the limit counts the items, as you chose
+		return s.issueCredit(ctx, req.OrderID, total)
+	}
+	return s.queueReview(ctx, req.OrderID, total)
+}
+```
+
+If the builder had compared `total` instead, the scenario would fail on the
+$48 order and the run could not be approved.
+
+## Generated plumbing, written by no model
+
+Agents write a compact Go design and the business logic. Goa and Goa-AI
+generate the rest from the design. This method comes from the
+[Orders example](examples/orders/README.md) in this repository:
+
+```go
+// examples/orders/design/orders.go: what an agent writes.
+Method("chat", func() {
+	Description("Send a message to the refund assistant and start a run.")
+	Payload(func() {
+		Token("token", String, "Customer bearer token.")
+		// MinLength becomes a generated check on every request.
+		Attribute("message", String, "What the customer says.", func() { MinLength(1) })
+		Required("token", "message")
+	})
+	Result(RunView)
+	HTTP(func() {
+		POST("/chat")
+		Response(StatusAccepted)
+	})
+})
+```
+
+```go
+// examples/orders/gen/orders/service.go: what Goa generates for it.
+type Service interface {
+	// Send a message to the refund assistant and start a run.
+	Chat(context.Context, *ChatPayload) (res *RunView, err error)
+	// ...
+}
+```
+
+From that one method Goa also generates the HTTP route, the request decoder
+with its length check, a typed client and the OpenAPI description. For a
+coding agent this has three effects:
+
+- **No model writes the generated files.** The generator does. Agents still
+  spend tokens on the design and the logic, so the overall saving depends on
+  the change. Highbay does not claim a measured figure.
+- **The same shape from any model.** Generated code looks the same whether
+  Claude, Codex or Gemini wrote the logic around it.
+- **A changed contract breaks the build.** Change a method's payload and
+  regenerate: a handler with the old signature no longer compiles.
+
+Highbay generates the transports a design declares: HTTP, JSON-RPC and MCP. It
+refuses a design with gRPC transports; see
+[`hbay gen`](docs/REFERENCE.md#hbay-gen).
+
+## Words you will meet
 
 | Term | Meaning |
 | --- | --- |
-| **The server** | The project's Highbay server. The guide's first Highbay call starts or attaches to one per project folder. It keeps what you agreed, who was asked to do what, and what was accepted, and it runs the checks. |
-| **The page** | The server's page in your browser, which the reference calls the views page. You agree on changes and approve results there. |
-| **Herdr** | An optional terminal workspace that shows the team's agents side by side. |
-| **Chorus** | The messaging and pane-launch service for teams in Herdr. |
-| **The guide** | The internal role Highbay assigns to your coding agent. It writes the Story and proposes changes. |
+| **The server** | The project's Highbay server, one per project folder. It keeps what you agreed, who was asked to do what and what was accepted, and it runs the checks. |
+| **The page** | The server's page in your browser. You agree on changes and approve results there. |
+| **Story** | A description of what the system does, written as Go in the project's design, one flow at a time. |
+| **Flow** | One path through a Story: who starts it, the steps, and the outcome. A flow with a start, an outcome and no open question is *finished*. |
+| **Change Card** | One proposed change: the request, the Story, open questions, concrete examples and the behavior to keep. |
+| **The guide** | The role of the coding agent you talk to. It writes the Story and proposes changes. |
 | **The builder** | The agent that writes the application code. |
-| **The test writer** | The agent that writes the change's tests, in its own working copy of the project. |
-| **Story** | A plain description of what the system does, written as Go in the project's design, one flow at a time. |
-| **Flow** | One path through a Story: who starts it, the steps by role, and the outcome. For example, "a customer asks the price of tea and gets it". A flow with a start, an outcome and no open question is *finished*; any other flow is a draft. |
-| **Change Card** | One change the guide proposes: the request, the Story, open questions, concrete examples and the behavior to preserve. |
-| **`request_revision`** | The digest of one saved revision of a Change Card. Previews, verification runs and approvals name the revision they belong to. |
+| **The test writer** | The agent that writes the change's scenario tests, in its own working copy. |
+| **Herdr** | An optional terminal workspace that shows the agents side by side. |
+| **Chorus** | The messaging service the agents use when they run in Herdr. |
+
+## What Highbay does not do
+
+- **It is not a sandbox.** All agents run as you on one machine. Highbay runs
+  the code they write as ordinary programs with your access to files and the
+  network. Roles limit what each agent can do in Highbay, not what its
+  programs can reach. The page says so next to **Build this change**. One
+  check, the builder's compile and unit test run, uses a local Docker
+  container; see [`check_project`](docs/REFERENCE.md#check_project).
+- **It does not judge what a test asserts.** Highbay checks that every
+  finished flow has a scenario test and that the tests build, then runs them.
+  Whether the assertions are strong enough remains your review. The page
+  shows which answers and examples the test writer says each scenario covers.
+- **It builds Goa projects only.** Highbay works on Go services and agents
+  designed with Goa and Goa-AI. Other languages and frameworks are out of
+  scope.
 
 ## Install
 
 Highbay needs:
 
-- **macOS or Linux.** Highbay runs the code the agents write (the design at
-  each refresh, candidate builds, the candidate service, test listing, and the
-  test program) as ordinary processes with your file and network access.
+- **macOS or Linux.**
 - **Go 1.27.3** or newer.
-- **Git 2.45 or newer**, with your name and address configured (`git config --global
-  user.name` and `user.email`). Highbay records accepted tests as commits under
-  your identity, and a build is refused until Git has one.
-- **Docker Desktop**, or another local Docker engine. The builder builds and
-  tests its work in Linux containers. Each project retains downloaded
-  dependencies across checks; tests mount them read-only and run offline with
-  fresh compiler scratch. See [`check_project`](docs/REFERENCE.md#check_project).
-- A coding agent that supports MCP. Setup registers Highbay with detected
-  clients; the [setup reference](docs/REFERENCE.md#hbay-setup--global)
-  lists them. Background workers need an installed CLI with supported
-  non-interactive execution.
-- For side-by-side agent panes, **Herdr core** (`herdr-core` and `hc`), the
-  **Herdr app** (`herdr-app`), and **Chorus v0.14.0** or newer. Without
-  Herdr, Highbay can run the build workers in the background without Chorus.
-
-To install the Highbay described by this README, clone this repository and check
-out the version you are reading. From the repository root, run:
+- **Git 2.45** or newer, with your name and address configured. Highbay
+  records accepted tests as commits under your identity.
+- **Docker Desktop**, or another local Docker engine, for the builder's
+  checks.
+- **A coding agent that supports MCP.** The
+  [setup reference](docs/REFERENCE.md#hbay-setup--global) lists the clients
+  that setup registers.
 
 ```bash
-go install ./cmd/hbay
+go install github.com/goadesign/highbay/cmd/hbay@latest
 hbay up
 ```
 
-`go install github.com/goadesign/highbay/cmd/hbay@latest` installs the latest
-module version available to Go, which may be older than this README and lack
-commands described here. When installing that version, follow its README.
+From a checkout of this repository, `go install ./cmd/hbay` installs the
+version you are reading.
 
-`hbay up` registers the `hbay stdio` MCP server with detected coding agents
-and installs `/highbay` in supported client skill folders and the shared
-`.agents` folder, preserving unrelated settings. Reload your
-agent's MCP configuration or start a new session if it does not yet show
-Highbay. Repeat setup after adding a client or moving the Highbay executable. `hbay setup -global` performs the same registration
-without starting Chorus. If Chorus stops, including after a reboot, restart
-it with `chorus up` before starting Herdr workers; the project server does not
-start Chorus itself.
+`hbay up` registers Highbay as an MCP server with the coding agents it
+detects and installs the `/highbay` skill. It leaves unrelated settings
+alone. Reload your agent's MCP configuration or start a new session if
+Highbay does not appear. Run `hbay up` again after you add a coding agent or
+move the `hbay` executable.
 
-Herdr is optional. For a side-by-side workspace, install Herdr and Chorus,
-open Herdr once to create its configuration folder, then run `hbay up`
-again to install the Highbay companion. On macOS, setup also adds
-**Cmd+Alt+Shift+H** to Herdr's `keys.json` when the shortcut is free; existing
-bindings stay in place. See [setup details](docs/REFERENCE.md#hbay-setup--global).
+**Side-by-side panes are optional.** With Herdr and Chorus v0.14.0 or newer
+installed, Highbay opens the builder and the test writer beside your coding
+agent. Without Herdr, it runs them in the background once you agree to that
+on the page. Install both, open Herdr once, then run `hbay up` again:
 
 ```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
@@ -257,176 +274,68 @@ curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
 ```
 
-Before startup, `hbay` checks for Git's `--no-lazy-fetch` capability and
-the browser opener. See [Prerequisites](docs/REFERENCE.md#prerequisites).
+`hbay up` starts Chorus when it is installed. If Chorus stops later, for
+example after a reboot, run `chorus up` before you start a build in Herdr.
+[Prerequisites](docs/REFERENCE.md#prerequisites) and
+[setup details](docs/REFERENCE.md#hbay-setup--global) cover the rest.
 
-Highbay's design and generation steps need no model key; each coding agent
-uses its own sign-in. An application that calls a model needs a key when
-the builder tries prompts on a live target. Export the provider's key, such as
-`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, with any request settings it needs,
-in the environment that starts your coding agent. If the client passes those
-settings to `hbay stdio`, it hands them to the server, which holds them in
-memory until `hbay stop`. Real-client environment forwarding has not been
-live-verified; see [stdio integration](docs/REFERENCE.md#hbay-stdio). While no
-model is chosen, live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`. The page's
-**Live target** view changes that model to another provider whose settings
-were handed over, or to a model gateway; see
-[`hbay` and `hbay stop`](docs/REFERENCE.md#hbay-and-hbay-stop).
+**Highbay needs no account and no model key.** Each coding agent uses its own
+sign-in, and the tests a test writer wrote run without a model key. A key
+matters only when your own application calls a model and the builder tries
+prompt wording on a *live target*, a running copy of the application that the
+server starts from a commit. In that case, export the provider's key, such as
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, in the environment that starts your
+coding agent. Your coding agent must pass that environment on to Highbay; see
+[stdio integration](docs/REFERENCE.md#hbay-stdio). While no model is chosen,
+live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`, and the page's
+**Live target** view changes the model.
 
 ## Start a project
 
-Open an existing project or an empty folder in your coding agent and invoke
-`/highbay` (`$highbay` in Codex). Describe what you want to build (if you invoke
-`/highbay` alone, your coding agent opens the browser window and asks what you
-would like to build). In an empty folder, your coding agent calls
-[`init_project`](docs/REFERENCE.md#init_project) with `dir: "."` to create the
-starter and its first Git commit in place, deriving a default Go module path
-from the folder name unless you specify one. Open product questions go onto the
-Change Card for you to answer on the page. Agent configuration folders can
-stay; the operation refuses conflicting project files.
+**In an empty folder,** `/highbay` creates a blank starter in place: a Goa and
+Goa-AI service with no methods yet, an architecture diagram, an empty Story,
+and a test module with one test that the program starts. Nothing in it is
+about someone else's product. See
+[`init_project`](docs/REFERENCE.md#init_project).
 
-The starter is blank: a Goa and Goa-AI service with no methods yet, an
-architecture diagram declared with [Model](https://github.com/goadesign/model),
-an empty Story in `design/story.go`, and a test module in `eval/` with one
-test that the program starts. Nothing in it is about someone else's product.
-Your coding agent writes the Story with you and opens the browser window. You review, build, approve
-and merge there. To recover a closed or reloaded page, ask your coding agent to
-open it again, or use **Open Highbay Window** in the Herdr companion.
+**In a project you already have,** Highbay needs a Goa or Goa-AI project with
+at least one Git commit and tests it can run. Those tests are either a test
+module in Highbay's layout or a test program of your own that you register
+with `hbay verification set`. With your own program, Highbay uses it for
+every change and starts no test writer. See
+[what a build adds](docs/HOW_IT_WORKS.md#what-a-build-adds).
 
-The page keeps unsaved input when you open a fresh link in the same tab and
-offers **Open link** after you save or discard it. A fresh link expires two
-minutes after issue. [Terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
-remains available for operators and browser automation, including bare
-`hbay`, `hbay --print-link`, `hbay status --json` and `hbay stop`.
+If you close the page, ask your coding agent to open Highbay again.
+[Terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
+covers `hbay --print-link`, `hbay status` and `hbay stop` for operators and
+browser automation.
 
 ## Use the tools without a team
 
-These commands need no server, no team and no model key. `hbay init`,
-`hbay preview` and `hbay gen` run Goa with the module's own versions, so no
-separately installed `goa` is needed. They compile and run the design as an
-ordinary process with your file and network access.
+These commands need no server, no agents and no model key. They run Goa with
+the module's own versions, so no separately installed `goa` is needed.
 
 ```bash
-# Scaffold a blank service and its test module
-# (add -example for Highbay's worked example, a price-answering service):
+# Create a blank service and its test module.
+# Add -example for a worked example, a price-answering service.
 hbay init -dir shop -module example.com/shop
 
-# Compile shop/design at 0 LLM tokens and print its
-# containers, boundary edges, agent policies and tool contracts:
+# Compile shop/design and print its containers, boundary edges,
+# agent policies and tool contracts.
 hbay preview -dir shop
 
-# List all commands; "hbay help <command>" prints a command's flags:
+# Regenerate shop/gen after you edit shop/design.
+hbay gen -dir shop
+
+# List all commands. "hbay help <command>" prints a command's flags.
 hbay help
 ```
 
-Or clone this repository and look at the [`examples/orders`](examples/orders/README.md)
-reference platform:
-
-```bash
-git clone https://github.com/goadesign/highbay.git
-cd highbay
-
-# Preview the Orders platform's architecture and tool guardrails:
-hbay preview -dir examples/orders
-
-# Compare two Goa design modules structurally:
-hbay diff --old-dir examples/orders --new-dir examples/orders
-```
-
-From a checkout you can also run `go run ./cmd/hbay`; `go run ./cmd/hbay init`
-then needs `-highbay-version` with a published version, such as
-`-highbay-version v0.0.0-20261125231720-7e4be2233e61`.
-
-After you edit a module's `design/`, `hbay gen -dir <module>` regenerates its
-`gen/` and replaces it in one step. It needs `goa.design/goa/v3`
-`v3.35.1-0.20261103205041-35e789e8f9b1` or later and refuses a design with gRPC
-transports; see [`hbay gen`](docs/REFERENCE.md#hbay-gen). The operator tools
-`hbay verify` and `hbay approve` build a commit, run a test suite from a
-Git repository you name against it and check a saved report, outside any
-server; see
-[`hbay verify`](docs/REFERENCE.md#hbay-verify).
-
-## Why engineers use Highbay
-
-### 1. Agents write the contract; the compiler writes the plumbing
-
-Why pay a model to write thousands of lines of HTTP handlers, gRPC stubs,
-OpenAPI specs, MCP schemas and JSON validators? In Highbay, agents express your
-API, agent tools and security rules in a compact, strongly typed design
-(`design/*.go`). Goa generates the transports, OpenAPI specs, MCP schemas and
-validators from it with no model inference (**0 LLM tokens**), which removes
-whole classes of glue-code bugs and the tokens spent writing them.
-
-### 2. A built-in Golden Path that stays cheap to evolve
-
-AI-built codebases decay when every prompt invents a new folder layout, a new
-way to call models or a new auth pattern, and later agents spend tokens
-reverse-engineering the repository. Highbay serves every agent the same
-**Golden Path** rules:
-
-- **Predictable layout and generated agent maps.** Every service follows the
-  same structure and ships a generated `AGENTS_QUICKSTART.md`, so an agent can
-  extend the platform months later with little context.
-- **Production patterns by default.** One HTTP/MCP edge service, internal gRPC
-  services, a central model gateway with rate limiting and usage accounting,
-  durable Temporal workflows, and tool fields such as `tenant_id` and
-  `user_id` that the server injects and the model can never set.
-
-### 3. Independent verification of each commit
-
-The agent that writes the code never decides whether it works. Tests come
-from the test writer and count only after Highbay's own check accepts them.
-Verification builds the builder's exact commit (`verify/candidate`) and runs
-the accepted tests against it; the code under test and the tests run as
-ordinary processes with your file and network access.
-
-- **Hidden scenarios.** A project can instead store verification settings
-  (`hbay verification set <file>`, applied when Highbay starts again) that
-  name a test suite of your own at one commit of a Git repository you choose;
-  its builds then add only the builder. The suite's scenarios tagged
-  `holdout` are hidden: [`Report.ForBuilders()`](internal/verify/report.go)
-  removes their names, inputs and logs from the report the builder sees. The
-  builder's programs run with your file access, so while a run executes they
-  could read the suite's files on this machine.
-- **Real crash and budget proof.** The [`examples/orders-eval`](examples/orders-eval/)
-  reference suite kills the Temporal worker in the middle of a refund
-  (`kill -9`), restarts the API while an approval is paused, and fails any
-  scenario whose model token use exceeds its budget
-  (`TestSeededPayloadBloatFailsTheBudget` proves it with a seeded payload
-  bloat).
-
-### 4. Prompt changes without rebuilding
-
-Prompt wording and compiled business rules are kept apart. The builder names
-the confirmed change and a commit to start a live target. Without stored
-verification settings, the current build's accepted tests start that copy
-using the chosen model; they receive no provider settings. The builder sends
-new prompt wording to it with
-`draft_override`, without rebuilding Go code. A draft aimed at a compiled
-business rule changes nothing and says that the rule needs a rebuild and
-verification. A draft lasts as long as the live target: to
-keep it, the builder commits the text and verifies that commit. The page's
-**Live target** view shows which prompts changed and the model live targets
-use. An unexpected ending leaves the commit, launch and observed-end times,
-and the builder's recovery step after cleanup, including after a page reload.
-See [`start_live_target`](docs/REFERENCE.md#start_live_target),
-[`draft_override`](docs/REFERENCE.md#draft_override) and the
-[live target prompt contract](docs/REFERENCE.md#live-target-prompt-contract).
-
-### 5. Your decisions on one page
-
-The page lists the project's changes and shows each one's Story, questions,
-architecture, build, team, verification runs and approval, and updates itself without
-losing what you typed. The frame names Describe, Agree, Architecture, Build, Check and
-Approve, with Story, Team, Live target and Diagnostics under **Inspect**. The approval decision appears in Next. The **Diagnostics** drawer
-shows safe summaries of what the agents and the server did, naming each caller's role. See the
-[views page](docs/REFERENCE.md#views-page) and [operation diagnostics](docs/REFERENCE.md#operation-diagnostics).
-
-> **Why the name "Highbay"?** Named after **Tambdi Highbay** in Goa, home to the
-> carved basalt Mahadeva temple beside the Highbay River. In Highbay
-> (*SOOR-lah*), `design/*.go` is that enduring stone contract: one compiled
-> specification every coding agent builds to, and an independent verifier
-> checks against.
+The [Orders example](examples/orders/README.md) is a complete platform with
+its own test suite. From a checkout, `hbay preview -dir examples/orders`
+prints its architecture. The [reference](docs/REFERENCE.md#hbay-verify) covers
+`hbay verify` and `hbay approve`, which check a commit against a test suite
+outside any server.
 
 ## Dive deeper
 
@@ -436,14 +345,18 @@ shows safe summaries of what the agents and the server did, naming each caller's
   the server's contracts.
 - **[Story language](story/README.md)**: the declarations a Story is written
   with.
-- **[Golden Path architecture](docs/ARCHITECTURE_PLAYBOOK.md)**: the rules that
-  keep Highbay platforms maintainable, and who owns what in Highbay.
+- **[Golden Path architecture](docs/ARCHITECTURE_PLAYBOOK.md)**: the built-in
+  rules every agent follows, and who owns what in Highbay.
 - **[Story flows and the tests a build requires](docs/STORY_TEST_DESIGN.md)**:
-  for contributors, how a Story becomes tests and how Highbay judges them.
-- **[Orders reference platform](examples/orders/README.md)**: a complete Golden
-  Path platform with its test suite.
-- **[Product direction](docs/PRODUCT_DIRECTION.md)**: what Highbay is meant to be
-  and for whom.
+  for contributors, how a Story becomes tests and how Highbay checks them.
+- **[Orders example](examples/orders/README.md)**: a complete platform with
+  its test suite.
+- **[Product direction](docs/PRODUCT_DIRECTION.md)**: what Highbay is meant to
+  be and for whom.
+
+> **Why the name?** A high bay is a tall factory hall where large things are
+> assembled and inspected before they leave. Highbay does the same for a
+> change: it is built, checked against what you agreed, and only then merged.
 
 ## License
 
