@@ -96,14 +96,17 @@ Rules for agents building services with Goa, Goa-AI, Model, Pulse and Clue. Rule
 - Define event payloads as typed types in the design. Decide up front which events must never be lost.
 - Choose each consumer's delivery guarantee explicitly. Work that must not be lost needs retained events and acknowledged consumption with redelivery; make those handlers idempotent and acknowledge after processing.
 - Pulse readers give each reader every event from its own position, without acknowledgement; sinks spread events across consumers; pools run jobs and move them off failed nodes. Never trim a stream by count if trimming could delete unfinished work.
+- In `goa.design/pulse/streaming`, create streams with `streaming.NewStream` and publish events with `stream.Add`: use `stream.NewReader` (`WithReaderTopic` or `WithReaderTopicPattern`) for fan-out and `stream.NewSink` (acknowledging with `Sink.Ack`, tuning `WithSinkAckGracePeriod`, and reserving `WithSinkNoAck` for disposable telemetry) for competing consumer groups. `streaming.NewStream` trims at 1,000 events by default, and `WithStreamMaxLen` changes that count; both apply Redis `XADD MAXLEN` without checking pending `Sink` acknowledgments. For a stream whose unfinished work must not be trimmed, pass `WithUnboundedStream()` and remove settled events explicitly.
+- In `goa.design/pulse/pool`, join consistent-hash worker pools with `pool.AddNode` (`WithMaxQueuedJobs`, `WithWorkerTTL`, `WithAckGracePeriod`): edge or API producers also pass `pool.WithClientOnly()` and dispatch jobs via `node.DispatchJob(ctx, key, payload)`, while worker processes attach idempotent `pool.JobHandler` (`Start` / `Stop`) implementations via `node.AddWorker` (`node.Close` stops this node's workers and requeues their jobs; `node.Shutdown` stops workers across all nodes).
+- In `goa.design/pulse/rmap`, join replicated state maps with `rmap.Join(ctx, name, rdb, opts...)` (`Set`, `Inc`, `TestAndSet`, `Delete`, `Subscribe`) for small, read-heavy cluster state such as feature flags and Goa-AI's `middleware.NewAdaptiveRateLimiter`. Never use `rmap` as primary entity storage.
 
 ## 8. Observability
 
-- Instrument from the first commit: server middleware, client transports, span names, and consistent attributes.
+- Instrument from the first commit: server middleware, client transports, span names, and consistent attributes. Configure OpenTelemetry exporters with `goa.design/clue/clue` (`clue.ConfigureOpenTelemetry(ctx, cfg)`) and stream trace propagation with `clue/interceptors`; Goa-AI's runtime emits `gen_ai.*` spans.
 - Create a span for each meaningful operation. Record state changes and results as span events, not log lines.
 - On every failure path, including early returns, record the error and set the span's error status. Never set error status for an expected negative result.
 - Log only startup, shutdown, background work outside a request, and unrecoverable errors. Never log in hot paths.
-- Readiness checks critical dependencies with timeouts. Liveness checks only the process. Never expose pprof publicly.
+- Readiness checks critical dependencies with timeouts. Liveness checks only the process. Never expose pprof publicly. In `goa.design/clue/health`, `health.NewChecker` takes `health.Pinger` values (pass `health.WithTimeout` to the built-in HTTP `health.NewPinger`, and supply custom `Pinger` implementations for Redis, databases, or Temporal); mount `clue/debug` (`MountDebugLogEnabler`, `MountPprofHandlers`) only on an internal port.
 - Alert on queries over truthful spans. Fix the alert's query; never filter or rewrite spans to quiet an alert.
 
 ## 9. Tests

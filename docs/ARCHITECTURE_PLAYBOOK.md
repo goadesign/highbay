@@ -4,7 +4,7 @@
 
 When coding agents build a platform from scratch without architectural guardrails, they default to fragile shortcuts: every service exposes ad-hoc HTTP JSON routes, every package calls LLM provider SDKs directly with no central rate limiting or cost tracking, `tenant_id` is passed inside LLM prompt arguments, and multi-step workflows run in fragile in-memory goroutines that lose state on deploy.
 
-Highbay embeds a single-source-of-truth **Golden Path Playbook** ([`internal/goldenpath/GOLDEN_PATH.md`](../internal/goldenpath/GOLDEN_PATH.md)) and serves it as an MCP resource (`highbay://golden-path`) to every agent on the project's team. The guide, the coding agent the user talks to, reads it before it writes the analysis it sends with `propose_change` or `revise_change`. The same resource ends with the decision component catalog for that analysis's optional `ui_composition`.
+Highbay embeds a single-source-of-truth **Golden Path Playbook** ([`internal/goldenpath/GOLDEN_PATH.md`](../internal/goldenpath/GOLDEN_PATH.md), 12 numbered sections) and serves it as an MCP resource (`highbay://golden-path`) to every agent on the project's team. The guide, the coding agent the user talks to, reads it before it writes the analysis it sends with `propose_change` or `revise_change`. The same resource ends with the decision component catalog for that analysis's optional `ui_composition`.
 
 This page has two readers. A platform author follows [the seven rules](#the-7-golden-path-rules) and [the tools behind them](#how-the-goa-design-suite-fits-together). A contributor to Highbay finds [who owns what in Highbay](#who-owns-what-in-highbay).
 
@@ -12,8 +12,8 @@ This page has two readers. A platform author follows [the seven rules](#the-7-go
 
 ## The 7 Golden Path Rules
 
-### 1. Design Is the Single Source of Truth (`design/*.go` → `goa gen`)
-Every service, method, payload, error contract, agent, toolset, MCP resource, and C4 container is declared in `design/*.go` first. Running `goa gen` deterministically generates transport codecs, OpenAPI specs, gRPC protobufs, workflow registrations, and `AGENTS_QUICKSTART.md` at **0 LLM tokens**. Files under `gen/` are never edited by hand.
+### 1. Design Is the Single Source of Truth & Standardized Layout (`design/*.go` → `goa gen`)
+Projects initialized with Highbay use the same two-module Go layout (`design/`, `gen/`, `cmd/`, `internal/`, and `eval/`, while existing Goa repositories may also register an external suite module such as `examples/orders-eval`), and every service, method, payload, error contract, agent, toolset, MCP resource, and C4 container is declared in `design/*.go` first. Running `goa gen` deterministically generates transport codecs, OpenAPI 3 specs, gRPC protobufs (when compiled via standalone `goa gen` with `protoc`), workflow registrations, and `AGENTS_QUICKSTART.md` at **0 LLM tokens** (in the [`examples/orders`](../examples/orders/gen) reference platform and [`Highbay's own gen/`](../gen), generated Go accounts for over 70% of non-test `.go` code). Highbay's built-in `hbay gen` and candidate `generate_code` generate HTTP, JSON-RPC, and MCP transports and refuse designs declaring `GRPC` transports because `protoc` is not bundled; see [`hbay gen`](REFERENCE.md#hbay-gen). Files under `gen/` are never edited by hand.
 
 ### 2. Single HTTP/SSE/MCP Edge Gateway, Internal gRPC Services
 - **One Edge Service**: Expose a single stateless HTTP/SSE/MCP edge service that terminates TLS, validates authentication tokens (`JWTAuth`, `OAuth2`, `APIKeyAuth`), enforces CORS, and streams real-time updates to clients.
@@ -22,8 +22,8 @@ Every service, method, payload, error contract, agent, toolset, MCP resource, an
 ### 3. Central Stateless LLM Model Gateway
 No domain service or agent worker holds raw LLM provider API keys or calls external provider endpoints directly:
 - **Gateway Service**: Front all model calls with [`goa.design/goa-ai/features/model/gateway`](https://github.com/goadesign/goa-ai) (`RegisterGRPCServer` and `NewGRPCClient`) over `Complete`, `Stream`, and `CountTokens`.
-- **Distributed Token Rate Limiting**: Wrap the gateway with `middleware.NewAdaptiveRateLimiter` backed by a [Pulse](https://github.com/goadesign/pulse) replicated map (`pulse/rmap`) so token-per-minute budgets and AIMD backpressure are coordinated across replicas.
-- **Fail-Closed Usage Attribution**: Emit OpenTelemetry `gen_ai.*` spans via [Clue](https://github.com/goadesign/clue) and record `TokenUsage` on every call. Treat a call whose usage is missing or only partly reported as unknown, never as zero, so budget gates fail closed (the `examples/orders-eval` gateway counts such calls in `Usage.Unreported` and fails the budget check).
+- **Distributed Token Rate Limiting**: Wrap the gateway with `middleware.NewAdaptiveRateLimiter` backed by a [Pulse](https://github.com/goadesign/pulse) replicated map (`rmap.Join`) so token-per-minute budgets and AIMD backpressure are coordinated across replicas.
+- **Fail-Closed Usage Attribution**: Goa-AI's runtime emits OpenTelemetry `gen_ai.*` spans (exported via [Clue](https://github.com/goadesign/clue)'s `clue.ConfigureOpenTelemetry`) and records `TokenUsage` on every call. Treat a call whose usage is missing or only partly reported as unknown, never as zero, so budget gates fail closed (the `examples/orders-eval` gateway counts such calls in `Usage.Unreported` and fails the budget check).
 
 ### 4. Security & Identity by Construction (`Inject`, `BindField`, `ServerData`)
 Never trust an LLM to supply or preserve security principals, tenant IDs, or credentials:
@@ -52,8 +52,8 @@ A Golden Path platform is built with these tools:
 
 - **[Goa](https://github.com/goadesign/goa)** — Compiles `design/*.go` into HTTP, gRPC, OpenAPI, CLI, and validation packages (`goa gen`)—plus in-memory `generator.Sources` for design evaluation—at **0 LLM tokens**.
 - **[Goa-AI](https://github.com/goadesign/goa-ai)** — Adds `Agent`, `Toolset`, `MCP`, durable Temporal workflows, `eval` suites, gRPC model gateways, and runtime token controls (`Inject`, `BindField`, `BoundedResult`, `ServerData`, `Cache`, `Compress`).
-- **[Pulse](https://github.com/goadesign/pulse)** — Streams live agent events (`pulse/streaming`) and coordinates distributed rate limits and replicated state maps (`pulse/rmap`) over Redis.
-- **[Clue](https://github.com/goadesign/clue)** — Emits OpenTelemetry `gen_ai.*` spans, structured logs, and health checks across services and model gateways.
+- **[Pulse](https://github.com/goadesign/pulse)** — Provides Redis-backed event streams (`pulse/streaming` with fan-out `Readers` and competing consumer-group `Sinks`), consistent-hash background job queues and worker pools (`pulse/pool` with automatic dead-worker failover and rebalancing), and atomic Lua-replicated state maps (`pulse/rmap` `rmap.Join` for feature flags and distributed rate limits).
+- **[Clue](https://github.com/goadesign/clue)** — Configures OpenTelemetry trace and metric exporters (`clue.ConfigureOpenTelemetry`), stream trace propagation (`clue/interceptors`), dependency readiness probes (`clue/health`), and internal runtime diagnostics (`clue/debug`), while Goa-AI emits `gen_ai.*` model spans.
 - **[Model](https://github.com/goadesign/model)** — Declares C4 architecture models (`SoftwareSystem`, `Container`, `Views`) alongside `design/*.go` and renders Structurizr JSON (`gen/structurizr/model.json`).
 
 The team of coding agents that builds it runs on two more:
