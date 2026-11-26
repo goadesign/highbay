@@ -6,12 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/goadesign/highbay/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/goadesign/highbay"></a>
-  <a href="https://www.npmjs.com/package/@goadesign/highbay"><img alt="npm" src="https://img.shields.io/npm/v/%40goadesign%2Fhighbay"></a>
-  <a href="https://glama.ai/mcp/servers/goadesign/highbay"><img alt="Glama MCP Server" src="https://glama.ai/mcp/servers/goadesign/highbay/badges/score.svg"></a>
-  <a href="https://mcprush.com/to/goadesign-highbay-mcp?ref=badge"><img alt="Highbay MCP on mcprush" src="https://mcprush.com/badge/goadesign-highbay-mcp/score.svg"></a>
-  <a href="https://serverdex.io/server/io-github-goadesign-highbay/score"><img alt="Highbay on Serverdex" src="https://serverdex.io/server/io-github-goadesign-highbay/badge.svg" height="20"></a>
   <a href="https://pkg.go.dev/github.com/goadesign/highbay"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/goadesign/highbay.svg"></a>
+  <a href="https://modelcontextprotocol.io"><img alt="MCP" src="https://img.shields.io/badge/MCP-2026--07--28-6E56CF"></a>
   <a href="https://github.com/goadesign/highbay/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
@@ -32,7 +28,7 @@ Windsurf, Copilot, and VS Code:
 - **One consistent layout & Golden Path playbook.** Every service, MCP server,
   and multi-agent platform shares the same two-module structure (`design/`,
   `gen/`, `cmd/`, `internal/`, and `eval/`) and built-in `highbay://golden-path`
-  rules for auth, OpenTelemetry tracing & error-flushed logging
+  rules for auth, OpenTelemetry tracing & readiness checks
   ([Clue](https://github.com/goadesign/clue)), Redis Streams, job queues, &
   worker pools ([Pulse](https://github.com/goadesign/pulse)), and durable
   workflows — so engineers and coding agents move across services without
@@ -40,30 +36,26 @@ Windsurf, Copilot, and VS Code:
 - **~70% generated at zero LLM tokens.** From one confirmed contract, Highbay
   compiles HTTP, JSON-RPC, and MCP servers, OpenAPI 3 specs (callable from
   Python, TypeScript, Go, or web apps), request validation, `Inject`
-  server-bound identity, `BoundedResult` pagination cursors, and `Confirmation`
-  pause gates — leaving clean typed interfaces in `internal/` for your coding
-  agent to implement.
+  server-supplied run labels, `BoundedResult` cursor contracts, and
+  `Confirmation` pause gates (~70% of non-test Go code in the
+  [Orders reference platform](examples/orders/README.md)) — leaving clean typed
+  interfaces in `internal/` for your coding agent to implement.
 - **Confirm open choices upfront, verify in a separate copy before merge.** Your
   coding agent drafts the contract and opens a plain-language Change Card and
   compiled C4 architecture diagram in your browser. Once confirmed, a second
   coding agent in `.highbay-tests` writes scenario checks in `eval/` from that
-  agreement, blocking merge until checks pass.
+  agreement, blocking approval until checks pass.
 
 ```bash
-# macOS or Linux (Homebrew)
-brew install goadesign/tap/highbay
-highbay up
-
-# Or with Node.js >= 18 (Linux or macOS)
-npx @goadesign/highbay up
+go install github.com/goadesign/highbay/cmd/hbay@latest
+hbay up
 ```
 
-Run `highbay up` once (`highbay update` updates the binary, skills, and MCP
-registrations in place). After that, open a new service folder (or existing Goa
+Run `hbay up` once. After that, open a new service folder (or existing Goa
 repo) in your coding agent and invoke `/highbay` (`$highbay` in Codex). That
 first call starts or attaches to the project's Highbay server on demand; there
 is nothing to start per session. [Install](#install) lists prerequisites and
-`go install`.
+optional Herdr + Chorus setup.
 
 ## One change, start to finish
 
@@ -79,8 +71,8 @@ The prompt leaves an architectural boundary open: which actions may
 | Cluster action | Autonomous staging + gated production | Approval required everywhere |
 | --- | --- | --- |
 | Pod logs & deploy correlation | Autonomous (`BoundedResult` pages) | Autonomous (`BoundedResult` pages) |
-| Staging rollback | Autonomous self-healing | Pauses at `Confirmation` |
-| Production rollback | Pauses at `Confirmation` for on-call | Pauses at `Confirmation` for on-call |
+| Staging rollback (`rollback_staging`) | Autonomous self-healing | Pauses at `Confirmation` |
+| Production rollback (`rollback_production`) | Pauses at `Confirmation` for on-call | Pauses at `Confirmation` for on-call |
 
 A freehand coding agent silently guesses the staging-versus-production rule (and
 whether a `viewer` JWT may call `/runs/{id}/approval`), returns unbounded log
@@ -103,15 +95,20 @@ behavior in a separate working copy:
    exists.
 4. **Build.** Pick a coding agent and model for each worker role inline and
    press **Build this change**. The *builder* implements handlers in
-   `.highbay-build`. The *test writer* implements one scenario test per finished
-   flow in `.highbay-tests`. Highbay accepts those tests only after confirming
-   nothing outside `eval/` changed and compiling the test binary.
+   `.highbay-build`. When no external verification suite is stored, the *test
+   writer* implements one scenario test per finished flow in `.highbay-tests`;
+   Highbay regenerates the Story test table and `eval/gen/`, verifies that
+   nothing outside `eval/` changed, and compiles the test binary before
+   accepting those tests.
 5. **Verify.** The builder asks Highbay to verify its commit. Highbay rejects
-   any candidate commit that alters `design/` or written tests in `eval/`, builds
-   the candidate, and runs the locked test commit against it. When `Confirmation`
-   pauses the production rollback and the builder's `/runs/{id}/approval`
-   endpoint forgets to enforce the `oncall` role (`expected 403 Forbidden, got
-   200 OK`), verification fails and blocks approval until fixed.
+   any candidate commit whose `design/` differs from the agreed design or (when
+   using `.highbay-tests` rather than a stored suite) that changes handwritten
+   files in `eval/` (`eval/gen/` and `eval/AGENTS_QUICKSTART.md` excluded),
+   builds the candidate, and runs the accepted test commit against it. When
+   `Confirmation` pauses `rollback_production` and the builder's
+   `/runs/{id}/approval` endpoint forgets to enforce the `oncall` role
+   (`expected 403 Forbidden, got 200 OK`), verification fails and blocks
+   approval until fixed.
 6. **Approve and merge.** Review the scenario report, press **Approve this
    result**, and press **Merge into current branch**.
 
@@ -137,19 +134,36 @@ the incident-platform walkthrough above; they are not files in this repository
 (for a checked-in platform, see [`examples/orders`](examples/orders/README.md)).
 
 ```go
-// design/agents.go
-// 1. The agent and tool contract drafted by your coding agent and confirmed by you.
-Agent("remediation", "Safe service rollbacks", func() {
-	Use("cluster")
-	RunPolicy(MaxToolCalls(4))
+// design/agents.go (illustrative excerpt)
+// 1. The toolset and agent contract drafted by your coding agent and confirmed by you.
+var opsTools = Toolset("ops", func() {
+	Tool("rollback_staging", "Roll back a staging service.", func() {
+		BindTo("ops", "rollback_staging")
+		Inject("org_id")
+	})
+	Tool("rollback_production", "Roll back a production service after on-call approval.", func() {
+		BindTo("ops", "rollback_production")
+		// Inject omits org_id from model-visible tool JSON and binds the trusted run label.
+		Inject("org_id")
+		// Confirmation pauses every call to rollback_production until approved.
+		Confirmation(func() {
+			Title("Approve production rollback")
+			PromptTemplate(`Roll back {{ .service }} in production?`)
+			DeniedResultTemplate(`{"status":"denied"}`)
+		})
+	})
 })
 
-Tool("rollback_service", func() {
-	// Inject omits org_id from model-visible tool JSON and populates it in Go.
-	Inject("org_id")
-	// Confirmation pauses the agent run before RollbackService executes.
-	Confirmation("On-call approval")
-	BindTo("Ops", "RollbackService")
+var _ = Service("ops", func() {
+	// ... service methods ...
+	Export(opsTools)
+	Agent("remediation", "Safe service rollbacks.", func() {
+		Use(opsTools)
+		RunPolicy(func() {
+			DefaultCaps(MaxToolCalls(4), MaxRecoveryTurns(1))
+			TimeBudget("45s")
+		})
+	})
 })
 ```
 
@@ -175,12 +189,15 @@ func (h *Hooks) ProductionRollbackRequiresApproval(ctx context.Context) (eval.Re
 
 ```go
 // internal/ops/service.go
-// 3. Plain Go business logic written by the builder against generated types.
-func (s *Service) RollbackService(
-	ctx context.Context, req *genops.RollbackPayload,
-) (*genops.RollbackResult, error) {
-	orgID := auth.VerifiedOrgID(ctx)
-	return s.rollouts.Rollback(ctx, orgID, req.Env, req.Service)
+// 3. Plain Go business logic written by the builder against generated types;
+//    the service verifies tenant access on the server-injected org_id.
+func (s *Service) RollbackProduction(
+	ctx context.Context, req *genops.RollbackArgs,
+) (*genops.RollbackOutcome, error) {
+	if err := s.authz.RequireTenantAccess(ctx, req.OrgID); err != nil {
+		return nil, err
+	}
+	return s.rollouts.RollbackProduction(ctx, req.OrgID, req.Service)
 }
 ```
 
@@ -222,9 +239,10 @@ From that declaration Goa generates the HTTP route, request decoder and
 validation, typed client, and OpenAPI 3 descriptions. For LLM-assisted
 development across multiple services, this has four practical effects:
 
-- **Zero model output tokens spent on generated files.** Goa generates roughly
-  70% of non-test Go code (see [`gen/`](gen) and [`examples/orders/gen/`](examples/orders/gen))
-  — routers, codecs, OpenAPI 3, validation, and tool JSON schemas — keeping each
+- **Zero model output tokens spent on generated files.** In the
+  [Orders reference platform](examples/orders/gen) (and
+  [Highbay's own `gen/`](gen)), Goa generates over 70% of non-test Go code —
+  routers, codecs, OpenAPI 3, validation, and tool JSON schemas — keeping each
   agent's read/edit surface to compact `design/` files and `internal/`
   interfaces. Highbay spends a second agent session on independent `eval/`
   verification rather than boilerplate; net token and wall-clock totals depend
@@ -236,22 +254,25 @@ development across multiple services, this has four practical effects:
 - **Code-enforced guardrails at every boundary.** Changing a result type in
   `design/` and regenerating fails `go build` on stale handlers, builder checks
   compile and unit-test inside a Linux Docker container, and Highbay refuses a
-  test report that touches files outside `eval/` or a builder commit that alters
-  `design/` or handwritten files in `eval/`.
+  test report that touches files outside `eval/` or a builder commit whose
+  `design/` differs from the agreed design or (without stored verification
+  settings) alters handwritten files in `eval/` (`eval/gen/` and
+  `eval/AGENTS_QUICKSTART.md` excluded).
 - **Built-in architectural playbook.** Highbay serves a 12-section playbook over
   MCP at `highbay://golden-path` ([`GOLDEN_PATH.md`](internal/goldenpath/GOLDEN_PATH.md)),
   pairing Goa, Goa-AI, Story, and [Model](https://github.com/goadesign/model) C4
-  diagrams with production patterns for Temporal workflows,
-  [Pulse](https://github.com/goadesign/pulse) event streams (`pulse/streaming`),
-  job queues & consistent-hash worker pools (`pulse/pool`), and replicated
-  rate-limit maps (`pulse/rmap`), plus [Clue](https://github.com/goadesign/clue)
-  OpenTelemetry spans, error-flushed buffered logs (`clue/log`), and health
-  probes (`clue/health`).
+  diagrams with production patterns for Temporal workflows and `gen_ai.*` model
+  spans (`Goa-AI`), [Pulse](https://github.com/goadesign/pulse) event streams
+  (`pulse/streaming`), job queues & consistent-hash worker pools (`pulse/pool`),
+  and replicated rate-limit maps (`pulse/rmap` `rmap.Join`), plus
+  [Clue](https://github.com/goadesign/clue) OpenTelemetry exporter setup
+  (`clue.ConfigureOpenTelemetry`) and dependency readiness probes
+  (`clue/health`).
 
 Any Python, TypeScript, Go, or web client can call the generated OpenAPI 3,
-HTTP, JSON-RPC, and MCP endpoints. Highbay's built-in `highbay gen` generates
+HTTP, JSON-RPC, and MCP endpoints. Highbay's built-in `hbay gen` generates
 HTTP, JSON-RPC, and MCP transports and refuses designs declaring `GRPC`
-transports (`protoc` is not bundled in `highbay gen`; standalone `goa gen` with
+transports (`protoc` is not bundled in `hbay gen`; standalone `goa gen` with
 `protoc` compiles gRPC); see [`hbay gen`](docs/REFERENCE.md#hbay-gen).
 
 ## Words you will meet
@@ -302,34 +323,25 @@ Highbay needs:
   that setup registers.
 
 ```bash
-# macOS or Linux (Homebrew)
-brew install goadesign/tap/highbay
-highbay up
-
-# Linux or macOS (Node.js >= 18)
-npx @goadesign/highbay up
-
-# Or with Go 1.27.3+
-go install github.com/goadesign/highbay/cmd/highbay@latest
-highbay up
+go install github.com/goadesign/highbay/cmd/hbay@latest
+hbay up
 ```
 
-Run `highbay update` anytime to update the binary, `/highbay` skills, MCP
-registrations, and Herdr companion in place. From a checkout of this
-repository, `go install ./cmd/highbay` installs the version you are reading. A
-build that Go reports as `(devel)` or `+dirty` must be told which published
-Highbay version a new project requires; see [`hbay init`](docs/REFERENCE.md#hbay-init).
+From a checkout of this repository, `go install ./cmd/hbay` installs the version
+you are reading. A build that Go reports as `(devel)` or `+dirty` must be told
+which published Highbay version a new project requires; see
+[`hbay init`](docs/REFERENCE.md#hbay-init).
 
-`highbay up` registers Highbay as an MCP server with the coding agents it
+`hbay up` registers Highbay as an MCP server with the coding agents it
 detects and installs the `/highbay` skill. It leaves unrelated settings
 alone. Reload your agent's MCP configuration or start a new session if
-Highbay does not appear. Run `highbay up` again after you add a coding agent or
-move the `highbay` executable.
+Highbay does not appear. Run `hbay up` again after you add a coding agent or
+move the `hbay` executable.
 
 **Side-by-side panes are optional.** With Herdr and Chorus v0.14.0 or newer
 installed, Highbay opens the builder and the test writer beside your coding
 agent. Without Herdr, it runs them in the background once you agree to that
-on the page. Install both, open Herdr once, then run `highbay up` again:
+on the page. Install both, open Herdr once, then run `hbay up` again:
 
 ```bash
 curl -fsSL https://releases.herdr.dev/core/install.sh | sh
@@ -337,7 +349,7 @@ curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
 ```
 
-`highbay up` starts Chorus when it is installed, and Highbay starts it again on
+`hbay up` starts Chorus when it is installed, and Highbay starts it again on
 demand if it stops later (for example after a reboot).
 [Prerequisites](docs/REFERENCE.md#prerequisites) and
 [setup details](docs/REFERENCE.md#hbay-setup--global) cover the rest.
@@ -368,13 +380,13 @@ the program starts. Nothing in it is about someone else's product. See
 **In a project you already have,** Highbay needs a Goa or Goa-AI project with
 at least one Git commit and tests it can run. Those tests are either a test
 module in Highbay's layout or a test program of your own that you register
-with `highbay verification set`. With your own program, Highbay uses it for
+with `hbay verification set`. With your own program, Highbay uses it for
 every change and starts no test writer. See
 [what a build adds](docs/HOW_IT_WORKS.md#what-a-build-adds).
 
 If you close the page, ask your coding agent to open Highbay again.
 [Terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
-covers `highbay --print-link`, `highbay status` and `highbay stop` for operators
+covers `hbay --print-link`, `hbay status` and `hbay stop` for operators
 and browser automation.
 
 ## Use the tools without a team
@@ -385,25 +397,25 @@ the module's own versions, so no separately installed `goa` is needed.
 ```bash
 # Create a blank service and its test module.
 # Add -example for a worked example, a price-answering service.
-highbay init -dir shop -module example.com/shop
+hbay init -dir shop -module example.com/shop
 
 # Compile shop/design and print its containers, boundary edges,
 # agent policies and tool contracts.
-highbay preview -dir shop
+hbay preview -dir shop
 
 # Regenerate shop/gen after you edit shop/design.
-highbay gen -dir shop
+hbay gen -dir shop
 
-# List all commands. "highbay help <command>" prints a command's flags.
-highbay help
+# List all commands. "hbay help <command>" prints a command's flags.
+hbay help
 ```
 
 The [Orders example](examples/orders/README.md) is a complete platform with
 its own test suite (including `SIGKILL` worker crash recovery, API restart
 during pending confirmation, redacted holdouts, and a token-budget gate). From a
-checkout, `highbay preview -dir examples/orders` prints its architecture. The
-[reference](docs/REFERENCE.md#hbay-verify) covers `highbay verify` and
-`highbay approve`, which check a commit against a test suite outside any server.
+checkout, `hbay preview -dir examples/orders` prints its architecture. The
+[reference](docs/REFERENCE.md#hbay-verify) covers `hbay verify` and
+`hbay approve`, which check a commit against a test suite outside any server.
 
 ## Dive deeper
 
