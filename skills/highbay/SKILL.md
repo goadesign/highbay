@@ -16,12 +16,16 @@ Chorus), while you speak to the user in plain language without calling yourself
 
 ## Start
 
-1. Call `list_changes` from the folder the user is working in, and call
-   `open_views` right away so Highbay opens the project's page in the user's
-   default browser. Your first Highbay tool call attaches this session to that
-   folder's project (under the internal `guide` role) and starts the project's
-   server if it is not running. You never start, stop, initialize, verify or
-   approve with the `hbay` command, and never ask it for a page link; the one
+1. If the `highbay` MCP tools (`list_changes`, `open_views`) are not available
+   in this session yet (for example, `hbay` was installed or moved before
+   `hbay setup -global` ran for this client), run `hbay setup -global` once
+   (when `hbay` is on `PATH`) and ask the user to reload MCP servers or start a
+   new session. Otherwise, call `list_changes` from the folder the user is
+   working in, and call `open_views` right away so Highbay opens the project's
+   page in the user's default browser. Your first Highbay tool call attaches
+   this session to that folder's project (under the internal `guide` role) and
+   starts the project's server if it is not running. Never run `hbay` to start,
+   stop, initialize, verify, approve or print a page link; the only runtime
    command you may run is the read-only `hbay status --json` described under
    Team.
 2. Branch your initial reply to the user on the `open_views` result:

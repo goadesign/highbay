@@ -14,13 +14,21 @@ import (
 	"github.com/goadesign/highbay/internal/project"
 )
 
-// connectChorus resolves the healthy managed server at an accepted team start.
-// Both adapters keep that immutable origin until the next explicit team start;
-// no command runs at server construction or during watcher polling.
+// connectChorus resolves the healthy managed server at an accepted team start,
+// starting Chorus with `chorus up` (without model provider settings) when it is
+// not already running so users never have to run `hbay up` or `chorus up` before
+// invoking `/highbay`. Both adapters keep that immutable origin until the next
+// explicit team start; no command runs at server construction or during watcher polling.
 func (c teamCommands) connectChorus(ctx context.Context) (project.TeamConnection, error) {
 	raw, err := c.run(ctx, c.chorusEnv, c.chorus, "status", "-json")
 	if err != nil {
-		return project.TeamConnection{}, errors.New("Chorus managed address is unavailable")
+		if _, upErr := c.run(ctx, c.chorusEnv, c.chorus, "up"); upErr != nil {
+			return project.TeamConnection{}, errors.New("Chorus managed address is unavailable")
+		}
+		raw, err = c.run(ctx, c.chorusEnv, c.chorus, "status", "-json")
+		if err != nil {
+			return project.TeamConnection{}, errors.New("Chorus managed address is unavailable")
+		}
 	}
 	var status struct {
 		// BaseURL is the HTTP origin returned by Chorus v0.14.0 status -json.

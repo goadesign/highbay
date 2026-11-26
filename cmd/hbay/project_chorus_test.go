@@ -41,3 +41,37 @@ func TestChorusManagedAddressRefusals(t *testing.T) {
 		})
 	}
 }
+
+// TestChorusManagedAddressAutoStartsWhenStopped starts Chorus with `chorus up`
+// when the initial `status -json` fails so `/highbay` works without running
+// `hbay up` or `chorus up` ahead of each session.
+func TestChorusManagedAddressAutoStartsWhenStopped(t *testing.T) {
+	var seen [][]string
+	running := false
+	commands := teamCommands{
+		chorus:    "chorus",
+		chorusEnv: []string{"PATH=/usr/bin"},
+		run: func(_ context.Context, env []string, program string, args ...string) ([]byte, error) {
+			assert.Equal(t, []string{"PATH=/usr/bin"}, env)
+			seen = append(seen, append([]string{program}, args...))
+			if len(args) == 1 && args[0] == "up" {
+				running = true
+				return []byte("ready\n"), nil
+			}
+			if !running {
+				return nil, assert.AnError
+			}
+			return []byte(`{"base_url":"http://localhost:9550"}`), nil
+		},
+	}
+	connection, err := commands.connectChorus(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, [][]string{
+		{"chorus", "status", "-json"},
+		{"chorus", "up"},
+		{"chorus", "status", "-json"},
+	}, seen)
+	assert.Equal(t, "http://localhost:9550", connection.Endpoint)
+	assert.NotNil(t, connection.Observer)
+	assert.NotNil(t, connection.Sender)
+}

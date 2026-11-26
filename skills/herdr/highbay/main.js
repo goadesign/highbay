@@ -48,26 +48,54 @@ const ROLE_STATES = {
 
 // projectFolder returns the folder whose Highbay project the window shows for
 // space, or null when there is none to ask about. A space on another machine
-// has none: `hbay` runs on this computer. The first live terminal in the
-// space labeled with a Highbay project names it; otherwise the focused
-// terminal's folder when it is in this space, then the folder of the active
-// tab's focused pane, of the active tab's first pane, of the space's first
-// pane, and finally the space's own folder.
+// has none: `hbay` runs on this computer. Within the active tab (when one is
+// marked), a live terminal labeled with `chorus.project` wins first, followed
+// by the focused terminal/pane's live foreground working folder (for example an
+// agent started after `cd`ing inside a shell tab) before the shell's initial
+// folder, then another tab's labeled project, and finally the space's folder.
 export function projectFolder(space, terms, paneList, focus) {
   if (!space || space.machine) return null;
-  for (const term of terms ?? []) {
+  const list = terms ?? [];
+  const byAddr = new Map(list.filter(t => t?.address).map(t => [t.address, t]));
+  const tabs = space.tabs ?? [];
+  const activeTabObj = tabs.find(tab => tab.active);
+  const activeTab = activeTabObj?.id;
+  const inSpace = (paneList ?? []).filter(p => tabs.some(tab => tab.id === p.tab));
+  const inActiveTab = activeTab ? inSpace.filter(p => p.tab === activeTab) : inSpace;
+  const activeAddrs = new Set([
+    ...inActiveTab.map(p => p.terminal).filter(Boolean),
+    ...(activeTabObj?.terminals ?? []).map(t => t?.terminal ?? t).filter(s => typeof s === "string"),
+  ]);
+  for (const term of list) {
+    const labels = term?.labels ?? {};
+    if (term?.state !== "live" || labels["herdr.space"] !== space.id || typeof labels["chorus.project"] !== "string" || !labels["chorus.project"]) continue;
+    if (!activeTab || labels["herdr.tab"] === activeTab || activeAddrs.has(term.address)) {
+      return labels["chorus.project"];
+    }
+  }
+  const termCwd = addr => {
+    const t = addr ? byAddr.get(addr) : null;
+    return t?.state === "live" && t.foreground?.cwd ? t.foreground.cwd : null;
+  };
+  if (focus?.space === space.id && (!activeTab || !focus.tab || focus.tab === activeTab)) {
+    const fg = termCwd(focus.terminal);
+    if (fg) return fg;
+    if (focus.cwd) return focus.cwd;
+  }
+  const candidates = activeTab
+    ? [...inActiveTab.filter(p => p.focused), ...inActiveTab, ...inSpace]
+    : [...inSpace.filter(p => p.focused), ...inSpace];
+  for (const p of candidates) {
+    const fg = termCwd(p.terminal);
+    if (fg) return fg;
+    if (p.cwd) return p.cwd;
+  }
+  for (const term of list) {
     const labels = term?.labels ?? {};
     if (term?.state === "live" && labels["herdr.space"] === space.id && typeof labels["chorus.project"] === "string" && labels["chorus.project"]) {
       return labels["chorus.project"];
     }
   }
-  if (focus?.space === space.id && focus.cwd) return focus.cwd;
-  const tabs = space.tabs ?? [];
-  const activeTab = tabs.find(tab => tab.active)?.id;
-  const inSpace = (paneList ?? []).filter(p => p.cwd && tabs.some(tab => tab.id === p.tab));
-  const inActiveTab = inSpace.filter(p => p.tab === activeTab);
-  const pane = inActiveTab.find(p => p.focused) ?? inActiveTab[0] ?? inSpace[0];
-  if (pane) return pane.cwd;
   return space.folder || null;
 }
 
@@ -202,8 +230,9 @@ export default class HighbayCompanion extends View {
   }
 
   // openPage runs `hbay` in folder, which starts the project's server when
-  // needed and opens its browser window.
-  openPage(cx, folder) {
+  // needed and opens its browser window. When shown as an overlay, opening the
+  // window dismisses the overlay; failures keep it open so the error is visible.
+  openPage(cx, folder, overlay) {
     if (this.opening === folder) return;
     this.opening = folder;
     this.opened = null;
@@ -218,8 +247,15 @@ export default class HighbayCompanion extends View {
         message = `Could not run hbay: ${err?.message ?? err}`;
       }
       if (this.opening === folder) this.opening = null;
-      if (message) this.openError = { folder, message };
-      else this.opened = { folder, fresh: true };
+      if (message) {
+        this.openError = { folder, message };
+      } else {
+        this.opened = { folder, fresh: true };
+        if (overlay) {
+          closeOverlay(overlay);
+          return;
+        }
+      }
       cx.notify();
       this.refresh(cx);
     });
@@ -279,7 +315,10 @@ export default class HighbayCompanion extends View {
             .items_center()
             .gap(8)
             .child(div().flex_1().min_w(0).truncate().child(roleLine(role)))
-            .when(Boolean(terminal), el => el.child(this.button(`highbay-show-${role.role}`, "Show", t, () => run("pane.focus", { terminal })))),
+            .when(Boolean(terminal), el => el.child(this.button(`highbay-show-${role.role}`, "Show", t, () => {
+              run("pane.focus", { terminal });
+              if (overlay) closeOverlay(overlay);
+            }))),
         );
       }
     }
@@ -292,7 +331,7 @@ export default class HighbayCompanion extends View {
     const footer = h_flex()
       .gap(8)
       .items_center()
-      .when(canOpen, el => el.child(this.button("highbay-open", label, t, cx => this.openPage(cx, target))))
+      .when(canOpen, el => el.child(this.button("highbay-open", label, t, cx => this.openPage(cx, target, overlay))))
       .when(Boolean(openError), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child(openError)))
       .when(Boolean(openSuccess), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(openSuccess)));
     return v_flex()

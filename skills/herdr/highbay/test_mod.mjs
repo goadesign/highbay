@@ -145,6 +145,17 @@ test('projectFolder follows labels, then focus, then panes, then the space folde
       panes: [...panes, { tab: 'tb2', cwd: '/work/second' }, { tab: 'tb2', cwd: '/work/focused', focused: true }],
       want: '/work/focused',
     },
+    {
+      name: 'active tab foreground cwd beats shell cwd and another tab project label',
+      space: { ...space, tabs: [{ id: 'tb1' }, { id: 'tb2', active: true }] },
+      terms: [
+        { address: 't1', state: 'live', labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb1', 'chorus.project': '/work/other-tab' } },
+        { address: 't2', state: 'live', cwd: '/work/shell-spawn', foreground: { cwd: '/work/jarvis' }, labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb2' } },
+      ],
+      panes: [{ tab: 'tb2', terminal: 't2', cwd: '/work/shell-spawn', focused: true }],
+      focus: { space: 'sp1', tab: 'tb2', terminal: 't2', cwd: '/work/shell-spawn' },
+      want: '/work/jarvis',
+    },
     { name: 'space folder', space, panes: [{ tab: 'tb9', cwd: '/elsewhere' }], want: '/work/space' },
     { name: 'home space', space: { ...space, folder: '' }, want: null },
   ];
@@ -275,8 +286,44 @@ test('a running project shows its stage, roles and pane shortcuts', async () => 
 
   buttons[1].handlers.click({}, cx);
   assert.deepEqual(calls.run, [{ name: 'pane.focus', args: { terminal: 't7' } }]);
-  buttons[0].handlers.click({}, cx);
   assert.deepEqual(calls.closed, ['ov1']);
+  buttons[0].handlers.click({}, cx);
+  assert.deepEqual(calls.closed, ['ov1', 'ov1']);
+});
+
+test('Open Highbay Window closes an active overlay on success and keeps it open on failure', async () => {
+  const ok = load({
+    spaces: [space],
+    props: { overlay: 'ov-open' },
+    answers: {
+      'status --json': { code: 0, stdout: JSON.stringify(running), stderr: '' },
+      '': { code: 0, stdout: '', stderr: '' },
+    },
+  });
+  const okView = new ok.mod.HighbayCompanion();
+  const okCx = fakeCx();
+  okView.init(undefined, okCx);
+  await okCx.settle();
+  walk(okView.render(okCx)).find(node => node.id === 'highbay-open').handlers.click({}, okCx);
+  await okCx.settle();
+  assert.deepEqual(ok.calls.closed, ['ov-open']);
+
+  const fail = load({
+    spaces: [space],
+    props: { overlay: 'ov-fail' },
+    answers: {
+      'status --json': { code: 0, stdout: JSON.stringify(running), stderr: '' },
+      '': { code: 1, stdout: '', stderr: 'hbay: could not open browser\n' },
+    },
+  });
+  const failView = new fail.mod.HighbayCompanion();
+  const failCx = fakeCx();
+  failView.init(undefined, failCx);
+  await failCx.settle();
+  walk(failView.render(failCx)).find(node => node.id === 'highbay-open').handlers.click({}, failCx);
+  await failCx.settle();
+  assert.deepEqual(fail.calls.closed, []);
+  assert.ok(texts(failView.render(failCx)).includes('hbay: could not open browser'));
 });
 
 test('Open Highbay Window shows Opening, then Opened in browser, and clears on next poll', async () => {
