@@ -90,21 +90,26 @@ Rules for agents building services with Goa, Goa-AI, Model, Pulse and Clue. Rule
 - Version workers with immutable build IDs. Keep old versions running until the executions pinned to them finish.
 - Before changing a generated contract, check compatibility with running executions and saved suspensions. A continued run starts a new workflow, so a saved checkpoint must still decode, or needs its own cutover.
 
-## 7. Events and streams
+## 7. Events, streams, queues, and worker pools (Pulse)
 
-- Use events when several consumers need the same fact, or when the producer must not wait for consumers. Never use events for a step that must commit or fail atomically.
-- Define event payloads as typed types in the design. Decide up front which events must never be lost.
-- Choose each consumer's delivery guarantee explicitly. Work that must not be lost needs retained events and acknowledged consumption with redelivery; make those handlers idempotent and acknowledge after processing.
-- Pulse readers give each reader every event from its own position, without acknowledgement; sinks spread events across consumers; pools run jobs and move them off failed nodes. Never trim a stream by count if trimming could delete unfinished work.
+- Use Redis-backed Pulse primitives (`goa.design/pulse`) for event streaming, background job queues, dedicated worker pools, and replicated control-plane state without introducing separate message brokers. Never use async events for a step that must commit or fail atomically with the caller's transaction.
+- Define event and job payloads as typed structs in the owning domain or Goa design and marshal deterministically. Decide up front which events or jobs must never be lost, and configure Redis persistence (AOF/replication) in production.
+- **Event streams (`goa.design/pulse/streaming`)**: Create bounded streams (`streaming.NewStream` with `WithStreamMaxLen` sized so active work is never trimmed) and publish typed topic events (`stream.Add`). Choose the consumer contract explicitly:
+  - **Fan-out (`stream.NewReader`)**: Each reader holds its own cursor and sees every event (`WithReaderTopic` / `WithReaderTopicPattern` when filtering). Use readers for projections, live SSE/MCP UI feeds, analytics, and replay.
+  - **Competing work queues (`stream.NewSink`)**: Sink instances sharing a name share one consumer-group cursor so each event goes to one consumer with at-least-once delivery. Make sink handlers idempotent and `Ack` only after durable processing completes (set `WithSinkAckGracePeriod` to match handler bounds; use `WithSinkNoAck` only for disposable telemetry).
+- **Dedicated worker pools (`goa.design/pulse/pool`)**: Use `pool.AddNode` for sticky or long-running background jobs routed across workers by consistent hashing on the job key:
+  - Edge/API producers join with `pool.WithClientOnly()` and enqueue work via `node.DispatchJob(ctx, key, payload)` (`WithMaxQueuedJobs` bounds backpressure; `WithWorkerTTL` and `WithAckGracePeriod` bound dead-worker failover).
+  - Worker processes attach typed `pool.JobHandler` implementations (`Start` / `Stop`) via `node.AddWorker`. Because dead nodes/workers trigger automatic requeue and consistent-hash rebalancing (`node.Close` requeues this node's jobs; `node.Shutdown` drains the pool globally), every `Start` and `Stop` handler must be idempotent.
+- **Replicated state maps (`goa.design/pulse/rmap`)**: Use `rmap.New` (`Set`, `Inc`, `TestAndSet`, `Delete`, `Subscribe`) for small, read-heavy cluster state such as feature flags, active worker metadata, and distributed LLM token rate-limit counters (`middleware.NewAdaptiveRateLimiter`). Never use `rmap` as primary entity storage.
 
-## 8. Observability
+## 8. Observability and health (Clue & OpenTelemetry)
 
-- Instrument from the first commit: server middleware, client transports, span names, and consistent attributes.
-- Create a span for each meaningful operation. Record state changes and results as span events, not log lines.
-- On every failure path, including early returns, record the error and set the span's error status. Never set error status for an expected negative result.
-- Log only startup, shutdown, background work outside a request, and unrecoverable errors. Never log in hot paths.
-- Readiness checks critical dependencies with timeouts. Liveness checks only the process. Never expose pprof publicly.
-- Alert on queries over truthful spans. Fix the alert's query; never filter or rewrite spans to quiet an alert.
+- Instrument every HTTP, gRPC, MCP, and worker binary from the first commit with `goa.design/clue/clue` (one-call OpenTelemetry trace and metric exporter wiring), Goa/gRPC trace middleware (`clue/interceptors` for streams), span names, and bounded attributes.
+- Create a span for each meaningful operation (including `gen_ai.*` model gateway spans). Record state changes and results as span events, not noisy request log lines.
+- On every failure path, including early returns, record the error and set the span's error status. Never set error status for an expected negative domain result.
+- Use `goa.design/clue/log` context-based structured logging (`log.Context`, `log.With`, `log.KV`): emit normal request breadcrumbs with buffered `log.Info` / `log.Debug` so healthy untraced requests produce zero log noise and errors (`log.Error`) automatically flush the full request buffer. Log unbuffered (`log.Print`) only for startup, shutdown, and background lifecycle transitions.
+- Wire `goa.design/clue/health` readiness probes (`health.NewChecker`, checking critical dependencies like Redis/DB/Temporal with bounded timeouts) separately from process-only liveness probes. Mount `goa.design/clue/debug` runtime log-level toggles and `pprof` on an internal-only port, never publicly.
+- Alert on queries over truthful OpenTelemetry spans. Fix the alert's query; never filter or rewrite spans to quiet an alert.
 
 ## 9. Tests
 

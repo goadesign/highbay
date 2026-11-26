@@ -59,16 +59,18 @@ go run ./cmd/hbay diff --old-dir examples/orders --new-dir examples/orders
 
 ## 2. Run the Orders Project with Highbay (`hbay`)
 
-Here `examples/orders` is the project and Highbay runs a team of coding agents
-on it. You need macOS, Go, Git, Docker (the builder checks its work in Linux
-containers), Herdr (the terminal program the agents run in, one pane each),
-Chorus v0.11.0 or newer (the service the agents message each other through,
-whose dialog starts them) and a coding agent the Chorus dialog can start for
-each role; [the reference](../../docs/REFERENCE.md#prerequisites) lists them
-with their install commands. Verification also needs the Temporal CLI
-(`brew install temporal`): the Orders evaluator suite starts a local Temporal
-server for its scenarios. Install `hbay` from this checkout first
-(`go install ./cmd/hbay` from the repository root).
+Here `examples/orders` is the project and Highbay runs a coding-agent workflow
+on it. You need Go 1.27.3 or newer, Git 2.45 or newer (with `user.name` and
+`user.email` configured), Docker (the builder checks its work in Linux
+containers), and a supported coding agent registered via `hbay up`; optional
+side-by-side panes use Herdr and Chorus v0.14.0 or newer (without Herdr, Highbay
+can run the builder in the background once you confirm that on the page).
+[The reference](../../docs/REFERENCE.md#prerequisites) lists every prerequisite
+and install command. Verification and the automated live-target test below also
+need the Temporal CLI (`brew install temporal`), because the Orders evaluator
+starts a local Temporal server for its scenarios. Install `hbay` from this
+checkout first and register your coding agents (`go install ./cmd/hbay && hbay up`
+from the repository root).
 
 In this project no test writer writes tests for each change. (In a project
 without stored verification settings, a build also adds the test writer: an
@@ -114,38 +116,38 @@ EOF
   cd examples/orders
   hbay verification set "$WORK_DIR/verification.json"
   hbay promotion set "$WORK_DIR/promotion.json"
-  hbay
 )
 ```
 
 The subshell leaves your shell in the repository root for the next sections.
-`hbay` starts the project's Highbay server in its own Herdr terminal, starts
-Chorus and the Herdr app when they are not running, and opens the Chorus
-dialog in Herdr, where you choose the agent app that plays the guide: the
-agent you talk to, which writes the Story (a Go description of the business's
-flows) and proposes changes. It prints `Team <name>.` and your next step,
-opens the views page in your browser, then prints
-`Highbay is running for <folder> at <address>`. The server reads the stored
-settings when it starts; after changing them, run `hbay stop`, then `hbay`,
-in `examples/orders`.
+Open `examples/orders` in your coding agent and invoke `/highbay` (`$highbay`
+in Codex). Its first Highbay call starts or attaches to the project's Highbay
+server, registers your current coding-agent session as the guide (the role that
+writes the Story and proposes changes), adopts a compatible Herdr pane when one
+is linked, and opens the views page in your browser (`hbay` in `examples/orders`
+also opens the page directly as an operator entrypoint). The server reads the
+stored verification and promotion settings when it starts; after changing them,
+run `hbay stop` in `examples/orders` before starting the server again.
 
 One change then goes like this:
 
-1. In the guide's pane, describe the change, for example "Card refunds above
-   $100 need a second manager". The guide writes the design change in its
-   own draft, the folder `.highbay-draft` that Highbay makes inside
-   `examples/orders`, never in your files. Then it proposes a Change Card:
-   the saved record of the request, its open questions, and the examples
+1. In your coding agent (the guide), describe the change, for example "Card
+   refunds above $100 need a second manager". The guide writes the design
+   change in its own draft, the folder `.highbay-draft` that Highbay makes
+   inside `examples/orders`, never in your files. Then it proposes a Change
+   Card: the saved record of the request, its open questions, and the examples
    that become checks. It appears on the views page.
 2. On the views page, answer the card's questions and confirm it. Only you
    can. The card's `request_revision` identifies the revision you agreed.
-3. Press **Build this change**. Because this project has stored verification
-   settings, the build adds only the builder, the agent that writes the
-   code; no test writer is used. Choose its agent app in the Chorus dialog.
-   The builder works in its own working copy of this repository: the folder
-   `.highbay-build` that Highbay makes inside `examples/orders`, on the branch
-   `highbay/build-<n>`, where `n` is the build's number. Your checkout and
-   the branch checked out in it stay as they are.
+3. In **Build**, choose the builder's coding agent and model inline (when Herdr
+   is not running, select a supported background CLI and confirm background
+   worker execution), then press **Build this change**. Because this project has
+   stored verification settings, the build adds only the builder, the agent that
+   writes the code; no test writer is used. The builder works in its own working
+   copy of this repository: the folder `.highbay-build` that Highbay makes
+   inside `examples/orders`, on the branch `highbay/build-<n>`, where `n` is the
+   build's number. Your checkout and the branch checked out in it stay as they
+   are.
 4. The builder writes the change in its working copy, commits it on
    `highbay/build-<n>` and asks Highbay to verify the commit (`verify_change`).
    Highbay builds `orders` and `orders-worker` from that commit and runs the
@@ -173,15 +175,15 @@ One change then goes like this:
    settings (`hbay promotion remove`, then `hbay stop` and `hbay`) to approve
    without that check.
 
-   The approval names the builder's commit and the tests commit, here the
-   stored suite commit. Highbay merges and deploys nothing.
-6. Merge the builder's commit, or drop the build. The builder's commit is on
-   `highbay/build-<n>`, not on the branch checked out in your checkout of this
-   repository. Once a run passed, the build shows **Passed**, and under
-   **To take this change, run in the project folder:** the page gives the
-   command to run in `examples/orders`: `git merge <candidate_commit>`, the
-   builder's commit. The tests are the stored suite's, so there is no tests
-   commit to merge. When your branch holds that commit, the build shows
+   Recording approval names the builder's commit and the tests commit, here the
+   stored suite commit; recording approval alone merges and deploys nothing.
+6. Merge the builder's commit, or drop the build. Once approval is recorded on
+   a current passing run, press **Merge into current branch** in **Approve** to
+   merge the verified candidate commit into the local branch checked out in
+   this repository (requires clean tracked files). **Manual merge instructions**
+   remain available as a secondary path (`git merge <candidate_commit>`;
+   because the tests come from the stored suite, there is no separate tests
+   commit to merge). When your branch holds that commit, the build shows
    **Merged**. To leave the change out instead, press **Drop…**, then
    **Drop change**: the builder's commits stay on `highbay/build-<n>`, and your
    branch is unchanged. Highbay builds another change only once this build is

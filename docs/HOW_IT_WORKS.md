@@ -37,10 +37,11 @@ Three more words appear on every step:
 
 - A **Story** is a plain description of what the system does, written as Go
   code in the project's design. It names the actors and their **flows**. A flow
-  is one path from a starting event to an outcome, for example "a customer
-  asks for a refund under the limit and receives store credit". A flow with a
-  start, at least one outcome and no open question is **finished**; any other
-  flow is a draft. See the [Story language](../story/README.md).
+  is one path from a starting event to an outcome, for example "an alert fires
+  for an unhealthy production deploy and the remediation agent pauses for
+  on-call approval before rolling back". A flow with a start, at least one
+  outcome and no open question is **finished**; any other flow is a draft. See
+  the [Story language](../story/README.md).
 - A **Change Card** is the server's record of one change: your request, the
   guide's analysis of it, the questions only you can answer, your answers and
   the Story it was made from.
@@ -182,9 +183,10 @@ full. `hbay stop` stops the server in order; see
 
 ## Agreeing on a change
 
-You type your request in the guide's pane, for example "Customers can get a
-refund on an order. Under $50 it is store credit at once; above that a
-manager approves it."
+You type your request in the guide's pane, for example "Build a multi-tenant
+incident platform: a triage agent and remediation agent with MCP tools to
+search pod logs, correlate deploys, and roll back services with on-call
+approval."
 
 1. **The guide writes the Story.** It calls `refresh_story`, which makes the
    guide's `.highbay-draft` copy in the project folder when needed, returns that
@@ -235,20 +237,19 @@ manager approves it."
    card `confirmed`, records you as the one who confirmed it, and computes its
    `request_revision`. That revision is the **agreed revision**.
 
-A card for the refund request holds, for example:
+A card for the incident-platform request holds, for example:
 
 ```text
-Change req-refunds · needs confirmation
+Change ops-copilot-platform · needs confirmation
 
 Examples
-  check_01  $35 item ($38.50 total)      → store credit at once, no approval   deterministic
-  check_02  $75 item ($82.00 total)      → waits for a manager's approval      deterministic
-  check_03  Manager declines a $75 refund → customer sees the reason            model_judged
+  check_01  Prompt-injected log line attempts org_id spoof → bound to caller's verified org_id   deterministic
+  check_02  Unhealthy production deploy triggers rollback → pauses at Confirmation for on-call  deterministic
+  check_03  On-call declines rollback with a note          → incident summary explains why       model_judged
 
 Questions only you can answer
-  req-refunds-ambiguity-01  Does "under $50" mean the item price or the total with tax and shipping?
-                            (A $48 item with $6 shipping totals $54.)
-  req-refunds-ambiguity-02  At exactly $50.00, store credit or a manager's approval?
+  ops-copilot-ambiguity-01  Where should RemediationAgent draw the autonomy boundary for rollbacks?
+                            (Autonomous staging rollbacks with production Confirmation, or Confirmation everywhere?)
 ```
 
 `deterministic` means code can check the outcome directly; `model_judged`
@@ -514,8 +515,8 @@ still read keys your other programs hold.
 The builder then calls `draft_override`. A prompt template change
 (`target_kind: "prompt_template"`) goes to the live target in memory, without
 rebuilding, and the result returns the version in force. A change to a
-compiled business rule (`target_kind: "compiled_rule"`, such as the $50
-limit) changes nothing: the result says `requires_rebuild: true`, because the
+compiled business rule (`target_kind: "compiled_rule"`, such as which
+environments require rollback approval) changes nothing: the result says `requires_rebuild: true`, because the
 rule needs a Go rebuild and verification, so a hard rule never moves into
 prompt text. A draft lasts as long as the live target: to keep wording, the
 builder edits it into the prompt's source and commits it.
