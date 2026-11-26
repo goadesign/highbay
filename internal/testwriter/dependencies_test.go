@@ -301,7 +301,7 @@ func TestDownloadDependenciesFailsForAModuleItCannotFetch(t *testing.T) {
 }
 
 // TestPrepareAttributesCommittedDependencyChanges verifies that when the test
-// writer commits its own unloadable go.mod on surla/tests-1 (or switches to a
+// writer commits its own unloadable go.mod on highbay/tests-1 (or switches to a
 // side branch), Prepare measures dependency attribution from the build's base
 // rather than HEAD and checks the branch before preparing: on the build branch
 // it returns an *AuthorError (not ErrDependencies), and on a side branch it
@@ -346,7 +346,7 @@ func TestPrepareAttributesCommittedDependencyChanges(t *testing.T) {
 				assert.Positive(t, downloads)
 			} else {
 				assert.Equal(t, FindingWorkingCopy, author.Finding.Kind)
-				assert.Contains(t, author.Finding.Message, "Your working copy (.surla-tests) is on branch 'mine'.")
+				assert.Contains(t, author.Finding.Message, "Your working copy (.highbay-tests) is on branch 'mine'.")
 				assert.Zero(t, downloads, "off-branch copy is refused before running generation or downloads")
 				assert.Empty(t, runGit(t, wc.Dir(), "status", "--porcelain", "--untracked-files=all"))
 			}

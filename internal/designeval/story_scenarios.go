@@ -31,7 +31,7 @@ type (
 	}
 )
 
-// EvalName implements eval.Expression. Surla's generator recognizes the Story
+// EvalName implements eval.Expression. Highbay's generator recognizes the Story
 // table's root by this name.
 func (*storyScenarioRoot) EvalName() string {
 	return "Story table (design/story_tests.go)"

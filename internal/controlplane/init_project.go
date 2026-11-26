@@ -23,11 +23,11 @@ import (
 	"golang.org/x/mod/module"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/renameat"
-	"github.com/goadesign/surla/internal/scaffold"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/renameat"
+	"github.com/goadesign/highbay/internal/scaffold"
 )
 
 type (
@@ -68,18 +68,18 @@ var (
 // commit.
 func (c *ControlPlane) InitProject(
 	ctx context.Context,
-	p *gensurla.InitProjectPayload,
-) (res *gensurla.InitProjectResult, retErr error) {
+	p *genhighbay.InitProjectPayload,
+) (res *genhighbay.InitProjectResult, retErr error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.init_project")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.init_project")
 	defer span.End()
 
 	if p == nil {
-		p = &gensurla.InitProjectPayload{}
+		p = &genhighbay.InitProjectPayload{}
 	}
 	var (
 		modulePath string
@@ -90,13 +90,13 @@ func (c *ControlPlane) InitProject(
 		modulePath = strings.TrimSpace(*p.ModulePath)
 		if modulePath == "" {
 			recordInitRefused(span, "invalid_payload")
-			return nil, gensurla.MakeUnprocessable(errors.New("module_path must not be blank"))
+			return nil, genhighbay.MakeUnprocessable(errors.New("module_path must not be blank"))
 		}
 		var err error
 		layout, err = scaffold.LayoutForModule(modulePath)
 		if err != nil {
 			recordInitRefused(span, "invalid_module_path")
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf("module_path %w", err))
+			return nil, genhighbay.MakeUnprocessable(fmt.Errorf("module_path %w", err))
 		}
 		targetBase = layout.Service
 	}
@@ -108,12 +108,12 @@ func (c *ControlPlane) InitProject(
 		if err := validateInitDirName(targetBase); err != nil {
 			recordInitRefused(span, "invalid_dir_name")
 			if p.ModulePath == nil {
-				return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+				return nil, genhighbay.MakeUnprocessable(fmt.Errorf(
 					"pass \".\" (or omit dir) to initialize the workspace root, or pass a single child directory name: %w",
 					err,
 				))
 			}
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+			return nil, genhighbay.MakeUnprocessable(fmt.Errorf(
 				"omit dir to create the direct child directory %q, pass a single child directory name, or pass \".\" to initialize the workspace root: %w",
 				layout.Service,
 				err,
@@ -133,10 +133,10 @@ func (c *ControlPlane) InitProject(
 		}
 	}
 	serviceName := layout.Service
-	if !scaffold.ValidVersion(c.surlaVersion) {
-		recordInitRefused(span, "surla_version_unavailable")
-		return nil, gensurla.MakeNotImplemented(errors.New(
-			"this server has no exact github.com/goadesign/surla module version configured for starter generation; install surla from a tagged or pseudo-versioned module release, stop this project's server with surla stop in the project folder, restart your coding agent so its Surla connection starts the new surla, then call init_project again",
+	if !scaffold.ValidVersion(c.highbayVersion) {
+		recordInitRefused(span, "highbay_version_unavailable")
+		return nil, genhighbay.MakeNotImplemented(errors.New(
+			"this server has no exact github.com/goadesign/highbay module version configured for starter generation; install hbay from a tagged or pseudo-versioned module release, stop this project's server with hbay stop in the project folder, restart your coding agent so its Highbay connection starts the new hbay, then call init_project again",
 		))
 	}
 
@@ -168,7 +168,7 @@ func (c *ControlPlane) InitProject(
 
 	if c.activeWorkspaceDir != c.initialWorkspaceRoot {
 		recordInitRefused(span, "already_initialized")
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+		return nil, genhighbay.MakeConflict(fmt.Errorf(
 			"workspace %s is already initialized at %s",
 			c.initialWorkspaceRoot,
 			c.activeWorkspaceDir,
@@ -180,7 +180,7 @@ func (c *ControlPlane) InitProject(
 	}
 	if hasRecord {
 		recordInitRefused(span, "already_initialized")
-		return nil, gensurla.MakeConflict(fmt.Errorf(
+		return nil, genhighbay.MakeConflict(fmt.Errorf(
 			"workspace %s is already initialized at %s",
 			c.initialWorkspaceRoot,
 			c.activeWorkspaceDir,
@@ -196,7 +196,7 @@ func (c *ControlPlane) InitProject(
 			if retErr != nil {
 				retErr = errors.Join(retErr, closeErr)
 			} else {
-				recordWorkspaceCleanupFailure("surla.controlplane.cleanup_init_workspace_fd", closeErr)
+				recordWorkspaceCleanupFailure("highbay.controlplane.cleanup_init_workspace_fd", closeErr)
 			}
 		}
 	}()
@@ -212,7 +212,7 @@ func (c *ControlPlane) InitProject(
 		return nil, failInitFault(span, "check verification runs failed", err)
 	} else if hasRuns {
 		recordInitRefused(span, "already_initialized")
-		return nil, gensurla.MakeConflict(errors.New("workspace already has verification runs; cannot re-initialize project"))
+		return nil, genhighbay.MakeConflict(errors.New("workspace already has verification runs; cannot re-initialize project"))
 	}
 
 	c.mu.RLock()
@@ -223,7 +223,7 @@ func (c *ControlPlane) InitProject(
 	}
 	if hasWorkspaceCards {
 		recordInitRefused(span, "already_initialized")
-		return nil, gensurla.MakeConflict(errors.New(
+		return nil, genhighbay.MakeConflict(errors.New(
 			"workspace already has Change Cards that captured existing design files; cannot re-initialize project",
 		))
 	}
@@ -271,12 +271,12 @@ func (c *ControlPlane) InitProject(
 	builtService, stagePath, initialCommit, err := scaffold.Prepare(
 		initCtx,
 		scaffold.Options{
-			Dir:          prepareDir,
-			WorkDir:      stageParentDir,
-			Module:       modulePath,
-			SurlaVersion: c.surlaVersion,
-			Example:      p.WorkedExample,
-			OnPhase:      reportPhase,
+			Dir:            prepareDir,
+			WorkDir:        stageParentDir,
+			Module:         modulePath,
+			HighbayVersion: c.highbayVersion,
+			Example:        p.WorkedExample,
+			OnPhase:        reportPhase,
 		},
 		run,
 		gen,
@@ -318,7 +318,7 @@ func (c *ControlPlane) InitProject(
 			if retErr != nil {
 				retErr = errors.Join(retErr, closeErr)
 			} else {
-				recordWorkspaceCleanupFailure("surla.controlplane.cleanup_init_stage_parent_fd", closeErr)
+				recordWorkspaceCleanupFailure("highbay.controlplane.cleanup_init_stage_parent_fd", closeErr)
 			}
 		}
 	}()
@@ -338,7 +338,7 @@ func (c *ControlPlane) InitProject(
 				if retErr != nil {
 					retErr = errors.Join(retErr, closeErr)
 				} else {
-					recordWorkspaceCleanupFailure("surla.controlplane.cleanup_init_stage_fd", closeErr)
+					recordWorkspaceCleanupFailure("highbay.controlplane.cleanup_init_stage_fd", closeErr)
 				}
 			}
 		}
@@ -419,7 +419,7 @@ func (c *ControlPlane) InitProject(
 	}
 	if inPlace {
 		if err := c.finishInPlaceWorkspace(wal, workspaceFD, stageParentFD, stageFD); err != nil {
-			return nil, failInitFault(span, "in-place publication interrupted; restart Surla to recover the workspace", err)
+			return nil, failInitFault(span, "in-place publication interrupted; restart Highbay to recover the workspace", err)
 		}
 		return c.initializedProject(principal.ID, span, targetPath, modulePath, builtService, initialCommit), nil
 	}
@@ -469,7 +469,7 @@ func (c *ControlPlane) InitProject(
 			removeOwnedStagingDir(stageParentFD, -1, stageParentDir, stageName, stageDev, stageIno),
 		)
 		if errors.Is(err, unix.EEXIST) {
-			conflictErr := gensurla.MakeConflict(fmt.Errorf("target directory %q already exists in workspace %s", targetBase, c.initialWorkspaceRoot))
+			conflictErr := genhighbay.MakeConflict(fmt.Errorf("target directory %q already exists in workspace %s", targetBase, c.initialWorkspaceRoot))
 			if cleanErr == nil {
 				recordInitRefused(span, "already_initialized")
 				return nil, conflictErr
@@ -503,7 +503,7 @@ func (c *ControlPlane) InitProject(
 			span,
 			"sync published project directory failed",
 			fmt.Errorf(
-				"project %s was published and bound in this server, and workspace.json retains its recovery record, but directory sync failed so stop and start Surla to verify crash durability: %w",
+				"project %s was published and bound in this server, and workspace.json retains its recovery record, but directory sync failed so stop and start Highbay to verify crash durability: %w",
 				targetPath,
 				syncErr,
 			),
@@ -514,7 +514,7 @@ func (c *ControlPlane) InitProject(
 		Dev: stageDev,
 		Ino: stageIno,
 	}); err != nil {
-		recordWorkspaceCleanupFailure("surla.controlplane.finalize_init_project", err)
+		recordWorkspaceCleanupFailure("highbay.controlplane.finalize_init_project", err)
 	}
 
 	return c.initializedProject(principal.ID, span, targetPath, modulePath, builtService, initialCommit), nil
@@ -523,16 +523,16 @@ func (c *ControlPlane) InitProject(
 // initializedProject records completed publication and returns the bound project.
 func (c *ControlPlane) initializedProject(
 	owner string, span trace.Span, targetPath, modulePath, builtService, initialCommit string,
-) *gensurla.InitProjectResult {
+) *genhighbay.InitProjectResult {
 	c.initOwner.Store(&owner)
 	span.AddEvent(
 		"project_initialized",
 		trace.WithAttributes(
-			attribute.String("surla.init.service_name", builtService),
-			attribute.String("surla.init.commit", initialCommit),
+			attribute.String("highbay.init.service_name", builtService),
+			attribute.String("highbay.init.commit", initialCommit),
 		),
 	)
-	return &gensurla.InitProjectResult{
+	return &genhighbay.InitProjectResult{
 		Dir:         targetPath,
 		ModulePath:  modulePath,
 		ServiceName: builtService,
@@ -558,13 +558,13 @@ func (c *ControlPlane) makeInitGenerator(defaultTempParent string) (scaffold.Gen
 }
 
 // validateInitDirName checks that name is a single direct child directory name
-// inside the workspace and does not use reserved `.surla` prefixes.
+// inside the workspace and does not use reserved `.highbay` prefixes.
 func validateInitDirName(name string) error {
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
 		return fmt.Errorf("invalid directory name %q", name)
 	}
-	if strings.HasPrefix(name, ".surla") {
-		return fmt.Errorf("directory name %q is reserved by Surla", name)
+	if strings.HasPrefix(name, ".highbay") {
+		return fmt.Errorf("directory name %q is reserved by Highbay", name)
 	}
 	if !initDirNamePattern.MatchString(name) {
 		return fmt.Errorf("directory name %q must start with an ASCII letter or digit and contain only letters, digits, '.', '_', or '-'", name)
@@ -611,7 +611,7 @@ func checkWorkspaceUninitialized(ctx context.Context, workspaceFD int, workspace
 		for _, marker := range projectMarkerNames {
 			var st unix.Stat_t
 			if err := unix.Fstatat(workspaceFD, marker, &st, unix.AT_SYMLINK_NOFOLLOW); err == nil {
-				return gensurla.MakeConflict(fmt.Errorf(
+				return genhighbay.MakeConflict(fmt.Errorf(
 					"workspace %s already contains %q; init_project requires an uninitialized workspace",
 					workspaceDir,
 					marker,
@@ -622,7 +622,7 @@ func checkWorkspaceUninitialized(ctx context.Context, workspaceFD int, workspace
 		}
 		var st unix.Stat_t
 		if err := unix.Fstatat(workspaceFD, targetBase, &st, unix.AT_SYMLINK_NOFOLLOW); err == nil {
-			return gensurla.MakeConflict(fmt.Errorf(
+			return genhighbay.MakeConflict(fmt.Errorf(
 				"target directory %q already exists in workspace %s",
 				targetBase,
 				workspaceDir,
@@ -632,7 +632,7 @@ func checkWorkspaceUninitialized(ctx context.Context, workspaceFD int, workspace
 		}
 	}
 	if hasCommittedGitHEAD(ctx, workspaceDir) {
-		return gensurla.MakeConflict(fmt.Errorf(
+		return genhighbay.MakeConflict(fmt.Errorf(
 			"workspace %s is already inside a Git repository with a committed HEAD",
 			workspaceDir,
 		))
@@ -702,8 +702,8 @@ func resolveInitStageParentDir(initialWorkspaceRoot, configuredStageDir string, 
 	}
 	candidates = append(
 		candidates,
-		filepath.Join(os.TempDir(), fmt.Sprintf("surla-operator-%d", os.Getuid()), "init-stage"),
-		filepath.Join(filepath.Dir(initialWorkspaceRoot), fmt.Sprintf(".surla-operator-%d", os.Getuid()), "init-stage"),
+		filepath.Join(os.TempDir(), fmt.Sprintf("highbay-operator-%d", os.Getuid()), "init-stage"),
+		filepath.Join(filepath.Dir(initialWorkspaceRoot), fmt.Sprintf(".highbay-operator-%d", os.Getuid()), "init-stage"),
 	)
 	var failures []error
 	for _, cand := range candidates {
@@ -903,7 +903,7 @@ func readDirEntriesFD(dirFD int, name string, limit int) ([]os.DirEntry, error) 
 // descriptor-relative operations (`Openat` with `O_NOFOLLOW` and `Unlinkat`),
 // verifying that every child resides on `expectedDev`.
 func emptyOwnedDirFD(dirFD int, expectedDev uint64) error {
-	entries, err := readDirEntriesFD(dirFD, "surla-stage-dir", -1)
+	entries, err := readDirEntriesFD(dirFD, "highbay-stage-dir", -1)
 	if err != nil {
 		return err
 	}
@@ -944,7 +944,7 @@ func emptyOwnedDirFD(dirFD int, expectedDev uint64) error {
 // syncDirTreeFD recursively fsyncs all regular files and child directories in
 // post-order under dirFD on expectedDev, then fsyncs dirFD itself.
 func syncDirTreeFD(dirFD int, expectedDev uint64) error {
-	entries, err := readDirEntriesFD(dirFD, "surla-sync-dir", -1)
+	entries, err := readDirEntriesFD(dirFD, "highbay-sync-dir", -1)
 	if err != nil {
 		return err
 	}
@@ -990,7 +990,7 @@ func syncDirTreeFD(dirFD int, expectedDev uint64) error {
 func recordInitRefused(span trace.Span, reason string) {
 	span.AddEvent(
 		"project_initialization_refused",
-		trace.WithAttributes(attribute.String("surla.init.refusal_reason", reason)),
+		trace.WithAttributes(attribute.String("highbay.init.refusal_reason", reason)),
 	)
 }
 

@@ -1,4 +1,4 @@
-// Package verify turns an evaluator suite's eval.Report into Surla's CP4
+// Package verify turns an evaluator suite's eval.Report into Highbay's CP4
 // verification report and checks, at CP5, that the report still describes the
 // change being promoted.
 //
@@ -37,7 +37,7 @@ import (
 
 	"goa.design/goa-ai/eval"
 
-	suitecmd "github.com/goadesign/surla/verify/suite"
+	suitecmd "github.com/goadesign/highbay/verify/suite"
 )
 
 type (
@@ -190,7 +190,7 @@ const (
 
 	// artifactSentenceStart and artifactSentenceEnd frame every sentence in
 	// artifactFaultSentences; the words between them say which check failed.
-	artifactSentenceStart = "The test program's record of the binaries it ran does not match what Surla built ("
+	artifactSentenceStart = "The test program's record of the binaries it ran does not match what Highbay built ("
 	artifactSentenceEnd   = "), so no check of this scenario counts; " +
 		"the full detail is in the saved report named by report_digest."
 )
@@ -211,11 +211,11 @@ var (
 		artifactReportedTwice: artifactSentenceStart +
 			"it recorded the same binary more than once" + artifactSentenceEnd,
 		artifactMissing: artifactSentenceStart +
-			"it did not record running a binary Surla built" + artifactSentenceEnd,
+			"it did not record running a binary Highbay built" + artifactSentenceEnd,
 		artifactDigestMismatch: artifactSentenceStart +
-			"it recorded a binary whose digest is not that of the binary Surla built" + artifactSentenceEnd,
+			"it recorded a binary whose digest is not that of the binary Highbay built" + artifactSentenceEnd,
 		artifactUndeclared: artifactSentenceStart +
-			"it recorded running a binary Surla did not build" + artifactSentenceEnd,
+			"it recorded running a binary Highbay did not build" + artifactSentenceEnd,
 	}
 )
 
@@ -305,13 +305,13 @@ type BuilderScenario struct {
 	Checks []eval.Check `json:"checks,omitempty"`
 	// Error is the repair scenario's environment error as the suite reported
 	// it, or, when the scenario's record of the binaries it ran failed
-	// Surla's artifact check, the fixed sentence for the check that failed;
+	// Highbay's artifact check, the fixed sentence for the check that failed;
 	// empty for holdouts.
 	Error string `json:"error,omitempty"`
 }
 
 // ForBuilders returns the builder view of the report: what get_verification,
-// list_verifications and `surla verify` show by default. A holdout keeps only
+// list_verifications and `hbay verify` show by default. A holdout keeps only
 // its position and outcome. A repair scenario keeps its name, its checks and
 // the error the suite reported for it. An error Assemble wrote because the
 // scenario's record of the binaries it ran failed checkArtifacts is not the
@@ -384,7 +384,7 @@ func Approve(current Binding, report Report) error {
 	return nil
 }
 
-// DecodeReport reads one report written by Run (or `surla verify`) from r. It
+// DecodeReport reads one report written by Run (or `hbay verify`) from r. It
 // rejects unknown fields and anything after the report, so a file that is not
 // exactly one report fails instead of being partly read. Decoding proves
 // nothing about the report's content; Approve checks that.

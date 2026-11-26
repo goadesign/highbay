@@ -1,6 +1,6 @@
 // This file holds the workers' waiting reads of their assignment lists. A
 // builder waiting for the tests to be accepted, or a test writer waiting for
-// Surla's verdict, keeps one such read open in place of repeated list calls;
+// Highbay's verdict, keeps one such read open in place of repeated list calls;
 // the reads depend on no Chorus reminder.
 package controlplane
 
@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -27,8 +27,8 @@ const (
 	defaultAssignmentPoll = time.Second
 	// waitForBuilderAssignmentSpan and waitForTestWriterAssignmentSpan name
 	// the waiting reads' spans, which the diagnostics history never saves.
-	waitForBuilderAssignmentSpan    = "surla.controlplane.wait_for_builder_assignment"
-	waitForTestWriterAssignmentSpan = "surla.controlplane.wait_for_test_writer_assignment"
+	waitForBuilderAssignmentSpan    = "highbay.controlplane.wait_for_builder_assignment"
+	waitForTestWriterAssignmentSpan = "highbay.controlplane.wait_for_test_writer_assignment"
 )
 
 // WaitForBuilderAssignment returns the builder's assignment list with the
@@ -36,31 +36,31 @@ const (
 // from it, otherwise when the list changes, the bounded wait ends or the
 // server stops. It records nothing and marks no assignment read.
 func (c *ControlPlane) WaitForBuilderAssignment(
-	ctx context.Context, p *gensurla.WaitForBuilderAssignmentPayload,
-) (*gensurla.BuilderAssignmentWait, error) {
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, waitForBuilderAssignmentSpan)
+	ctx context.Context, p *genhighbay.WaitForBuilderAssignmentPayload,
+) (*genhighbay.BuilderAssignmentWait, error) {
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, waitForBuilderAssignmentSpan)
 	defer span.End()
-	list, version, changed, err := waitForAssignments(ctx, c, p.SinceVersion, c.ListBuilderAssignments, gensurla.EncodeBuilderAssignmentList)
+	list, version, changed, err := waitForAssignments(ctx, c, p.SinceVersion, c.ListBuilderAssignments, genhighbay.EncodeBuilderAssignmentList)
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Bool("surla.changed", changed))
-	return &gensurla.BuilderAssignmentWait{Assignments: list.Assignments, Version: version}, nil
+	span.SetAttributes(attribute.Bool("highbay.changed", changed))
+	return &genhighbay.BuilderAssignmentWait{Assignments: list.Assignments, Version: version}, nil
 }
 
 // WaitForTestWriterAssignment is WaitForBuilderAssignment for the test
 // writer's assignment list.
 func (c *ControlPlane) WaitForTestWriterAssignment(
-	ctx context.Context, p *gensurla.WaitForTestWriterAssignmentPayload,
-) (*gensurla.TestWriterAssignmentWait, error) {
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, waitForTestWriterAssignmentSpan)
+	ctx context.Context, p *genhighbay.WaitForTestWriterAssignmentPayload,
+) (*genhighbay.TestWriterAssignmentWait, error) {
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, waitForTestWriterAssignmentSpan)
 	defer span.End()
-	list, version, changed, err := waitForAssignments(ctx, c, p.SinceVersion, c.ListTestWriterAssignments, gensurla.EncodeTestWriterAssignmentList)
+	list, version, changed, err := waitForAssignments(ctx, c, p.SinceVersion, c.ListTestWriterAssignments, genhighbay.EncodeTestWriterAssignmentList)
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Bool("surla.changed", changed))
-	return &gensurla.TestWriterAssignmentWait{Assignments: list.Assignments, Version: version}, nil
+	span.SetAttributes(attribute.Bool("highbay.changed", changed))
+	return &genhighbay.TestWriterAssignmentWait{Assignments: list.Assignments, Version: version}, nil
 }
 
 // waitForAssignments reads a role's assignment list until its version, the

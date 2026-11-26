@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,45 +35,45 @@ func TestViewsPageWorkerDraftSurvivesUpdates(t *testing.T) {
 	runPageScript(t, ps, map[string]any{"revision": card.RequestRevision}, `
 const page = await openPage(origin, { link: input.link });
 const discovery = "/team/agent-options", path = "/changes/chg-picker/build";
-await until(() => page.$("#surla-build-agents-builder-client") && !page.$("#surla-build-start").disabled, "worker defaults did not become ready");
-expect(!page.$("#surla-build-merge-feedback") && !page.$("#surla-build-merge-feedback-refresh"), "unbuilt change offered merge recovery before approval");
+await until(() => page.$("#highbay-build-agents-builder-client") && !page.$("#highbay-build-start").disabled, "worker defaults did not become ready");
+expect(!page.$("#highbay-build-merge-feedback") && !page.$("#highbay-build-merge-feedback-refresh"), "unbuilt change offered merge recovery before approval");
 expect(page.state() !== "cp5-approval", "opening an unbuilt change navigated to approval recovery");
-const client = (role) => JSON.parse(page.$("#surla-build-agents-" + role + "-client").value)[0];
+const client = (role) => JSON.parse(page.$("#highbay-build-agents-" + role + "-client").value)[0];
 expect(client("builder") === "codex" && client("test_writer") === "claude", "default workers did not use different installed families");
-expect(!page.$("#surla-build-agents-builder-yolo").checked && !page.$("#surla-build-agents-test_writer-yolo").checked, "discovery granted permissions");
+expect(!page.$("#highbay-build-agents-builder-yolo").checked && !page.$("#highbay-build-agents-test_writer-yolo").checked, "discovery granted permissions");
 for (const [role, label] of [["builder", "Builder"], ["test_writer", "Test writer"]]) {
-  const toggle = page.$("#surla-build-agents-" + role + "-yolo");
+  const toggle = page.$("#highbay-build-agents-" + role + "-yolo");
   expect(toggle.labels[0]?.textContent.trim().replace(/\s+/g, " ") === "Skip permission prompts (YOLO) for " + label,
          "permission toggle did not include its worker role in its native label");
   const description = toggle.getAttribute("aria-describedby").split(" ").map((id) => page.doc.getElementById(id)?.textContent).join(" ");
   expect(description.includes("sets missing folder trust") && description.includes("explicitly untrusted"),
          "the toggle's help did not distinguish missing and explicitly untrusted folder settings");
 }
-const model = page.$("#surla-build-agents-builder-model");
+const model = page.$("#highbay-build-agents-builder-model");
 Object.getOwnPropertyDescriptor(page.win.HTMLInputElement.prototype, "value").set.call(model, "custom-model-id");
 model.dispatchEvent(new page.win.Event("input", { bubbles: true }));
-const effort = page.$("#surla-build-agents-builder-thinking"); effort.value = "high";
+const effort = page.$("#highbay-build-agents-builder-thinking"); effort.value = "high";
 effort.dispatchEvent(new page.win.Event("change", { bubbles: true }));
 const editor = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 page.type(editor, "Keep my unsaved Story text");
 const reads = page.sent("GET", discovery).length;
-page.$("#surla-nav-team").click();
-await until(() => page.$("#surla-team-agents-builder-model"), "Team worker draft did not open");
-expect(page.$("#surla-team-agents-builder-model").value === "custom-model-id", "navigation replaced the worker draft");
+page.$("#highbay-nav-team").click();
+await until(() => page.$("#highbay-team-agents-builder-model"), "Team worker draft did not open");
+expect(page.$("#highbay-team-agents-builder-model").value === "custom-model-id", "navigation replaced the worker draft");
 await control(origin, "act", { key: "team-update" });
-await until(() => page.$("#surla-team-role-builder")?.dataset.state === "needs_you", "Team update did not arrive");
-expect(page.$("#surla-team-agents-builder-model").value === "custom-model-id", "Team polling replaced edited choices");
-page.$("#surla-nav-build").click();
-await until(() => page.$("#surla-build-agents-builder-model"), "Build picker did not return");
-expect(page.$("#surla-build-agents-builder-model").value === "custom-model-id" && page.$("#surla-build-agents-builder-thinking").value === "high", "Build navigation replaced edited worker settings");
+await until(() => page.$("#highbay-team-role-builder")?.dataset.state === "needs_you", "Team update did not arrive");
+expect(page.$("#highbay-team-agents-builder-model").value === "custom-model-id", "Team polling replaced edited choices");
+page.$("#highbay-nav-build").click();
+await until(() => page.$("#highbay-build-agents-builder-model"), "Build picker did not return");
+expect(page.$("#highbay-build-agents-builder-model").value === "custom-model-id" && page.$("#highbay-build-agents-builder-thinking").value === "high", "Build navigation replaced edited worker settings");
 const cardReads = page.sent("GET", "/changes/chg-picker").length;
 await control(origin, "act", { key: "card-save" });
-await until(() => page.sent("GET", "/changes/chg-picker").length > cardReads && !page.$("#surla-build-loading"), "saved card update did not arrive");
-expect(page.$("#surla-build-agents-builder-model").value === "custom-model-id" && page.$("#surla-build-agents-builder-thinking").value === "high", "saved card polling replaced worker drafts");
+await until(() => page.sent("GET", "/changes/chg-picker").length > cardReads && !page.$("#highbay-build-loading"), "saved card update did not arrive");
+expect(page.$("#highbay-build-agents-builder-model").value === "custom-model-id" && page.$("#highbay-build-agents-builder-thinking").value === "high", "saved card polling replaced worker drafts");
 expect(page.sent("GET", discovery).length === reads, "navigation or polling repeated executable discovery");
 expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "Keep my unsaved Story text", "worker navigation discarded the Story draft");
 expect(page.sent("POST", path).length === 0 && page.sent("POST", "/team/agents").length === 0, "reads or edits launched a role");
-page.$("#surla-build-start").click();
+page.$("#highbay-build-start").click();
 await until(() => page.sent("POST", path).length === 1, "explicit Build did not submit");
 const request = page.sent("POST", path)[0].body;
 expect(request.request_revision === input.revision, "Build changed the selected agreement");
@@ -95,16 +95,16 @@ func TestViewsPageAgentDiscoveryRequiresExplicitRecovery(t *testing.T) {
 const discovery = "/team/agent-options";
 await control(origin, "reply", { key: "GET " + discovery, status: 503, body: { name: "unavailable", message: "Agent discovery unavailable." } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-agents-error"), "discovery failure was not visible");
-expect(page.$("#surla-build-start").disabled && page.text("#surla-build-agents-error").includes("Retry agent discovery"), "failed discovery did not block launch with recovery");
+await until(() => page.$("#highbay-build-agents-error"), "discovery failure was not visible");
+expect(page.$("#highbay-build-start").disabled && page.text("#highbay-build-agents-error").includes("Retry agent discovery"), "failed discovery did not block launch with recovery");
 await sleep(100);
 expect(page.sent("GET", discovery).length === 1, "failed discovery retried automatically");
 await control(origin, "reply", { key: "GET " + discovery, status: 200, body: { agents: [], build_roles: ["builder", "test_writer"] } });
-page.$("#surla-build-agents-refresh").click();
-await until(() => page.$("#surla-build-agents-empty") && !page.$("#surla-build-agents-error"), "empty discovery did not settle");
-expect(page.$("#surla-build-start").disabled && page.text("#surla-build-agents-empty").includes("Install a coding agent"), "empty inventory offered a launch");
-page.$("#surla-build-agents-refresh").click();
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "explicit discovery retry did not recover");
+page.$("#highbay-build-agents-refresh").click();
+await until(() => page.$("#highbay-build-agents-empty") && !page.$("#highbay-build-agents-error"), "empty discovery did not settle");
+expect(page.$("#highbay-build-start").disabled && page.text("#highbay-build-agents-empty").includes("Install a coding agent"), "empty inventory offered a launch");
+page.$("#highbay-build-agents-refresh").click();
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "explicit discovery retry did not recover");
 expect(page.sent("GET", discovery).length === 3, "retry performed additional discovery");
 expect(page.sent("POST", "/changes/chg-discovery/build").length === 0 && page.sent("POST", "/team/agents").length === 0, "discovery recovery launched workers");
 page.close();
@@ -116,7 +116,7 @@ page.close();
 func TestViewsPageSingleFamilyAndBuilderOnly(t *testing.T) {
 	for _, stored := range []bool{false, true} {
 		t.Run(map[bool]string{false: "written tests", true: "stored evaluator"}[stored], func(t *testing.T) {
-			f := &teamServiceFixture{snapshot: pageTeamSnapshot("working"), options: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+			f := &teamServiceFixture{snapshot: pageTeamSnapshot("working"), options: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 				return fixtureAgentOptions()[:1], nil
 			}}
 			opts := Options{Team: &TeamBinding{Owner: pageOwner, Service: f}}
@@ -129,12 +129,12 @@ func TestViewsPageSingleFamilyAndBuilderOnly(t *testing.T) {
 			ps := startPageServer(t, cp)
 			runPageScript(t, ps, map[string]any{"stored": stored}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-agents-builder-client") && !page.$("#surla-build-start").disabled, "single installed family was not usable");
-expect(JSON.parse(page.$("#surla-build-agents-builder-client").value)[0] === "codex", "builder did not use installed family");
-expect(Boolean(page.$("#surla-build-agents-test_writer-client")) === !input.stored, "picker ignored the owner-returned build roles");
-if (!input.stored) expect(JSON.parse(page.$("#surla-build-agents-test_writer-client").value)[0] === "codex", "single family was not reused for test writer");
-expect(Boolean(page.$("#surla-build-agents-notice-single_agent_family")) === !input.stored, "single-family advice ignored whether two roles are required");
-page.$("#surla-build-start").click();
+await until(() => page.$("#highbay-build-agents-builder-client") && !page.$("#highbay-build-start").disabled, "single installed family was not usable");
+expect(JSON.parse(page.$("#highbay-build-agents-builder-client").value)[0] === "codex", "builder did not use installed family");
+expect(Boolean(page.$("#highbay-build-agents-test_writer-client")) === !input.stored, "picker ignored the owner-returned build roles");
+if (!input.stored) expect(JSON.parse(page.$("#highbay-build-agents-test_writer-client").value)[0] === "codex", "single family was not reused for test writer");
+expect(Boolean(page.$("#highbay-build-agents-notice-single_agent_family")) === !input.stored, "single-family advice ignored whether two roles are required");
+page.$("#highbay-build-start").click();
 await until(() => page.sent("POST", "/changes/chg-single/build").length === 1, "single-family Build did not submit");
 const choices = page.sent("POST", "/changes/chg-single/build")[0].body.choices;
 expect(JSON.stringify(Object.keys(choices).sort()) === JSON.stringify(input.stored ? ["builder"] : ["builder", "test_writer"]), "Build sent an unnecessary worker role");
@@ -153,8 +153,8 @@ func TestViewsPageHeadlessNeedsPermissionAndSeparateConsent(t *testing.T) {
 			snapshot.HerdrMode = "unavailable"
 			f := &teamServiceFixture{snapshot: snapshot}
 			if openCode {
-				f.options = func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
-					return []*gensurla.InstalledAgentOption{{Client: "opencode", Program: "/fixture/opencode", Title: "OpenCode", Models: []string{}, Efforts: []string{}, ModelSupported: true, HeadlessSupported: true}}, nil
+				f.options = func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
+					return []*genhighbay.InstalledAgentOption{{Client: "opencode", Program: "/fixture/opencode", Title: "OpenCode", Models: []string{}, Efforts: []string{}, ModelSupported: true, HeadlessSupported: true}}, nil
 				}
 			}
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
@@ -162,17 +162,17 @@ func TestViewsPageHeadlessNeedsPermissionAndSeparateConsent(t *testing.T) {
 			ps := startPageServer(t, cp)
 			runPageScript(t, ps, map[string]any{"openCode": openCode}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-agents-background-consent") && page.$("#surla-build-agents-builder-client").value, "background picker did not settle");
-expect(page.$("#surla-build-start").disabled && !page.$("#surla-build-agents-background-consent").checked, "headless mode implicitly granted background consent");
+await until(() => page.$("#highbay-build-agents-background-consent") && page.$("#highbay-build-agents-builder-client").value, "background picker did not settle");
+expect(page.$("#highbay-build-start").disabled && !page.$("#highbay-build-agents-background-consent").checked, "headless mode implicitly granted background consent");
 if (input.openCode) {
-  expect(!page.$("#surla-build-agents-builder-yolo") && page.text("#surla-build-agents-builder").includes("configured permissions"), "OpenCode invented a YOLO switch");
+  expect(!page.$("#highbay-build-agents-builder-yolo") && page.text("#highbay-build-agents-builder").includes("configured permissions"), "OpenCode invented a YOLO switch");
 } else {
-  for (const role of ["builder", "test_writer"]) page.$("#surla-build-agents-" + role + "-yolo").click();
-  expect(page.$("#surla-build-start").disabled, "permission switches were treated as background consent");
+  for (const role of ["builder", "test_writer"]) page.$("#highbay-build-agents-" + role + "-yolo").click();
+  expect(page.$("#highbay-build-start").disabled, "permission switches were treated as background consent");
 }
-page.$("#surla-build-agents-background-consent").click();
-await until(() => !page.$("#surla-build-start").disabled, "explicit consent and valid permissions did not enable background workers");
-page.$("#surla-build-start").click();
+page.$("#highbay-build-agents-background-consent").click();
+await until(() => !page.$("#highbay-build-start").disabled, "explicit consent and valid permissions did not enable background workers");
+page.$("#highbay-build-start").click();
 await until(() => page.sent("POST", "/changes/chg-background/build").length === 1, "background Build did not submit");
 const choices = page.sent("POST", "/changes/chg-background/build")[0].body.choices;
 expect(choices.builder.yolo === !input.openCode && choices.test_writer.yolo === !input.openCode, "permission choice did not match actual supported switches");
@@ -194,7 +194,7 @@ func TestViewsPageRecommendationsDismissOnlyAfterSave(t *testing.T) {
 			} else if notice == "herdr_unavailable" {
 				snapshot.HerdrMode = "unavailable"
 			}
-			f := &teamServiceFixture{snapshot: snapshot, options: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+			f := &teamServiceFixture{snapshot: snapshot, options: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 				return fixtureAgentOptions()[:1], nil
 			}}
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
@@ -202,7 +202,7 @@ func TestViewsPageRecommendationsDismissOnlyAfterSave(t *testing.T) {
 			ps := startPageServer(t, cp)
 			runPageScript(t, ps, map[string]any{"notice": notice}, `
 const page = await openPage(origin, { link: input.link });
-const id = "#surla-build-agents-notice-" + input.notice, path = "/team/notices/dismiss";
+const id = "#highbay-build-agents-notice-" + input.notice, path = "/team/notices/dismiss";
 await until(() => page.$(id + "-dismiss"), "recommendation did not appear");
 await control(origin, "reply", { key: "POST " + path, status: 503, body: { name: "unavailable", message: "Preference owner unavailable." } });
 page.$(id + "-dismiss").click();
@@ -211,9 +211,9 @@ expect(page.text(id + "-dismiss") === "Retry dismissal", "dismissal refusal omit
 page.$(id + "-dismiss").click();
 await until(() => !page.$(id), "successful dismissal did not remove the recommendation");
 expect(page.sent("POST", path).length === 2 && page.sent("POST", path).every((request) => request.body.notice === input.notice), "dismissal changed notice identity or retried automatically");
-page.$("#surla-nav-team").click();
-await until(() => page.$("#surla-team-agents"), "Team did not open");
-expect(!page.$("#surla-team-agents-notice-" + input.notice), "saved dismissal did not follow navigation");
+page.$("#highbay-nav-team").click();
+await until(() => page.$("#highbay-team-agents"), "Team did not open");
+expect(!page.$("#highbay-team-agents-notice-" + input.notice), "saved dismissal did not follow navigation");
 expect(page.sent("POST", "/changes/chg-notice/build").length === 0 && page.sent("POST", "/team/agents").length === 0, "notice dismissal launched workers");
 page.close();
 `)

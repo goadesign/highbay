@@ -22,11 +22,11 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/renameat"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/renameat"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 type (
@@ -39,7 +39,7 @@ type (
 		// StageDir is the protected operator staging parent directory holding
 		// Staging while initialization is in flight.
 		StageDir string `json:"stage_dir,omitempty"`
-		// Staging is the `.surla-init-*` directory name inside StageDir while
+		// Staging is the `.highbay-init-*` directory name inside StageDir while
 		// initialization is in flight.
 		Staging string `json:"staging,omitempty"`
 		// Dev is the device ID of the staged/published child project root.
@@ -180,7 +180,7 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 			if err != nil {
 				err = errors.Join(err, closeErr)
 			} else {
-				recordWorkspaceCleanupFailure("surla.controlplane.cleanup_restored_workspace_descriptors", closeErr)
+				recordWorkspaceCleanupFailure("highbay.controlplane.cleanup_restored_workspace_descriptors", closeErr)
 			}
 		}
 	}()
@@ -198,7 +198,7 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 					if err != nil {
 						err = errors.Join(err, closeErr)
 					} else {
-						recordWorkspaceCleanupFailure("surla.controlplane.cleanup_restored_workspace_descriptors", closeErr)
+						recordWorkspaceCleanupFailure("highbay.controlplane.cleanup_restored_workspace_descriptors", closeErr)
 					}
 				}
 			}()
@@ -244,7 +244,7 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 					}),
 				)
 				if cleanErr != nil {
-					recordWorkspaceCleanupFailure("surla.controlplane.finalize_restored_workspace", cleanErr)
+					recordWorkspaceCleanupFailure("highbay.controlplane.finalize_restored_workspace", cleanErr)
 				}
 			}
 			return nil
@@ -320,7 +320,7 @@ func (c *ControlPlane) restoreWorkspace() (err error) {
 			Dev: wf.Dev,
 			Ino: wf.Ino,
 		}); err != nil {
-			recordWorkspaceCleanupFailure("surla.controlplane.finalize_restored_workspace", err)
+			recordWorkspaceCleanupFailure("highbay.controlplane.finalize_restored_workspace", err)
 		}
 		return nil
 
@@ -409,23 +409,23 @@ func (c *ControlPlane) removeWorkspaceRecord() error {
 // (`root.Stat(".")`) that its `(dev, ino)` matches `(expectedDev, expectedIno)`.
 func openModuleRootWithIdentity(dir string, expectedDev, expectedIno uint64) (string, *os.Root, error) {
 	if expectedDev == 0 || expectedIno == 0 {
-		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s has no recorded device/inode identity", dir))
+		return "", nil, genhighbay.MakeUnprocessable(fmt.Errorf("bound workspace directory %s has no recorded device/inode identity", dir))
 	}
 	cleanDir, root, err := designeval.OpenModuleRoot(dir)
 	if err != nil {
-		return "", nil, gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s was replaced or removed after startup: %w", dir, err))
+		return "", nil, genhighbay.MakeUnprocessable(fmt.Errorf("bound workspace directory %s was replaced or removed after startup: %w", dir, err))
 	}
 	rootInfo, err := root.Stat(".")
 	if err != nil {
 		return "", nil, errors.Join(
-			gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s was replaced or removed after startup: %w", dir, err)),
+			genhighbay.MakeUnprocessable(fmt.Errorf("bound workspace directory %s was replaced or removed after startup: %w", dir, err)),
 			root.Close(),
 		)
 	}
 	st, ok := rootInfo.Sys().(*syscall.Stat_t)
 	if !ok || st == nil || uint64(st.Dev) != expectedDev || st.Ino != expectedIno {
 		return "", nil, errors.Join(
-			gensurla.MakeUnprocessable(fmt.Errorf("bound workspace directory %s was replaced or removed after startup", dir)),
+			genhighbay.MakeUnprocessable(fmt.Errorf("bound workspace directory %s was replaced or removed after startup", dir)),
 			root.Close(),
 		)
 	}
@@ -500,7 +500,7 @@ func normalizeAndValidateStartupPaths(
 	protectedDirs, err := verify.WorkspaceBoundaryRoots(gitCtx, wsRoot)
 	cancel()
 	if err != nil {
-		return "", "", nil, nil, fmt.Errorf("%w; check that Git can read the workspace, then start Surla again", err)
+		return "", "", nil, nil, fmt.Errorf("%w; check that Git can read the workspace, then start Highbay again", err)
 	}
 	if err := validateStartupSeparation(opts.CardsDir, runsDir, initStageDir, opts.BuildCacheDir, verifierRuns(verif), protectedDirs...); err != nil {
 		return "", "", nil, nil, err
@@ -692,7 +692,7 @@ func recordWorkspaceCleanupFailure(spanName string, err error) {
 	if err == nil {
 		return
 	}
-	_, span := otel.Tracer("surla/controlplane").Start(
+	_, span := otel.Tracer("highbay/controlplane").Start(
 		contextBackgroundForCleanup(),
 		spanName,
 	)

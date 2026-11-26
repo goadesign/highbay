@@ -1,4 +1,4 @@
-// This file declares the model provider request settings the surla command
+// This file declares the model provider request settings the hbay command
 // hands to the project server. The variable names come from the one provider
 // table in internal/modelsettings, so the generated validation accepts
 // exactly the names that table lets cross.
@@ -7,13 +7,13 @@ package design
 import (
 	. "goa.design/goa/v3/dsl"
 
-	"github.com/goadesign/surla/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/modelsettings"
 )
 
 // HandOverModelSettingsPayload carries the request settings of each provider
-// the surla command found a key for.
+// the hbay command found a key for.
 var HandOverModelSettingsPayload = Type("HandOverModelSettingsPayload", func() {
-	Description("Request settings the surla command read from the shell it runs in, by provider. Each attribute is optional: an absent provider keeps what the project server holds for it.")
+	Description("Request settings the hbay command read from the shell it runs in, by provider. Each attribute is optional: an absent provider keeps what the project server holds for it.")
 	for _, p := range modelsettings.Providers() {
 		providerSettings(p)
 	}

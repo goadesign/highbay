@@ -1,5 +1,5 @@
 // This file owns the model choice on a running control plane and the model
-// provider request settings the surla command hands over: the choice live
+// provider request settings the hbay command hands over: the choice live
 // targets started afterwards receive, the settings permitted programs
 // receive, and the environment a live target starts with. Settings live in
 // memory only, as modelsettings values, and no result, error or span carries
@@ -17,14 +17,14 @@ import (
 	"strings"
 	"unicode"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/verify"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/verify"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// HandOverModelSettings holds the request settings the surla command read
+// HandOverModelSettings holds the request settings the hbay command read
 // from its shell, by provider. Each provider present in p replaces
 // everything held for it and must include its key variable; an absent one
 // keeps what is held, so a request with neither changes nothing. Every
@@ -36,12 +36,12 @@ import (
 // unprocessable, naming the provider and the variable only.
 func (c *ControlPlane) HandOverModelSettings(
 	ctx context.Context,
-	p *gensurla.HandOverModelSettingsPayload,
-) (*gensurla.ModelSettingsResult, error) {
+	p *genhighbay.HandOverModelSettingsPayload,
+) (*genhighbay.ModelSettingsResult, error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.hand_over_model_settings")
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.hand_over_model_settings")
 	defer span.End()
 
 	// Providers are checked in table order, so a request refused for both
@@ -55,18 +55,18 @@ func (c *ControlPlane) HandOverModelSettings(
 		}
 		settings, err := modelsettings.New(provider.Name, values)
 		if err != nil {
-			span.AddEvent("model_settings_refused", trace.WithAttributes(attribute.String("surla.model.provider", provider.Name)))
-			return nil, gensurla.MakeUnprocessable(err)
+			span.AddEvent("model_settings_refused", trace.WithAttributes(attribute.String("highbay.model.provider", provider.Name)))
+			return nil, genhighbay.MakeUnprocessable(err)
 		}
 		arrived[provider.Name] = settings
 	}
 
 	c.modelMu.Lock()
 	maps.Copy(c.heldSettings, arrived)
-	if c.liveModel.Kind() == gensurla.ConnectionKindNone {
+	if c.liveModel.Kind() == genhighbay.ConnectionKindNone {
 		for _, provider := range modelsettings.Providers() {
 			if _, held := c.heldSettings[provider.Name]; held {
-				c.liveModel = gensurla.NewConnectionDirect(&gensurla.ModelDirect{Provider: provider.Name, ModelName: provider.DefaultModel})
+				c.liveModel = genhighbay.NewConnectionDirect(&genhighbay.ModelDirect{Provider: provider.Name, ModelName: provider.DefaultModel})
 				break
 			}
 		}
@@ -76,11 +76,11 @@ func (c *ControlPlane) HandOverModelSettings(
 	c.modelMu.Unlock()
 
 	span.AddEvent("model_settings_held", trace.WithAttributes(
-		attribute.StringSlice("surla.model.providers_handed_over", slices.Sorted(maps.Keys(arrived))),
-		attribute.StringSlice("surla.model.providers_held", slices.Sorted(maps.Keys(held))),
-		attribute.String("surla.model.connection_kind", string(choice.Kind())),
+		attribute.StringSlice("highbay.model.providers_handed_over", slices.Sorted(maps.Keys(arrived))),
+		attribute.StringSlice("highbay.model.providers_held", slices.Sorted(maps.Keys(held))),
+		attribute.String("highbay.model.connection_kind", string(choice.Kind())),
 	))
-	return &gensurla.ModelSettingsResult{Held: held, Connection: choice}, nil
+	return &genhighbay.ModelSettingsResult{Held: held, Connection: choice}, nil
 }
 
 // ConfigureModel switches, without restarting the server, the model choice
@@ -94,27 +94,27 @@ func (c *ControlPlane) HandOverModelSettings(
 // declared choice, which the result and get_model_connection both report.
 func (c *ControlPlane) ConfigureModel(
 	ctx context.Context,
-	p *gensurla.ConfigureModelPayload,
-) (*gensurla.ModelConfigResult, error) {
+	p *genhighbay.ConfigureModelPayload,
+) (*genhighbay.ModelConfigResult, error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.configure_model")
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.configure_model")
 	defer span.End()
 
 	choice, err := modelChoice(p)
 	if err != nil {
 		span.AddEvent(
 			"model_configuration_refused",
-			trace.WithAttributes(attribute.String("surla.model.refusal_reason", "invalid_payload")),
+			trace.WithAttributes(attribute.String("highbay.model.refusal_reason", "invalid_payload")),
 		)
-		return nil, gensurla.MakeUnprocessable(err)
+		return nil, genhighbay.MakeUnprocessable(err)
 	}
 	if err := c.chooseModel(choice); err != nil {
 		span.AddEvent(
 			"model_configuration_refused",
-			trace.WithAttributes(attribute.String("surla.model.refusal_reason", "missing_api_key")),
+			trace.WithAttributes(attribute.String("highbay.model.refusal_reason", "missing_api_key")),
 		)
 		return nil, err
 	}
@@ -122,19 +122,19 @@ func (c *ControlPlane) ConfigureModel(
 	if gateway, ok := choice.AsGateway(); ok {
 		span.AddEvent(
 			"model_configured",
-			trace.WithAttributes(attribute.String("surla.model.connection_kind", "gateway")),
+			trace.WithAttributes(attribute.String("highbay.model.connection_kind", "gateway")),
 		)
-		return &gensurla.ModelConfigResult{GatewayAddr: &gateway.GatewayAddr}, nil
+		return &genhighbay.ModelConfigResult{GatewayAddr: &gateway.GatewayAddr}, nil
 	}
 	direct, _ := choice.AsDirect()
 	span.AddEvent(
 		"model_configured",
 		trace.WithAttributes(
-			attribute.String("surla.model.connection_kind", "provider"),
-			attribute.String("surla.model.provider", direct.Provider),
+			attribute.String("highbay.model.connection_kind", "provider"),
+			attribute.String("highbay.model.provider", direct.Provider),
 		),
 	)
-	return &gensurla.ModelConfigResult{
+	return &genhighbay.ModelConfigResult{
 		Provider:  &direct.Provider,
 		ModelName: &direct.ModelName,
 	}, nil
@@ -144,26 +144,26 @@ func (c *ControlPlane) ConfigureModel(
 // receive: none until a hand-over or configure_model chooses one. It returns
 // the choice only, never a held setting, so no API key or other setting
 // value can reach the caller.
-func (c *ControlPlane) GetModelConnection(ctx context.Context) (*gensurla.ModelConnection, error) {
+func (c *ControlPlane) GetModelConnection(ctx context.Context) (*genhighbay.ModelConnection, error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	c.modelMu.Lock()
 	defer c.modelMu.Unlock()
-	return &gensurla.ModelConnection{Connection: c.liveModel}, nil
+	return &genhighbay.ModelConnection{Connection: c.liveModel}, nil
 }
 
 // chooseModel makes choice the one live targets started afterwards receive,
 // after checking, under the same lock, that a direct provider's settings are
 // held. It returns the unprocessable refusal configure_model reports.
-func (c *ControlPlane) chooseModel(choice gensurla.Connection) error {
+func (c *ControlPlane) chooseModel(choice genhighbay.Connection) error {
 	c.modelMu.Lock()
 	defer c.modelMu.Unlock()
 	if direct, ok := choice.AsDirect(); ok {
 		if _, held := c.heldSettings[direct.Provider]; !held {
 			provider, _ := modelsettings.Lookup(direct.Provider)
-			return gensurla.MakeUnprocessable(fmt.Errorf(
-				"provider %s needs %s: export it, with any %s request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway.",
+			return genhighbay.MakeUnprocessable(fmt.Errorf(
+				"provider %s needs %s: export it, with any %s request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway.",
 				provider.Name, provider.Key, provider.Prefix,
 			))
 		}
@@ -179,8 +179,8 @@ func (c *ControlPlane) chooseModel(choice gensurla.Connection) error {
 func (c *ControlPlane) liveLaunch(requireModel bool) ([]string, []modelsettings.Settings, error) {
 	c.modelMu.Lock()
 	defer c.modelMu.Unlock()
-	if requireModel && c.liveModel.Kind() == gensurla.ConnectionKindNone {
-		return nil, nil, gensurla.MakeLiveTargetUnavailable(errors.New(msgLiveModelRequired))
+	if requireModel && c.liveModel.Kind() == genhighbay.ConnectionKindNone {
+		return nil, nil, genhighbay.MakeLiveTargetUnavailable(errors.New(msgLiveModelRequired))
 	}
 	env := liveTargetEnv(c.liveBaseEnv, c.liveModel)
 	if direct, ok := c.liveModel.AsDirect(); ok {
@@ -196,7 +196,7 @@ func (c *ControlPlane) liveLaunch(requireModel bool) ([]string, []modelsettings.
 func (c *ControlPlane) hasLiveModel() bool {
 	c.modelMu.Lock()
 	defer c.modelMu.Unlock()
-	return c.liveModel.Kind() != gensurla.ConnectionKindNone
+	return c.liveModel.Kind() != genhighbay.ConnectionKindNone
 }
 
 // evaluatorSettings returns, in one modelMu section, the held request
@@ -218,9 +218,9 @@ func (c *ControlPlane) evaluatorSettings() []modelsettings.Settings {
 // modelChoice validates configure_model's mutually exclusive direct-provider
 // and gateway fields at the boundary and returns them as the declared choice:
 // direct with both a provider and a model name, or gateway with an address.
-func modelChoice(p *gensurla.ConfigureModelPayload) (gensurla.Connection, error) {
+func modelChoice(p *genhighbay.ConfigureModelPayload) (genhighbay.Connection, error) {
 	if p == nil {
-		return gensurla.Connection{}, errors.New("specify both provider and model_name, or specify gateway_addr")
+		return genhighbay.Connection{}, errors.New("specify both provider and model_name, or specify gateway_addr")
 	}
 	var provider, modelName, gatewayAddr string
 	if p.Provider != nil {
@@ -235,20 +235,20 @@ func modelChoice(p *gensurla.ConfigureModelPayload) (gensurla.Connection, error)
 	_, known := modelsettings.Lookup(provider)
 	switch {
 	case gatewayAddr != "" && (provider != "" || modelName != ""):
-		return gensurla.Connection{}, errors.New("gateway_addr cannot be combined with provider or model_name; the gateway chooses the model")
+		return genhighbay.Connection{}, errors.New("gateway_addr cannot be combined with provider or model_name; the gateway chooses the model")
 	case gatewayAddr != "":
 		if !validModelGateway(gatewayAddr) {
-			return gensurla.Connection{}, errors.New("gateway_addr must be a host and decimal port from 1 to 65535, such as 127.0.0.1:8080 or [::1]:8080; no URL, path or whitespace")
+			return genhighbay.Connection{}, errors.New("gateway_addr must be a host and decimal port from 1 to 65535, such as 127.0.0.1:8080 or [::1]:8080; no URL, path or whitespace")
 		}
-		return gensurla.NewConnectionGateway(&gensurla.ModelGateway{GatewayAddr: gatewayAddr}), nil
+		return genhighbay.NewConnectionGateway(&genhighbay.ModelGateway{GatewayAddr: gatewayAddr}), nil
 	case provider == "" && modelName == "":
-		return gensurla.Connection{}, errors.New("specify both provider and model_name, or specify gateway_addr")
+		return genhighbay.Connection{}, errors.New("specify both provider and model_name, or specify gateway_addr")
 	case provider == "" || modelName == "":
-		return gensurla.Connection{}, errors.New("provider and model_name must be set together")
+		return genhighbay.Connection{}, errors.New("provider and model_name must be set together")
 	case !known:
-		return gensurla.Connection{}, fmt.Errorf("unsupported provider %q (expected \"anthropic\" or \"openai\")", provider)
+		return genhighbay.Connection{}, fmt.Errorf("unsupported provider %q (expected \"anthropic\" or \"openai\")", provider)
 	default:
-		return gensurla.NewConnectionDirect(&gensurla.ModelDirect{Provider: provider, ModelName: modelName}), nil
+		return genhighbay.NewConnectionDirect(&genhighbay.ModelDirect{Provider: provider, ModelName: modelName}), nil
 	}
 }
 
@@ -271,7 +271,7 @@ func validModelGateway(addr string) bool {
 // handedOver returns the providers present in p, by name. A nil map is an
 // absent attribute, which keeps what is held; a present one, even empty, is
 // handed over and checked.
-func handedOver(p *gensurla.HandOverModelSettingsPayload) map[string]map[string]string {
+func handedOver(p *genhighbay.HandOverModelSettingsPayload) map[string]map[string]string {
 	present := map[string]map[string]string{}
 	if p == nil {
 		return present
@@ -296,10 +296,10 @@ func heldNames(held map[string]modelsettings.Settings) map[string][]string {
 
 // liveTargetEnv returns the environment a live target's executor starts
 // with for choice: base without any provider family or inherited
-// SURLA_LIVE_MODEL_* variable, then the choice's SURLA_LIVE_MODEL_*
+// HIGHBAY_LIVE_MODEL_* variable, then the choice's HIGHBAY_LIVE_MODEL_*
 // variables. The chosen provider's settings are added only by the launch,
 // from the held snapshot, so the hand-over is their one source.
-func liveTargetEnv(base []string, choice gensurla.Connection) []string {
+func liveTargetEnv(base []string, choice genhighbay.Connection) []string {
 	_, rest := modelsettings.Split(base)
 	out := make([]string, 0, len(rest)+2)
 	for _, kv := range rest {

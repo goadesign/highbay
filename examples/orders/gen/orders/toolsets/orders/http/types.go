@@ -3,7 +3,7 @@
 // orders tool transport types
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package http
 

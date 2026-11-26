@@ -96,7 +96,7 @@ export function workerChoiceError(
   if (choice.thinking !== undefined && (!option.thinking_supported || !option.efforts.includes(choice.thinking))) {
     return "Use the client default effort setting or choose an available reasoning effort.";
   }
-  if (choice.yolo && !option.yolo_supported) return "This client has no separate Surla YOLO switch. Use configured permissions.";
+  if (choice.yolo && !option.yolo_supported) return "This client has no separate Highbay YOLO switch. Use configured permissions.";
   // Chorus interprets these exact Antigravity suffixes as an effort selection.
   if (choice.client === "antigravity" && choice.model !== undefined && choice.thinking !== undefined &&
     /-(low|medium|high|xhigh|max)$/.test(choice.model)) {

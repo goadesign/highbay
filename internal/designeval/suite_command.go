@@ -19,7 +19,7 @@ import (
 )
 
 // suiteCommandEnvironment is the dependency profile every run of a generated
-// suite command declares: Surla's test layout runs the program under test
+// suite command declares: Highbay's test layout runs the program under test
 // with a scripted model.
 const suiteCommandEnvironment = "scripted-model"
 
@@ -34,7 +34,7 @@ const storyTableRootName = "Story table (design/story_tests.go)"
 // It builds the module's one evaluation suite from the generated tests
 // (genevals) and the author's package (acceptance), calling exactly
 // acceptance.Name, acceptance.Hooks, acceptance.New, acceptance.Live and
-// acceptance.LiveThroughGateway, and hands it to Surla's suite command
+// acceptance.LiveThroughGateway, and hands it to Highbay's suite command
 // contract (verify/suite.Main).
 const suiteCommandSource = `// environment is the dependency profile every run of this suite declares.
 const environment = {{ printf "%q" .Environment }}
@@ -60,17 +60,17 @@ func main() {
 // selected model gateway or direct provider and model. Provider keys stay in
 // this process.
 func live(ctx context.Context, binary candidate.Artifact, key string, getenv func(string) string) (suite.LiveTarget, error) {
-	gatewayAddr := getenv("SURLA_LIVE_MODEL_GATEWAY")
-	providerName, modelName := getenv("SURLA_LIVE_MODEL_PROVIDER"), getenv("SURLA_LIVE_MODEL_NAME")
+	gatewayAddr := getenv("HIGHBAY_LIVE_MODEL_GATEWAY")
+	providerName, modelName := getenv("HIGHBAY_LIVE_MODEL_PROVIDER"), getenv("HIGHBAY_LIVE_MODEL_NAME")
 	switch {
 	case gatewayAddr != "" && (providerName != "" || modelName != ""):
-		return suite.LiveTarget{}, errors.New("the live {{ .Service }} got both a model gateway and a model provider; the Surla project server passes only one")
+		return suite.LiveTarget{}, errors.New("the live {{ .Service }} got both a model gateway and a model provider; the Highbay project server passes only one")
 	case gatewayAddr != "":
 		return acceptance.LiveThroughGateway(ctx, binary, key, gatewayAddr)
 	case providerName == "" && modelName == "":
-		return suite.LiveTarget{}, errors.New("no model for the live {{ .Service }}: ask the user to configure a model in Surla")
+		return suite.LiveTarget{}, errors.New("no model for the live {{ .Service }}: ask the user to configure a model in Highbay")
 	case providerName == "" || modelName == "":
-		return suite.LiveTarget{}, errors.New("the live {{ .Service }} needs both a model provider and a model name; ask the user to configure a provider and model in Surla")
+		return suite.LiveTarget{}, errors.New("the live {{ .Service }} needs both a model provider and a model name; ask the user to configure a provider and model in Highbay")
 	}
 	provider, err := liveProvider(providerName, modelName, getenv)
 	if err != nil {
@@ -110,9 +110,9 @@ type suiteCommandData struct {
 	StoryTests bool
 }
 
-// surlaSuiteCommand returns the "surla-suite-command" Goa plugin that runs
+// highbaySuiteCommand returns the "highbay-suite-command" Goa plugin that runs
 // after Goa-AI's generators. acceptance is HasAcceptancePackage for the
-// module being generated, which the plugin cannot see itself. For a Surla
+// module being generated, which the plugin cannot see itself. For a Highbay
 // test module (TestModuleService accepts the module path, which genpkg, the
 // module's gen import path, ends) whose design declares exactly one
 // evaluation suite and which has an acceptance package, it adds the module's
@@ -124,7 +124,7 @@ type suiteCommandData struct {
 // have planned the suite's package at gen/evals/<suite>/suite.go; if it did
 // not, generation fails naming that file rather than writing a program that
 // cannot build.
-func surlaSuiteCommand(acceptance bool) func(string, []eval.Root, []*codegen.File) ([]*codegen.File, error) {
+func highbaySuiteCommand(acceptance bool) func(string, []eval.Root, []*codegen.File) ([]*codegen.File, error) {
 	return func(genpkg string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 		service, ok := TestModuleService(strings.TrimSuffix(genpkg, "/"+codegen.Gendir))
 		suites := declaredSuites(roots)
@@ -144,7 +144,7 @@ func suiteCommandFiles(
 ) ([]*codegen.File, error) {
 	suiteFile := path.Join(codegen.Gendir, "evals", suite.Name, "suite.go")
 	if !slices.ContainsFunc(files, func(f *codegen.File) bool { return filepath.ToSlash(f.Path) == suiteFile }) {
-		return nil, fmt.Errorf("the evaluation suite %q has no generated package at %s, from which Surla builds the test program", suite.Name, suiteFile)
+		return nil, fmt.Errorf("the evaluation suite %q has no generated package at %s, from which Highbay builds the test program", suite.Name, suiteFile)
 	}
 	data := suiteCommandData{
 		Service:     service,
@@ -162,19 +162,19 @@ func suiteCommandFiles(
 		codegen.SimpleImport("goa.design/goa-ai/features/model/anthropic"),
 		codegen.SimpleImport("goa.design/goa-ai/features/model/openai"),
 		codegen.SimpleImport("goa.design/goa-ai/runtime/agent/model"),
-		codegen.SimpleImport("github.com/goadesign/surla/verify/candidate"),
-		codegen.SimpleImport("github.com/goadesign/surla/verify/suite"),
+		codegen.SimpleImport("github.com/goadesign/highbay/verify/candidate"),
+		codegen.SimpleImport("github.com/goadesign/highbay/verify/suite"),
 		codegen.SimpleImport(path.Join(path.Dir(genpkg), AcceptancePackage)),
 		codegen.NewImport("genevals", path.Join(genpkg, "evals", suite.Name)),
 	}
 	files = append(files, &codegen.File{
 		Path: path.Join(strings.TrimPrefix(data.Command, "./"), "main.go"),
 		SectionTemplates: []*codegen.SectionTemplate{
-			codegen.Header(service+"-evals: the test program Surla builds from the generated tests", "main", imports),
-			{Name: "surla-suite-command", Source: suiteCommandSource, Data: data},
+			codegen.Header(service+"-evals: the test program Highbay builds from the generated tests", "main", imports),
+			{Name: "highbay-suite-command", Source: suiteCommandSource, Data: data},
 		},
 	})
-	section := &codegen.SectionTemplate{Name: "surla-test-program", Source: testProgramSection, Data: data}
+	section := &codegen.SectionTemplate{Name: "highbay-test-program", Source: testProgramSection, Data: data}
 	for _, f := range files {
 		if f.Path == quickstartPath {
 			f.SectionTemplates = append(f.SectionTemplates, section)

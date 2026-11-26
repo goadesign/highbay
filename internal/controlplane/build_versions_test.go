@@ -14,7 +14,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestChangeVersionFollowsBuildReadsAndReports exercises real assignment APIs
@@ -34,14 +34,14 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 		run     func() error
 	}{
 		{name: "start", changed: true, run: func() error {
-			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			if err == nil {
 				makeBuildFixtureBuilderCopy(t, cp)
 			}
 			return err
 		}},
 		{name: "build read", run: func() error {
-			build, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+			build, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 			if assert.NoError(t, err) {
 				started, ok := build.Build.AsStarted()
 				if assert.True(t, ok) {
@@ -60,19 +60,19 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 			return err
 		}},
 		{name: "builder full read", changed: true, run: func() error {
-			_, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+			_, err := cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			return err
 		}},
 		{name: "builder reread", run: func() error {
-			_, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+			_, err := cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			return err
 		}},
 		{name: "writer full read", changed: true, run: func() error {
-			_, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			_, err := cp.GetTestWriterAssignment(writer, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			return err
 		}},
 		{name: "writer reread", run: func() error {
-			_, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			_, err := cp.GetTestWriterAssignment(writer, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			return err
 		}},
 		{name: "same revision starts again", changed: true, run: func() error {
@@ -80,13 +80,13 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 			return err
 		}},
 		{name: "writer read after restart", changed: true, run: func() error {
-			_, err := cp.GetTestWriterAssignment(writer, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			_, err := cp.GetTestWriterAssignment(writer, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			return err
 		}},
 		// Reporting comes last: the real worker then owns the copy turn while
 		// this test's stand-in waits for Close; restarting is proved above.
 		{name: "report", changed: true, run: func() error {
-			_, err := cp.ReportTestsFinished(writer, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+			_, err := cp.ReportTestsFinished(writer, &genhighbay.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 			return err
 		}},
 	}
@@ -98,7 +98,7 @@ func TestChangeVersionFollowsBuildReadsAndReports(t *testing.T) {
 			assert.Equal(t, before.Changes, after.Changes, "build effects do not save the card")
 			if tc.changed {
 				assert.NotEqual(t, before.Version, after.Version)
-				waited, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: before.Version})
+				waited, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: before.Version})
 				require.NoError(t, err)
 				assert.Equal(t, after.Version, waited.Version)
 			} else {
@@ -122,7 +122,7 @@ func TestChangeVersionReadsOnlyOwnersBuilds(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{TracerProvider: provider})
 	user := asCaller("alice@example.com", CallerUser)
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	before, err := cp.ListChanges(user)
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestChangeVersionReadsOnlyOwnersBuilds(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte(`{"invalid_build":true}`), 0o600))
 	_, err = cp.ListChanges(user)
 	assert.EqualError(t, err, "list changes: saved builds could not be read")
-	_, err = cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: before.Version})
+	_, err = cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: before.Version})
 	assert.EqualError(t, err, "list changes: saved builds could not be read")
 	spans := exporter.GetSpans().Snapshots()
 	failed := spans[len(spans)-1]
@@ -165,9 +165,9 @@ func TestChangeVersionUsesRenderedBuild(t *testing.T) {
 	unusable, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	assert.Equal(t, missing, unusable)
-	read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+	read, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.BuildKindNotStarted, read.Build.Kind())
+	assert.Equal(t, genhighbay.BuildKindNotStarted, read.Build.Kind())
 
 	saved.Roles = buildRolesBuilderAndTestWriter
 
@@ -175,11 +175,11 @@ func TestChangeVersionUsesRenderedBuild(t *testing.T) {
 	usable, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	assert.NotEqual(t, unusable.Version, usable.Version)
-	before, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+	before, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	saved.DesignSource = "unexposed saved design"
 	require.NoError(t, cp.cards.saveOpenBuild(saved))
-	after, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+	after, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
 	unchanged, err := cp.ListChanges(user)

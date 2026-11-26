@@ -18,15 +18,15 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 const (
 	// defaultChangesWait bounds one wait_for_changes call when nothing changes.
 	// It stays below the project server's five-second ordered-shutdown grace,
-	// so an open page never makes `surla stop` wait for its request.
+	// so an open page never makes `hbay stop` wait for its request.
 	defaultChangesWait = 4 * time.Second
 	// defaultChangesPoll is how often a waiting call reads the list again.
 	// Verification runs are written by separate processes, so only reading
@@ -35,7 +35,7 @@ const (
 	// waitForChangesSpan names the waiting read's span. Its spans are
 	// exported like every operation's but never saved in the diagnostics
 	// history (see diagnosticTracer.Start).
-	waitForChangesSpan = "surla.controlplane.wait_for_changes"
+	waitForChangesSpan = "highbay.controlplane.wait_for_changes"
 )
 
 // ListChanges returns the caller's saved Change Cards for this project, most
@@ -47,18 +47,18 @@ const (
 // becomes ready, accepts a draft, ends or is stopped. The model choice is not
 // part of it. A card, build or run record that
 // cannot be read fails the call rather than being left out of the list.
-func (c *ControlPlane) ListChanges(ctx context.Context) (*gensurla.ChangeList, error) {
+func (c *ControlPlane) ListChanges(ctx context.Context) (*genhighbay.ChangeList, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.list_changes")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.list_changes")
 	defer span.End()
 	list, err := c.changeList(ctx, span, principal.ID)
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Int("surla.change_count", len(list.Changes)))
+	span.SetAttributes(attribute.Int("highbay.change_count", len(list.Changes)))
 	return list, nil
 }
 
@@ -69,13 +69,13 @@ func (c *ControlPlane) ListChanges(ctx context.Context) (*gensurla.ChangeList, e
 // one such call open, so its span is never saved in the diagnostics history.
 func (c *ControlPlane) WaitForChanges(
 	ctx context.Context,
-	p *gensurla.WaitForChangesPayload,
-) (*gensurla.ChangeListVersion, error) {
+	p *genhighbay.WaitForChangesPayload,
+) (*genhighbay.ChangeListVersion, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, waitForChangesSpan)
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, waitForChangesSpan)
 	defer span.End()
 	wait := cmp.Or(c.changesWait, defaultChangesWait)
 	poll := cmp.Or(c.changesPoll, defaultChangesPoll)
@@ -89,16 +89,16 @@ func (c *ControlPlane) WaitForChanges(
 			return nil, err
 		}
 		if list.Version != p.Since {
-			span.SetAttributes(attribute.Bool("surla.changed", true))
-			return &gensurla.ChangeListVersion{Version: list.Version}, nil
+			span.SetAttributes(attribute.Bool("highbay.changed", true))
+			return &genhighbay.ChangeListVersion{Version: list.Version}, nil
 		}
 		select {
 		case <-ctx.Done():
 			// The page closed or paused its request; nobody reads a result.
 			return nil, ctx.Err()
 		case <-deadline.C:
-			span.SetAttributes(attribute.Bool("surla.changed", false))
-			return &gensurla.ChangeListVersion{Version: list.Version}, nil
+			span.SetAttributes(attribute.Bool("highbay.changed", false))
+			return &genhighbay.ChangeListVersion{Version: list.Version}, nil
 		case <-ticker.C:
 		}
 	}
@@ -114,7 +114,7 @@ func (c *ControlPlane) WaitForChanges(
 // error names only the kind of record. A promotion target that cannot be
 // resolved keeps the list working with approvals unavailable, as approve_merge
 // refuses them; span records the cause.
-func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner string) (*gensurla.ChangeList, error) {
+func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner string) (*genhighbay.ChangeList, error) {
 	// Held for the whole read: an initialization cannot take the workspace
 	// between this read's look at its phase and its reads of the workspace.
 	c.initGate.RLock()
@@ -160,7 +160,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		return strings.Compare(a.card.ChangeID, b.card.ChangeID)
 	})
 	buildVersions := make([]string, 0, len(records))
-	items := make([]*gensurla.ChangeListItem, 0, len(records))
+	items := make([]*genhighbay.ChangeListItem, 0, len(records))
 	for _, record := range records {
 		build, err := c.changeBuild(ctx, record, saved, found, draftedBeforeDrop(record, provenance))
 		if err != nil {
@@ -168,7 +168,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 			span.SetStatus(codes.Error, "read builds")
 			return nil, errors.New("list changes: saved builds could not be read")
 		}
-		raw, err := gensurla.EncodeChangeBuild(build)
+		raw, err := genhighbay.EncodeChangeBuild(build)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "encode builds")
@@ -176,7 +176,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		}
 		sum := sha256.Sum256(raw)
 		buildVersions = append(buildVersions, hex.EncodeToString(sum[:]))
-		item := &gensurla.ChangeListItem{
+		item := &genhighbay.ChangeListItem{
 			ChangeID:        record.card.ChangeID,
 			Summary:         record.card.Summary,
 			Status:          record.card.Status,
@@ -226,7 +226,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 			draftState = firstChangeDraftState(storyState, hasDraft, initCompleted)
 		}
 	}
-	var team *gensurla.TeamSnapshot
+	var team *genhighbay.TeamSnapshot
 	if c.team.Owner == owner {
 		team, err = c.team.Service.ReadTeam(ctx)
 		if err != nil {
@@ -234,14 +234,14 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		}
 	}
 	raw, err := json.Marshal(struct {
-		Changes           []*gensurla.ChangeListItem `json:"changes"`
-		Builds            []string                   `json:"builds"`
-		ApprovalAvailable bool                       `json:"approval_available"`
-		Team              *gensurla.TeamSnapshot     `json:"team"`
-		StoryEvaluation   storyEvaluationVersion     `json:"story_evaluation"`
-		LiveTarget        liveTargetVersion          `json:"live_target"`
-		Initializing      *string                    `json:"initializing,omitempty"`
-		DraftState        *string                    `json:"draft_state,omitempty"`
+		Changes           []*genhighbay.ChangeListItem `json:"changes"`
+		Builds            []string                     `json:"builds"`
+		ApprovalAvailable bool                         `json:"approval_available"`
+		Team              *genhighbay.TeamSnapshot     `json:"team"`
+		StoryEvaluation   storyEvaluationVersion       `json:"story_evaluation"`
+		LiveTarget        liveTargetVersion            `json:"live_target"`
+		Initializing      *string                      `json:"initializing,omitempty"`
+		DraftState        *string                      `json:"draft_state,omitempty"`
 	}{items, buildVersions, approvalAvailable, team, story, c.liveTargetVersion(), initializing, draftState})
 	if err != nil {
 		err = fmt.Errorf("encode change list version: %w", err)
@@ -250,7 +250,7 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		return nil, err
 	}
 	sum := sha256.Sum256(raw)
-	return &gensurla.ChangeList{
+	return &genhighbay.ChangeList{
 		Changes:           items,
 		Version:           hex.EncodeToString(sum[:]),
 		ApprovalAvailable: approvalAvailable,
@@ -284,7 +284,7 @@ func firstChangeDraftState(storyState string, hasDraft, initCompleted bool) *str
 // completed run reports its report's verdict. It relies on verifyrun
 // reporting only the three kinds below: no encoder between here and the
 // caller checks the state against the design's values.
-func latestVerification(run verifyrun.Run, inputsCurrent bool) *gensurla.LatestVerificationItem {
+func latestVerification(run verifyrun.Run, inputsCurrent bool) *genhighbay.LatestVerificationItem {
 	var state string
 	switch run.State.Kind {
 	case verifyrun.StateRunning:
@@ -297,7 +297,7 @@ func latestVerification(run verifyrun.Run, inputsCurrent bool) *gensurla.LatestV
 	case verifyrun.StateNotCompleted:
 		state = "not_completed"
 	}
-	return &gensurla.LatestVerificationItem{
+	return &genhighbay.LatestVerificationItem{
 		RunID: run.Request.RunID, State: state, InputsCurrent: inputsCurrent,
 	}
 }

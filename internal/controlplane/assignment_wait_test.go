@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // TestAssignmentWaitReturnsTheListAndItsVersion follows both roles' waits
@@ -38,7 +38,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 			name: "builder",
 			wait: func(cp *ControlPlane, ctx context.Context, since *string) (wait, error) {
 				got, err := cp.WaitForBuilderAssignment(WithPrincipal(ctx, Principal{ID: agreedOwner, CallerID: "builder", Kind: CallerBuilder}),
-					&gensurla.WaitForBuilderAssignmentPayload{SinceVersion: since})
+					&genhighbay.WaitForBuilderAssignmentPayload{SinceVersion: since})
 				if err != nil {
 					return wait{}, err
 				}
@@ -47,7 +47,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 			listVersion: func(t *testing.T, cp *ControlPlane) string {
 				list, err := cp.ListBuilderAssignments(agreedBuilder)
 				require.NoError(t, err)
-				raw, err := gensurla.EncodeBuilderAssignmentList(list)
+				raw, err := genhighbay.EncodeBuilderAssignmentList(list)
 				require.NoError(t, err)
 				sum := sha256.Sum256(raw)
 				return hex.EncodeToString(sum[:])
@@ -57,7 +57,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 			name: "test writer",
 			wait: func(cp *ControlPlane, ctx context.Context, since *string) (wait, error) {
 				got, err := cp.WaitForTestWriterAssignment(WithPrincipal(ctx, Principal{ID: agreedOwner, CallerID: "tests", Kind: CallerTestWriter}),
-					&gensurla.WaitForTestWriterAssignmentPayload{SinceVersion: since})
+					&genhighbay.WaitForTestWriterAssignmentPayload{SinceVersion: since})
 				if err != nil {
 					return wait{}, err
 				}
@@ -66,7 +66,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 			listVersion: func(t *testing.T, cp *ControlPlane) string {
 				list, err := cp.ListTestWriterAssignments(agreedTestWriter)
 				require.NoError(t, err)
-				raw, err := gensurla.EncodeTestWriterAssignmentList(list)
+				raw, err := genhighbay.EncodeTestWriterAssignmentList(list)
 				require.NoError(t, err)
 				sum := sha256.Sum256(raw)
 				return hex.EncodeToString(sum[:])
@@ -76,7 +76,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 		t.Run(role.name, func(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{})
 			agreed := confirmAgreedTerms(t, cp, "chg")
-			_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+			_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 			require.NoError(t, err)
 			makeBuildFixtureBuilderCopy(t, cp)
 			started := mustStartedBuild(t, cp, agreedUser, "chg").StartedAt
@@ -123,7 +123,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 				}
 				done <- got
 			}()
-			_, err = cp.DropBuild(agreedUser, &gensurla.DropBuildPayload{ChangeID: "chg", StartedAt: started})
+			_, err = cp.DropBuild(agreedUser, &genhighbay.DropBuildPayload{ChangeID: "chg", StartedAt: started})
 			require.NoError(t, err)
 			select {
 			case got := <-done:
@@ -139,7 +139,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 	}
 }
 
-// TestAssignmentWaitEndsWhenTheServerStops keeps surla stop from waiting on a
+// TestAssignmentWaitEndsWhenTheServerStops keeps hbay stop from waiting on a
 // worker's open call: when the host signals that the stop has begun, or the
 // server's own lifetime ends, an open wait returns the unchanged list at
 // once, without its bounded wait or another read.
@@ -150,16 +150,16 @@ func TestAssignmentWaitEndsWhenTheServerStops(t *testing.T) {
 			defer stop()
 			cp := newBuildControlPlane(t, Options{Stopping: stopping})
 			agreed := confirmAgreedTerms(t, cp, "chg")
-			_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+			_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 			require.NoError(t, err)
 			makeBuildFixtureBuilderCopy(t, cp)
 			cp.assignmentWait, cp.assignmentPoll = time.Minute, time.Minute
-			first, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{})
+			first, err := cp.WaitForBuilderAssignment(agreedBuilder, &genhighbay.WaitForBuilderAssignmentPayload{})
 			require.NoError(t, err)
-			done := make(chan *gensurla.BuilderAssignmentWait, 1)
+			done := make(chan *genhighbay.BuilderAssignmentWait, 1)
 			failed := make(chan error, 1)
 			go func() {
-				got, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{SinceVersion: &first.Version})
+				got, err := cp.WaitForBuilderAssignment(agreedBuilder, &genhighbay.WaitForBuilderAssignmentPayload{SinceVersion: &first.Version})
 				if err != nil {
 					failed <- err
 					return
@@ -194,18 +194,18 @@ func TestAssignmentWaitEndsWhenTheServerStops(t *testing.T) {
 func TestAssignmentWaitBoundsASlowRead(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
 	makeBuildFixtureBuilderCopy(t, cp)
 	cp.assignmentWait, cp.assignmentPoll = time.Minute, 5*time.Millisecond
-	first, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{})
+	first, err := cp.WaitForBuilderAssignment(agreedBuilder, &genhighbay.WaitForBuilderAssignmentPayload{})
 	require.NoError(t, err)
 
 	cp.assignmentWait = 400 * time.Millisecond
-	done := make(chan *gensurla.BuilderAssignmentWait, 1)
+	done := make(chan *genhighbay.BuilderAssignmentWait, 1)
 	failed := make(chan error, 1)
 	go func() {
-		got, err := cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{SinceVersion: &first.Version})
+		got, err := cp.WaitForBuilderAssignment(agreedBuilder, &genhighbay.WaitForBuilderAssignmentPayload{SinceVersion: &first.Version})
 		if err != nil {
 			failed <- err
 			return
@@ -232,7 +232,7 @@ func TestAssignmentWaitBoundsASlowRead(t *testing.T) {
 	// A first read that cannot finish fails at the bound.
 	cp.assignmentWait = 100 * time.Millisecond
 	begun := time.Now()
-	_, err = cp.WaitForBuilderAssignment(agreedBuilder, &gensurla.WaitForBuilderAssignmentPayload{})
+	_, err = cp.WaitForBuilderAssignment(agreedBuilder, &genhighbay.WaitForBuilderAssignmentPayload{})
 	require.ErrorContains(t, err, "the read did not finish in time")
 	assert.Less(t, time.Since(begun), 5*time.Second)
 	cp.workspaceMu.Unlock()
@@ -240,21 +240,21 @@ func TestAssignmentWaitBoundsASlowRead(t *testing.T) {
 }
 
 // TestTestWriterWaitEndsOnEachVerdict follows a test writer's wait through
-// Surla's verdicts on its reports: findings keep the assignment in the list
+// Highbay's verdicts on its reports: findings keep the assignment in the list
 // with its new state, and acceptance removes it, so the wait returns an empty
 // list and the full assignment read says the tests were accepted.
 func TestTestWriterWaitEndsOnEachVerdict(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
 	cp.assignmentWait, cp.assignmentPoll = time.Minute, 5*time.Millisecond
-	wait := func(since string, verdict map[string]any) *gensurla.TestWriterAssignmentWait {
+	wait := func(since string, verdict map[string]any) *genhighbay.TestWriterAssignmentWait {
 		t.Helper()
-		done := make(chan *gensurla.TestWriterAssignmentWait, 1)
+		done := make(chan *genhighbay.TestWriterAssignmentWait, 1)
 		failed := make(chan error, 1)
 		go func() {
-			got, err := cp.WaitForTestWriterAssignment(agreedTestWriter, &gensurla.WaitForTestWriterAssignmentPayload{SinceVersion: &since})
+			got, err := cp.WaitForTestWriterAssignment(agreedTestWriter, &genhighbay.WaitForTestWriterAssignmentPayload{SinceVersion: &since})
 			if err != nil {
 				failed <- err
 				return
@@ -273,7 +273,7 @@ func TestTestWriterWaitEndsOnEachVerdict(t *testing.T) {
 			return nil
 		}
 	}
-	first, err := cp.WaitForTestWriterAssignment(agreedTestWriter, &gensurla.WaitForTestWriterAssignmentPayload{})
+	first, err := cp.WaitForTestWriterAssignment(agreedTestWriter, &genhighbay.WaitForTestWriterAssignmentPayload{})
 	require.NoError(t, err)
 	require.Len(t, first.Assignments, 1)
 
@@ -287,7 +287,7 @@ func TestTestWriterWaitEndsOnEachVerdict(t *testing.T) {
 	accepted := wait(found.Version, map[string]any{"state": "accepted", "findings": []string{}, "commit": "cccccccccccccccccccccccccccccccccccccccc", "checked_at": at})
 	assert.Empty(t, accepted.Assignments, "accepted tests leave the list")
 	assert.NotEqual(t, found.Version, accepted.Version)
-	full, err := cp.GetTestWriterAssignment(agreedTestWriter, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	full, err := cp.GetTestWriterAssignment(agreedTestWriter, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	_, ok = full.Progress.Tests.AsAccepted()
 	assert.True(t, ok, "the full read gives the verdict the empty list does not")

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 // TestNewWorkspaceGitAdmission exercises the complete constructor with a private
@@ -58,7 +58,7 @@ func TestNewWorkspaceGitAdmission(t *testing.T) {
 			assert.True(t, called)
 			assert.Contains(t, err.Error(), "git rev-parse")
 			assert.Contains(t, err.Error(), outcome.message)
-			assert.Contains(t, err.Error(), "start Surla again")
+			assert.Contains(t, err.Error(), "start Highbay again")
 			assert.Equal(t, outcome.timeout, errors.Is(err, context.DeadlineExceeded))
 			var exitErr *exec.ExitError
 			assert.ErrorAs(t, err, &exitErr)

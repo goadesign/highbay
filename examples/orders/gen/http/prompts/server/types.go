@@ -3,14 +3,14 @@
 // prompts HTTP server types
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package server
 
 import (
 	"unicode/utf8"
 
-	prompts "github.com/goadesign/surla/examples/orders/gen/prompts"
+	prompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
 	goa "goa.design/goa/v3/pkg"
 )
 

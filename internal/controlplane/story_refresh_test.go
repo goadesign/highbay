@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbaytools "github.com/goadesign/highbay/gen/highbay/toolsets/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -181,20 +181,20 @@ func TestSlowStoryRefreshDoesNotBlockGetChangeVerifyChangeOrProposeChange(t *tes
 	// propose_change, get_change, and verify_change do not block on the running evaluation.
 	var (
 		propErr error
-		gotCard *gensurla.ChangeCardResult
+		gotCard *genhighbay.ChangeCardResult
 		getErr  error
 		verErr  error
 	)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, propErr = cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+		_, propErr = cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 			ChangeID: "chg-unblocked",
 			Prompt:   "Refunds up to $50 are instant.",
 			Analysis: refundAnalysis("Refunds up to $50 are instant."),
 		})
-		gotCard, getErr = cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: existing.ChangeID})
-		_, verErr = cp.VerifyChange(alice, &gensurla.VerifyChangePayload{
+		gotCard, getErr = cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: existing.ChangeID})
+		_, verErr = cp.VerifyChange(alice, &genhighbay.VerifyChangePayload{
 			ChangeID:        existing.ChangeID,
 			RequestRevision: existing.RequestRevision,
 			CandidateCommit: strings.Repeat("a", 40),
@@ -398,7 +398,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, first.OpID)
 
-		var failed *gensurla.StoryRefreshResult
+		var failed *genhighbay.StoryRefreshResult
 		require.Eventually(t, func() bool {
 			cur, getErr := cp.GetStoryRefresh(alice)
 			if getErr != nil {
@@ -460,7 +460,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 		require.NotNil(t, expireFirst)
 		expireFirst(context.DeadlineExceeded)
 
-		var expired *gensurla.StoryRefreshResult
+		var expired *genhighbay.StoryRefreshResult
 		require.Eventually(t, func() bool {
 			cur, getErr := cp.GetStoryRefresh(alice)
 			if getErr != nil {
@@ -499,7 +499,7 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, started.OpID)
 
-		var expired *gensurla.StoryRefreshResult
+		var expired *genhighbay.StoryRefreshResult
 		require.Eventually(t, func() bool {
 			cur, getErr := cp.GetStoryRefresh(alice)
 			if getErr != nil {
@@ -516,12 +516,12 @@ func TestStoryRefreshReplacementFailureRetryAndExpiry(t *testing.T) {
 // TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage verifies that a
 // refresh of a design that imports the Story language, in a project whose
 // go.mod does not require the Story module, fails with a diagnostic naming
-// the go get command at the Story version Surla's own go.mod requires.
+// the go get command at the Story version Highbay's own go.mod requires.
 func TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	wsDir := t.TempDir()
 	writeWorkspaceFiles(t, wsDir, validWorkspaceStub(
-		"package design\n\nimport . \"github.com/goadesign/surla/story/dsl\"\n\nvar _ = Story(\"Orders\", func() {})\n",
+		"package design\n\nimport . \"github.com/goadesign/highbay/story/dsl\"\n\nvar _ = Story(\"Orders\", func() {})\n",
 	))
 
 	// The toolchain's go fails to load the design's dependencies, as Go
@@ -530,7 +530,7 @@ func TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage(t *testing.T) {
 	goroot := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(goroot, "bin"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(goroot, "bin", "go"), []byte("#!/bin/sh\n"+
-		"echo 'no required module provides package github.com/goadesign/surla/story/dsl' >&2\nexit 1\n"), 0o700))
+		"echo 'no required module provides package github.com/goadesign/highbay/story/dsl' >&2\nexit 1\n"), 0o700))
 	// The go on PATH answers go env GOROOT GOMODCACHE with that toolchain.
 	installFakeGo(t, "#!/bin/sh\nprintf '%s\\n' '"+goroot+"' '"+filepath.Join(goroot, "modcache")+"'\n")
 
@@ -539,7 +539,7 @@ func TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, started.OpID)
 
-	var failed *gensurla.StoryRefreshResult
+	var failed *genhighbay.StoryRefreshResult
 	require.Eventually(t, func() bool {
 		cur, getErr := cp.GetStoryRefresh(alice)
 		if getErr != nil {
@@ -551,8 +551,8 @@ func TestStoryRefreshNamesTheStepThatRequiresTheStoryLanguage(t *testing.T) {
 	require.NotNil(t, failed.Diagnostic)
 	assert.Equal(t, "Story evaluation failed while loading the design module dependencies.\n"+
 		"The design imports the Story language, but its module's go.mod does not require it. "+
-		"In the folder that holds that go.mod, run: go get github.com/goadesign/surla/story@"+
-		testmodule.SurlaVersion(t, "github.com/goadesign/surla/story")+
+		"In the folder that holds that go.mod, run: go get github.com/goadesign/highbay/story@"+
+		testmodule.HighbayVersion(t, "github.com/goadesign/highbay/story")+
 		", then try again.", *failed.Diagnostic)
 	assert.Equal(t, "Story refresh "+*started.OpID+" failed for workspace snapshot "+*started.SnapshotDigest+".", failed.Message)
 }
@@ -605,12 +605,12 @@ func TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStory
 	wantStoryDigest := designeval.SnapshotDigest(storySnapshot)
 
 	cp := newControlPlane(t, Options{WorkspaceDir: wsDir})
-	endpoints := gensurla.NewEndpoints(cp)
+	endpoints := genhighbay.NewEndpoints(cp)
 	applyOperationPolicy(endpoints, cp.tracer("test/requests"))
 	adapter := genmcpadapter.NewMCPAdapter(endpoints, nil)
 	guide := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide})
 
-	callMCP := func(toolName string) *gensurlatools.RefreshStoryResult {
+	callMCP := func(toolName string) *genhighbaytools.RefreshStoryResult {
 		t.Helper()
 		caller := alice
 		if toolName == "refresh_story" {
@@ -625,16 +625,16 @@ func TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStory
 		require.True(t, ok)
 		require.False(t, complete.IsError != nil && *complete.IsError, "unexpected MCP tool error: %+v", complete.Content)
 		require.NotEmpty(t, complete.StructuredContent)
-		out, decErr := gensurlatools.UnmarshalRefreshStoryResult(complete.StructuredContent)
+		out, decErr := genhighbaytools.UnmarshalRefreshStoryResult(complete.StructuredContent)
 		require.NoError(t, decErr)
 		return out
 	}
 
 	// Observe each operation through the owner's deadline and bounded cleanup,
 	// keeping the final state and diagnostic if the operation never finishes.
-	awaitRefresh := func() *gensurlatools.RefreshStoryResult {
+	awaitRefresh := func() *genhighbaytools.RefreshStoryResult {
 		t.Helper()
-		var last *gensurlatools.RefreshStoryResult
+		var last *genhighbaytools.RefreshStoryResult
 		var diagnostic string
 		require.EventuallyWithT(t, func(collect *assert.CollectT) {
 			last = callMCP("get_story_refresh")
@@ -700,7 +700,7 @@ func TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStory
 	// Adopting the succeeded Story refresh into a Change Card saves the
 	// evaluated Stories and hashes them into request_revision; preview_architecture
 	// still rejects a Story-only design.
-	cardWithStory, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+	cardWithStory, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 		ChangeID:         "chg-story-adopted",
 		Prompt:           "Refunds up to $50 are instant.",
 		StoryRefreshOpID: succeeded.OpID,
@@ -716,9 +716,9 @@ func TestStoryRefreshAdoptsStoryOnlyAndNonStorySnapshotsWhilePreviewRejectsStory
 	require.NoError(t, err)
 	assert.NotEqual(t, withoutStoryRevision, cardWithStory.RequestRevision)
 
-	cardWithStory, err = cp.ConfirmIntent(alice, &gensurla.ConfirmIntentPayload{ChangeID: cardWithStory.ChangeID, RequestRevision: cardWithStory.RequestRevision, Answers: map[string]string{}, Examples: cardWithStory.Examples})
+	cardWithStory, err = cp.ConfirmIntent(alice, &genhighbay.ConfirmIntentPayload{ChangeID: cardWithStory.ChangeID, RequestRevision: cardWithStory.RequestRevision, Answers: map[string]string{}, Examples: cardWithStory.Examples})
 	require.NoError(t, err)
-	_, err = cp.PreviewArchitecture(alice, &gensurla.PreviewArchitecturePayload{
+	_, err = cp.PreviewArchitecture(alice, &genhighbay.PreviewArchitecturePayload{
 		ChangeID:        cardWithStory.ChangeID,
 		RequestRevision: cardWithStory.RequestRevision,
 	})
@@ -760,7 +760,7 @@ var _ = Service("orders", func() {
 	// With the same canonical design input, adopting a refresh with zero
 	// Stories has the same canonical content as an empty Story list. Module
 	// proposals always select a refresh; no live-folder comparison is needed.
-	adoptedZero, err := cp.ProposeChange(alice, &gensurla.ProposeChangePayload{
+	adoptedZero, err := cp.ProposeChange(alice, &genhighbay.ProposeChangePayload{
 		ChangeID:         "chg-zero-stories",
 		Prompt:           "Refunds up to $50 are instant.",
 		StoryRefreshOpID: nonStorySucceeded.OpID,
@@ -769,7 +769,7 @@ var _ = Service("orders", func() {
 	require.NoError(t, err)
 	assert.Nil(t, adoptedZero.Stories)
 	emptyStories := *adoptedZero
-	emptyStories.Stories = []*gensurla.StorySummaryItem{}
+	emptyStories.Stories = []*genhighbay.StorySummaryItem{}
 	savedZero := loadMetadataRecord(t, cp, adoptedZero.ChangeID)
 	emptyRevision, err := computeCanonicalRevision(&emptyStories, savedZero.owner, savedZero.designSource)
 	require.NoError(t, err)

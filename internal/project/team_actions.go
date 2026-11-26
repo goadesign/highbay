@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -19,19 +19,19 @@ import (
 
 // ReadTeam returns registered roles only and never creates a space or agent.
 // Missing observations are unknown; expected absence before team preparation is a value.
-func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
+func (s *Server) ReadTeam(ctx context.Context) (*genhighbay.TeamSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	selection, record := s.teamState()
-	result := &gensurla.TeamSnapshot{
+	result := &genhighbay.TeamSnapshot{
 		Team: selection.Team, HerdrMode: s.herdrMode(record.Tab),
-		Roles:            make([]*gensurla.TeamRoleState, 0, len(selection.Roles)),
-		SavedChoices:     make(map[string]*gensurla.RoleAgentChoice, len(record.SavedChoices)),
+		Roles:            make([]*genhighbay.TeamRoleState, 0, len(selection.Roles)),
+		SavedChoices:     make(map[string]*genhighbay.RoleAgentChoice, len(record.SavedChoices)),
 		DismissedNotices: append([]string{}, record.DismissedNotices...),
 	}
 	for role, saved := range record.SavedChoices {
-		choice := gensurla.RoleAgentChoice(saved)
+		choice := genhighbay.RoleAgentChoice(saved)
 		choice.Model = cloneChoiceOption(choice.Model)
 		choice.Thinking = cloneChoiceOption(choice.Thinking)
 		result.SavedChoices[role] = &choice
@@ -47,7 +47,7 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 		result.ChorusStatus = &chorus.status
 	}
 	for _, role := range selection.Roles {
-		value := gensurla.TeamRoleState{Role: role.Role, Handle: role.Handle, State: "unknown", Attention: "none", Watcher: "unknown", Assignment: "unknown"}
+		value := genhighbay.TeamRoleState{Role: role.Role, Handle: role.Handle, State: "unknown", Attention: "none", Watcher: "unknown", Assignment: "unknown"}
 		if role.Role == "guide" {
 			value.Assignment = "nothing_owed"
 		}
@@ -75,7 +75,7 @@ func (s *Server) ReadTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
 // StartAgents must recover the saved build without starting it again. The context
 // carries tracing only; this method performs no window work or external commands.
 func (s *Server) RegisterBuildRoles(ctx context.Context, folders controlplane.BuildFolders) error {
-	ctx, span := otel.Tracer("surla/project").Start(ctx, "surla.project.register_build_roles")
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.register_build_roles")
 	defer span.End()
 	var roles []agentRecord
 	switch value := folders.(type) {
@@ -119,15 +119,15 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 	s.team.Lock()
 	defer s.team.Unlock()
 	if !s.team.dependencies.HerdrAvailable {
-		return gensurla.MakePaneUnavailable(errors.New("this role runs without a Herdr pane"))
+		return genhighbay.MakePaneUnavailable(errors.New("this role runs without a Herdr pane"))
 	}
 	host := s.team.dependencies.Host
 	overlays, err := host.Overlays(ctx)
 	if err != nil {
 		return userTeamError(teamUnavailable(ctx, "overlays", "herdr"))
 	}
-	if slices.ContainsFunc(overlays, func(name string) bool { return name != "surla" }) {
-		return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
+	if slices.ContainsFunc(overlays, func(name string) bool { return name != "highbay" }) {
+		return genhighbay.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
 	}
 	selection := s.teamSelection()
 	var handle string
@@ -137,7 +137,7 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 		}
 	}
 	if handle == "" || selection.Space == "" {
-		return gensurla.MakePaneUnavailable(errors.New("this role has no owned pane to show; start its agent"))
+		return genhighbay.MakePaneUnavailable(errors.New("this role has no owned pane to show; start its agent"))
 	}
 	// Discover through all three labels before reading any terminal facts.
 	terminals, err := host.Terminals(ctx, selection.Root, selection.Space, []string{handle})
@@ -150,12 +150,12 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 			continue
 		}
 		if address != "" {
-			return gensurla.MakePaneUnavailable(errors.New("this role has several owned panes; choose one in Herdr"))
+			return genhighbay.MakePaneUnavailable(errors.New("this role has several owned panes; choose one in Herdr"))
 		}
 		address = terminal.Address
 	}
 	if address == "" {
-		return gensurla.MakePaneUnavailable(errors.New("this role has no owned pane to show; start its agent"))
+		return genhighbay.MakePaneUnavailable(errors.New("this role has no owned pane to show; start its agent"))
 	}
 	spaces, err := host.Spaces(ctx)
 	if err != nil {
@@ -170,7 +170,7 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 				if pane.Terminal == address {
 					fresh, err := host.ReadTerminal(ctx, address)
 					if err != nil || !selection.owns(fresh, handle) || fresh.State != "live" {
-						return gensurla.MakePaneUnavailable(errors.New("the requested pane changed; read the team again"))
+						return genhighbay.MakePaneUnavailable(errors.New("the requested pane changed; read the team again"))
 					}
 					space.Tabs = []TeamTab{{ID: tab.ID, Terminals: []TeamPane{{Terminal: address}}}}
 					if err := host.Focus(ctx, space); err != nil {
@@ -181,7 +181,7 @@ func (s *Server) ShowPane(ctx context.Context, role string) error {
 			}
 		}
 	}
-	return gensurla.MakePaneUnavailable(errors.New("the requested pane is no longer in this project's space"))
+	return genhighbay.MakePaneUnavailable(errors.New("the requested pane is no longer in this project's space"))
 }
 
 // teamSelection copies only immutable selection facts, never credentials or external replies.
@@ -227,15 +227,15 @@ func userTeamError(err error) error {
 	}
 	var domain *goa.ServiceError
 	if errors.As(err, &domain) && domain.Name == "window_busy" {
-		return gensurla.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
+		return genhighbay.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
 	}
 	var unavailable *genproject.TeamUnavailable
 	if !errors.As(err, &unavailable) {
-		return gensurla.MakeTeamUnavailable(errors.New("project team could not be prepared; try again"))
+		return genhighbay.MakeTeamUnavailable(errors.New("project team could not be prepared; try again"))
 	}
 	// Wrapping only the typed failure keeps any peer text around it out. A
 	// project_state failure from this server's own state carries its repair.
-	failure := gensurla.MakeTeamUnavailable(unavailable)
+	failure := genhighbay.MakeTeamUnavailable(unavailable)
 	failure.Message = userTeamStep(unavailable.Cause)
 	var state *teamStateUnavailable
 	if errors.As(err, &state) {
@@ -250,7 +250,7 @@ func userTeamError(err error) error {
 func userTeamStep(cause string) string {
 	switch cause {
 	case "stopping":
-		return "the project server is stopping; ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"
+		return "the project server is stopping; ask your coding agent to open Highbay views, or choose Start Highbay in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"
 	case "chorus":
 		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), then try again."
 	case "herdr":
@@ -262,7 +262,7 @@ func userTeamStep(cause string) string {
 	case "roster_folder":
 		return "Herdr's launcher roster folder could not be written; make data/chorus-launcher/rosters in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, then start the agents again"
 	case "project_state":
-		return "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Surla state from a backup"
+		return "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Highbay state from a backup"
 	case "role_folder":
 		return "a team role's working folder could not be read; make sure this account can open the project folder and its build working folders, then start the agents again"
 	}

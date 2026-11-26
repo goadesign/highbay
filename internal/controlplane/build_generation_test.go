@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
-	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
-	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbayclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	genmcpclient "github.com/goadesign/highbay/gen/jsonrpc/mcp_highbay/client"
+	genmcphighbay "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -37,10 +37,10 @@ func TestBuildGenerationWritesAgreedDesignBeforeDependencyRefusal(t *testing.T) 
 	t.Cleanup(srv.Close)
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
-	transport := gensurlaclient.NewClient(origin.Scheme, origin.Host,
+	transport := genhighbayclient.NewClient(origin.Scheme, origin.Host,
 		generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	client := &gensurla.Client{GenerateCodeEndpoint: transport.GenerateCode()}
-	_, err = client.GenerateCode(t.Context(), &gensurla.GenerateCodePayload{})
+	client := &genhighbay.Client{GenerateCodeEndpoint: transport.GenerateCode()}
+	_, err = client.GenerateCode(t.Context(), &genhighbay.GenerateCodePayload{})
 	require.Error(t, err)
 	assertServiceError(t, err, "missing_modules")
 	assert.Contains(t, err.Error(), "GOWORK=off go get 'goa.design/goa/v3@v3.35.0'")
@@ -48,10 +48,10 @@ func TestBuildGenerationWritesAgreedDesignBeforeDependencyRefusal(t *testing.T) 
 	assert.Contains(t, err.Error(), "generate_code again")
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host,
 		generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	mcpClient := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
-	args, err := gensurla.EncodeGenerateCodePayload(&gensurla.GenerateCodePayload{})
+	mcpClient := &genmcphighbay.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
+	args, err := genhighbay.EncodeGenerateCodePayload(&genhighbay.GenerateCodePayload{})
 	require.NoError(t, err)
-	call, err := mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{Name: "generate_code", Arguments: args})
+	call, err := mcpClient.ToolsCall(t.Context(), &genmcphighbay.ToolsCallPayload{Name: "generate_code", Arguments: args})
 	require.NoError(t, err)
 	complete, ok := call.Outcome.AsComplete()
 	require.True(t, ok)
@@ -98,7 +98,7 @@ func TestBuildGenerationRefusesBeforeWriting(t *testing.T) {
 				build, found, err := cp.cards.loadOpenBuild()
 				require.NoError(t, err)
 				require.True(t, found)
-				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 					ChangeID: card.ChangeID, StartedAt: build.StartedAt.UTC().Format(time.RFC3339Nano),
 				})
 				require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestBuildGenerationRefusesBeforeWriting(t *testing.T) {
 				cp.builderCopyTurn <- struct{}{}
 				t.Cleanup(func() { <-cp.builderCopyTurn })
 			}
-			_, err := cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), &gensurla.GenerateCodePayload{})
+			_, err := cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), &genhighbay.GenerateCodePayload{})
 			require.Error(t, err)
 			switch state {
 			case "unread":
@@ -123,7 +123,7 @@ func TestBuildGenerationRefusesBeforeWriting(t *testing.T) {
 			case "dropped":
 				assertServiceError(t, err, "no_build")
 			case "off branch":
-				var refusal *gensurla.CopyOffBranch
+				var refusal *genhighbay.CopyOffBranch
 				require.ErrorAs(t, err, &refusal)
 				assert.Equal(t, "copy_off_branch", refusal.Name)
 			case "busy":
@@ -147,7 +147,7 @@ func TestBuildGenerationRefusesNestedPathLinks(t *testing.T) {
 	parent := filepath.Dir(assignment.WorkingFolder)
 	require.NoError(t, os.Rename(parent, filepath.Join(t.TempDir(), "saved-apps")))
 	require.NoError(t, os.Symlink(filepath.Dir(project), parent))
-	_, err := cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), &gensurla.GenerateCodePayload{})
+	_, err := cp.GenerateCode(asCaller("alice@example.com", CallerBuilder), &genhighbay.GenerateCodePayload{})
 	assertServiceError(t, err, "unprocessable")
 	for name, want := range map[string]string{
 		"design/design.go": "package design // user's source\n",
@@ -162,7 +162,7 @@ func TestBuildGenerationRefusesNestedPathLinks(t *testing.T) {
 // buildGenerationFixture creates a real numbered builder copy whose agreed
 // design needs Goa, without invoking evaluation or generation during setup.
 func buildGenerationFixture(t *testing.T, prefix string) (
-	string, *ControlPlane, *gensurla.ChangeCardResult, *gensurla.BuilderAssignment,
+	string, *ControlPlane, *genhighbay.ChangeCardResult, *genhighbay.BuilderAssignment,
 ) {
 	t.Helper()
 	return buildGenerationDesignFixture(t, prefix, buildProbeDesign)
@@ -172,7 +172,7 @@ func buildGenerationFixture(t *testing.T, prefix string) (
 // revision/base and real builder copy are selected. Workspace-only native
 // proof can use a self-contained design without changing an agreed file later.
 func buildGenerationDesignFixture(t *testing.T, prefix, design string) (
-	string, *ControlPlane, *gensurla.ChangeCardResult, *gensurla.BuilderAssignment,
+	string, *ControlPlane, *genhighbay.ChangeCardResult, *genhighbay.BuilderAssignment,
 ) {
 	t.Helper()
 	repo, project := productionBuildProject(t, prefix, reviewEval)
@@ -194,17 +194,17 @@ func buildGenerationDesignFixture(t *testing.T, prefix, design string) (
 	require.NoError(t, err)
 	saveMetadataRecord(t, cp, record)
 	proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
-	card, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{
+	card, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &genhighbay.ConfirmIntentPayload{
 		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
-	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
 	assignment, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-		&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+		&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	return project, cp, card, assignment
 }

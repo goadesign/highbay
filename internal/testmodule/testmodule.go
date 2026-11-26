@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	// PublishedSurlaVersion is the published github.com/goadesign/surla
+	// PublishedHighbayVersion is the published github.com/goadesign/highbay
 	// module version that starter, test-writer, and build-report fixtures
 	// require on the module proxy.
-	PublishedSurlaVersion = "v0.0.0-20261118203415-bec57123a61f"
+	PublishedHighbayVersion = "v0.0.0-20261125231720-7e4be2233e61"
 
 	// CompleteSourcesGoaVersion is the first goa.design/goa/v3 version
 	// with generator.CompleteSources.
@@ -62,20 +62,20 @@ func Snapshot(t testing.TB, goaVersion, design string) map[string]string {
 }
 
 // Module returns the files of a tidy module at modulePath holding files. It
-// requires goa.design/goa/v3 at goaVersion (Surla's own version when empty)
-// and goa.design/goa-ai and goa.design/model at Surla's versions; go mod
+// requires goa.design/goa/v3 at goaVersion (Highbay's own version when empty)
+// and goa.design/goa-ai and goa.design/model at Highbay's versions; go mod
 // tidy drops the ones the files do not import and completes go.mod and go.sum.
 func Module(t testing.TB, modulePath, goaVersion string, files map[string]string) map[string]string {
 	t.Helper()
 	if goaVersion == "" {
-		goaVersion = SurlaVersion(t, "goa.design/goa/v3")
+		goaVersion = HighbayVersion(t, "goa.design/goa/v3")
 	}
 	out := maps.Clone(files)
 	out["go.mod"] = moduleGoMod(
 		modulePath,
 		goaVersion,
-		SurlaVersion(t, "goa.design/goa-ai"),
-		SurlaVersion(t, "goa.design/model"),
+		HighbayVersion(t, "goa.design/goa-ai"),
+		HighbayVersion(t, "goa.design/model"),
 	)
 	return Tidy(t, out)
 }
@@ -92,10 +92,10 @@ func Tidy(t testing.TB, files map[string]string) map[string]string {
 	return out
 }
 
-// SurlaVersion returns the version Surla's own go.mod requires of path.
-func SurlaVersion(t testing.TB, path string) string {
+// HighbayVersion returns the version Highbay's own go.mod requires of path.
+func HighbayVersion(t testing.TB, path string) string {
 	t.Helper()
-	v, err := surlaVersion(path)
+	v, err := highbayVersion(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,8 +158,8 @@ func tidyInDir(dir string, files map[string]string) (map[string]string, error) {
 	return out, nil
 }
 
-// surlaVersion returns the version Surla's own go.mod requires of path.
-func surlaVersion(path string) (string, error) {
+// highbayVersion returns the version Highbay's own go.mod requires of path.
+func highbayVersion(path string) (string, error) {
 	root, err := repoRoot()
 	if err != nil {
 		return "", err
@@ -177,7 +177,7 @@ func surlaVersion(path string) (string, error) {
 			return r.Mod.Version, nil
 		}
 	}
-	return "", fmt.Errorf("Surla's go.mod does not require %s", path)
+	return "", fmt.Errorf("Highbay's go.mod does not require %s", path)
 }
 
 // repoRoot locates the repository root from this source file's path.

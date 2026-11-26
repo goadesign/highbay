@@ -10,8 +10,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/renameat"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/renameat"
 )
 
 // initStage keeps the one build tree and its separate logs under the protected
@@ -58,11 +58,11 @@ func newInitStage(target, workDir string) (*initStage, error) {
 		return nil, errors.New("init work directory must share the project's filesystem; choose protected storage on that filesystem")
 	}
 	s := &initStage{target: filepath.Join(parentPath, filepath.Base(target))}
-	s.path, err = os.MkdirTemp(workPath, ".surla-init-*")
+	s.path, err = os.MkdirTemp(workPath, ".highbay-init-*")
 	if err != nil {
 		return nil, fmt.Errorf("create staging directory: %w", err)
 	}
-	s.logs, err = os.MkdirTemp(workPath, ".surla-init-logs-*")
+	s.logs, err = os.MkdirTemp(workPath, ".highbay-init-logs-*")
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("create log directory: %w", err), os.RemoveAll(s.path))
 	}

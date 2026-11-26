@@ -20,14 +20,14 @@ import (
 	"testing"
 	"time"
 
-	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
-	gensurlahttp "github.com/goadesign/surla/gen/http/surla/server"
-	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
-	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	gensurlatools "github.com/goadesign/surla/gen/surla/toolsets/surla"
-	"github.com/goadesign/surla/internal/traceview"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbaytools "github.com/goadesign/highbay/gen/highbay/toolsets/highbay"
+	genhttpclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	genhighbayhttp "github.com/goadesign/highbay/gen/http/highbay/server"
+	genmcpclient "github.com/goadesign/highbay/gen/jsonrpc/mcp_highbay/client"
+	genmcphighbay "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/traceview"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -119,28 +119,28 @@ func TestCloseKeepsTracingUntilCheckRequestEnds(t *testing.T) {
 	}
 	var ended []tracetest.SpanStub
 	for _, span := range exported.GetSpans() {
-		if span.Name == "surla.controlplane.check_project" || span.Name == "surla.controlplane.recover_check_operations" {
+		if span.Name == "highbay.controlplane.check_project" || span.Name == "highbay.controlplane.recover_check_operations" {
 			ended = append(ended, span)
 		}
 	}
 	require.Len(t, ended, 3)
-	assert.Equal(t, "surla.controlplane.recover_check_operations", ended[0].Name)
-	assert.Equal(t, "surla.controlplane.check_project", ended[1].Name)
-	assert.Equal(t, "surla.controlplane.recover_check_operations", ended[2].Name)
+	assert.Equal(t, "highbay.controlplane.recover_check_operations", ended[0].Name)
+	assert.Equal(t, "highbay.controlplane.check_project", ended[1].Name)
+	assert.Equal(t, "highbay.controlplane.recover_check_operations", ended[2].Name)
 	saved, err := traceview.Open(cardsDir)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, saved.Close()) })
 	page, err := saved.List("alice@example.com", "error", 20, nil)
 	require.NoError(t, err)
 	require.Len(t, page.Spans, 1)
-	assert.Equal(t, "surla.controlplane.check_project", page.Spans[0].Name)
+	assert.Equal(t, "highbay.controlplane.check_project", page.Spans[0].Name)
 }
 
 // ExportSpans pauses only the check under test, then preserves its original
 // evidence in the standard SDK test exporter.
 func (e *blockedCheckExport) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
 	for _, span := range spans {
-		if span.Name() == "surla.controlplane.check_project" {
+		if span.Name() == "highbay.controlplane.check_project" {
 			close(e.started)
 			select {
 			case <-e.release:
@@ -164,11 +164,11 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{TracerProvider: tp})
 	alice := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	parentCtx, parent := cp.tracer("surla/controlplane").Start(alice, "operation-parent")
-	_, failed := cp.tracer("surla/controlplane").Start(parentCtx, "operation-failed")
+	parentCtx, parent := cp.tracer("highbay/controlplane").Start(alice, "operation-parent")
+	_, failed := cp.tracer("highbay/controlplane").Start(parentCtx, "operation-failed")
 	failed.SetAttributes(
 		attribute.String(traceview.SummaryAttribute, cp1SafeFaultSummary(false, cp1FaultStorageSave)),
-		attribute.String("surla.change_id", "change-1"),
+		attribute.String("highbay.change_id", "change-1"),
 		attribute.String("raw.secret", "/private/operator/key"),
 	)
 	failed.RecordError(errors.New("private storage content"))
@@ -176,10 +176,10 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	failed.End()
 	parent.End()
 	bob := WithPrincipal(t.Context(), Principal{ID: "bob@example.com", CallerID: "bob@example.com", Kind: CallerUser})
-	_, other := cp.tracer("surla/controlplane").Start(bob, "bob-operation")
+	_, other := cp.tracer("highbay/controlplane").Start(bob, "bob-operation")
 	other.SetStatus(codes.Error, "bob-private-error")
 	other.End()
-	_, unauthenticated := cp.tracer("surla/controlplane").Start(t.Context(), "no-authenticated-owner")
+	_, unauthenticated := cp.tracer("highbay/controlplane").Start(t.Context(), "no-authenticated-owner")
 	unauthenticated.End()
 
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
@@ -192,8 +192,8 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	doer := generationDoer{client: srv.Client()}
 	httpTransport := genhttpclient.NewClient(origin.Scheme, origin.Host, doer,
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	client := &gensurla.Client{ListTracesEndpoint: httpTransport.ListTraces()}
-	page, err := client.ListTraces(t.Context(), &gensurla.ListTracesPayload{Status: "error", Limit: 20})
+	client := &genhighbay.Client{ListTracesEndpoint: httpTransport.ListTraces()}
+	page, err := client.ListTraces(t.Context(), &genhighbay.ListTracesPayload{Status: "error", Limit: 20})
 	require.NoError(t, err)
 	require.Len(t, page.Spans, 1)
 	view := page.Spans[0]
@@ -201,7 +201,7 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	assert.Equal(t, parent.SpanContext().TraceID().String(), view.TraceID)
 	assert.Equal(t, parent.SpanContext().SpanID().String(), view.ParentSpanID)
 	assert.Equal(t, "error", view.Status)
-	assert.Equal(t, map[string]string{"surla.change_id": "change-1", "surla.caller_id": "test-user", "surla.caller_kind": "user"}, view.Attributes)
+	assert.Equal(t, map[string]string{"highbay.change_id": "change-1", "highbay.caller_id": "test-user", "highbay.caller_kind": "user"}, view.Attributes)
 	assert.Equal(t, cp1SafeFaultSummary(false, cp1FaultStorageSave), view.Summary)
 	raw, err := json.Marshal(page)
 	require.NoError(t, err)
@@ -211,9 +211,9 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host, doer,
 		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	mcp := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
-	callMCPTool(t, mcp, "list_traces", `{"status":"error"}`, gensurlatools.UnmarshalListTracesResult)
-	callMCPTool(t, mcp, "list_traces", `{"status":"ok","limit":1}`, gensurlatools.UnmarshalListTracesResult)
+	mcp := &genmcphighbay.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
+	callMCPTool(t, mcp, "list_traces", `{"status":"error"}`, genhighbaytools.UnmarshalListTracesResult)
+	callMCPTool(t, mcp, "list_traces", `{"status":"ok","limit":1}`, genhighbaytools.UnmarshalListTracesResult)
 
 	// Both auth identities cross the same real HTTP edge; generated code owns
 	// filter and limit validation before the service reads that caller's history.
@@ -259,7 +259,7 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	assert.Contains(t, ended[0].Attributes, attribute.String("raw.secret", "/private/operator/key"))
 	for _, span := range ended {
 		for _, value := range span.Attributes {
-			assert.NotEqual(t, "surla.principal_hash", string(value.Key))
+			assert.NotEqual(t, "highbay.principal_hash", string(value.Key))
 		}
 	}
 }
@@ -271,8 +271,8 @@ func TestTraceToolEncodesEmptyData(t *testing.T) {
 	tp := sdktrace.NewTracerProvider()
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{TracerProvider: tp})
-	adapter := genmcpsurla.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
-	tools, err := adapter.ToolsList(t.Context(), &genmcpsurla.ToolsListPayload{})
+	adapter := genmcphighbay.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
+	tools, err := adapter.ToolsList(t.Context(), &genmcphighbay.ToolsListPayload{})
 	require.NoError(t, err)
 	var found bool
 	for _, tool := range tools.Tools {
@@ -282,12 +282,12 @@ func TestTraceToolEncodesEmptyData(t *testing.T) {
 	}
 	require.True(t, found, "MCP ToolsList must include list_traces")
 	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	result, err := adapter.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
+	result, err := adapter.ToolsCall(ctx, &genmcphighbay.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok)
 	assert.NotContains(t, string(complete.StructuredContent), `"spans":null`)
-	page, err := gensurlatools.UnmarshalListTracesResult(complete.StructuredContent)
+	page, err := genhighbaytools.UnmarshalListTracesResult(complete.StructuredContent)
 	require.NoError(t, err)
 	assert.Empty(t, page.Spans)
 	assert.False(t, page.HasMore)
@@ -299,10 +299,10 @@ func TestTraceToolExplainsMissingRecording(t *testing.T) {
 	t.Parallel()
 	cp := newControlPlane(t, Options{})
 	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	_, err := cp.ListTraces(ctx, &gensurla.ListTracesPayload{Status: "all", Limit: 20})
+	_, err := cp.ListTraces(ctx, &genhighbay.ListTracesPayload{Status: "all", Limit: 20})
 	assertServiceError(t, err, "not_implemented")
-	adapter := genmcpsurla.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
-	result, err := adapter.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
+	adapter := genmcphighbay.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
+	result, err := adapter.ToolsCall(ctx, &genmcphighbay.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok)
@@ -310,7 +310,7 @@ func TestTraceToolExplainsMissingRecording(t *testing.T) {
 	assert.True(t, *complete.IsError)
 	require.NotEmpty(t, complete.Content)
 	require.NotNil(t, complete.Content[0].Text)
-	assert.Contains(t, *complete.Content[0].Text, "start the project with surla")
+	assert.Contains(t, *complete.Content[0].Text, "start the project with hbay")
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"generation-token": {ID: "alice@example.com"},
 	})))
@@ -335,18 +335,18 @@ func TestTraceToolReadsSavedHistoryAfterRestart(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, first.Close()) })
 	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	_, span := first.tracer("surla/controlplane").Start(ctx, "saved-before-restart")
+	_, span := first.tracer("highbay/controlplane").Start(ctx, "saved-before-restart")
 	span.End()
 	require.NoError(t, first.Close())
 	second, err := New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, second.Close()) })
-	adapter := genmcpsurla.NewMCPAdapter(gensurla.NewEndpoints(second), nil)
-	result, err := adapter.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
+	adapter := genmcphighbay.NewMCPAdapter(genhighbay.NewEndpoints(second), nil)
+	result, err := adapter.ToolsCall(ctx, &genmcphighbay.ToolsCallPayload{Name: "list_traces", Arguments: json.RawMessage(`{}`)})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok)
-	page, err := gensurlatools.UnmarshalListTracesResult(complete.StructuredContent)
+	page, err := genhighbaytools.UnmarshalListTracesResult(complete.StructuredContent)
 	require.NoError(t, err)
 	require.Len(t, page.Spans, 1)
 	assert.Equal(t, "saved-before-restart", page.Spans[0].Name)
@@ -369,18 +369,18 @@ func TestCP1FailuresProduceSafeSavedRecovery(t *testing.T) {
 		assert.NoError(t, tp.Shutdown(context.Background()))
 	})
 	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	seed, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
+	seed, err := cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{
 		ChangeID: "existing", Prompt: "private-feature-request", Analysis: refundAnalysis("private-analysis-summary"),
 	})
 	require.NoError(t, err)
 
 	reference := "private-analysis-reference"
-	_, err = cp.ReviseChange(ctx, &gensurla.ReviseChangePayload{
+	_, err = cp.ReviseChange(ctx, &genhighbay.ReviseChangePayload{
 		ChangeID: "existing", RequestRevision: seed.RequestRevision, Prompt: "private-feature-request",
 		RevisionNote: "Revise the change.",
-		Analysis: &gensurla.CP1RevisionAnalysis{
-			Summary: "private-analysis-summary", Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
+			Summary: "private-analysis-summary", Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &reference, Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 				ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 			}},
@@ -388,39 +388,39 @@ func TestCP1FailuresProduceSafeSavedRecovery(t *testing.T) {
 		},
 	})
 	assertServiceError(t, err, "unprocessable")
-	unchanged, err := cp.GetChange(ctx, &gensurla.GetChangePayload{ChangeID: "existing"})
+	unchanged, err := cp.GetChange(ctx, &genhighbay.GetChangePayload{ChangeID: "existing"})
 	require.NoError(t, err)
 	assert.Equal(t, seed.RequestRevision, unchanged.RequestRevision)
 
 	// The existing card-store fault fixture makes only the final save fail.
 	require.NoError(t, os.Mkdir(filepath.Join(cp.cards.dir, stagingFile), 0o700))
-	_, err = cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
+	_, err = cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{
 		ChangeID: "save-fault", Prompt: "private-feature-request", Analysis: refundAnalysis("private-analysis-summary"),
 	})
 	require.Error(t, err)
-	adapter := genmcpsurla.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
-	result, err := adapter.ToolsCall(ctx, &genmcpsurla.ToolsCallPayload{
+	adapter := genmcphighbay.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
+	result, err := adapter.ToolsCall(ctx, &genmcphighbay.ToolsCallPayload{
 		Name: "list_traces", Arguments: json.RawMessage(`{"status":"all","limit":100}`),
 	})
 	require.NoError(t, err)
 	complete, ok := result.Outcome.AsComplete()
 	require.True(t, ok)
-	page, err := gensurlatools.UnmarshalListTracesResult(complete.StructuredContent)
+	page, err := genhighbaytools.UnmarshalListTracesResult(complete.StructuredContent)
 	require.NoError(t, err)
 	seen := map[string]string{}
 	for _, span := range page.Spans {
-		if span.Name != "surla.controlplane.propose_change" && span.Name != "surla.controlplane.revise_change" {
+		if span.Name != "highbay.controlplane.propose_change" && span.Name != "highbay.controlplane.revise_change" {
 			continue
 		}
-		key := span.Name + " " + span.Attributes["surla.change_id"]
+		key := span.Name + " " + span.Attributes["highbay.change_id"]
 		seen[key] = span.Status
 		switch key {
-		case "surla.controlplane.propose_change existing":
+		case "highbay.controlplane.propose_change existing":
 			assert.Equal(t, "Proposed Change Card (needs_confirmation).", span.Summary)
-		case "surla.controlplane.revise_change existing":
+		case "highbay.controlplane.revise_change existing":
 			assert.NotEqual(t, "error", span.Status, "a broken revision rule is the caller's input, not a server failure")
 			assert.Contains(t, span.Summary, "retry revise_change")
-		case "surla.controlplane.propose_change save-fault":
+		case "highbay.controlplane.propose_change save-fault":
 			assert.Equal(t, "error", span.Status)
 			assert.Contains(t, strings.ToLower(span.Summary), "operator")
 		default:
@@ -449,21 +449,21 @@ func TestSharedProviderKeepsControlPlaneHistoriesSeparate(t *testing.T) {
 	a := newControlPlane(t, Options{TracerProvider: tp})
 	b := newControlPlane(t, Options{TracerProvider: tp})
 	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	_, host := tp.Tracer("surla/controlplane").Start(ctx, "private-host-operation")
+	_, host := tp.Tracer("highbay/controlplane").Start(ctx, "private-host-operation")
 	host.SetAttributes(attribute.String("host.evidence", "original-host-evidence"))
 	host.End()
 	_, foreign := tp.Tracer("third-party").Start(ctx, "private-third-party-operation")
 	foreign.End()
-	_, first := a.tracer("surla/controlplane").Start(ctx, "only-a")
+	_, first := a.tracer("highbay/controlplane").Start(ctx, "only-a")
 	first.End()
 	first.End()
-	_, second := b.tracer("surla/controlplane").Start(ctx, "only-b")
+	_, second := b.tracer("highbay/controlplane").Start(ctx, "only-b")
 	second.End()
-	pageA, err := a.ListTraces(ctx, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	pageA, err := a.ListTraces(ctx, &genhighbay.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, pageA.Spans, 1)
 	assert.Equal(t, "only-a", pageA.Spans[0].Name)
-	pageB, err := b.ListTraces(ctx, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	pageB, err := b.ListTraces(ctx, &genhighbay.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, pageB.Spans, 1)
 	assert.Equal(t, "only-b", pageB.Spans[0].Name)
@@ -475,9 +475,9 @@ func TestSharedProviderKeepsControlPlaneHistoriesSeparate(t *testing.T) {
 		assert.Empty(t, span.Attributes, "capture must add no metadata to any exported span")
 	}
 	require.NoError(t, a.Close())
-	_, after := b.tracer("surla/controlplane").Start(ctx, "b-after-a-closes")
+	_, after := b.tracer("highbay/controlplane").Start(ctx, "b-after-a-closes")
 	after.End()
-	pageB, err = b.ListTraces(ctx, &gensurla.ListTracesPayload{Status: "all", Limit: 100})
+	pageB, err = b.ListTraces(ctx, &genhighbay.ListTracesPayload{Status: "all", Limit: 100})
 	require.NoError(t, err)
 	require.Len(t, pageB.Spans, 3)
 	assert.Equal(t, "b-after-a-closes", pageB.Spans[0].Name)
@@ -491,7 +491,7 @@ func TestDiagnosticTracingPreservesSDKParentAccounting(t *testing.T) {
 	t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{TracerProvider: tp})
 	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-	ctx, parent := cp.tracer("surla/controlplane").Start(ctx, "parent")
+	ctx, parent := cp.tracer("highbay/controlplane").Start(ctx, "parent")
 	_, child := tp.Tracer("host-child").Start(ctx, "child")
 	child.End()
 	parent.End()
@@ -516,8 +516,8 @@ func TestDiagnosticTracingPreservesSDKPanicEvidence(t *testing.T) {
 			t.Cleanup(func() { assert.NoError(t, tp.Shutdown(context.Background())) })
 			cp := newControlPlane(t, Options{TracerProvider: tp})
 			ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", CallerID: "test-user", Kind: CallerUser})
-			plain := runDiagnosticPanic(ctx, tp.Tracer("surla/controlplane"), direct)
-			owned := runDiagnosticPanic(ctx, cp.tracer("surla/controlplane"), direct)
+			plain := runDiagnosticPanic(ctx, tp.Tracer("highbay/controlplane"), direct)
+			owned := runDiagnosticPanic(ctx, cp.tracer("highbay/controlplane"), direct)
 			assert.Equal(t, "private-panic-evidence", plain)
 			assert.Equal(t, plain, owned)
 			ended := full.GetSpans()
@@ -563,15 +563,15 @@ func TestWaitingReadBoundaryExportsWithoutRecording(t *testing.T) {
 		// names are the wait's request boundary span and inner span.
 		names []string
 	}{
-		{CallerUser, []string{"surla.request.wait_for_changes", waitForChangesSpan}},
-		{CallerBuilder, []string{"surla.request.wait_for_builder_assignment", waitForBuilderAssignmentSpan}},
-		{CallerTestWriter, []string{"surla.request.wait_for_test_writer_assignment", waitForTestWriterAssignmentSpan}},
+		{CallerUser, []string{"highbay.request.wait_for_changes", waitForChangesSpan}},
+		{CallerBuilder, []string{"highbay.request.wait_for_builder_assignment", waitForBuilderAssignmentSpan}},
+		{CallerTestWriter, []string{"highbay.request.wait_for_test_writer_assignment", waitForTestWriterAssignmentSpan}},
 	}
 	count := 0
 	for _, wait := range waits {
 		caller := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "session", Kind: wait.kind})
 		for _, name := range wait.names {
-			_, span := cp.tracer("surla/requests").Start(caller, name)
+			_, span := cp.tracer("highbay/requests").Start(caller, name)
 			span.SetStatus(codes.Error, "the caller went away")
 			span.End()
 			count++
@@ -583,7 +583,7 @@ func TestWaitingReadBoundaryExportsWithoutRecording(t *testing.T) {
 	assert.Empty(t, history.Spans)
 
 	builder := WithPrincipal(t.Context(), Principal{ID: "owner", CallerID: "builder", Kind: CallerBuilder})
-	_, span := cp.tracer("surla/requests").Start(builder, "surla.request.list_builder_assignments")
+	_, span := cp.tracer("highbay/requests").Start(builder, "highbay.request.list_builder_assignments")
 	span.End()
 	history, err = cp.traces.List("owner", "all", 20, nil)
 	require.NoError(t, err)
@@ -610,8 +610,8 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 		historyPanic = "history-read-panic"
 	)
 	// get returns a call sending a GET for path with token.
-	get := func(path, token string) func(*testing.T, *ControlPlane, *httptest.Server, *gensurla.ChangeCardResult) int {
-		return func(t *testing.T, _ *ControlPlane, srv *httptest.Server, _ *gensurla.ChangeCardResult) int {
+	get := func(path, token string) func(*testing.T, *ControlPlane, *httptest.Server, *genhighbay.ChangeCardResult) int {
+		return func(t *testing.T, _ *ControlPlane, srv *httptest.Server, _ *genhighbay.ChangeCardResult) int {
 			return sendHistoryRequest(t, t.Context(), srv, http.MethodGet, path, token, nil)
 		}
 	}
@@ -622,7 +622,7 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 		panics bool
 		// call sends the request and returns its HTTP status, or 0 when no
 		// answer arrived.
-		call       func(*testing.T, *ControlPlane, *httptest.Server, *gensurla.ChangeCardResult) int
+		call       func(*testing.T, *ControlPlane, *httptest.Server, *genhighbay.ChangeCardResult) int
 		wantStatus int
 		// saved lists the records the call adds as "name caller_kind status".
 		saved []string
@@ -632,82 +632,82 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 		{
 			name: "user reads a change", call: get("/changes/chg-history", user), wantStatus: http.StatusOK,
 			saved:    []string{},
-			exported: map[string]codes.Code{"surla.request.get_change": codes.Unset},
+			exported: map[string]codes.Code{"highbay.request.get_change": codes.Unset},
 		},
 		{
 			name: "user lists changes", call: get("/changes", user), wantStatus: http.StatusOK,
 			saved:    []string{},
-			exported: map[string]codes.Code{"surla.request.list_changes": codes.Unset, "surla.controlplane.list_changes": codes.Unset},
+			exported: map[string]codes.Code{"highbay.request.list_changes": codes.Unset, "highbay.controlplane.list_changes": codes.Unset},
 		},
 		{
 			name: "user reads the history", call: get("/traces?status=all&limit=100", user), wantStatus: http.StatusOK,
 			saved:    []string{},
-			exported: map[string]codes.Code{"surla.request.list_traces": codes.Unset, "surla.controlplane.list_traces": codes.Unset},
+			exported: map[string]codes.Code{"highbay.request.list_traces": codes.Unset, "highbay.controlplane.list_traces": codes.Unset},
 		},
 		{
 			name: "user read is refused as not found", call: get("/changes/chg-missing", user), wantStatus: http.StatusNotFound,
 			saved:    []string{},
-			exported: map[string]codes.Code{"surla.request.get_change": codes.Unset},
+			exported: map[string]codes.Code{"highbay.request.get_change": codes.Unset},
 		},
 		{
 			name: "user read is refused as forbidden", call: get("/assignments/builder", user), wantStatus: http.StatusForbidden,
 			saved:    []string{},
-			exported: map[string]codes.Code{"surla.request.list_builder_assignments": codes.Unset},
+			exported: map[string]codes.Code{"highbay.request.list_builder_assignments": codes.Unset},
 		},
 		{
 			name: "user read faults",
-			call: func(t *testing.T, cp *ControlPlane, srv *httptest.Server, _ *gensurla.ChangeCardResult) int {
+			call: func(t *testing.T, cp *ControlPlane, srv *httptest.Server, _ *genhighbay.ChangeCardResult) int {
 				require.NoError(t, os.WriteFile(cp.cards.path("chg-broken"), []byte("{"), 0o600))
 				return sendHistoryRequest(t, t.Context(), srv, http.MethodGet, "/changes/chg-broken", user, nil)
 			},
 			wantStatus: http.StatusInternalServerError,
-			saved:      []string{"surla.request.get_change user error"},
-			exported:   map[string]codes.Code{"surla.request.get_change": codes.Error},
+			saved:      []string{"highbay.request.get_change user error"},
+			exported:   map[string]codes.Code{"highbay.request.get_change": codes.Error},
 		},
 		{
 			// The panic reaches net/http, which drops the connection, so no
 			// answer arrives; the SDK records it as an exception event only.
 			name: "user read panics", panics: true, call: get("/changes", user), wantStatus: 0,
-			saved:    []string{"surla.controlplane.list_changes user unset", "surla.request.list_changes user unset"},
-			exported: map[string]codes.Code{"surla.request.list_changes": codes.Unset, "surla.controlplane.list_changes": codes.Unset},
+			saved:    []string{"highbay.controlplane.list_changes user unset", "highbay.request.list_changes user unset"},
+			exported: map[string]codes.Code{"highbay.request.list_changes": codes.Unset, "highbay.controlplane.list_changes": codes.Unset},
 		},
 		{
 			name: "user confirms a change",
-			call: func(t *testing.T, _ *ControlPlane, srv *httptest.Server, card *gensurla.ChangeCardResult) int {
-				raw, err := gensurla.EncodeConfirmIntentPayload(&gensurla.ConfirmIntentPayload{
+			call: func(t *testing.T, _ *ControlPlane, srv *httptest.Server, card *genhighbay.ChangeCardResult) int {
+				raw, err := genhighbay.EncodeConfirmIntentPayload(&genhighbay.ConfirmIntentPayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{}, Examples: card.Examples,
 				})
 				require.NoError(t, err)
 				return sendHistoryRequest(t, t.Context(), srv, http.MethodPost, "/changes/confirm", user, raw)
 			},
 			wantStatus: http.StatusOK,
-			saved:      []string{"surla.request.confirm_intent user unset"},
-			exported:   map[string]codes.Code{"surla.request.confirm_intent": codes.Unset},
+			saved:      []string{"highbay.request.confirm_intent user unset"},
+			exported:   map[string]codes.Code{"highbay.request.confirm_intent": codes.Unset},
 		},
 		{
 			name: "guide reads a change over HTTP", call: get("/changes/chg-history", guide), wantStatus: http.StatusOK,
-			saved:    []string{"surla.request.get_change guide unset"},
-			exported: map[string]codes.Code{"surla.request.get_change": codes.Unset},
+			saved:    []string{"highbay.request.get_change guide unset"},
+			exported: map[string]codes.Code{"highbay.request.get_change": codes.Unset},
 		},
 		{
 			name: "builder reads a change over MCP",
-			call: func(t *testing.T, _ *ControlPlane, srv *httptest.Server, card *gensurla.ChangeCardResult) int {
+			call: func(t *testing.T, _ *ControlPlane, srv *httptest.Server, card *genhighbay.ChangeCardResult) int {
 				origin, err := url.Parse(srv.URL)
 				require.NoError(t, err)
 				transport := genmcpclient.NewClient(origin.Scheme, origin.Host, generationDoer{client: srv.Client()},
 					goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-				mcp := &genmcpsurla.Client{ToolsCallEndpoint: transport.ToolsCall()}
-				read := callMCPTool(t, mcp, "get_change", `{"change_id":"`+card.ChangeID+`"}`, gensurlatools.UnmarshalGetChangeResult)
+				mcp := &genmcphighbay.Client{ToolsCallEndpoint: transport.ToolsCall()}
+				read := callMCPTool(t, mcp, "get_change", `{"change_id":"`+card.ChangeID+`"}`, genhighbaytools.UnmarshalGetChangeResult)
 				assert.Equal(t, card.ChangeID, read.ChangeID)
 				return http.StatusOK
 			},
 			wantStatus: http.StatusOK,
-			saved:      []string{"surla.request.get_change builder unset"},
-			exported:   map[string]codes.Code{"surla.request.get_change": codes.Unset},
+			saved:      []string{"highbay.request.get_change builder unset"},
+			exported:   map[string]codes.Code{"highbay.request.get_change": codes.Unset},
 		},
 		{
 			name: "user's waiting read ends with an error",
-			call: func(t *testing.T, cp *ControlPlane, srv *httptest.Server, _ *gensurla.ChangeCardResult) int {
+			call: func(t *testing.T, cp *ControlPlane, srv *httptest.Server, _ *genhighbay.ChangeCardResult) int {
 				// The current version keeps the read waiting; reading it starts no span.
 				list, err := cp.changeList(t.Context(), trace.SpanFromContext(t.Context()), owner)
 				require.NoError(t, err)
@@ -718,7 +718,7 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 			},
 			wantStatus: 0,
 			saved:      []string{},
-			exported:   map[string]codes.Code{"surla.request.wait_for_changes": codes.Error, waitForChangesSpan: codes.Unset},
+			exported:   map[string]codes.Code{"highbay.request.wait_for_changes": codes.Error, waitForChangesSpan: codes.Unset},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -745,7 +745,7 @@ func TestHistoryLeavesOutOnlyTheUsersSuccessfulReads(t *testing.T) {
 				require.NoError(t, err)
 				records := map[string]string{}
 				for _, span := range page.Spans {
-					records[span.SpanID] = span.Name + " " + span.Attributes["surla.caller_kind"] + " " + span.Status
+					records[span.SpanID] = span.Name + " " + span.Attributes["highbay.caller_kind"] + " " + span.Status
 				}
 				return records
 			}
@@ -793,13 +793,13 @@ func TestMCPTransportFailureAppearsInHistory(t *testing.T) {
 			request.Body = failingBody{readErr: errors.New("private-history-sentinel")}
 			handler.ServeHTTP(httptest.NewRecorder(), request)
 
-			page, err := cp.ListTraces(WithPrincipal(t.Context(), principal), &gensurla.ListTracesPayload{Status: "all", Limit: 20})
+			page, err := cp.ListTraces(WithPrincipal(t.Context(), principal), &genhighbay.ListTracesPayload{Status: "all", Limit: 20})
 			require.NoError(t, err)
 			require.Len(t, page.Spans, 1)
 			span := page.Spans[0]
-			assert.Equal(t, "surla.mcp.transport_error", span.Name)
+			assert.Equal(t, "highbay.mcp.transport_error", span.Name)
 			assert.Equal(t, "error", span.Status)
-			assert.Equal(t, map[string]string{"surla.caller_id": "session", "surla.caller_kind": string(kind)}, span.Attributes)
+			assert.Equal(t, map[string]string{"highbay.caller_id": "session", "highbay.caller_kind": string(kind)}, span.Attributes)
 			assert.NotContains(t, span.Summary, "private-history-sentinel")
 		})
 	}
@@ -828,10 +828,10 @@ func TestUserGETRoutesOnlyRead(t *testing.T) {
 
 	// Mount points name the Go method; the operation table uses the design's name.
 	operations := map[string]string{}
-	for _, name := range gensurla.MethodNames {
+	for _, name := range genhighbay.MethodNames {
 		operations[codegen.Goify(name, true)] = name
 	}
-	routes := gensurlahttp.New(gensurla.NewEndpoints(cp), goahttp.NewMuxer(), StrictJSONRequestDecoder,
+	routes := genhighbayhttp.New(genhighbay.NewEndpoints(cp), goahttp.NewMuxer(), StrictJSONRequestDecoder,
 		goahttp.ResponseEncoder, nil, nil).Mounts
 	param := regexp.MustCompile(`\{[^}]+\}`)
 	var called []string

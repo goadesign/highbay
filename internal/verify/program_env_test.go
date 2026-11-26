@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // TestProgramEnvGivesWrittenTestsOnlyTheirRunsNames checks ProgramEnv and
@@ -26,7 +26,7 @@ func TestProgramEnvGivesWrittenTestsOnlyTheirRunsNames(t *testing.T) {
 		"PATH=/usr/bin:/bin",
 		"HOME=/Users/operator",
 		"TMPDIR=/var/tmp/server",
-		"SURLA_TEST_SERVER_VAR=present",
+		"HIGHBAY_TEST_SERVER_VAR=present",
 		"ANTHROPIC_API_KEY=ant-k",
 		"ANTHROPIC_BASE_URL=https://gateway.invalid",
 		"ANTHROPIC_ADMIN_KEY=admin-k",
@@ -102,7 +102,7 @@ func TestRunGivesEachStepOnlyItsSourcesEnvironment(t *testing.T) {
 	server := []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=/Users/operator",
-		"SURLA_TEST_SERVER_VAR=present",
+		"HIGHBAY_TEST_SERVER_VAR=present",
 		"ANTHROPIC_API_KEY=ant-k",
 		"OPENAI_API_KEY=oai-k",
 	}
@@ -114,11 +114,11 @@ func TestRunGivesEachStepOnlyItsSourcesEnvironment(t *testing.T) {
 	}{
 		{
 			name: "operator's evaluator", tests: TestsEvaluator,
-			sees: []string{"SURLA_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=ant-k", "OPENAI_API_KEY=oai-k", "HOME=/Users/operator"},
+			sees: []string{"HIGHBAY_TEST_SERVER_VAR=present", "ANTHROPIC_API_KEY=ant-k", "OPENAI_API_KEY=oai-k", "HOME=/Users/operator"},
 		},
 		{
 			name: "written tests", tests: TestsWritten,
-			doesNotSee: []string{"SURLA_TEST_SERVER_VAR", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HOME"},
+			doesNotSee: []string{"HIGHBAY_TEST_SERVER_VAR", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HOME"},
 		},
 	}
 	for _, tc := range cases {

@@ -95,7 +95,7 @@ func TestBuildModulePreservesValidationAndFailure(t *testing.T) {
 	data, err := os.ReadFile(out)
 	require.NoError(t, err)
 	assert.Equal(t, "previous", string(data))
-	left, err := filepath.Glob(filepath.Join(spec.WorkDir, ".surla-stage-*"))
+	left, err := filepath.Glob(filepath.Join(spec.WorkDir, ".highbay-stage-*"))
 	require.NoError(t, err)
 	assert.Empty(t, left)
 	spec.SourceDir = t.TempDir()

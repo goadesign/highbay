@@ -25,7 +25,7 @@ var TeamSnapshot = Type("TeamSnapshot", func() {
 	Attribute("herdr_mode", String, "Current desktop attachment.", func() { Enum("attached", "available", "unavailable") })
 	Attribute("saved_choices", MapOf(String, RoleAgentChoice, roleAgentChoices), "Saved client choices by role.")
 	Attribute("dismissed_notices", ArrayOf(String, func() { Enum("single_agent_family", "outside_herdr", "herdr_unavailable") }), "Dismissed project notices.")
-	Attribute("chorus_status", String, "Whether Chorus serves this team: not_used when workers run outside Herdr and never use it; connected after Surla's latest read of the team's Chorus view succeeded; unavailable after that read failed or when the team's space has no Chorus connection. While unavailable no Chorus reminder reaches a worker: workers wait on Surla with wait_for_builder_assignment and wait_for_test_writer_assignment, and a worker that stopped needs the user's prompt. Absent before a team space exists or before the first read settled it.", func() {
+	Attribute("chorus_status", String, "Whether Chorus serves this team: not_used when workers run outside Herdr and never use it; connected after Highbay's latest read of the team's Chorus view succeeded; unavailable after that read failed or when the team's space has no Chorus connection. While unavailable no Chorus reminder reaches a worker: workers wait on Highbay with wait_for_builder_assignment and wait_for_test_writer_assignment, and a worker that stopped needs the user's prompt. Absent before a team space exists or before the first read settled it.", func() {
 		Enum("connected", "unavailable", "not_used")
 	})
 	Required("team", "roles", "herdr_mode", "saved_choices", "dismissed_notices")

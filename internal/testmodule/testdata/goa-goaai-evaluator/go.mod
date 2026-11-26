@@ -1,4 +1,4 @@
-module surla.local/designeval
+module highbay.local/designeval
 
 go 1.27.3
 

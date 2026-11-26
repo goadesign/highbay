@@ -36,7 +36,7 @@ func TestInitPublishesTheBuiltTreeFromProtectedStorage(t *testing.T) {
 	}
 	target := filepath.Join(workspace, "shop")
 	_, err = Init(t.Context(), Options{
-		Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+		Dir: target, WorkDir: work, Module: "example.com/shop", HighbayVersion: published,
 	}, run, &fakeGenerator{pkgs: []string{"shop"}})
 	require.NoError(t, err)
 	created, err := os.Stat(target)
@@ -70,7 +70,7 @@ func TestInitPublishesUnderAWriteSearchOnlyParent(t *testing.T) {
 	target := filepath.Join(parent, "shop")
 	gen := &fakeGenerator{pkgs: []string{"shop"}}
 	_, err := Init(t.Context(), Options{
-		Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+		Dir: target, WorkDir: work, Module: "example.com/shop", HighbayVersion: published,
 	}, run, gen)
 	require.NoError(t, err)
 	created, err := os.Stat(target)
@@ -109,7 +109,7 @@ func TestInitNeverReplacesAnEmptyDirectoryFileOrLink(t *testing.T) {
 				return fakeGo(dir, args)
 			}
 			_, err := Init(t.Context(), Options{
-				Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+				Dir: target, WorkDir: work, Module: "example.com/shop", HighbayVersion: published,
 			}, run, &fakeGenerator{pkgs: []string{"shop"}})
 			require.ErrorContains(t, err, "move project into")
 			current, err := os.Lstat(target)
@@ -126,7 +126,7 @@ func TestInitRejectsWorkspaceStaging(t *testing.T) {
 	parent := t.TempDir()
 	gen := &fakeGenerator{}
 	_, err := Init(t.Context(), Options{
-		Dir: filepath.Join(parent, "shop"), WorkDir: parent, Module: "example.com/shop", SurlaVersion: published,
+		Dir: filepath.Join(parent, "shop"), WorkDir: parent, Module: "example.com/shop", HighbayVersion: published,
 	}, failRunner(t), gen)
 	require.ErrorContains(t, err, "must be outside project parent")
 	assert.Equal(t, 1, gen.closes)
@@ -203,7 +203,7 @@ func TestInitReportsEachSlowPhaseBeforeItStarts(t *testing.T) {
 		}
 		target := filepath.Join(workspace, "shop")
 		_, err := Init(t.Context(), Options{
-			Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+			Dir: target, WorkDir: work, Module: "example.com/shop", HighbayVersion: published,
 			OnPhase: func(phase string) error { phases = append(phases, phase); return nil },
 		}, run, &fakeGenerator{pkgs: []string{"shop"}})
 		require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestInitReportsEachSlowPhaseBeforeItStarts(t *testing.T) {
 		run := func(_ context.Context, dir string, _ string, args ...string) error { return fakeGo(dir, args) }
 		target := filepath.Join(workspace, "shop")
 		_, err := Init(t.Context(), Options{
-			Dir: target, WorkDir: work, Module: "example.com/shop", SurlaVersion: published,
+			Dir: target, WorkDir: work, Module: "example.com/shop", HighbayVersion: published,
 			OnPhase: func(phase string) error {
 				phases = append(phases, phase)
 				if len(phases) == 3 {

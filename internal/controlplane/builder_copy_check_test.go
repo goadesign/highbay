@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
-	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
-	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
-	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbayclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	genmcpclient "github.com/goadesign/highbay/gen/jsonrpc/mcp_highbay/client"
+	genmcphighbay "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -92,7 +92,7 @@ func TestBuilderCopyCheckPublishesOnlyInItsCopy(t *testing.T) {
 			user := asCaller("alice@example.com", CallerUser)
 			build := mustStartedBuild(t, cp, user, card.ChangeID)
 			require.NotNil(t, build.Builder.Branch)
-			assert.Regexp(t, `^surla/build-\d+$`, *build.Builder.Branch)
+			assert.Regexp(t, `^highbay/build-\d+$`, *build.Builder.Branch)
 			require.NotNil(t, build.Builder.LastCheckPassed)
 			assert.True(t, *build.Builder.LastCheckPassed)
 			require.NotNil(t, build.Builder.LastCheckAt)
@@ -138,7 +138,7 @@ func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
 				build, found, err := cp.cards.loadOpenBuild()
 				require.NoError(t, err)
 				require.True(t, found)
-				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 					ChangeID: card.ChangeID, StartedAt: build.StartedAt.UTC().Format(time.RFC3339Nano),
 				})
 				require.NoError(t, err)
@@ -163,12 +163,12 @@ func TestBuilderCopyCheckRefusesBeforeStarting(t *testing.T) {
 			_, updateErr := cp.UpdateDependencies(ctx)
 			refusals := []error{err, updateErr}
 			if state == "missing folder" {
-				_, generationErr := cp.GenerateCode(ctx, &gensurla.GenerateCodePayload{})
+				_, generationErr := cp.GenerateCode(ctx, &genhighbay.GenerateCodePayload{})
 				refusals = append(refusals, generationErr)
 			}
 			for _, refusal := range refusals {
 				if want == "copy_off_branch" {
-					var offBranch *gensurla.CopyOffBranch
+					var offBranch *genhighbay.CopyOffBranch
 					require.ErrorAs(t, refusal, &offBranch)
 					assert.Equal(t, want, offBranch.Name)
 				} else {
@@ -288,15 +288,15 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	doer := generationDoer{client: srv.Client()}
-	httpTransport := gensurlaclient.NewClient(origin.Scheme, origin.Host,
+	httpTransport := genhighbayclient.NewClient(origin.Scheme, origin.Host,
 		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	client := &gensurla.Client{
+	client := &genhighbay.Client{
 		CheckProjectEndpoint: httpTransport.CheckProject(), UpdateDependenciesEndpoint: httpTransport.UpdateDependencies(),
 		GenerateCodeEndpoint: httpTransport.GenerateCode(),
 	}
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host,
 		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	mcpClient := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
+	mcpClient := &genmcphighbay.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
 	for _, tool := range []struct{ name, route string }{
 		{checkToolProject, "/workspace/check"},
 		{checkToolDependencies, "/workspace/dependencies"},
@@ -320,10 +320,10 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 			case checkToolDependencies:
 				_, err = client.UpdateDependencies(t.Context())
 			case "generate_code":
-				_, err = client.GenerateCode(t.Context(), &gensurla.GenerateCodePayload{})
+				_, err = client.GenerateCode(t.Context(), &genhighbay.GenerateCodePayload{})
 			}
 			assertServiceError(t, err, "working_copy_busy")
-			result, err := mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
+			result, err := mcpClient.ToolsCall(t.Context(), &genmcphighbay.ToolsCallPayload{
 				Name: tool.name, Arguments: json.RawMessage(`{}`),
 			})
 			require.NoError(t, err)
@@ -372,7 +372,7 @@ func TestBuilderCopyCheckSpanOutcomes(t *testing.T) {
 				build, found, err := cp.cards.loadOpenBuild()
 				require.NoError(t, err)
 				require.True(t, found)
-				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+				_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 					ChangeID: build.ChangeID, StartedAt: build.StartedAt.UTC().Format(time.RFC3339Nano),
 				})
 				require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestBuilderCopyCheckSpanOutcomes(t *testing.T) {
 			require.Error(t, checkErr)
 			require.Error(t, updateErr)
 			spans := slices.DeleteFunc(exporter.GetSpans(), func(span tracetest.SpanStub) bool {
-				return span.Name != "surla.controlplane.check_project" && span.Name != "surla.controlplane.update_dependencies"
+				return span.Name != "highbay.controlplane.check_project" && span.Name != "highbay.controlplane.update_dependencies"
 			})
 			require.Len(t, spans, 2)
 			for _, span := range spans {
@@ -474,7 +474,7 @@ func TestBuilderCheckVerdictStaysWithTheCheckedBuild(t *testing.T) {
 func TestBuilderCheckRecordBelongsToItsBuild(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	agreed := confirmAgreedTerms(t, cp, "chg")
-	_, err := cp.StartBuild(agreedUser, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
+	_, err := cp.StartBuild(agreedUser, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: agreed.RequestRevision})
 	require.NoError(t, err)
 	open, found, err := cp.cards.loadOpenBuild()
 	require.NoError(t, err)
@@ -572,8 +572,8 @@ func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
 				cp.builderCopyTurn <- struct{}{}
 				defer func() { <-cp.builderCopyTurn }()
 			}
-			endpoints := gensurla.NewEndpoints(cp)
-			applyOperationPolicy(endpoints, cp.tracer("surla/requests"))
+			endpoints := genhighbay.NewEndpoints(cp)
+			applyOperationPolicy(endpoints, cp.tracer("highbay/requests"))
 			calls := map[string]func(context.Context, any) (any, error){
 				"check_project": endpoints.CheckProject, "update_dependencies": endpoints.UpdateDependencies,
 			}
@@ -594,12 +594,12 @@ func TestCheckFailuresSaveTheirReasonOnBothSpans(t *testing.T) {
 			}
 			history, err := cp.traces.List("alice@example.com", "all", 50, nil)
 			require.NoError(t, err)
-			saved := map[string]*gensurla.TraceSpan{}
+			saved := map[string]*genhighbay.TraceSpan{}
 			for _, record := range history.Spans {
 				saved[record.Name] = record
 			}
 			for name := range calls {
-				for _, span := range []string{"surla.request." + name, "surla.controlplane." + name} {
+				for _, span := range []string{"highbay.request." + name, "highbay.controlplane." + name} {
 					record := saved[span]
 					require.NotNil(t, record, span)
 					assert.Equal(t, tc.summary, record.Summary, span)

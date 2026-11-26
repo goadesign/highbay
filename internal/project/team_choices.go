@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 type (
@@ -25,20 +25,20 @@ type (
 
 // ListAgentOptions asks the installed clients for their current options on
 // demand. Team snapshot reads never invoke discovery.
-func (s *Server) ListAgentOptions(ctx context.Context) ([]*gensurla.InstalledAgentOption, error) {
+func (s *Server) ListAgentOptions(ctx context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	discover := s.team.dependencies.DiscoverAgents
 	if discover == nil {
-		return nil, gensurla.MakeTeamUnavailable(errors.New("coding agent discovery is unavailable"))
+		return nil, genhighbay.MakeTeamUnavailable(errors.New("coding agent discovery is unavailable"))
 	}
 	options, err := discover(ctx)
 	if err != nil {
-		return nil, gensurla.MakeTeamUnavailable(errors.New("could not read installed coding agents"))
+		return nil, genhighbay.MakeTeamUnavailable(errors.New("could not read installed coding agents"))
 	}
 	if options == nil {
-		return []*gensurla.InstalledAgentOption{}, nil
+		return []*genhighbay.InstalledAgentOption{}, nil
 	}
 	return options, nil
 }
@@ -50,7 +50,7 @@ func (s *Server) DismissNotice(ctx context.Context, notice string) error {
 		return err
 	}
 	if !knownNotice(notice) {
-		return gensurla.MakeUnprocessable(errors.New("unknown team recommendation"))
+		return genhighbay.MakeUnprocessable(errors.New("unknown team recommendation"))
 	}
 	s.state.mu.Lock()
 	defer s.state.mu.Unlock()
@@ -70,8 +70,8 @@ func (s *Server) DismissNotice(ctx context.Context, notice string) error {
 // resolveChoices validates explicit requests against the current installed
 // inventory and fills each required role from its saved or installed default.
 func (s *Server) resolveChoices(
-	ctx context.Context, roster []launcherRole, requested map[string]*gensurla.RoleAgentChoice,
-) (map[string]*gensurla.RoleAgentChoice, error) {
+	ctx context.Context, roster []launcherRole, requested map[string]*genhighbay.RoleAgentChoice,
+) (map[string]*genhighbay.RoleAgentChoice, error) {
 	for role, choice := range requested {
 		if !choiceRole(role) || choice == nil || !validChoice(roleChoice(*choice)) {
 			return nil, invalidWorkerChoice()
@@ -94,11 +94,11 @@ func (s *Server) resolveChoices(
 	s.state.mu.Lock()
 	saved := s.state.Record.SavedChoices
 	s.state.mu.Unlock()
-	choices := make(map[string]*gensurla.RoleAgentChoice, len(roster))
+	choices := make(map[string]*genhighbay.RoleAgentChoice, len(roster))
 	for _, role := range roster {
 		selected, explicit := requested[role.Role]
 		if !explicit {
-			preference := gensurla.RoleAgentChoice(saved[role.Role])
+			preference := genhighbay.RoleAgentChoice(saved[role.Role])
 			if installedChoice(&preference, options, headless) {
 				selected = &preference
 			} else {
@@ -106,7 +106,7 @@ func (s *Server) resolveChoices(
 			}
 		}
 		if selected == nil {
-			return nil, gensurla.MakeTeamUnavailable(errors.New("install a supported coding agent, then start the workers again"))
+			return nil, genhighbay.MakeTeamUnavailable(errors.New("install a supported coding agent, then start the workers again"))
 		}
 		choices[role.Role] = selected
 	}
@@ -115,7 +115,7 @@ func (s *Server) resolveChoices(
 
 // saveChoices stores the selected roles without dropping the preference
 // for a test writer when a build uses stored evaluator tests.
-func (s *Server) saveChoices(ctx context.Context, choices map[string]*gensurla.RoleAgentChoice) error {
+func (s *Server) saveChoices(ctx context.Context, choices map[string]*genhighbay.RoleAgentChoice) error {
 	if len(choices) == 0 {
 		return nil
 	}
@@ -152,7 +152,7 @@ func cloneChoiceOption(value *string) *string {
 // installedChoice verifies trusted inventory membership and supported option
 // flags. Model IDs may be supplied by the user even when absent from a
 // client's discovery list. The installed client resolves access at launch.
-func installedChoice(choice *gensurla.RoleAgentChoice, options []*gensurla.InstalledAgentOption, headless bool) bool {
+func installedChoice(choice *genhighbay.RoleAgentChoice, options []*genhighbay.InstalledAgentOption, headless bool) bool {
 	if choice.Client == "antigravity" && choice.Model != nil && choice.Thinking != nil {
 		// Chorus treats a suffixed Antigravity model as an effort selection.
 		model := *choice.Model
@@ -177,9 +177,9 @@ func installedChoice(choice *gensurla.RoleAgentChoice, options []*gensurla.Insta
 // defaultChoice prefers separate families when available and reuses the sole
 // installed agent for both worker roles.
 func defaultChoice(
-	role string, options []*gensurla.InstalledAgentOption,
-	selected map[string]*gensurla.RoleAgentChoice, headless bool,
-) *gensurla.RoleAgentChoice {
+	role string, options []*genhighbay.InstalledAgentOption,
+	selected map[string]*genhighbay.RoleAgentChoice, headless bool,
+) *genhighbay.RoleAgentChoice {
 	preferred := "codex"
 	var already string
 	if role == "test_writer" {
@@ -188,7 +188,7 @@ func defaultChoice(
 			already = builder.Client
 		}
 	}
-	var first, distinct *gensurla.InstalledAgentOption
+	var first, distinct *genhighbay.InstalledAgentOption
 	for _, option := range options {
 		if headless && !option.HeadlessSupported {
 			continue
@@ -212,7 +212,7 @@ func defaultChoice(
 	if first == nil {
 		return nil
 	}
-	return &gensurla.RoleAgentChoice{Client: first.Client, Program: first.Program}
+	return &genhighbay.RoleAgentChoice{Client: first.Client, Program: first.Program}
 }
 
 // validateTeamPreferences refuses malformed persisted settings before loading
@@ -273,5 +273,5 @@ func knownNotice(notice string) bool {
 
 // invalidWorkerChoice names a refused role option without echoing caller input.
 func invalidWorkerChoice() error {
-	return gensurla.MakeUnprocessable(errors.New("choose a supported installed coding agent and options for each requested role"))
+	return genhighbay.MakeUnprocessable(errors.New("choose a supported installed coding agent and options for each requested role"))
 }

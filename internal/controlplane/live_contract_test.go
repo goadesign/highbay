@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // TestLiveStartRefusesUnauthorizedCardsWithoutWaiting proves entry checks
@@ -38,7 +38,7 @@ func TestLiveStartRefusesUnauthorizedCardsWithoutWaiting(t *testing.T) {
 			defer cp.liveMu.Unlock()
 			result := make(chan error, 1)
 			go func() {
-				_, err := cp.StartLiveTarget(asCaller(tc.owner, CallerBuilder), &gensurla.StartLiveTargetPayload{
+				_, err := cp.StartLiveTarget(asCaller(tc.owner, CallerBuilder), &genhighbay.StartLiveTargetPayload{
 					ChangeID: tc.changeID, CandidateCommit: strings.Repeat("a", 40),
 				})
 				result <- err
@@ -61,7 +61,7 @@ func TestLiveStartRefusesUnauthorizedCardsWithoutWaiting(t *testing.T) {
 func TestLiveStartRefusalsPreserveTheRunningTarget(t *testing.T) {
 	cp, root := newLiveControlPlane(t, "serve")
 	builder := asCaller("alice@example.com", CallerBuilder)
-	started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+	started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40),
 	})
 	require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestLiveStartRefusalsPreserveTheRunningTarget(t *testing.T) {
 		{owner: "bob@example.com", changeID: liveTestChangeID, refusal: "forbidden"},
 		{owner: "alice@example.com", changeID: "chg-unconfirmed", refusal: "conflict"},
 	} {
-		_, err := cp.StartLiveTarget(asCaller(tc.owner, CallerBuilder), &gensurla.StartLiveTargetPayload{
+		_, err := cp.StartLiveTarget(asCaller(tc.owner, CallerBuilder), &genhighbay.StartLiveTargetPayload{
 			ChangeID: tc.changeID, CandidateCommit: strings.Repeat("b", 40),
 		})
 		assert.Equal(t, tc.refusal, goaErrorName(err))
@@ -112,12 +112,12 @@ func TestWrittenLiveStartNeedsAModelBeforeLaunching(t *testing.T) {
 		Live: &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve")},
 	})
 	card := buildableChange(t, cp, "chg")
-	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", repo.tests)
-	_, err = cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{
+	_, err = cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &genhighbay.StartLiveTargetPayload{
 		ChangeID: "chg", CandidateCommit: repo.candidate,
 	})
 	assert.Equal(t, "live_target_unavailable", goaErrorName(err))
@@ -150,11 +150,11 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 	card := buildableChange(t, cp, "chg")
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	acceptTests(t, cp, "chg", repo.tests)
 	firstGateway := "127.0.0.1:9090"
-	_, err = cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &firstGateway})
+	_, err = cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &firstGateway})
 	require.NoError(t, err)
 
 	// The real read-only Git invocation is a synchronization point: plan
@@ -165,9 +165,9 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 	bin := t.TempDir()
 	marker := filepath.Join(bin, "read-started")
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(
-		"#!/bin/sh\n: > \"$SURLA_LIVE_READ_MARKER\"\nexec \"$SURLA_LIVE_REAL_GIT\" \"$@\"\n"), 0o700))
-	t.Setenv("SURLA_LIVE_READ_MARKER", marker)
-	t.Setenv("SURLA_LIVE_REAL_GIT", realGit)
+		"#!/bin/sh\n: > \"$HIGHBAY_LIVE_READ_MARKER\"\nexec \"$HIGHBAY_LIVE_REAL_GIT\" \"$@\"\n"), 0o700))
+	t.Setenv("HIGHBAY_LIVE_READ_MARKER", marker)
+	t.Setenv("HIGHBAY_LIVE_REAL_GIT", realGit)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	cp.liveMu.Lock()
 	locked := true
@@ -177,12 +177,12 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 		}
 	}()
 	type result struct {
-		target *gensurla.LiveTargetResult
+		target *genhighbay.LiveTargetResult
 		err    error
 	}
 	started := make(chan result, 1)
 	go func() {
-		target, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+		target, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 			ChangeID: "chg", CandidateCommit: repo.candidate,
 		})
 		started <- result{target: target, err: err}
@@ -193,7 +193,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 	}, 5*time.Second, 10*time.Millisecond, "the queued caller has selected the earlier accepted tests")
 	acceptTests(t, cp, "chg", repo.candidate)
 	secondGateway := "127.0.0.1:9191"
-	_, err = cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &secondGateway})
+	_, err = cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &secondGateway})
 	require.NoError(t, err)
 	cp.liveMu.Unlock()
 	locked = false
@@ -232,7 +232,7 @@ func TestAQueuedLiveStartUsesTheCurrentAcceptedTestsAndModel(t *testing.T) {
 	} {
 		t.Run(transition.name, func(t *testing.T) {
 			transition.apply(t)
-			_, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+			_, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 				ChangeID: "chg", CandidateCommit: repo.candidate,
 			})
 			assert.Equal(t, "tests_not_accepted", goaErrorName(err))
@@ -249,7 +249,7 @@ func TestGatewayAddressValidationPreservesThePreviousChoice(t *testing.T) {
 	cp := newControlPlane(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
 	for _, address := range []string{"model.local:1", "127.0.0.1:65535", "[::1]:9090"} {
-		_, err := cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &address})
+		_, err := cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &address})
 		require.NoError(t, err, address)
 		read, err := cp.GetModelConnection(user)
 		require.NoError(t, err)
@@ -265,7 +265,7 @@ func TestGatewayAddressValidationPreservesThePreviousChoice(t *testing.T) {
 		" model.local:9090", "model.local:9090 ", "model .local:9090", "model.local:\t9090", "model\u2003.local:9090",
 	} {
 		t.Run(address, func(t *testing.T) {
-			_, err := cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &address})
+			_, err := cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &address})
 			assert.Equal(t, "unprocessable", goaErrorName(err))
 			assert.NotContains(t, err.Error(), address, "refusals do not echo a submitted address")
 			after, err := cp.GetModelConnection(user)
@@ -292,7 +292,7 @@ func TestGatewayAddressValidationPreservesThePreviousChoice(t *testing.T) {
 func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 	cp, root := newLiveControlPlane(t, "serve-settings")
 	const header = "X-Test-Secret: sentinel-ended-header-a71b"
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{
 		"ANTHROPIC_API_KEY":        sentinelKey,
 		"ANTHROPIC_AUTH_TOKEN":     sentinelToken,
 		"ANTHROPIC_BASE_URL":       sentinelURL,
@@ -300,7 +300,7 @@ func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 	}})
 	builder := asCaller("alice@example.com", CallerBuilder)
 	commit := strings.Repeat("a", 40)
-	started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+	started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: commit,
 	})
 	require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 	if response, err := http.Post(started.URL+"/exit", "text/plain", nil); err == nil {
 		require.NoError(t, response.Body.Close())
 	}
-	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == gensurla.LiveTargetKindEnded },
+	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == genhighbay.LiveTargetKindEnded },
 		30*time.Second, 20*time.Millisecond)
 	read, err := cp.GetLiveTarget(builder)
 	require.NoError(t, err)
@@ -340,7 +340,7 @@ func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 	assert.Empty(t, dirs)
 	_, err = draft(builder, cp, fakePromptID, "A later draft.")
 	assert.Equal(t, "live_target_ended", goaErrorName(err))
-	_, err = cp.StartLiveTarget(asCaller("bob@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{
+	_, err = cp.StartLiveTarget(asCaller("bob@example.com", CallerBuilder), &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("b", 40),
 	})
 	assert.Equal(t, "forbidden", goaErrorName(err))
@@ -366,25 +366,25 @@ func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, stopped.Stopped)
 	assert.Contains(t, stopped.Message, "cleared")
-	assert.Equal(t, gensurla.LiveTargetKindNone, cp.liveTargetState().Kind())
+	assert.Equal(t, genhighbay.LiveTargetKindNone, cp.liveTargetState().Kind())
 	_, err = draft(builder, cp, fakePromptID, "After clearing.")
 	assert.Equal(t, "no_live_target", goaErrorName(err))
 	// End another launch and restart while its notice is still present, so
 	// the reopened none state proves the notice was not saved to the card store.
-	started, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+	started, err = cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("b", 40),
 	})
 	require.NoError(t, err)
 	if response, err := http.Post(started.URL+"/exit", "text/plain", nil); err == nil {
 		require.NoError(t, response.Body.Close())
 	}
-	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == gensurla.LiveTargetKindEnded },
+	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == genhighbay.LiveTargetKindEnded },
 		30*time.Second, 20*time.Millisecond)
 	require.NoError(t, cp.Close())
 	reopened, err := New(Options{CardsDir: filepath.Dir(root), WorkspaceDir: cp.initialWorkspaceRoot, Team: testTeamBinding()})
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, reopened.Close()) })
-	assert.Equal(t, gensurla.LiveTargetKindNone, reopened.liveTargetState().Kind(), "an ended notice is not durable history")
+	assert.Equal(t, genhighbay.LiveTargetKindNone, reopened.liveTargetState().Kind(), "an ended notice is not durable history")
 }
 
 // TestEndedPublicationNeverLooksLikeNoTarget coordinates output EOF with
@@ -392,7 +392,7 @@ func TestEndedLiveTargetRetainsOnlyItsPublicObservation(t *testing.T) {
 func TestEndedPublicationNeverLooksLikeNoTarget(t *testing.T) {
 	cp, _ := newLiveControlPlane(t, "serve")
 	builder := asCaller("alice@example.com", CallerBuilder)
-	started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+	started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40),
 	})
 	require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestEndedPublicationNeverLooksLikeNoTarget(t *testing.T) {
 	}
 	read, err := cp.GetLiveTarget(builder)
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.LiveTargetKindRunning, read.LiveTarget.Kind(), "cleanup is still waiting for liveMu")
+	assert.Equal(t, genhighbay.LiveTargetKindRunning, read.LiveTarget.Kind(), "cleanup is still waiting for liveMu")
 	_, err = draft(builder, cp, fakePromptID, "After output ended.")
 	assert.Equal(t, "live_target_ended", goaErrorName(err))
 	cp.liveMu.Unlock()
@@ -423,11 +423,11 @@ func TestEndedPublicationNeverLooksLikeNoTarget(t *testing.T) {
 	for time.Now().Before(deadline) {
 		read, err = cp.GetLiveTarget(builder)
 		require.NoError(t, err)
-		assert.Contains(t, []gensurla.LiveTargetKind{gensurla.LiveTargetKindRunning, gensurla.LiveTargetKindEnded}, read.LiveTarget.Kind(),
+		assert.Contains(t, []genhighbay.LiveTargetKind{genhighbay.LiveTargetKindRunning, genhighbay.LiveTargetKindEnded}, read.LiveTarget.Kind(),
 			"confirmed cleanup publishes ended atomically, without an intermediate none")
 		_, err = draft(builder, cp, fakePromptID, "During cleanup.")
 		assert.Equal(t, "live_target_ended", goaErrorName(err), "the end is never mistaken for a target that never ran")
-		if read.LiveTarget.Kind() == gensurla.LiveTargetKindEnded {
+		if read.LiveTarget.Kind() == genhighbay.LiveTargetKindEnded {
 			return
 		}
 	}
@@ -439,23 +439,23 @@ func TestEndedPublicationNeverLooksLikeNoTarget(t *testing.T) {
 func TestAcceptedReplacementDoesNotReviveTheOlderEnd(t *testing.T) {
 	cp, _ := newLiveControlPlane(t, "serve")
 	builder := asCaller("alice@example.com", CallerBuilder)
-	started, err := cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+	started, err := cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("a", 40),
 	})
 	require.NoError(t, err)
 	if response, err := http.Post(started.URL+"/exit", "text/plain", nil); err == nil {
 		require.NoError(t, response.Body.Close())
 	}
-	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == gensurla.LiveTargetKindEnded },
+	require.Eventually(t, func() bool { return cp.liveTargetState().Kind() == genhighbay.LiveTargetKindEnded },
 		30*time.Second, 20*time.Millisecond)
 	cp.liveMu.Lock()
 	cp.liveCommand = []string{filepath.Join(t.TempDir(), "missing-executor")}
 	cp.liveMu.Unlock()
-	_, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{
+	_, err = cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{
 		ChangeID: liveTestChangeID, CandidateCommit: strings.Repeat("b", 40),
 	})
 	assert.Equal(t, "live_target_failed", goaErrorName(err))
-	assert.Equal(t, gensurla.LiveTargetKindNone, cp.liveTargetState().Kind(), "an older end cannot describe the new failed launch")
+	assert.Equal(t, genhighbay.LiveTargetKindNone, cp.liveTargetState().Kind(), "an older end cannot describe the new failed launch")
 	_, err = draft(builder, cp, fakePromptID, "After a refused launch.")
 	assert.Equal(t, "no_live_target", goaErrorName(err))
 }
@@ -464,7 +464,7 @@ func TestAcceptedReplacementDoesNotReviveTheOlderEnd(t *testing.T) {
 // that supplies a launch command but no verification profile.
 func TestLiveWithoutVerificationKeepsItsUnavailableRefusal(t *testing.T) {
 	cp := newControlPlane(t, Options{Live: &LiveConfig{Command: []string{"unused"}}})
-	_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &gensurla.StartLiveTargetPayload{
+	_, err := cp.StartLiveTarget(asCaller("alice@example.com", CallerBuilder), &genhighbay.StartLiveTargetPayload{
 		ChangeID: "unknown", CandidateCommit: strings.Repeat("a", 40),
 	})
 	assert.Equal(t, "live_target_unavailable", goaErrorName(err))

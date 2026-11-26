@@ -17,7 +17,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 type (
@@ -89,8 +89,8 @@ const openDirFlags = unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O
 // copyGrant copies the grant held open as rootFD into dst, which must exist
 // and be empty. workspaceRel is the active workspace's slash path inside the
 // grant ("." when they are the same directory), workspaceID is the verified
-// workspace's identity. It skips .git and .surla*
-// entries, any entry the kernel resolves as the directory's .git or .surla
+// workspace's identity. It skips .git and .highbay*
+// entries, any entry the kernel resolves as the directory's .git or .highbay
 // (a case or Unicode alias on a case-insensitive volume), each decided when
 // its entry is opened; it copies every other regular file (keeping its mode),
 // directory and symlink (with its raw target). It refuses a workspace path
@@ -136,7 +136,7 @@ func (c *grantCopier) copyDir(dirFD int, rel, dst string) error {
 		return fmt.Errorf("read directory %s: %w", rel, err)
 	}
 	for _, name := range names {
-		if name == ".git" || strings.HasPrefix(name, ".surla") {
+		if name == ".git" || strings.HasPrefix(name, ".highbay") {
 			continue
 		}
 		if err := c.copyEntry(dirFD, path.Join(rel, name), name, dst); err != nil {
@@ -148,10 +148,10 @@ func (c *grantCopier) copyDir(dirFD int, rel, dst string) error {
 
 // protectedNames are the directories a copy never includes under any name
 // the kernel resolves to them.
-var protectedNames = []string{".git", ".surla"}
+var protectedNames = []string{".git", ".highbay"}
 
 // copyEntry copies one entry of dirFD unless the kernel currently resolves
-// .git or .surla in dirFD to it.
+// .git or .highbay in dirFD to it.
 func (c *grantCopier) copyEntry(dirFD int, rel, name, dst string) error {
 	if err := c.ctx.Err(); err != nil {
 		return err

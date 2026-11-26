@@ -40,7 +40,7 @@ export function MergeFeedback({ idPrefix, controls }: { idPrefix: string; contro
           year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
         })}</time>.</p>
       <p>Verification covered the approved commits before the merge, not the resulting branch. Nothing was deployed.</p>
-      <details className="surla-details" id={`${idPrefix}-receipt-details`}>
+      <details className="highbay-details" id={`${idPrefix}-receipt-details`}>
         <summary>Merge receipt</summary>
         <dl><dt>Branch</dt><dd><code>{receipt.branch}</code></dd>
           <dt>Resulting commit</dt><dd><code>{receipt.head_commit}</code></dd>
@@ -50,12 +50,12 @@ export function MergeFeedback({ idPrefix, controls }: { idPrefix: string; contro
     {error !== null && recovery !== null ? <Alert id={`${idPrefix}-error`} variant="destructive" role="alert" tabIndex={-1}>
       <p><strong>{recovery.title}</strong></p>
       <p>{recovery.step}</p>
-      <details className="surla-details"><summary>Details returned by Surla</summary>
+      <details className="highbay-details"><summary>Details returned by Highbay</summary>
         <p>{error.message}</p>
       </details>
     </Alert> : null}
     {controls.reason !== null ? <p id={`${idPrefix}-reason`} role="status">{controls.reason}</p> : null}
-    <div className="surla-field-row">
+    <div className="highbay-field-row">
       <Button id={`${idPrefix}-refresh`} disabled={controls.pending} onClick={controls.onRefresh}>Refresh merge state</Button>
     </div>
     <p>Refresh reads the current build and approval. It does not merge or retry a merge.</p>
@@ -82,7 +82,7 @@ export function MergedBranchVerification({
   const suiteModule = storedEvaluator ? "REPLACE_WITH_SUITE_MODULE" : "eval";
   const suiteCommand = storedEvaluator ? "REPLACE_WITH_SUITE_COMMAND" : "./gen/cmd/SERVICE-evals";
   const command = 'VERIFY_DIR="$(mktemp -d)" &&\n' + [
-    "surla verify",
+    "hbay verify",
     "-candidate-repo . -candidate-commit " + candidate,
     "-candidate-module " + shellWord(candidateModule) + " -binary " + shellWord(binary),
     "-suite-repo " + shellWord(suiteRepo) + " -suite-commit " + suite,
@@ -91,14 +91,14 @@ export function MergedBranchVerification({
     '-work-dir "$VERIFY_DIR/work" -report-dir "$VERIFY_DIR/reports" -builder-view',
   ].join(" \\\n  ");
 
-  return <details id={id} className="surla-details">
+  return <details id={id} className="highbay-details">
     <summary>Verify the merged branch from the terminal</summary>
     <p>{mergedCommit !== null
       ? "Run from the project's repository root. This template checks the resulting commit from the merge receipt."
       : "Check out the merged branch and run from its repository root. This template checks that branch's current commit."}
       {" The command creates a separate verification report."}</p>
     <p>{storedEvaluator
-      ? <>Use the settings shown by <code>surla verification show</code> to fill in the evaluator and candidate fields. Include a <code>-binary</code> flag for each candidate binary.</>
+      ? <>Use the settings shown by <code>hbay verification show</code> to fill in the evaluator and candidate fields. Include a <code>-binary</code> flag for each candidate binary.</>
       : <>Replace <code>SERVICE</code> with your service name. Adjust the module paths if your project or tests are outside the default directories.</>}</p>
     <p>{approvedSuite ? "The suite commit comes from the saved approval."
       : suiteCommit !== null ? "The suite commit identifies the currently accepted tests for this build."

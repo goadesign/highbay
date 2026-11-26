@@ -24,15 +24,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	genprojectserver "github.com/goadesign/surla/gen/http/project/server"
-	genproject "github.com/goadesign/surla/gen/project"
-	"github.com/goadesign/surla/internal/controlplane"
+	genprojectserver "github.com/goadesign/highbay/gen/http/project/server"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 )
 
-// viewsProject is one running project composed as Surla's composition root
+// viewsProject is one running project composed as Highbay's composition root
 // composes it: a control plane and a project server behind the project's
 // saved address, with a test-only restart that replaces both, as starting
-// Surla again does.
+// Highbay again does.
 type viewsProject struct {
 	// state is the project's private state.
 	state *State
@@ -80,8 +80,8 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   // Recovery stays available through the agent or companion without a shell step.
   const expectRecovery = (page, selector) => {
     const text = page.text(selector);
-    expect(text.includes("coding agent") && text.includes("Open Surla Window") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
-    expect(!text.includes("Run surla") && !text.includes("run surla"), "session recovery still requires a typed terminal command: " + text);
+    expect(text.includes("coding agent") && text.includes("Open Highbay Window") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
+    expect(!text.includes("Run hbay") && !text.includes("run hbay"), "session recovery still requires a typed terminal command: " + text);
   };
   const expectPromptCopy = async (page, selector) => {
     const copied = [];
@@ -94,19 +94,19 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
     button.click();
     const status = () => page.text(selector + ' [role="status"]');
     await until(() => status() === "Prompt copied.", "the copy success was not announced");
-    expect(copied.length === 1 && copied[0] === "Open Surla views", "copy included something other than the recovery prompt");
+    expect(copied.length === 1 && copied[0] === "Open Highbay views", "copy included something other than the recovery prompt");
     Object.defineProperty(page.win.navigator, "clipboard", { value: undefined });
     button.click();
     await until(() => status().includes("Could not copy"), "clipboard failure did not offer a fallback");
-    expect(page.text(selector + " code") === "Open Surla views", "clipboard failure left no selectable prompt");
+    expect(page.text(selector + " code") === "Open Highbay views", "clipboard failure left no selectable prompt");
   };
   // Without a link the page explains how to open it and asks the server nothing.
   const bare = await openPage(origin);
-  await until(() => bare.$("#surla-signed-out"), "a page without a link did not say how to open it");
-  expectRecovery(bare, "#surla-signed-out");
-  await expectPromptCopy(bare, "#surla-signed-out");
-  expect(!bare.text("#surla-signed-out-title").includes("with surla"), "the no-link heading still directs the user to the CLI");
-  const lifetime = bare.text("#surla-signed-out .surla-muted");
+  await until(() => bare.$("#highbay-signed-out"), "a page without a link did not say how to open it");
+  expectRecovery(bare, "#highbay-signed-out");
+  await expectPromptCopy(bare, "#highbay-signed-out");
+  expect(!bare.text("#highbay-signed-out-title").includes("with hbay"), "the no-link heading still directs the user to the CLI");
+  const lifetime = bare.text("#highbay-signed-out .highbay-muted");
   expect(lifetime.includes("fresh session") && lifetime.includes("one of those routes"), "the session-lifetime note omitted the established reopen routes: " + lifetime);
   await sleep(200);
   expect(bare.requests.length === 0, "a page without a link sent requests: " + JSON.stringify(bare.requests));
@@ -118,7 +118,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
 
   // The link becomes a session held only in memory, and leaves the address.
   const page = await openPage(origin, { link: input.first });
-  await until(() => page.$("#surla-change-list-empty"), "the page did not obtain a session and read the empty project");
+  await until(() => page.$("#highbay-change-list-empty"), "the page did not obtain a session and read the empty project");
   expect(page.win.location.href === origin + "/views" && page.win.location.hash === "", "the link stayed in the address: " + page.win.location.href);
   const exchange = page.sent("POST", "/project/browser-session");
   expect(exchange.length === 1 && exchange[0].body.link === input.first && !exchange[0].headers.Authorization, "the link was not exchanged exactly once");
@@ -139,22 +139,22 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
     analysis: { summary: "Route refunds to a manager.", ambiguities: [], examples: [{ scenario: "Refund", input_summary: "$40", expected_outcome: "Approved", verification_kind: "deterministic" }], preserved_behaviors: [] },
   }, input.guide);
   expect(proposed.status === 200, "the guide could not propose: " + JSON.stringify(proposed));
-  await until(() => page.$("#surla-open-change-chg-session"), "the proposed change did not appear");
-  page.$("#surla-open-change-chg-session").click();
+  await until(() => page.$("#highbay-open-change-chg-session"), "the proposed change did not appear");
+  page.$("#highbay-open-change-chg-session").click();
   await until(() => page.$('textarea[data-field="expected_outcome"]'), "the change did not open");
   const field = page.$('textarea[data-field="expected_outcome"]');
   page.type(field, "Typed before the restart");
 
   // A reload is a new page without the link: it has no session.
   const reloaded = await openPage(origin);
-  await until(() => reloaded.$("#surla-signed-out"), "a reloaded page did not say how to open it again");
+  await until(() => reloaded.$("#highbay-signed-out"), "a reloaded page did not say how to open it again");
   reloaded.close();
 
   // A second use of the same link is refused and reported.
   const reused = await openPage(origin, { link: input.first });
-  await until(() => reused.$("#surla-link-used"), "a used link was not reported");
-  expect(reused.text("#surla-link-used").includes("already used"), "the used link was not reported plainly");
-  expectRecovery(reused, "#surla-signed-out");
+  await until(() => reused.$("#highbay-link-used"), "a used link was not reported");
+  expect(reused.text("#highbay-link-used").includes("already used"), "the used link was not reported plainly");
+  expectRecovery(reused, "#highbay-signed-out");
   expect(reused.win.location.hash === "", "a refused link stayed in the address");
   reused.close();
 
@@ -164,21 +164,21 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   field.focus();
   field.setSelectionRange(2, 8);
   page.win.location.hash = "link=" + fresh;
-  await until(() => page.$("#surla-pending-link") && page.win.location.hash === "", "a new same-tab link was not scrubbed and deferred");
-  expect(page.$("#surla-open-pending-link").disabled && page.beforeUnload(), "unsaved CP1 input did not guard both link opening and unload");
+  await until(() => page.$("#highbay-pending-link") && page.win.location.hash === "", "a new same-tab link was not scrubbed and deferred");
+  expect(page.$("#highbay-open-pending-link").disabled && page.beforeUnload(), "unsaved CP1 input did not guard both link opening and unload");
   expect(page.$('textarea[data-field="expected_outcome"]') === field && field.value === "Typed before the restart" && page.doc.activeElement === field && field.selectionStart === 2 && field.selectionEnd === 8, "deferring a link changed the draft, focus or selection");
   expect(page.sent("POST", "/project/browser-session").length === 1, "a deferred link was exchanged before edits were resolved");
-  expect(page.text("#surla-pending-link").includes("two minutes after it was printed"), "the deferred notice did not explain the link's original expiry");
-  expect(page.status().includes("You opened a new Surla link") && page.status().includes("Open link"), "the existing live status did not announce the deferred link");
-  page.$("#surla-confirm-submit").click();
-  await until(() => page.$("#surla-session-ended"), "the page did not say its session ended");
-  expectRecovery(page, "#surla-session-ended");
-  await expectPromptCopy(page, "#surla-session-ended");
+  expect(page.text("#highbay-pending-link").includes("two minutes after it was printed"), "the deferred notice did not explain the link's original expiry");
+  expect(page.status().includes("You opened a new Highbay link") && page.status().includes("Open link"), "the existing live status did not announce the deferred link");
+  page.$("#highbay-confirm-submit").click();
+  await until(() => page.$("#highbay-session-ended"), "the page did not say its session ended");
+  expectRecovery(page, "#highbay-session-ended");
+  await expectPromptCopy(page, "#highbay-session-ended");
   expect(page.$('textarea[data-field="expected_outcome"]').value === "Typed before the restart", "typed edits were lost");
-  expect(page.text("#surla-session-ended-edits").includes("Typed before the restart"), "the unsaved edits are not shown for copying");
-  expect(page.$("#surla-open-pending-link").disabled && page.beforeUnload(), "a failed save released unsaved input");
-  page.$("#surla-discard-draft").click();
-  await until(() => !page.$("#surla-open-pending-link").disabled, "local discard after session end did not enable the pending link");
+  expect(page.text("#highbay-session-ended-edits").includes("Typed before the restart"), "the unsaved edits are not shown for copying");
+  expect(page.$("#highbay-open-pending-link").disabled && page.beforeUnload(), "a failed save released unsaved input");
+  page.$("#highbay-discard-draft").click();
+  await until(() => !page.$("#highbay-open-pending-link").disabled, "local discard after session end did not enable the pending link");
   expect(!page.beforeUnload(), "discarded CP1 input still blocked leaving");
   expect(page.win.localStorage.length === 0 && page.win.sessionStorage.length === 0, "the pending link was persisted in browser storage");
   const afterRestart = await fetch(origin + "/changes", { headers: { Authorization: session, "Sec-Fetch-Site": "same-origin" } });
@@ -226,8 +226,8 @@ func TestViewsPageShellNavigation(t *testing.T) {
 			require.NoError(t, response.Body.Close())
 			if tc.name == "bare address" {
 				assert.Contains(t, string(body), "request must come from the project's own page")
-				assert.Contains(t, string(body), "ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion")
-				assert.NotContains(t, string(body), "run surla")
+				assert.Contains(t, string(body), "ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")
+				assert.NotContains(t, string(body), "run hbay")
 			}
 		})
 	}
@@ -319,24 +319,24 @@ func TestViewsPageReadsNeedTheSameOriginMark(t *testing.T) {
 // instead of proceeding with nil servers or acknowledging a failed HTTP restart.
 func TestViewsProjectRestartReportsStartupFailure(t *testing.T) {
 	t.Run("initial construction", func(t *testing.T) {
-		vp := &viewsProject{state: testState(t), opts: controlplane.Options{SurlaVersion: "invalid"}}
+		vp := &viewsProject{state: testState(t), opts: controlplane.Options{HighbayVersion: "invalid"}}
 		err := vp.restart()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start the control plane: surla version")
+		assert.Contains(t, err.Error(), "start the control plane: hbay version")
 		assert.Nil(t, vp.cp.Load())
 		assert.Nil(t, vp.server.Load())
 		assert.Nil(t, vp.handler.Load())
 	})
 	t.Run("HTTP restart", func(t *testing.T) {
 		vp := startViewsProject(t, controlplane.Options{})
-		vp.opts.SurlaVersion = "invalid"
+		vp.opts.HighbayVersion = "invalid"
 		resp, err := http.Post(vp.state.Origin()+"/__test/restart", "text/plain", nil)
 		require.NoError(t, err)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, resp.Body.Close())
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-		assert.Contains(t, string(body), "start the control plane: surla version")
+		assert.Contains(t, string(body), "start the control plane: hbay version")
 	})
 }
 
@@ -385,7 +385,7 @@ func startViewsProject(t *testing.T, opts controlplane.Options) *viewsProject {
 }
 
 // restart stops the current control plane, if any, and starts a new control
-// plane and project server on the same state, as starting Surla again does:
+// plane and project server on the same state, as starting Highbay again does:
 // saved changes and agent credentials survive, while every session and
 // everything the old control plane held only in memory, such as the Story
 // evaluation, ends. It returns construction or cleanup failures to the caller,
@@ -448,7 +448,7 @@ func (vp *viewsProject) link() (string, error) {
 	return strings.TrimPrefix(u.Fragment, "link="), nil
 }
 
-// management is the context of the management caller `surla` uses.
+// management is the context of the management caller `hbay` uses.
 func (vp *viewsProject) management() context.Context {
 	return controlplane.WithPrincipal(context.Background(), controlplane.Principal{
 		ID: vp.state.Record.Owner, CallerID: "management", Kind: controlplane.CallerManagement,

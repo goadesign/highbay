@@ -11,8 +11,8 @@ func TestViewsPageTitleFollowsChangeDecisions(t *testing.T) {
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const title = (page, step) => page.doc.title === step + ": Refunds café";
 const bare = await openPage(origin);
-await until(() => bare.$("#surla-signed-out"), "bare page did not finish opening");
-expect(bare.doc.title === "Surla", "unauthenticated page invented a project name: " + bare.doc.title);
+await until(() => bare.$("#highbay-signed-out"), "bare page did not finish opening");
+expect(bare.doc.title === "Highbay", "unauthenticated page invented a project name: " + bare.doc.title);
 bare.close();
 await control(origin, "hold", { key: "GET /changes" });
 const page = await openPage(origin, { link: input.link });
@@ -25,9 +25,9 @@ const proposed = await api(origin, "POST", "/changes/propose", {
 }, input.guide);
 expect(proposed.status === 200, "proposal failed: " + JSON.stringify(proposed));
 await until(() => title(page, "Open a change"), "list did not name the open step");
-page.$("#surla-open-change-chg-title").click();
+page.$("#highbay-open-change-chg-title").click();
 await until(() => title(page, "Confirm change"), "unconfirmed change did not name confirmation");
-page.$("#surla-confirm-submit").click();
+page.$("#highbay-confirm-submit").click();
 await until(() => title(page, "Review change"), "confirmed change invented build or approval eligibility");
 page.type(page.$('textarea[data-field="expected_outcome"]'), "Unsaved refinement");
 await until(() => title(page, "Refine change"), "unsaved refinement did not reach the title");
@@ -36,8 +36,8 @@ await revise(card, "Route larger refunds to a manager.", "Manager review");
 await until(() => title(page, "Review proposed change"), "waiting proposal did not outrank the draft");
 page.close();
 const reloaded = await openPage(origin);
-await until(() => reloaded.$("#surla-signed-out"), "reload did not end the session");
-expect(reloaded.doc.title === "Surla", "reload retained the session's project name");
+await until(() => reloaded.$("#highbay-signed-out"), "reload did not end the session");
+expect(reloaded.doc.title === "Highbay", "reload retained the session's project name");
 reloaded.close();
 `)
 }
@@ -67,19 +67,19 @@ const title = (page, step) => page.doc.title === step + ": Refunds café";
 const page = await openPage(origin, { link: input.link });
 await until(() => title(page, "Coding agent needs you: permission"), "role order or project name is wrong: " + page.doc.title);
 expect(!page.doc.title.includes("page-team"), "title used the sanitized team identity");
-page.$("#surla-nav-team").click();
-await until(() => page.$("#surla-team-refresh") && !page.$("#surla-team-refresh").disabled, "Team did not open");
+page.$("#highbay-nav-team").click();
+await until(() => page.$("#highbay-team-refresh") && !page.$("#highbay-team-refresh").disabled, "Team did not open");
 await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team unavailable." } });
-page.$("#surla-team-refresh").click();
+page.$("#highbay-team-refresh").click();
 await until(() => title(page, "Refresh Team"), "failed read presented retained attention as current");
-page.$("#surla-team-refresh").click();
+page.$("#highbay-team-refresh").click();
 await until(() => title(page, "Coding agent needs you: permission"), "recovered read did not restore current attention");
 await control(origin, "act", { key: "working" });
 await until(() => title(page, "Describe your change"), "working role kept stale needs-you attention");
 await control(origin, "act", { key: "needs-you" });
 await until(() => title(page, "Builder needs you: question"), "second attention did not arrive");
 await control(origin, "reply", { key: "GET /team", status: 401, body: { name: "unauthorized", message: "Session ended." } });
-page.$("#surla-team-refresh").click();
+page.$("#highbay-team-refresh").click();
 await until(() => title(page, "Reopen project"), "ended session did not override retained facts");
 page.close();
 `)

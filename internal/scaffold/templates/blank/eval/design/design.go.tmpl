@@ -21,7 +21,7 @@ var _ = Service("[[.Name]]", func() {
 
 // This suite lives in the same repository as the [[.Name]], so anyone who can
 // read the [[.Name]]'s code can read its scenarios too; none of them is hidden.
-// Surla generates the suite's program, gen/cmd/[[.Name]]-evals, from this suite
+// Highbay generates the suite's program, gen/cmd/[[.Name]]-evals, from this suite
 // and the acceptance package.
 var _ = Suite("[[.Name]]_acceptance", func() {
 	Description("Proves that the [[.Name]] starts and accepts connections. A change adds the scenarios that prove its behavior.")

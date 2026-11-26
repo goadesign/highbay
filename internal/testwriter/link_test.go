@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/shquote"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/shquote"
 )
 
 // TestPrepareAndCheckRefuseALinkedFolder places a symbolic link, absolute and

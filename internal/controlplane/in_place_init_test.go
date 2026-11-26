@@ -17,9 +17,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"golang.org/x/mod/module"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/gitenv"
-	"github.com/goadesign/surla/internal/scaffold"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/gitenv"
+	"github.com/goadesign/highbay/internal/scaffold"
 )
 
 // TestInPlaceInitPublishesGitLastAndPreservesFiles uses real Git to confirm
@@ -114,7 +114,7 @@ func TestInPlaceInitPublishesGitLastAndPreservesFiles(t *testing.T) {
 func TestInPlaceInitConflictsBeforeWAL(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{
-		".git", ".gitignore", "README.md", "AGENTS_QUICKSTART.md", ".surla-work", "go.mod", "notes.txt", ".env",
+		".git", ".gitignore", "README.md", "AGENTS_QUICKSTART.md", ".highbay-work", "go.mod", "notes.txt", ".env",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -236,7 +236,7 @@ func TestInPlaceInitRejectsForeignEntry(t *testing.T) {
 				require.NoError(t, os.Symlink("foreign", changed))
 			}
 			_, err := initInPlaceForTest(cp)
-			require.ErrorContains(t, err, "restart Surla")
+			require.ErrorContains(t, err, "restart Highbay")
 			pending := pendingInPlaceRecord(t, cp)
 			require.NoError(t, cp.Close())
 
@@ -302,7 +302,7 @@ func TestInitProjectEmptyDirStillUsesChild(t *testing.T) {
 	cp := newControlPlane(t, opts)
 	empty := ""
 	shopModule := "example.com/shop"
-	result, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{
+	result, err := cp.InitProject(inPlaceTestGuide(), &genhighbay.InitProjectPayload{
 		ModulePath: &shopModule, Dir: &empty,
 	})
 	require.NoError(t, err)
@@ -329,7 +329,7 @@ func TestInitProjectCreatesABlankProjectUnlessAskedForTheWorkedExample(t *testin
 			t.Parallel()
 			cp := newControlPlane(t, inPlaceInitOptions(t))
 			shopModule := "example.com/shop"
-			result, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{
+			result, err := cp.InitProject(inPlaceTestGuide(), &genhighbay.InitProjectPayload{
 				ModulePath: &shopModule, WorkedExample: tc.example,
 			})
 			require.NoError(t, err)
@@ -385,7 +385,7 @@ func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 			opts.WorkspaceDir = ws
 			opts.NewGenerator = func() scaffold.Generator { return &fakeInitGenerator{pkg: tc.wantService} }
 			cp := newControlPlane(t, opts)
-			res, err := cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{Dir: tc.dir})
+			res, err := cp.InitProject(inPlaceTestGuide(), &genhighbay.InitProjectPayload{Dir: tc.dir})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantService, res.ServiceName)
 			assert.LessOrEqual(t, len(res.ServiceName), 48)
@@ -403,30 +403,30 @@ func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 }
 
 // TestInitProjectWithoutAVersionNamesTheRestart checks the refusal of a server
-// started from a surla build without a module version. The server keeps that
-// version until it stops, and a new surla refuses to attach to an older server,
+// started from a hbay build without a module version. The server keeps that
+// version until it stops, and a new hbay refuses to attach to an older server,
 // so the step must stop the server and restart the coding agent before the
-// retry; the guide cannot pass surla init's -surla-version flag.
+// retry; the guide cannot pass hbay init's -highbay-version flag.
 func TestInitProjectWithoutAVersionNamesTheRestart(t *testing.T) {
 	opts := inPlaceInitOptions(t)
-	opts.SurlaVersion = ""
+	opts.HighbayVersion = ""
 	cp, err := New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cp.Close()) })
 	root := "."
-	_, err = cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{Dir: &root})
+	_, err = cp.InitProject(inPlaceTestGuide(), &genhighbay.InitProjectPayload{Dir: &root})
 	var refusal *goa.ServiceError
 	require.ErrorAs(t, err, &refusal)
 	assert.Equal(t, "not_implemented", refusal.Name)
 	for _, step := range []string{
-		"install surla from a tagged or pseudo-versioned module release",
-		"stop this project's server with surla stop in the project folder",
-		"restart your coding agent so its Surla connection starts the new surla",
+		"install hbay from a tagged or pseudo-versioned module release",
+		"stop this project's server with hbay stop in the project folder",
+		"restart your coding agent so its Highbay connection starts the new hbay",
 		"then call init_project again",
 	} {
 		assert.Contains(t, refusal.Message, step)
 	}
-	assert.NotContains(t, refusal.Message, "-surla-version")
+	assert.NotContains(t, refusal.Message, "-highbay-version")
 	entries, err := os.ReadDir(opts.WorkspaceDir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "a refused init writes nothing")
@@ -440,12 +440,12 @@ func inPlaceInitOptions(t *testing.T) Options {
 	ws := filepath.Join(root, "workspace")
 	require.NoError(t, os.Mkdir(ws, 0o755))
 	return Options{
-		Team:         testTeamBinding(),
-		CardsDir:     filepath.Join(root, "cards"),
-		WorkspaceDir: ws,
-		InitStageDir: filepath.Join(root, "staging"),
-		SurlaVersion: testSurlaVersion,
-		NewGenerator: func() scaffold.Generator { return &fakeInitGenerator{pkg: "shop"} },
+		Team:           testTeamBinding(),
+		CardsDir:       filepath.Join(root, "cards"),
+		WorkspaceDir:   ws,
+		InitStageDir:   filepath.Join(root, "staging"),
+		HighbayVersion: testHighbayVersion,
+		NewGenerator:   func() scaffold.Generator { return &fakeInitGenerator{pkg: "shop"} },
 		InitRunner: func(ctx context.Context, dir, logPath string, args ...string) error {
 			if args[0] == "git" && slices.Contains(args, "init") {
 				if err := os.Mkdir(filepath.Join(dir, ".git"), 0o700); err != nil {
@@ -466,8 +466,8 @@ func inPlaceTestGit(ctx context.Context, dir string, args ...string) *exec.Cmd {
 		"GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
 		"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
 	), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-		"GIT_AUTHOR_NAME=Surla Test", "GIT_AUTHOR_EMAIL=author@example.com",
-		"GIT_COMMITTER_NAME=Surla Test", "GIT_COMMITTER_EMAIL=author@example.com")
+		"GIT_AUTHOR_NAME=Highbay Test", "GIT_AUTHOR_EMAIL=author@example.com",
+		"GIT_COMMITTER_NAME=Highbay Test", "GIT_COMMITTER_EMAIL=author@example.com")
 	return cmd
 }
 
@@ -477,10 +477,10 @@ func inPlaceTestGuide() context.Context {
 }
 
 // initInPlaceForTest calls the service entry point with a root destination.
-func initInPlaceForTest(cp *ControlPlane) (*gensurla.InitProjectResult, error) {
+func initInPlaceForTest(cp *ControlPlane) (*genhighbay.InitProjectResult, error) {
 	root := "."
 	shopModule := "example.com/shop"
-	return cp.InitProject(inPlaceTestGuide(), &gensurla.InitProjectPayload{
+	return cp.InitProject(inPlaceTestGuide(), &genhighbay.InitProjectPayload{
 		ModulePath: &shopModule, Dir: &root,
 	})
 }
@@ -600,7 +600,7 @@ func TestChangesWaitOpenBeforeInitSeesItsPhases(t *testing.T) {
 	opened := make(chan struct{})
 	go func() {
 		close(opened)
-		got, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: before.Version})
+		got, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: before.Version})
 		if err != nil {
 			woke <- ""
 			return

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +22,7 @@ func TestAttachGuideAdoptsExistingPaneAndKeepsItsCredential(t *testing.T) {
 	deps := fixtureTeamDependencies(state)
 	deps.CompanionInstalled = true
 	host := deps.Host.(*teamFixture)
-	host.overlays = []string{"surla"}
+	host.overlays = []string{"highbay"}
 	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
 	result := attachFixtureGuide(t, s, host)
@@ -173,9 +173,9 @@ func TestStartAgentsValidatesAndPersistsPreferences(t *testing.T) {
 	deps := fixtureTeamDependencies(state)
 	host := deps.Host.(*teamFixture)
 	discover := 0
-	deps.DiscoverAgents = func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
+	deps.DiscoverAgents = func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 		discover++
-		return []*gensurla.InstalledAgentOption{{Client: "claude", Program: "claude", ModelSupported: true}}, nil
+		return []*genhighbay.InstalledAgentOption{{Client: "claude", Program: "claude", ModelSupported: true}}, nil
 	}
 	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
@@ -184,13 +184,13 @@ func TestStartAgentsValidatesAndPersistsPreferences(t *testing.T) {
 		BuilderFolder: state.Record.Directory, TestWriterFolder: t.TempDir(),
 	}))
 	model := "sonnet"
-	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+	_, err = s.StartAgents(t.Context(), map[string]*genhighbay.RoleAgentChoice{
 		"builder": {Client: "claude", Program: "/uninstalled", Model: &model},
 	})
 	require.Error(t, err)
 	assert.Empty(t, host.calls)
 	assert.Empty(t, state.Record.SavedChoices)
-	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+	_, err = s.StartAgents(t.Context(), map[string]*genhighbay.RoleAgentChoice{
 		"builder": {Client: "claude", Program: "claude", Model: &model},
 	})
 	require.NoError(t, err)
@@ -288,7 +288,7 @@ func TestStartAgentsExplicitGuideRequiresNoLiveSession(t *testing.T) {
 			if scenario == "active pane" {
 				attachFixtureGuide(t, s, host)
 			}
-			choices := map[string]*gensurla.RoleAgentChoice{"guide": {Client: "codex", Program: "codex"}}
+			choices := map[string]*genhighbay.RoleAgentChoice{"guide": {Client: "codex", Program: "codex"}}
 			result, err := s.StartAgents(t.Context(), choices)
 			if scenario != "missing" {
 				require.ErrorContains(t, err, "current guide session is already running")
@@ -327,8 +327,8 @@ func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
 			deps := fixtureTeamDependencies(state)
 			host := deps.Host.(*teamFixture)
 			program := "/installed/" + strings.Repeat("p/", 260) + "agy"
-			deps.DiscoverAgents = func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
-				return []*gensurla.InstalledAgentOption{{
+			deps.DiscoverAgents = func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
+				return []*genhighbay.InstalledAgentOption{{
 					Client: "antigravity", Program: program, ModelSupported: true,
 					ThinkingSupported: true, Efforts: []string{effort},
 				}}, nil
@@ -337,10 +337,10 @@ func TestStartAgentsHonorsClientModelChoices(t *testing.T) {
 			require.NoError(t, err)
 			fixtureAssignments(s, false)
 			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderOnly{BuilderFolder: state.Record.Directory}))
-			choice := &gensurla.RoleAgentChoice{
+			choice := &genhighbay.RoleAgentChoice{
 				Client: "antigravity", Program: program, Model: &scenario.model, Thinking: scenario.effort,
 			}
-			_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{"builder": choice})
+			_, err = s.StartAgents(t.Context(), map[string]*genhighbay.RoleAgentChoice{"builder": choice})
 			if !scenario.allowed {
 				require.Error(t, err)
 				assert.Empty(t, host.calls)
@@ -551,7 +551,7 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 			wantAdopted: false,
 		},
 		{
-			name:         "refuses adoption when pane cwd is inside .surla-build",
+			name:         "refuses adoption when pane cwd is inside .highbay-build",
 			client:       "codex",
 			ancestorPids: []int{52099, 52010},
 			setup: func(_ *testing.T, state *State, host *teamFixture) {
@@ -560,13 +560,13 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 				}}
 				host.terminals = []TeamTerminal{{
 					Address: "t-build", PID: 52000, State: "live",
-					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: filepath.Join(state.Record.Directory, ".surla-build")},
+					Foreground: &TeamForeground{PID: 52010, Argv: []string{"codex"}, Cwd: filepath.Join(state.Record.Directory, ".highbay-build")},
 				}}
 			},
 			wantAdopted: false,
 		},
 		{
-			name:         "refuses adoption when pane cwd is inside .surla-tests",
+			name:         "refuses adoption when pane cwd is inside .highbay-tests",
 			client:       "claude",
 			ancestorPids: []int{60099, 60010},
 			setup: func(_ *testing.T, state *State, host *teamFixture) {
@@ -575,7 +575,7 @@ func TestAttachGuideLiveClientFallback(t *testing.T) {
 				}}
 				host.terminals = []TeamTerminal{{
 					Address: "t-tests", PID: 60000, State: "live",
-					Foreground: &TeamForeground{PID: 60010, Argv: []string{"claude"}, Cwd: filepath.Join(state.Record.Directory, ".surla-tests", "eval")},
+					Foreground: &TeamForeground{PID: 60010, Argv: []string{"claude"}, Cwd: filepath.Join(state.Record.Directory, ".highbay-tests", "eval")},
 				}}
 			},
 			wantAdopted: false,
@@ -719,8 +719,8 @@ func TestAttachGuideLineageAdoptionReusedByBuildWorkers(t *testing.T) {
 			assert.Equal(t, "attached", attached.HerdrMode)
 
 			fixtureAssignments(s, true)
-			builderDir := filepath.Join(state.Record.Directory, ".surla-build")
-			writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+			builderDir := filepath.Join(state.Record.Directory, ".highbay-build")
+			writerDir := filepath.Join(state.Record.Directory, ".highbay-tests")
 			require.NoError(t, os.MkdirAll(builderDir, 0o755))
 			require.NoError(t, os.MkdirAll(writerDir, 0o755))
 			require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
@@ -822,8 +822,8 @@ func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *
 	s, err := NewServer(state, func() {}, deps)
 	require.NoError(t, err)
 	fixtureAssignments(s, true)
-	builderDir := filepath.Join(state.Record.Directory, ".surla-build")
-	writerDir := filepath.Join(state.Record.Directory, ".surla-tests")
+	builderDir := filepath.Join(state.Record.Directory, ".highbay-build")
+	writerDir := filepath.Join(state.Record.Directory, ".highbay-tests")
 	require.NoError(t, os.MkdirAll(builderDir, 0o755))
 	require.NoError(t, os.MkdirAll(writerDir, 0o755))
 	require.NoError(t, s.RegisterBuildRoles(t.Context(), controlplane.BuilderAndTestWriter{
@@ -831,7 +831,7 @@ func TestStartAgentsPreparesWorkerTrustAndRefusesExplicitPolicyBeforeEffects(t *
 	}))
 
 	// Refused choice must not prepare trust.
-	_, err = s.StartAgents(t.Context(), map[string]*gensurla.RoleAgentChoice{
+	_, err = s.StartAgents(t.Context(), map[string]*genhighbay.RoleAgentChoice{
 		"builder": {Client: "codex", Program: "/missing"},
 	})
 	require.Error(t, err)

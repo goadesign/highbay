@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,37 +51,37 @@ func TestViewsPageBinariesGuidanceUsesTheSelectedRun(t *testing.T) {
 				"olderDir": f.olderDir, "newerDir": f.newerDir, "digest": f.digest,
 			}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check") && !page.$("#surla-build-review-check").disabled, "the saved current check did not settle");
-page.$("#surla-build-review-check").click();
-const settled = (id) => page.$("#surla-result-view").dataset.runId === id && !page.$("#surla-cp5-observation-status") &&
-  (input.promotion ? page.$("#surla-cp5-approve-blocked") : page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled);
-await until(() => settled(input.newer) && page.$("#surla-cp4-run-" + input.older), "the latest result and selection did not settle");
-const folder = () => page.$("#surla-cp4-binaries-dir code")?.textContent;
+await until(() => page.$("#highbay-build-review-check") && !page.$("#highbay-build-review-check").disabled, "the saved current check did not settle");
+page.$("#highbay-build-review-check").click();
+const settled = (id) => page.$("#highbay-result-view").dataset.runId === id && !page.$("#highbay-cp5-observation-status") &&
+  (input.promotion ? page.$("#highbay-cp5-approve-blocked") : page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled);
+await until(() => settled(input.newer) && page.$("#highbay-cp4-run-" + input.older), "the latest result and selection did not settle");
+const folder = () => page.$("#highbay-cp4-binaries-dir code")?.textContent;
 if (input.promotion) expect(folder() === input.newerDir, "Test details did not show the latest run's recorded output folder");
-else expect(!page.$("#surla-cp4-binaries-dir"), "a project without promotion settings exposed a private output folder");
-page.$("#surla-cp4-run-" + input.older).click();
+else expect(!page.$("#highbay-cp4-binaries-dir"), "a project without promotion settings exposed a private output folder");
+page.$("#highbay-cp4-run-" + input.older).click();
 await until(() => settled(input.older), "the older selected result did not settle");
 if (!input.promotion) {
-  expect(!page.$("#surla-cp4-binaries-dir"), "selection exposed an output folder without promotion settings");
+  expect(!page.$("#highbay-cp4-binaries-dir"), "selection exposed an output folder without promotion settings");
   page.close();
   return;
 }
-expect(folder() === input.olderDir && !page.text("#surla-cp4-binaries-dir").includes(input.newerDir), "an equivalent report selected another execution's folder");
-expect(page.text("#surla-cp5-approve-blocked").includes("whose folder the run's Proof view shows") && !page.$("#surla-cp5-approve"), "owner preflight did not explain the changed release binaries before approval");
+expect(folder() === input.olderDir && !page.text("#highbay-cp4-binaries-dir").includes(input.newerDir), "an equivalent report selected another execution's folder");
+expect(page.text("#highbay-cp5-approve-blocked").includes("whose folder the run's Proof view shows") && !page.$("#highbay-cp5-approve"), "owner preflight did not explain the changed release binaries before approval");
 expect(page.sent("POST", "/changes/approve").length === 0, "blocked owner preflight submitted approval");
-page.$("#surla-cp4-run-" + input.newer).click();
+page.$("#highbay-cp4-run-" + input.newer).click();
 await until(() => settled(input.newer), "the newer run did not settle after the refusal");
-expect(folder() === input.newerDir && !page.$("#surla-cp5-approve-error"), "selection carried another run's refusal or output folder");
-page.$("#surla-cp4-run-" + input.older).click();
+expect(folder() === input.newerDir && !page.$("#highbay-cp5-approve-error"), "selection carried another run's refusal or output folder");
+page.$("#highbay-cp4-run-" + input.older).click();
 await until(() => settled(input.older), "returning to the selected refusal lost its guidance");
 expect(folder() === input.olderDir, "returning to saved evidence mixed execution paths");
-const verdict = page.text("#surla-cp4-title");
+const verdict = page.text("#highbay-cp4-title");
 const listPath = "/changes/chg-selected-inputs/verifications";
 const lists = page.sent("GET", listPath).length;
 await control(origin, "act", { key: "remove-promotion" });
-page.$("#surla-load-verifications").click();
-await until(() => page.sent("GET", listPath).slice(lists).some((r) => r.status === 200) && !page.$("#surla-load-verifications").disabled && !page.$("#surla-cp4-binaries-dir") && page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "a fresh owner read did not remove promotion-only metadata and restore availability");
-expect(page.text("#surla-cp4-title") === verdict && page.$("#surla-result-view").dataset.runId === input.older, "metadata refresh replaced the selected report");
+page.$("#highbay-load-verifications").click();
+await until(() => page.sent("GET", listPath).slice(lists).some((r) => r.status === 200) && !page.$("#highbay-load-verifications").disabled && !page.$("#highbay-cp4-binaries-dir") && page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "a fresh owner read did not remove promotion-only metadata and restore availability");
+expect(page.text("#highbay-cp4-title") === verdict && page.$("#highbay-result-view").dataset.runId === input.older, "metadata refresh replaced the selected report");
 expect(page.sent("POST", "/changes/approve").length === 0, "reading source guidance attempted approval");
 page.close();
 `)

@@ -3,7 +3,7 @@
 // prompts HTTP client encoders and decoders
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package client
 
@@ -16,7 +16,7 @@ import (
 	"net/http"
 	"net/url"
 
-	prompts "github.com/goadesign/surla/examples/orders/gen/prompts"
+	prompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
 	goahttp "goa.design/goa/v3/http"
 )
 

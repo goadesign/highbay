@@ -20,11 +20,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // fixtureSuite locates the fixture's suite module and the program the
@@ -325,8 +325,8 @@ func TestCheckIgnoresTheCopysOwnRepository(t *testing.T) {
 // requires none: the Story table Check writes says the module must declare
 // exactly one evaluation suite and how many it declares, never a build error
 // about a missing package. A module whose acceptance package was deleted, and one whose path
-// is outside Surla's test layout, get no generated program, and Check says
-// what makes a module a Surla test module.
+// is outside Highbay's test layout, get no generated program, and Check says
+// what makes a module a Highbay test module.
 func TestCheckWantsExactlyOneEvaluationSuite(t *testing.T) {
 	skipInShortMode(t)
 	repo, _ := newProject(t, fixtureProject(t))
@@ -374,7 +374,7 @@ var _ = Suite("second", func() {
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
-		assert.Contains(t, v.Findings[0].Message, "Surla generated no test program at ./gen/cmd/shop-evals")
+		assert.Contains(t, v.Findings[0].Message, "Highbay generated no test program at ./gen/cmd/shop-evals")
 		assert.Contains(t, v.Findings[0].Message, "keep its acceptance package")
 		assertNoAbsolutePath(t, v.Findings)
 	})
@@ -389,7 +389,7 @@ var _ = Suite("second", func() {
 		require.NoError(t, err)
 		require.Len(t, v.Findings, 1, "%+v", v.Findings)
 		assert.Equal(t, FindingGeneration, v.Findings[0].Kind)
-		assert.Contains(t, v.Findings[0].Message, "Surla generated no test program at ./gen/cmd/shop-evals")
+		assert.Contains(t, v.Findings[0].Message, "Highbay generated no test program at ./gen/cmd/shop-evals")
 		assertNoAbsolutePath(t, v.Findings)
 	})
 }
@@ -521,16 +521,16 @@ func skipInShortMode(t *testing.T) {
 	}
 }
 
-// publishedSurla is a Surla version on the module proxy whose suite contract
+// publishedHighbay is a Highbay version on the module proxy whose suite contract
 // has everything the generated program calls; the starter's tests use the
 // same one. The fixture requires it as a starter does, because generation
 // refuses a replacement by a local folder.
-const publishedSurla = testmodule.PublishedSurlaVersion
+const publishedHighbay = testmodule.PublishedHighbayVersion
 
 // fixtureProject returns a project's files holding the fixture's test module
 // under eval/, as a test writer would start from: generated without a Story,
 // so with the generated program, and with an acceptance package providing the
-// five names the program calls. The module requires publishedSurla for the
+// five names the program calls. The module requires publishedHighbay for the
 // suite contract the program uses. The checks compile their own changed copies.
 func fixtureProject(t *testing.T) map[string]string {
 	t.Helper()
@@ -549,7 +549,7 @@ func fixtureProject(t *testing.T) map[string]string {
 			module[p] = string(b)
 		}
 		module["go.mod"] = strings.Replace(module["go.mod"], "require (",
-			"require (\n\tgithub.com/goadesign/surla "+publishedSurla, 1)
+			"require (\n\tgithub.com/goadesign/highbay "+publishedHighbay, 1)
 		module = testmodule.Tidy(t, module)
 		files := map[string]string{"README.md": "shop\n"}
 		for p, content := range module {
@@ -578,8 +578,8 @@ import (
 	"goa.design/goa-ai/eval"
 	"goa.design/goa-ai/runtime/agent/model"
 
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // Name is the name the program under test is bound as.

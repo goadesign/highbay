@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -67,7 +67,7 @@ func TestNewRefusesMissingOrInvalidProjectInputs(t *testing.T) {
 // TestNewKeepsItsTeamBinding proves edits to the caller's options do not
 // change the project owner or the service of a running control plane.
 func TestNewKeepsItsTeamBinding(t *testing.T) {
-	snapshot := gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "original-team", Roles: []*gensurla.TeamRoleState{}}
+	snapshot := genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "original-team", Roles: []*genhighbay.TeamRoleState{}}
 	binding := &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{snapshot: snapshot}}
 	cp, err := New(Options{CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: binding})
 	require.NoError(t, err)

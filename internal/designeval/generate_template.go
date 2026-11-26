@@ -22,8 +22,8 @@ import (
 // {{DESIGN_IMPORT}} and {{GEN_IMPORT}} are replaced with the target module's
 // design package and generated package import paths, and
 // {{ACCEPTANCE_PACKAGE}} with whether the module has an acceptance package
-// (HasAcceptancePackage). Before generating, it registers surlaQuickstart and
-// then surlaSuiteCommand, which generateProgram compiles alongside it.
+// (HasAcceptancePackage). Before generating, it registers highbayQuickstart and
+// then highbaySuiteCommand, which generateProgram compiles alongside it.
 const generateMainTemplate = `package main
 
 import (
@@ -52,8 +52,8 @@ func main() {
 	flag.String("cmd", "", "Command line recorded in generated file headers")
 	flag.Parse()
 
-	codegen.RegisterPluginLast("surla-quickstart", "gen", nil, surlaQuickstart)
-	codegen.RegisterPluginLast("surla-suite-command", "gen", nil, surlaSuiteCommand({{ACCEPTANCE_PACKAGE}}))
+	codegen.RegisterPluginLast("highbay-quickstart", "gen", nil, highbayQuickstart)
+	codegen.RegisterPluginLast("highbay-suite-command", "gen", nil, highbaySuiteCommand({{ACCEPTANCE_PACKAGE}}))
 	if err := eval.RunDSL(); err != nil {
 		fail(err)
 	}
@@ -96,7 +96,7 @@ func fail(err error) {
 
 // generateProgram returns the generation program's files: main.go from
 // generateMainTemplate; quickstart.go, suite_command.go and test_layout.go
-// (the surlaQuickstart and surlaSuiteCommand plugins and the layout rule they
+// (the highbayQuickstart and highbaySuiteCommand plugins and the layout rule they
 // use, with their package clauses changed to main); and
 // quickstart_sections.go, which declares quickstartSections as Go string
 // literals, with testProgramSection, because the program cannot read this

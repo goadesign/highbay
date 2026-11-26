@@ -33,7 +33,7 @@ export function TestWriterFacts({ build, findingTexts, loading, error, disabled,
     case "assigned": progress = build.test_writer.read
       ? "assignment read, no tests reported yet" : "assignment unread, no tests reported yet"; break;
     case "reported": progress = build.test_writer.read
-      ? "assignment read; Surla is checking its reported tests" : "assignment unread; its reported tests are being checked"; break;
+      ? "assignment read; Highbay is checking its reported tests" : "assignment unread; its reported tests are being checked"; break;
     case "needs_changes": progress = build.test_writer.read
       ? "assignment read; findings to address" : "assignment unread; new findings ready to read"; break;
     case "accepted": progress = build.test_writer.read
@@ -46,51 +46,51 @@ export function TestWriterFacts({ build, findingTexts, loading, error, disabled,
     tests.state === "accepted" ? "Tests accepted" :
     tests.state === "reported" ? "Checking the reported tests" : "Tests for this build";
   const findingCount = tests.state === "needs_changes" ? tests.finding_count : 0;
-  return <section id="surla-build-test-writer" className="surla-build-test-review" data-state={tests.state}
-    aria-labelledby="surla-build-tests-title">
-    <h4 id="surla-build-tests-title" tabIndex={-1} ref={heading}>{title}</h4>
+  return <section id="highbay-build-test-writer" className="highbay-build-test-review" data-state={tests.state}
+    aria-labelledby="highbay-build-tests-title">
+    <h4 id="highbay-build-tests-title" tabIndex={-1} ref={heading}>{title}</h4>
     <p>Test writer: {progress}</p>
     {!build.in_force ? <p>This build belongs to an earlier agreement.</p> : null}
-    <p className="surla-build-test-binding">Built agreement <code>{build.request_revision.slice(0, 12)}</code>
+    <p className="highbay-build-test-binding">Built agreement <code>{build.request_revision.slice(0, 12)}</code>
       {" · started "}<time dateTime={build.started_at}>{new Date(build.started_at).toLocaleString()}</time>
       {" · report "}{build.test_writer.report}</p>
     {tests.state === "could_not_run" ? <Alert variant="warning">{tests.reason} {tests.step}</Alert> : null}
-    {tests.state === "accepted" ? <p id="surla-build-not-judged">{tests.not_judged}</p> : null}
-    {tests.state !== "not_used" ? <div className="surla-build-test-evidence">
-      <section aria-labelledby="surla-build-required-title">
-        <h5 id="surla-build-required-title">Required tests</h5>
+    {tests.state === "accepted" ? <p id="highbay-build-not-judged">{tests.not_judged}</p> : null}
+    {tests.state !== "not_used" ? <div className="highbay-build-test-evidence">
+      <section aria-labelledby="highbay-build-required-title">
+        <h5 id="highbay-build-required-title">Required tests</h5>
         <p>{build.required_test_count} finished Story {build.required_test_count === 1 ? "flow requires a test" : "flows require tests"}.</p>
         {build.required_tests.length === 0 ? <p>No finished Story flow requires a test. Draft flows require none.</p> :
-          <ul id="surla-build-required-tests" className="surla-build-required-tests">
+          <ul id="highbay-build-required-tests" className="highbay-build-required-tests">
             {build.required_tests.map((test) => <li key={test.scenario}>
               <strong>{test.story}</strong><span>Flow <code>{test.flow_key}</code></span>
               <span>Scenario <code>{test.scenario}</code></span>
             </li>)}
           </ul>}
       </section>
-      {tests.state === "needs_changes" ? <div id="surla-build-findings" ref={findings} aria-busy={open && loading}>
-        <h5>What Surla told the test writer</h5>
+      {tests.state === "needs_changes" ? <div id="highbay-build-findings" ref={findings} aria-busy={open && loading}>
+        <h5>What Highbay told the test writer</h5>
         {!open || loading || error !== null || findingTexts === null ?
           <p>{findingCount} {findingCount === 1 ? "finding" : "findings"}</p> : null}
         {open && findingCount > 0 ? <>
           {loading ? <p role="status">Reading findings…</p> : null}
-          {error !== null ? <Alert id="surla-build-findings-error" variant="destructive" role="alert">
+          {error !== null ? <Alert id="highbay-build-findings-error" variant="destructive" role="alert">
             Could not read findings. {error}
           </Alert> : null}
           {!loading && (error !== null || findingTexts === null) ?
-            <Button id="surla-build-findings-retry" disabled={disabled} onClick={onRead}>
+            <Button id="highbay-build-findings-retry" disabled={disabled} onClick={onRead}>
               {error !== null ? "Retry findings read" : "Read findings"}
             </Button> : null}
-          {!loading && error === null && findingTexts !== null ? <details className="surla-details" open>
+          {!loading && error === null && findingTexts !== null ? <details className="highbay-details" open>
             <summary>{findingTexts.length} {findingTexts.length === 1 ? "finding" : "findings"}</summary>
-            <div className="surla-build-finding-text" tabIndex={0} role="region" aria-label="Surla's findings">
+            <div className="highbay-build-finding-text" tabIndex={0} role="region" aria-label="Highbay's findings">
               <ul>{findingTexts.map((text, index) => <li key={index}>{text}</li>)}</ul>
             </div>
           </details> : null}
         </> : null}
       </div> : null}
     </div> : null}
-    {tests.state === "accepted" ? <TestCoverage id="surla-build-coverage" heading="h5"
+    {tests.state === "accepted" ? <TestCoverage id="highbay-build-coverage" heading="h5"
       answers={build.answers} examples={build.examples} statements={build.coverage_statements} report={null} /> :
       tests.state !== "not_used" ? <p>No accepted tests for this report yet.</p> : null}
   </section>;

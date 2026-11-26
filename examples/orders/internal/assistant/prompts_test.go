@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	genpromptsclient "github.com/goadesign/surla/examples/orders/gen/http/prompts/client"
-	genpromptsserver "github.com/goadesign/surla/examples/orders/gen/http/prompts/server"
-	genorders "github.com/goadesign/surla/examples/orders/gen/orders"
-	genrefund "github.com/goadesign/surla/examples/orders/gen/orders/agents/refund"
-	genrefundorders "github.com/goadesign/surla/examples/orders/gen/orders/agents/refund/orders"
-	genprompts "github.com/goadesign/surla/examples/orders/gen/prompts"
-	"github.com/goadesign/surla/examples/orders/internal/orders"
-	"github.com/goadesign/surla/examples/orders/internal/runstore"
+	genpromptsclient "github.com/goadesign/highbay/examples/orders/gen/http/prompts/client"
+	genpromptsserver "github.com/goadesign/highbay/examples/orders/gen/http/prompts/server"
+	genorders "github.com/goadesign/highbay/examples/orders/gen/orders"
+	genrefund "github.com/goadesign/highbay/examples/orders/gen/orders/agents/refund"
+	genrefundorders "github.com/goadesign/highbay/examples/orders/gen/orders/agents/refund/orders"
+	genprompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
+	"github.com/goadesign/highbay/examples/orders/internal/orders"
+	"github.com/goadesign/highbay/examples/orders/internal/runstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"goa.design/goa-ai/runtime/agent/model"
@@ -62,7 +62,7 @@ type (
 
 // TestOverridePromptChangesTheNextModelRequest calls the prompts service's
 // override_prompt through the generated HTTP server and client with the live
-// key, as Surla's draft_override does on a live copy, wired to the agent's
+// key, as Highbay's draft_override does on a live copy, wired to the agent's
 // real prompt store, and reads the model request of the next turn.
 func TestOverridePromptChangesTheNextModelRequest(t *testing.T) {
 	spec := genrefund.PromptSpecSystem()

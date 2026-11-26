@@ -28,7 +28,7 @@ var InstalledAgentOption = Type("InstalledAgentOption", func() {
 	Attribute("thinking_supported", Boolean, "Whether reasoning effort can be selected.")
 	Attribute("yolo_supported", Boolean, "Whether an unattended permission mode is supported.")
 	Attribute("yolo_effect", String, "What this client's unattended permission mode permits.")
-	Attribute("headless_supported", Boolean, "Whether Surla supports this client's finite noninteractive mode.")
+	Attribute("headless_supported", Boolean, "Whether Highbay supports this client's finite noninteractive mode.")
 	Required("client", "program", "title", "models", "efforts", "model_supported", "thinking_supported", "yolo_supported", "headless_supported")
 })
 

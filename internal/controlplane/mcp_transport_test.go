@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -27,7 +27,7 @@ import (
 )
 
 type progressService struct {
-	gensurla.Service
+	genhighbay.Service
 	entered chan error
 }
 
@@ -78,7 +78,7 @@ func TestMCPDisconnectSurvives(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	req := mcpTransportRequest(t, ctx, server.URL+"/mcp", `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"surla://golden-path","_meta":{"progressToken":"test","io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`)
+	req := mcpTransportRequest(t, ctx, server.URL+"/mcp", `{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"highbay://golden-path","_meta":{"progressToken":"test","io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`)
 	resp, err := server.Client().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -102,7 +102,7 @@ func TestMCPDisconnectSurvives(t *testing.T) {
 	spans := recorder.Ended()
 	var failure, parent sdktrace.ReadOnlySpan
 	for _, span := range spans {
-		if span.Name() == "surla.mcp.transport_error" {
+		if span.Name() == "highbay.mcp.transport_error" {
 			failure = span
 		}
 		if span.Name() == "parent" {
@@ -182,13 +182,13 @@ func TestMCPGuardFailures(t *testing.T) {
 	}
 	var spans []sdktrace.ReadOnlySpan
 	for _, span := range recorder.Ended() {
-		if span.Name() == "surla.mcp.transport_error" {
+		if span.Name() == "highbay.mcp.transport_error" {
 			spans = append(spans, span)
 		}
 	}
 	require.Len(t, spans, 5)
 	for _, span := range spans {
-		assert.Equal(t, "surla.mcp.transport_error", span.Name())
+		assert.Equal(t, "highbay.mcp.transport_error", span.Name())
 		assert.Equal(t, codes.Error, span.Status().Code)
 		assert.Equal(t, "MCP transport failure", span.Status().Description)
 		assert.NotContains(t, fmt.Sprint(span.Attributes()), "private-body-sentinel")
@@ -203,7 +203,7 @@ func TestMCPGuardFailures(t *testing.T) {
 		{"malformed", `{`, http.StatusBadRequest, `"error"`},
 		{"unknown method", `{"jsonrpc":"2.0","id":7,"method":"unknown","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`, http.StatusNotFound, `"id":7`},
 		{"success", `{"jsonrpc":"2.0","id":8,"method":"resources/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`, http.StatusOK, `"id":8`},
-		{"accepted refusal", `{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":"surla://missing","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`, http.StatusBadRequest, `"id":10`},
+		{"accepted refusal", `{"jsonrpc":"2.0","id":10,"method":"resources/read","params":{"uri":"highbay://missing","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}`, http.StatusBadRequest, `"id":10`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := len(recorder.Ended())
@@ -213,7 +213,7 @@ func TestMCPGuardFailures(t *testing.T) {
 			assert.Contains(t, response.Body.String(), tc.contains)
 			newSpans := recorder.Ended()[before:]
 			for _, span := range newSpans {
-				assert.NotEqual(t, "surla.mcp.transport_error", span.Name())
+				assert.NotEqual(t, "highbay.mcp.transport_error", span.Name())
 			}
 		})
 	}
@@ -232,7 +232,7 @@ func TestMCPGuardFailures(t *testing.T) {
 		parent.End()
 		spans := selected.Ended()
 		require.Len(t, spans, 2)
-		assert.Equal(t, "surla.mcp.transport_error", spans[0].Name())
+		assert.Equal(t, "highbay.mcp.transport_error", spans[0].Name())
 		assert.Equal(t, codes.Error, spans[0].Status().Code)
 		require.NotEmpty(t, spans[0].Events())
 		assert.Equal(t, spans[1].SpanContext().SpanID(), spans[0].Parent().SpanID())

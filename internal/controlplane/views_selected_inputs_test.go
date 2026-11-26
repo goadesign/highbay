@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ type selectedInputsListRead struct {
 	// armed selects one list answer after its delivery gate is installed.
 	armed atomic.Bool
 	// captured proves the old positive observation preceded new acceptance.
-	captured chan *gensurla.VerificationListResult
+	captured chan *genhighbay.VerificationListResult
 }
 
 // TestViewsPageAcceptedTestsRefreshOpenedBuildAndSelectedProof follows a second
@@ -45,8 +45,8 @@ func TestViewsPageAcceptedTestsRefreshOpenedBuildAndSelectedProof(t *testing.T) 
 			State: verifyrun.StoryRecorded, BuildNumber: 1,
 			BuildStartedAt: req.AcceptedAt.Add(-time.Minute), Stories: []designeval.StorySummary{},
 			TestCoverage: &verifyrun.TestCoverageSnapshot{
-				Report: 1, Answers: []*gensurla.ConfirmedAnswer{}, Examples: card.Examples,
-				CoverageStatements: []*gensurla.TestCoverageStatement{},
+				Report: 1, Answers: []*genhighbay.ConfirmedAnswer{}, Examples: card.Examples,
+				CoverageStatements: []*genhighbay.TestCoverageStatement{},
 			},
 		}
 	})
@@ -55,59 +55,59 @@ func TestViewsPageAcceptedTestsRefreshOpenedBuildAndSelectedProof(t *testing.T) 
 	user := asCaller(pageOwner, CallerUser)
 	build := mustStartedBuild(t, cp, user, card.ChangeID)
 	ps.act("drop-current-build", func() {
-		_, err := cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: build.StartedAt})
+		_, err := cp.DropBuild(user, &genhighbay.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: build.StartedAt})
 		require.NoError(t, err)
 	})
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-const review = () => page.$("#surla-build-review-check");
+const review = () => page.$("#highbay-build-review-check");
 const currentBuild = () => review()?.classList.contains("shadcn-btn-primary") && !review().disabled;
 await until(currentBuild, "the opened Build did not offer its current passing check");
 expect(review().textContent === "Review result", "the current check has no review action");
-expect(page.$$("#surla-build-section .shadcn-btn-primary").length === 1, "Build has competing primary actions");
+expect(page.$$("#highbay-build-section .shadcn-btn-primary").length === 1, "Build has competing primary actions");
 const beforeReplacement = page.requests.length;
 await control(origin, "act", { key: "accept-t2" });
 await until(() => page.requests.slice(beforeReplacement).some((r) => r.path === "/verifications/" + input.run && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "the opened Build did not read the second acceptance's negative match");
 await until(() => review() && !review().disabled && !currentBuild() && review().textContent === "Review saved check", "a second accepted commit left the opened Build claiming current proof");
-expect(page.$("#surla-cp1-editor") && !page.$("#surla-cp4-verification"), "a background acceptance navigated away from Build");
+expect(page.$("#highbay-cp1-editor") && !page.$("#highbay-cp4-verification"), "a background acceptance navigated away from Build");
 await control(origin, "act", { key: "accept-t1" });
 await until(currentBuild, "reaccepting the recorded tests did not restore Build's decision");
 review().click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "Review result did not open the exact owner-supplied saved run");
-expect(page.doc.activeElement === page.$("#surla-cp5-title"), "Review result did not focus the approval destination");
-const verdict = page.text("#surla-cp4-title");
-const details = page.text("#surla-cp4-details");
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "Review result did not open the exact owner-supplied saved run");
+expect(page.doc.activeElement === page.$("#highbay-cp5-title"), "Review result did not focus the approval destination");
+const verdict = page.text("#highbay-cp4-title");
+const details = page.text("#highbay-cp4-details");
 expect(verdict === "The check passed: 2 of 2 scenarios.", "the saved passing verdict is missing");
-const binding = () => page.text("#surla-cp4-test-binding");
-const difference = () => page.text("#surla-cp4-input-difference");
+const binding = () => page.text("#highbay-cp4-test-binding");
+const difference = () => page.text("#highbay-cp4-input-difference");
 expect(/\breport 1\b/i.test(binding()) && !difference(), "the original run lost its recorded report or claimed a mismatch");
 await control(origin, "act", { key: "accept-t2" });
 const testsChanged = () => {
   const [used, current] = difference().toLowerCase().split("current accepted tests");
-  return page.text("#surla-cp4-inputs").includes("does not match") &&
+  return page.text("#highbay-cp4-inputs").includes("does not match") &&
     /\breport 1\b/.test(used) && used.includes("2222222") &&
     /\breport 2\b/.test(current ?? "") && current.includes("3333333");
 };
-await until(() => testsChanged() && (page.$("#surla-cp5-approve")?.disabled ?? true), "the selected run did not name its recorded tests and the current accepted tests");
+await until(() => testsChanged() && (page.$("#highbay-cp5-approve")?.disabled ?? true), "the selected run did not name its recorded tests and the current accepted tests");
 expect(/\breport 1\b/i.test(binding()) && !/\breport 2\b/i.test(binding()), "the new acceptance replaced the selected run's report number");
-expect(page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details, "freshness changed the saved report or selection");
-page.$("#surla-cp5-approve")?.click();
+expect(page.$("#highbay-result-view").dataset.runId === input.run && page.text("#highbay-cp4-title") === verdict && page.text("#highbay-cp4-details") === details, "freshness changed the saved report or selection");
+page.$("#highbay-cp5-approve")?.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "a stale selected report submitted approval");
 const listPath = "/changes/chg-selected-inputs/verifications";
 await control(origin, "answer-later", { key: "GET " + listPath });
-page.$("#surla-load-verifications").click();
-await until(() => page.$("#surla-load-verifications").disabled && page.text("#surla-cp4-inputs").includes("not known"), "a pending input read did not make currentness unknown");
+page.$("#highbay-load-verifications").click();
+await until(() => page.$("#highbay-load-verifications").disabled && page.text("#highbay-cp4-inputs").includes("not known"), "a pending input read did not make currentness unknown");
 expect(!difference() && /\breport 1\b/i.test(binding()), "pending currentness kept an exact mismatch or hid the frozen report");
 await control(origin, "release", { key: "GET " + listPath });
 await until(testsChanged, "the exact mismatch did not return after the owner confirmed it");
 await control(origin, "act", { key: "accept-t1" });
-await until(() => page.text("#surla-cp4-inputs").includes("matches the agreed revision") && !difference() && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the selected report did not regain its current owner match");
-expect(page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details, "restoring freshness replaced historical evidence");
+await until(() => page.text("#highbay-cp4-inputs").includes("matches the agreed revision") && !difference() && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the selected report did not regain its current owner match");
+expect(page.text("#highbay-cp4-title") === verdict && page.text("#highbay-cp4-details") === details, "restoring freshness replaced historical evidence");
 await control(origin, "act", { key: "accept-t2" });
 await until(testsChanged, "the second acceptance did not restore the tests mismatch");
 await control(origin, "act", { key: "drop-current-build" });
-await until(() => page.text("#surla-cp4-inputs").includes("does not match") && !difference(), "the dropped build was still described as the current accepted tests");
-expect(/\breport 1\b/i.test(binding()) && page.text("#surla-cp4-title") === verdict, "dropping the build hid the saved evidence");
+await until(() => page.text("#highbay-cp4-inputs").includes("does not match") && !difference(), "the dropped build was still described as the current accepted tests");
+expect(/\breport 1\b/i.test(binding()) && page.text("#highbay-cp4-title") === verdict, "dropping the build hid the saved evidence");
 expect(page.sent("POST", "/changes/verify").length === 0, "reading saved proof started verification");
 page.close();
 `)
@@ -130,37 +130,37 @@ func TestViewsPageRefreshesAnOlderSelectionWhenLatestStaysStale(t *testing.T) {
 	})
 	runPageScript(t, ps, map[string]any{"older": olderID, "latest": latestID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check") && !page.$("#surla-build-review-check").disabled, "the latest saved check did not reach Build");
-expect(!page.$("#surla-build-review-check").classList.contains("shadcn-btn-primary"), "the latest stale run was presented as an approval decision");
-page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.latest && page.$("#surla-cp4-run-" + input.older) && page.text("#surla-cp4-inputs").includes("does not match"), "Build did not open the exact latest identity with its stale observation");
-expect(page.doc.activeElement === page.$("#surla-cp5-title"), "reviewing a stale passed check did not focus its blocked approval");
-const row = (id) => page.text("#surla-cp4-run-" + id).replaceAll("’", "'");
+await until(() => page.$("#highbay-build-review-check") && !page.$("#highbay-build-review-check").disabled, "the latest saved check did not reach Build");
+expect(!page.$("#highbay-build-review-check").classList.contains("shadcn-btn-primary"), "the latest stale run was presented as an approval decision");
+page.$("#highbay-build-review-check").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.latest && page.$("#highbay-cp4-run-" + input.older) && page.text("#highbay-cp4-inputs").includes("does not match"), "Build did not open the exact latest identity with its stale observation");
+expect(page.doc.activeElement === page.$("#highbay-cp5-title"), "reviewing a stale passed check did not focus its blocked approval");
+const row = (id) => page.text("#highbay-cp4-run-" + id).replaceAll("’", "'");
 expect(row(input.older).includes("Tests' commit") && row(input.older).includes("2222222") &&
   row(input.latest).includes("Tests' commit") && row(input.latest).includes("3333333"), "run rows did not identify their own tests commits");
-expect(!/\breport \d+\b/i.test(page.text("#surla-cp4-test-binding")), "a historical run without coverage inherited the build's current report number");
+expect(!/\breport \d+\b/i.test(page.text("#highbay-cp4-test-binding")), "a historical run without coverage inherited the build's current report number");
 const listPath = "/changes/chg-selected-inputs/verifications";
 await control(origin, "answer-later", { key: "GET " + listPath });
 const listsBeforeSelection = page.sent("GET", listPath).length;
-page.$("#surla-load-verifications").click();
-await until(() => page.sent("GET", listPath).length > listsBeforeSelection && page.$("#surla-load-verifications").disabled, "the selection-preservation list did not remain pending");
-page.$("#surla-cp4-run-" + input.older).click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.older, "the older run could not be selected during the pending list");
+page.$("#highbay-load-verifications").click();
+await until(() => page.sent("GET", listPath).length > listsBeforeSelection && page.$("#highbay-load-verifications").disabled, "the selection-preservation list did not remain pending");
+page.$("#highbay-cp4-run-" + input.older).click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.older, "the older run could not be selected during the pending list");
 await control(origin, "release", { key: "GET " + listPath });
-await until(() => page.$("#surla-result-view").dataset.runId === input.older && page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the older matching run inherited the latest run's false observation");
-const oldDetails = page.text("#surla-cp4-details");
+await until(() => page.$("#highbay-result-view").dataset.runId === input.older && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the older matching run inherited the latest run's false observation");
+const oldDetails = page.text("#highbay-cp4-details");
 const latestPath = "/verifications/" + input.latest;
 const olderPath = "/verifications/" + input.older + "/review";
 const before = page.requests.length;
 await control(origin, "act", { key: "accept-t3" });
-await until(() => page.$("#surla-result-view").dataset.runId === input.older && page.text("#surla-cp4-inputs").includes("does not match") && (page.$("#surla-cp5-approve")?.disabled ?? true), "changing T1 to T3 did not invalidate the independently selected older run");
+await until(() => page.$("#highbay-result-view").dataset.runId === input.older && page.text("#highbay-cp4-inputs").includes("does not match") && (page.$("#highbay-cp5-approve")?.disabled ?? true), "changing T1 to T3 did not invalidate the independently selected older run");
 await until(() => page.requests.slice(before).some((r) => r.path === latestPath && r.status === 200 && JSON.parse(r.answer).inputs_current === false) && page.requests.slice(before).some((r) => r.path === olderPath && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "the owner did not refresh both exact run identities");
-expect(page.text("#surla-cp4-details") === oldDetails && page.text("#surla-cp4-title") === "The check passed: 2 of 2 scenarios.", "invalidating the older selection replaced its report");
+expect(page.text("#highbay-cp4-details") === oldDetails && page.text("#highbay-cp4-title") === "The check passed: 2 of 2 scenarios.", "invalidating the older selection replaced its report");
 await control(origin, "act", { key: "accept-t1" });
-await until(() => page.$("#surla-result-view").dataset.runId === input.older && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the older run could not recover independently of the still-stale latest run");
-page.$("#surla-cp4-run-" + input.latest).click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.latest && page.text("#surla-cp4-inputs").includes("does not match") && (page.$("#surla-cp5-approve")?.disabled ?? true), "the latest run acquired the older run's positive match");
-expect(page.text("#surla-cp4-details").includes("3333333333333333333333333333333333333333"), "the latest run lost its distinct saved tests commit");
+await until(() => page.$("#highbay-result-view").dataset.runId === input.older && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the older run could not recover independently of the still-stale latest run");
+page.$("#highbay-cp4-run-" + input.latest).click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.latest && page.text("#highbay-cp4-inputs").includes("does not match") && (page.$("#highbay-cp5-approve")?.disabled ?? true), "the latest run acquired the older run's positive match");
+expect(page.text("#highbay-cp4-details").includes("3333333333333333333333333333333333333333"), "the latest run lost its distinct saved tests commit");
 expect(page.sent("POST", "/changes/approve").length === 0, "selecting historical evidence submitted approval");
 page.close();
 `)
@@ -175,7 +175,7 @@ func TestViewsPageAnOlderPositiveListCannotRestoreApproval(t *testing.T) {
 	writeListedRunAt(t, runsDir, pageOwner, card, runID,
 		time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC), true, candidate)
 	setListedRunSource(t, runsDir, runID, verify.TestsWritten)
-	service := &selectedInputsListRead{ControlPlane: cp, captured: make(chan *gensurla.VerificationListResult, 1)}
+	service := &selectedInputsListRead{ControlPlane: cp, captured: make(chan *genhighbay.VerificationListResult, 1)}
 	ps := startPageServer(t, service)
 	selectedInputsActions(t, ps, cp, card.ChangeID)
 	ps.act("hold-old-list", func() {
@@ -194,40 +194,40 @@ func TestViewsPageAnOlderPositiveListCannotRestoreApproval(t *testing.T) {
 	})
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#surla-build-review-check").disabled, "the current saved run did not load");
-page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true) && !page.$("#surla-load-verifications").disabled, "initial proof reads did not settle");
-const verdict = page.text("#surla-cp4-title");
+await until(() => page.$("#highbay-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#highbay-build-review-check").disabled, "the current saved run did not load");
+page.$("#highbay-build-review-check").click();
+await until(() => page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true) && !page.$("#highbay-load-verifications").disabled, "initial proof reads did not settle");
+const verdict = page.text("#highbay-cp4-title");
 const listPath = "/changes/chg-selected-inputs/verifications";
 const runPath = "/verifications/" + input.run + "/review";
 await control(origin, "act", { key: "hold-old-list" });
 const previousLists = page.sent("GET", listPath).length;
-page.$("#surla-load-verifications").click();
-await until(() => page.sent("GET", listPath).length > previousLists && page.$("#surla-load-verifications").disabled && (page.$("#surla-cp5-approve")?.disabled ?? true), "the held list did not make freshness unknown");
+page.$("#highbay-load-verifications").click();
+await until(() => page.sent("GET", listPath).length > previousLists && page.$("#highbay-load-verifications").disabled && (page.$("#highbay-cp5-approve")?.disabled ?? true), "the held list did not make freshness unknown");
 const old = page.sent("GET", listPath)[previousLists];
 await control(origin, "act", { key: "await-old-list" });
 expect(old.status === undefined, "the positive owner answer escaped its delivery gate");
 const before = page.requests.length;
 await control(origin, "act", { key: "accept-t2" });
 await until(() => page.requests.slice(before).some((r) => r.path === runPath && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "the second acceptance did not produce a newer negative owner answer");
-expect(old.status === undefined && (page.$("#surla-cp5-approve")?.disabled ?? true), "approval became available before the old answer was released");
+expect(old.status === undefined && (page.$("#highbay-cp5-approve")?.disabled ?? true), "approval became available before the old answer was released");
 const regressions = [];
 const observe = () => {
-  if (page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true)) regressions.push("approval enabled");
-  if (page.text("#surla-cp4-title") !== verdict) regressions.push("saved verdict changed");
+  if (page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true)) regressions.push("approval enabled");
+  if (page.text("#highbay-cp4-title") !== verdict) regressions.push("saved verdict changed");
 };
 const observer = new page.win.MutationObserver(observe);
-observer.observe(page.$("#surla-result-view"), { childList: true, attributes: true, subtree: true });
+observer.observe(page.$("#highbay-result-view"), { childList: true, attributes: true, subtree: true });
 await control(origin, "release", { key: "GET " + listPath });
-await until(() => old.status === 200 && !page.$("#surla-load-verifications").disabled && page.text("#surla-cp4-inputs").includes("does not match"), "the delayed list did not settle behind the newer observation");
+await until(() => old.status === 200 && !page.$("#highbay-load-verifications").disabled && page.text("#highbay-cp4-inputs").includes("does not match"), "the delayed list did not settle behind the newer observation");
 expect(JSON.parse(old.answer).runs[0].inputs_current === true, "the held response did not actually carry the older positive match");
 await sleep(0);
 observe();
 observer.disconnect();
 expect(regressions.length === 0, "a delayed positive list restored stale approval: " + JSON.stringify(regressions));
-page.$("#surla-cp5-approve")?.click();
+page.$("#highbay-cp5-approve")?.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "the delayed positive answer enabled submission");
-expect(page.$("#surla-result-view").dataset.runId === input.run, "the delayed list changed the selected identity");
+expect(page.$("#highbay-result-view").dataset.runId === input.run, "the delayed list changed the selected identity");
 page.close();
 `)
 }
@@ -244,29 +244,29 @@ func TestViewsPagePendingAndFailedFreshnessPreservesReportAndDraft(t *testing.T)
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#surla-build-review-check").disabled, "the saved passing check did not load");
-page.$("#surla-refine-agreement").open = true;
+await until(() => page.$("#highbay-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#highbay-build-review-check").disabled, "the saved passing check did not load");
+page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-field="expected_outcome"]');
 page.type(draft, "Keep this unsaved agreement outcome");
-page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true) && !page.$("#surla-load-verifications").disabled, "the selected passing proof did not settle");
-const verdict = page.text("#surla-cp4-title");
-const details = page.text("#surla-cp4-details");
-const preserved = () => page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details && page.$("#surla-cp5-approval-dirty-warning") !== null;
+page.$("#highbay-build-review-check").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true) && !page.$("#highbay-load-verifications").disabled, "the selected passing proof did not settle");
+const verdict = page.text("#highbay-cp4-title");
+const details = page.text("#highbay-cp4-details");
+const preserved = () => page.text("#highbay-cp4-title") === verdict && page.text("#highbay-cp4-details") === details && page.$("#highbay-cp5-approval-dirty-warning") !== null;
 const path = "/changes/chg-selected-inputs/verifications";
 await control(origin, "reply", { key: "GET " + path, status: 503, body: { name: "internal", message: "The saved run could not be read." } });
 await control(origin, "hold", { key: "GET " + path });
 const before = page.sent("GET", path).length;
-page.$("#surla-load-verifications").click();
-await until(() => page.sent("GET", path).length > before && page.$("#surla-load-verifications").disabled && (page.$("#surla-cp5-approve")?.disabled ?? true), "pending freshness retained enabled approval");
-expect(page.text("#surla-cp4-inputs").includes("not known") && preserved(), "a pending freshness read lost saved evidence or the unsaved draft");
-page.$("#surla-cp5-approve")?.click();
+page.$("#highbay-load-verifications").click();
+await until(() => page.sent("GET", path).length > before && page.$("#highbay-load-verifications").disabled && (page.$("#highbay-cp5-approve")?.disabled ?? true), "pending freshness retained enabled approval");
+expect(page.text("#highbay-cp4-inputs").includes("not known") && preserved(), "a pending freshness read lost saved evidence or the unsaved draft");
+page.$("#highbay-cp5-approve")?.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "pending freshness submitted approval");
 await control(origin, "release", { key: "GET " + path });
-await until(() => page.$("#surla-cp4-list-error") && !page.$("#surla-load-verifications").disabled, "the failed freshness read offered no recovery");
-expect((page.$("#surla-cp5-approve")?.disabled ?? true) && page.text("#surla-cp4-inputs").includes("not known") && preserved(), "a failed read restored approval or discarded evidence/draft");
-page.$("#surla-load-verifications").click();
-await until(() => !page.$("#surla-cp4-list-error") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "a successful retry did not restore current-input approval");
+await until(() => page.$("#highbay-cp4-list-error") && !page.$("#highbay-load-verifications").disabled, "the failed freshness read offered no recovery");
+expect((page.$("#highbay-cp5-approve")?.disabled ?? true) && page.text("#highbay-cp4-inputs").includes("not known") && preserved(), "a failed read restored approval or discarded evidence/draft");
+page.$("#highbay-load-verifications").click();
+await until(() => !page.$("#highbay-cp4-list-error") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "a successful retry did not restore current-input approval");
 expect(preserved(), "retry changed the saved verdict or unsaved draft");
 
 // A delayed nonterminal snapshot may carry a newer freshness observation,
@@ -275,12 +275,12 @@ const snapshot = JSON.parse(page.sent("GET", path).findLast((r) => r.status === 
 snapshot.runs[0].state = { type: "running", value: { started_at: snapshot.runs[0].accepted_at } };
 await control(origin, "reply", { key: "GET " + path, status: 200, body: snapshot });
 const previous = page.sent("GET", path).length;
-page.$("#surla-load-verifications").click();
-await until(() => page.sent("GET", path).length > previous && page.sent("GET", path).at(-1).status === 200 && !page.$("#surla-load-verifications").disabled, "the delayed running snapshot did not settle");
-await until(() => page.$("#surla-cp5-approve") && !page.$("#surla-cp5-approve").disabled, "the owner review did not settle after the delayed running snapshot");
+page.$("#highbay-load-verifications").click();
+await until(() => page.sent("GET", path).length > previous && page.sent("GET", path).at(-1).status === 200 && !page.$("#highbay-load-verifications").disabled, "the delayed running snapshot did not settle");
+await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "the owner review did not settle after the delayed running snapshot");
 expect(preserved(), "a running snapshot regressed a terminal saved report");
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/confirm").length === 0, "freshness recovery submitted unsaved work");
-page.$("#surla-nav-cp1").click();
+page.$("#highbay-nav-cp1").click();
 expect(page.$('textarea[data-field="expected_outcome"]').value === "Keep this unsaved agreement outcome", "returning to Agree lost the unsaved draft");
 page.close();
 `)
@@ -299,25 +299,25 @@ func TestViewsPageWaitOutageDisablesRenderedApprovalUntilSameVersionRecovers(t *
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#surla-build-review-check").disabled, "the saved passing check did not load");
-page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the initial approval did not settle");
-const approve = page.$("#surla-cp5-approve");
-const verdict = page.text("#surla-cp4-title");
-const details = page.text("#surla-cp4-details");
+await until(() => page.$("#highbay-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#highbay-build-review-check").disabled, "the saved passing check did not load");
+page.$("#highbay-build-review-check").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the initial approval did not settle");
+const approve = page.$("#highbay-cp5-approve");
+const verdict = page.text("#highbay-cp4-title");
+const details = page.text("#highbay-cp4-details");
 const lists = page.sent("GET", "/changes").length;
 const version = JSON.parse(page.sent("GET", "/changes").findLast((r) => r.status === 200).answer).version;
 const waits = page.sent("GET", "/change-updates").length;
 await control(origin, "reply", { key: "GET /change-updates", status: 503, body: { name: "internal", message: "The update channel is temporarily unavailable." } });
-await until(() => page.sent("GET", "/change-updates").some((r) => r.status === 503) && page.status().includes("Lost contact with the Surla server"), "the wait outage was not announced");
-expect(page.$("#surla-cp5-approve") === approve && approve.disabled && page.text("#surla-cp4-inputs").includes("not known"), "the outage left the already rendered approval usable");
-expect(page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details, "the outage discarded saved evidence");
+await until(() => page.sent("GET", "/change-updates").some((r) => r.status === 503) && page.status().includes("Lost contact with the Highbay server"), "the wait outage was not announced");
+expect(page.$("#highbay-cp5-approve") === approve && approve.disabled && page.text("#highbay-cp4-inputs").includes("not known"), "the outage left the already rendered approval usable");
+expect(page.text("#highbay-cp4-title") === verdict && page.text("#highbay-cp4-details") === details, "the outage discarded saved evidence");
 approve.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "the unavailable update channel allowed approval submission");
-await until(() => page.status() === "This page is up to date with the Surla server again." && !approve.disabled && page.text("#surla-cp4-inputs").includes("matches the agreed revision"), "same-version wait recovery did not restore rendered approval", 15000);
+await until(() => page.status() === "This page is up to date with the Highbay server again." && !approve.disabled && page.text("#highbay-cp4-inputs").includes("matches the agreed revision"), "same-version wait recovery did not restore rendered approval", 15000);
 expect(page.sent("GET", "/changes").length === lists, "the recovery depended on a changed version or another list read");
 expect(page.sent("GET", "/change-updates").slice(waits).some((r) => r.status === 200 && JSON.parse(r.answer).version === version), "recovery did not observe the unchanged owner version");
-expect(page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title") === verdict, "wait recovery changed the selected evidence");
+expect(page.$("#highbay-result-view").dataset.runId === input.run && page.text("#highbay-cp4-title") === verdict, "wait recovery changed the selected evidence");
 page.close();
 `)
 }
@@ -345,21 +345,21 @@ func TestViewsPageBackgroundCardReadRequiresRecoveryBeforeApproval(t *testing.T)
 	ps.act("builder-reads-assignment", func() {
 		makeBuildFixtureBuilderCopy(t, cp)
 		_, err := cp.GetBuilderAssignment(asCaller(pageOwner, CallerBuilder),
-			&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+			&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 	})
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#surla-build-review-check").disabled, "the saved passing check did not load");
-page.$("#surla-refine-agreement").open = true;
+await until(() => page.$("#highbay-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#highbay-build-review-check").disabled, "the saved passing check did not load");
+page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-field="expected_outcome"]');
 page.type(draft, "Preserve this draft through the card read");
-page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the selected passing proof did not settle");
-const approve = page.$("#surla-cp5-approve");
-const verdict = page.text("#surla-cp4-title");
-const details = page.text("#surla-cp4-details");
-const preserved = () => page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title") === verdict && page.text("#surla-cp4-details") === details && page.$("#surla-cp5-approval-dirty-warning") !== null;
+page.$("#highbay-build-review-check").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the selected passing proof did not settle");
+const approve = page.$("#highbay-cp5-approve");
+const verdict = page.text("#highbay-cp4-title");
+const details = page.text("#highbay-cp4-details");
+const preserved = () => page.$("#highbay-result-view").dataset.runId === input.run && page.text("#highbay-cp4-title") === verdict && page.text("#highbay-cp4-details") === details && page.$("#highbay-cp5-approval-dirty-warning") !== null;
 const cardPath = "/changes/chg-selected-inputs";
 const buildPath = cardPath + "/build";
 const runPath = "/verifications/" + input.run + "/review";
@@ -373,25 +373,25 @@ await until(() => page.sent("GET", cardPath).length > before && page.sent("GET",
   throw new Error(error.message + ": " + JSON.stringify(page.requests.filter((r) => [cardPath, buildPath, runPath].includes(r.path)).map((r) => ({ path: r.path, status: r.status, answer: r.answer?.slice(0, 1800) }))));
 }
 const held = page.sent("GET", cardPath)[before];
-expect(held.status === undefined && approve.disabled && page.text("#surla-cp4-inputs").includes("not known"), "an outstanding background card read left the rendered approval usable");
+expect(held.status === undefined && approve.disabled && page.text("#highbay-cp4-inputs").includes("not known"), "an outstanding background card read left the rendered approval usable");
 expect(preserved(), "the pending card read discarded the report or draft");
 approve.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "a pending card refresh submitted approval");
 await control(origin, "release", { key: "GET " + cardPath });
-await until(() => held.status === 503 && page.$("#surla-cp4-card-error") && page.$("#surla-cp4-retry-card") && !page.$("#surla-cp4-retry-card").disabled, "the failed background card read exposed no user recovery");
-expect(page.text("#surla-cp4-card-error").includes("HTTP 503") && approve.disabled && preserved(), "the failed card read hid its failure, enabled approval or discarded work: " + JSON.stringify({message: page.text("#surla-cp4-card-error"), disabled: approve.disabled, preserved: preserved(), run: page.$("#surla-result-view").dataset.runId === input.run, verdict: page.text("#surla-cp4-title") === verdict, details: page.text("#surla-cp4-details") === details, draftKept: page.$("#surla-cp5-approval-dirty-warning") !== null}));
+await until(() => held.status === 503 && page.$("#highbay-cp4-card-error") && page.$("#highbay-cp4-retry-card") && !page.$("#highbay-cp4-retry-card").disabled, "the failed background card read exposed no user recovery");
+expect(page.text("#highbay-cp4-card-error").includes("HTTP 503") && approve.disabled && preserved(), "the failed card read hid its failure, enabled approval or discarded work: " + JSON.stringify({message: page.text("#highbay-cp4-card-error"), disabled: approve.disabled, preserved: preserved(), run: page.$("#highbay-result-view").dataset.runId === input.run, verdict: page.text("#highbay-cp4-title") === verdict, details: page.text("#highbay-cp4-details") === details, draftKept: page.$("#highbay-cp5-approval-dirty-warning") !== null}));
 approve.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "a failed background card refresh submitted approval");
 await control(origin, "hold", { key: "GET " + cardPath });
 const retries = page.sent("GET", cardPath).length;
-page.$("#surla-cp4-retry-card").click();
-await until(() => page.sent("GET", cardPath).length > retries && page.$("#surla-cp4-retry-card").disabled, "retry did not issue a new card read");
+page.$("#highbay-cp4-retry-card").click();
+await until(() => page.sent("GET", cardPath).length > retries && page.$("#highbay-cp4-retry-card").disabled, "retry did not issue a new card read");
 expect(approve.disabled && preserved(), "requesting recovery cleared the card-read failure before its owner answered");
 await control(origin, "release", { key: "GET " + cardPath });
-await until(() => page.sent("GET", cardPath).slice(retries).some((r) => r.status === 200) && !page.$("#surla-cp4-card-error") && !approve.disabled, "a successful card retry did not restore current-input approval");
+await until(() => page.sent("GET", cardPath).slice(retries).some((r) => r.status === 200) && !page.$("#highbay-cp4-card-error") && !approve.disabled, "a successful card retry did not restore current-input approval");
 expect(preserved(), "card recovery replaced the saved report or unsaved draft");
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/confirm").length === 0, "card recovery submitted approval or draft edits");
-page.$("#surla-nav-cp1").click();
+page.$("#highbay-nav-cp1").click();
 expect(page.$('textarea[data-field="expected_outcome"]').value === "Preserve this draft through the card read", "returning to Agree lost the unsaved draft");
 page.close();
 `)
@@ -409,38 +409,38 @@ func TestViewsPageExplicitCardReadFailureRequiresRecoveryBeforeApproval(t *testi
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check") && !page.$("#surla-build-review-check").disabled, "the initial current result did not load");
-page.$("#surla-refine-agreement").open = true;
+await until(() => page.$("#highbay-build-review-check") && !page.$("#highbay-build-review-check").disabled, "the initial current result did not load");
+page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-field="expected_outcome"]');
 page.type(draft, "Keep this draft while the manual read recovers");
 await control(origin, "reply", { key: "POST /changes/confirm", status: 409, body: { name: "conflict", message: "Inspect the saved agreement before refining." } });
-page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-load-latest-card") && !page.$("#surla-load-latest-card").disabled, "the refused refinement did not offer a manual read");
-page.$("#surla-nav-cp5").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.$("#surla-cp5-approve") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "the saved proof did not become eligible before the explicit read");
-expect(!page.$("#surla-cp4-card-error"), "the test started with a card-read failure already latched");
-const approve = page.$("#surla-cp5-approve");
-const verdict = page.text("#surla-cp4-title");
-const preserved = () => page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title") === verdict && page.$("#surla-cp5-approval-dirty-warning") !== null;
+page.$("#highbay-confirm-submit").click();
+await until(() => page.$("#highbay-load-latest-card") && !page.$("#highbay-load-latest-card").disabled, "the refused refinement did not offer a manual read");
+page.$("#highbay-nav-cp5").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the saved proof did not become eligible before the explicit read");
+expect(!page.$("#highbay-cp4-card-error"), "the test started with a card-read failure already latched");
+const approve = page.$("#highbay-cp5-approve");
+const verdict = page.text("#highbay-cp4-title");
+const preserved = () => page.$("#highbay-result-view").dataset.runId === input.run && page.text("#highbay-cp4-title") === verdict && page.$("#highbay-cp5-approval-dirty-warning") !== null;
 const cardPath = "/changes/chg-selected-inputs";
 await control(origin, "reply", { key: "GET " + cardPath, status: 503, body: { name: "internal", message: "The current agreement is unreadable." } });
 await control(origin, "hold", { key: "GET " + cardPath });
 const before = page.sent("GET", cardPath).length;
-page.$("#surla-nav-cp1").click();
-page.$("#surla-load-latest-card").click();
-page.$("#surla-nav-cp5").click();
-await until(() => page.sent("GET", cardPath).length > before && (page.$("#surla-cp5-approve")?.disabled ?? true), "the pending explicit read left approval enabled");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-load-latest-card").click();
+page.$("#highbay-nav-cp5").click();
+await until(() => page.sent("GET", cardPath).length > before && (page.$("#highbay-cp5-approve")?.disabled ?? true), "the pending explicit read left approval enabled");
 expect(preserved(), "the manual read discarded the report or draft");
 await control(origin, "release", { key: "GET " + cardPath });
-await until(() => page.$("#surla-cp4-card-error") && page.$("#surla-cp4-retry-card") && !page.$("#surla-cp4-retry-card").disabled, "the failed explicit read did not latch its own recovery state");
-expect(page.text("#surla-cp4-card-error").includes("HTTP 503") && (page.$("#surla-cp5-approve")?.disabled ?? true) && preserved(), "the failed explicit read restored approval or discarded work");
-page.$("#surla-cp5-approve")?.click();
+await until(() => page.$("#highbay-cp4-card-error") && page.$("#highbay-cp4-retry-card") && !page.$("#highbay-cp4-retry-card").disabled, "the failed explicit read did not latch its own recovery state");
+expect(page.text("#highbay-cp4-card-error").includes("HTTP 503") && (page.$("#highbay-cp5-approve")?.disabled ?? true) && preserved(), "the failed explicit read restored approval or discarded work");
+page.$("#highbay-cp5-approve")?.click();
 expect(page.sent("POST", "/changes/approve").length === 0, "the failed manual card refresh submitted approval");
-page.$("#surla-cp4-retry-card").click();
-await until(() => !page.$("#surla-cp4-card-error") && !(page.$("#surla-cp5-approve")?.disabled ?? true), "a successful explicit retry did not restore eligibility");
+page.$("#highbay-cp4-retry-card").click();
+await until(() => !page.$("#highbay-cp4-card-error") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "a successful explicit retry did not restore eligibility");
 expect(preserved(), "successful recovery replaced the saved report or draft");
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/confirm").length === 1, "recovery submitted approval or resubmitted the draft");
-page.$("#surla-nav-cp1").click();
+page.$("#highbay-nav-cp1").click();
 expect(page.$('textarea[data-field="expected_outcome"]').value === "Keep this draft while the manual read recovers", "returning to Agree lost the unsaved draft");
 // Closing a browser tab is a separate task from the navigation click. Let the
 // click's mount microtasks finish before jsdom tears down the document.
@@ -460,11 +460,11 @@ func TestViewsPageReviewFailedCheckFocusesItsSavedResult(t *testing.T) {
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-review-check") && !page.$("#surla-build-review-check").disabled, "the failed saved check did not reach Build");
-page.$("#surla-build-review-check").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title").includes("did not pass"), "review did not open the exact failed result");
-expect(page.doc.activeElement === page.$("#surla-cp5-title"), "reviewing a failed check did not focus its result stage");
-expect(!page.$("#surla-cp5-approve"), "a failed result offered approval");
+await until(() => page.$("#highbay-build-review-check") && !page.$("#highbay-build-review-check").disabled, "the failed saved check did not reach Build");
+page.$("#highbay-build-review-check").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.text("#highbay-cp4-title").includes("did not pass"), "review did not open the exact failed result");
+expect(page.doc.activeElement === page.$("#highbay-cp5-title"), "reviewing a failed check did not focus its result stage");
+expect(!page.$("#highbay-cp5-approve"), "a failed result offered approval");
 page.close();
 `)
 }
@@ -490,24 +490,24 @@ const runPath = "/verifications/" + input.run;
 await control(origin, "hold", { key: "GET /change-updates" });
 await control(origin, "reply", { key: "GET " + buildPath, status: 503, body: { name: "internal", message: "Retry the saved build read." } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-refresh") && !page.$("#surla-build-refresh").disabled && page.sent("GET", runPath).some((r) => r.status === 200 && JSON.parse(r.answer).inputs_current === true), "the initial failed build read did not retain the positive T1 owner observation");
-page.$("#surla-refine-agreement").open = true;
+await until(() => page.$("#highbay-build-refresh") && !page.$("#highbay-build-refresh").disabled && page.sent("GET", runPath).some((r) => r.status === 200 && JSON.parse(r.answer).inputs_current === true), "the initial failed build read did not retain the positive T1 owner observation");
+page.$("#highbay-refine-agreement").open = true;
 page.type(page.$('textarea[data-field="expected_outcome"]'), "Keep the editor beside saved proof");
-page.$("#surla-nav-cp5").click();
-await until(() => page.$("#surla-result-view").dataset.runId === input.run && page.$("#surla-cp5-approve") && (page.$("#surla-cp5-approve")?.disabled ?? true) && !page.$("#surla-load-verifications").disabled, "the failed build's saved proof did not load");
-const verdict = page.text("#surla-cp4-title");
+page.$("#highbay-nav-cp5").click();
+await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && (page.$("#highbay-cp5-approve")?.disabled ?? true) && !page.$("#highbay-load-verifications").disabled, "the failed build's saved proof did not load");
+const verdict = page.text("#highbay-cp4-title");
 const lists = page.sent("GET", "/changes").length;
 const before = page.requests.length;
 await control(origin, "act", { key: "accept-t2" });
-page.$("#surla-nav-build").click();
-page.$("#surla-build-refresh").click();
-await until(() => !page.$("#surla-build-error") && page.sent("GET", buildPath).some((r) => r.status === 200 && JSON.parse(r.answer).build.test_writer.tests.commit === "3333333333333333333333333333333333333333"), "the explicit retry did not discover accepted T2");
+page.$("#highbay-nav-build").click();
+page.$("#highbay-build-refresh").click();
+await until(() => !page.$("#highbay-build-error") && page.sent("GET", buildPath).some((r) => r.status === 200 && JSON.parse(r.answer).build.test_writer.tests.commit === "3333333333333333333333333333333333333333"), "the explicit retry did not discover accepted T2");
 await until(() => page.requests.slice(before).some((r) => r.path === runPath + "/review" && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "discovering T2 through Build did not replace the positive T1 owner review");
 expect(page.sent("GET", "/changes").length === lists && page.sent("GET", "/change-updates").every((r) => r.status === undefined), "the test received a version notification before the explicit retry established freshness");
-page.$("#surla-nav-cp5").click();
-await until(() => page.text("#surla-cp4-inputs").includes("does not match"), "the saved result did not reflect the recovered Build");
-expect((page.$("#surla-cp5-approve")?.disabled ?? true) && page.$("#surla-result-view").dataset.runId === input.run && page.text("#surla-cp4-title") === verdict, "Build recovery enabled stale proof or replaced the selected report");
-page.$("#surla-cp5-approve")?.click();
+page.$("#highbay-nav-cp5").click();
+await until(() => page.text("#highbay-cp4-inputs").includes("does not match"), "the saved result did not reflect the recovered Build");
+expect((page.$("#highbay-cp5-approve")?.disabled ?? true) && page.$("#highbay-result-view").dataset.runId === input.run && page.text("#highbay-cp4-title") === verdict, "Build recovery enabled stale proof or replaced the selected report");
+page.$("#highbay-cp5-approve")?.click();
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", buildPath).length === 0, "the independent build read submitted approval or started a build");
 page.close();
 `)
@@ -523,9 +523,9 @@ func TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement(t
 	writeListedRunAt(t, runsDir, pageOwner, earlier, older, accepted, true, candidate)
 	example := *earlier.Examples[0]
 	example.ExpectedOutcome = "The manager reviews the refund before deciding"
-	card, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &gensurla.ConfirmIntentPayload{
+	card, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &genhighbay.ConfirmIntentPayload{
 		ChangeID: earlier.ChangeID, RequestRevision: earlier.RequestRevision,
-		Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&example},
+		Answers: map[string]string{}, Examples: []*genhighbay.ExampleItem{&example},
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, earlier.RequestRevision, card.RequestRevision)
@@ -536,27 +536,27 @@ func TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement(t
 	}, `
 await control(origin, "hold", { key: "GET /change-updates" });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor")?.dataset.requestRevision === input.listed &&
-  page.sent("GET", "/change-updates").some((r) => r.status === undefined) && !page.$("#surla-build-loading"),
+await until(() => page.$("#highbay-cp1-editor")?.dataset.requestRevision === input.listed &&
+  page.sent("GET", "/change-updates").some((r) => r.status === undefined) && !page.$("#highbay-build-loading"),
   "the original agreement and held update read did not settle");
-page.$("#surla-refine-agreement").open = true;
+page.$("#highbay-refine-agreement").open = true;
 page.type(page.$('textarea[data-field="expected_outcome"]'), "The manager reviews the refund and records the reason");
-page.$("#surla-confirm-submit").click();
+page.$("#highbay-confirm-submit").click();
 await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === 200), "in-page refinement did not save");
 const revised = JSON.parse(page.sent("POST", "/changes/confirm").findLast((r) => r.status === 200).answer);
 expect(revised.request_revision !== input.listed && revised.status === "confirmed", "the refinement did not produce a confirmed revision");
-await until(() => page.$("#surla-cp1-editor").dataset.requestRevision === revised.request_revision, "the page did not mount its new agreement");
+await until(() => page.$("#highbay-cp1-editor").dataset.requestRevision === revised.request_revision, "the page did not mount its new agreement");
 expect(JSON.parse(page.sent("GET", "/changes").findLast((r) => r.status === 200).answer).changes[0].request_revision === input.listed,
   "the list caught up before the held owner notification");
-page.$("#surla-nav-cp4").click();
-const reviewed = (id) => page.$("#surla-result-view").dataset.runId === id &&
+page.$("#highbay-nav-cp4").click();
+const reviewed = (id) => page.$("#highbay-result-view").dataset.runId === id &&
   page.sent("GET", "/verifications/" + id + "/review").some((r) => r.status === 200 && JSON.parse(r.answer).inputs_current === false) &&
-  !page.$("#surla-cp4-verification").hasAttribute("aria-busy");
+  !page.$("#highbay-cp4-verification").hasAttribute("aria-busy");
 await until(() => reviewed(input.latest), "Check did not read the selected saved run against the revised agreement");
-const unknown = () => page.text("#surla-cp4-inputs").includes("not known") && !page.$("#surla-cp4-input-difference");
+const unknown = () => page.text("#highbay-cp4-inputs").includes("not known") && !page.$("#highbay-cp4-input-difference");
 expect(unknown(), "a stale list named the just-replaced agreement as current");
-expect(page.text("#surla-cp4-title").includes("passed"), "unknown currentness hid the saved verdict");
-page.$("#surla-cp4-run-" + input.older).click();
+expect(page.text("#highbay-cp4-title").includes("passed"), "unknown currentness hid the saved verdict");
+page.$("#highbay-cp4-run-" + input.older).click();
 await until(() => reviewed(input.older), "the earlier saved run did not load");
 expect(unknown(), "the earlier run treated the stale list as the current agreement");
 await control(origin, "hold", { key: "GET /changes" });
@@ -567,12 +567,12 @@ await until(() => page.sent("GET", "/changes").length > lists &&
 expect(unknown(), "a pending list exposed a stale current-agreement explanation");
 await control(origin, "release", { key: "GET /changes" });
 const namesRevisedAgreement = (used) => {
-  const codes = page.$$("#surla-cp4-input-difference code").map((node) => node.textContent);
-  return page.text("#surla-cp4-inputs").includes("does not match") && codes.length === 2 &&
+  const codes = page.$$("#highbay-cp4-input-difference code").map((node) => node.textContent);
+  return page.text("#highbay-cp4-inputs").includes("does not match") && codes.length === 2 &&
     used.startsWith(codes[0]) && revised.request_revision.startsWith(codes[1]);
 };
 await until(() => namesRevisedAgreement(input.earlier), "the fresh list did not identify the revised agreement for the older run");
-page.$("#surla-cp4-run-" + input.latest).click();
+page.$("#highbay-cp4-run-" + input.latest).click();
 await until(() => namesRevisedAgreement(input.listed), "the prior agreement's run did not name the newly confirmed agreement");
 expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0,
   "reading saved proof approved or started verification");
@@ -584,8 +584,8 @@ page.close();
 // armed answer. The HTTP answer-later gate controls its later delivery.
 func (s *selectedInputsListRead) ListVerifications(
 	ctx context.Context,
-	p *gensurla.ListVerificationsPayload,
-) (*gensurla.VerificationListResult, error) {
+	p *genhighbay.ListVerificationsPayload,
+) (*genhighbay.VerificationListResult, error) {
 	result, err := s.ControlPlane.ListVerifications(ctx, p)
 	if err == nil && s.armed.CompareAndSwap(true, false) {
 		s.captured <- result
@@ -595,7 +595,7 @@ func (s *selectedInputsListRead) ListVerifications(
 
 // selectedInputsFixture starts a real saved build with accepted T1 tests. Its
 // simulated working-copy boundary and checker avoid executing candidate code.
-func selectedInputsFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardResult, string, string) {
+func selectedInputsFixture(t *testing.T) (*ControlPlane, *genhighbay.ChangeCardResult, string, string) {
 	t.Helper()
 	runsDir := t.TempDir()
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
@@ -603,7 +603,7 @@ func selectedInputsFixture(t *testing.T) (*ControlPlane, *gensurla.ChangeCardRes
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 	card := buildableChange(t, cp, "chg-selected-inputs")
-	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -645,7 +645,7 @@ func selectedInputsActions(t *testing.T, ps *pageServer, cp *ControlPlane, chang
 func writeSelectedInputsRun(
 	t *testing.T,
 	runsDir string,
-	card *gensurla.ChangeCardResult,
+	card *genhighbay.ChangeCardResult,
 	runID, suiteCommit, candidate string,
 ) {
 	t.Helper()

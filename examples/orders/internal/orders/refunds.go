@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	gencommerce "github.com/goadesign/surla/examples/orders/gen/commerce"
-	genorders "github.com/goadesign/surla/examples/orders/gen/orders"
-	genpayments "github.com/goadesign/surla/examples/orders/gen/payments"
+	gencommerce "github.com/goadesign/highbay/examples/orders/gen/commerce"
+	genorders "github.com/goadesign/highbay/examples/orders/gen/orders"
+	genpayments "github.com/goadesign/highbay/examples/orders/gen/payments"
 	goa "goa.design/goa/v3/pkg"
 )
 

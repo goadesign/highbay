@@ -3,7 +3,7 @@
 // simulator and candidate platform, drives the candidate's public API, and
 // returns exact checks. Hook errors mean the environment broke; a wrong product
 // outcome is a failed check. Live starts the same platform as the live copy
-// Surla's start_live_target runs.
+// Highbay's start_live_target runs.
 package acceptance
 
 import (
@@ -13,11 +13,11 @@ import (
 	"slices"
 	"time"
 
-	gencommerce "github.com/goadesign/surla/examples/orders-eval/gen/commerce"
-	genorders "github.com/goadesign/surla/examples/orders-eval/gen/orders"
-	genpayments "github.com/goadesign/surla/examples/orders-eval/gen/payments"
-	"github.com/goadesign/surla/examples/orders-eval/harness"
-	"github.com/goadesign/surla/examples/orders-eval/sim"
+	gencommerce "github.com/goadesign/highbay/examples/orders-eval/gen/commerce"
+	genorders "github.com/goadesign/highbay/examples/orders-eval/gen/orders"
+	genpayments "github.com/goadesign/highbay/examples/orders-eval/gen/payments"
+	"github.com/goadesign/highbay/examples/orders-eval/harness"
+	"github.com/goadesign/highbay/examples/orders-eval/sim"
 	"goa.design/goa-ai/eval"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -294,7 +294,7 @@ func (h *Hooks) OtherCustomersOrderRefused(ctx context.Context) (res eval.Result
 }
 
 // recordArtifacts adds to the scenario result the evidence of every pinned
-// candidate binary this run can execute, under the names surla verify bound
+// candidate binary this run can execute, under the names hbay verify bound
 // them with (candidate.Artifact.Evidence), so the verifier can check the
 // report used exactly the binaries it bound.
 func (h *Hooks) recordArtifacts(res *eval.Result) {

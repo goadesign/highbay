@@ -3,7 +3,7 @@
 // project endpoints
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package project
 

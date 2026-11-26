@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,31 +38,31 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 	cp.mu.RUnlock()
 	require.NoError(t, err)
 	require.True(t, found)
-	read := func(want bool) *gensurla.StartedBuild {
+	read := func(want bool) *genhighbay.StartedBuild {
 		t.Helper()
-		public, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+		public, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 		assert.Equal(t, want, public.DraftedBeforeDrop)
 		started, ok := public.Build.AsStarted()
 		require.True(t, ok)
 		return started
 	}
-	revise := func(op *string) *gensurla.ChangeCardResult {
+	revise := func(op *string) *genhighbay.ChangeCardResult {
 		t.Helper()
-		examples := make([]*gensurla.CP1RevisionAnalysisExample, 0, len(card.Examples))
+		examples := make([]*genhighbay.CP1RevisionAnalysisExample, 0, len(card.Examples))
 		for _, example := range card.Examples {
 			id := example.ID
-			examples = append(examples, &gensurla.CP1RevisionAnalysisExample{
+			examples = append(examples, &genhighbay.CP1RevisionAnalysisExample{
 				PriorID: &id, Scenario: example.Scenario, InputSummary: example.InputSummary,
 				ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
 			})
 		}
-		revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
+		revised, err := cp.ReviseChange(guide, &genhighbay.ReviseChangePayload{
 			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Prompt: card.Prompt,
 			RevisionNote:     "Revise the change.",
 			StoryRefreshOpID: op,
-			Analysis: &gensurla.CP1RevisionAnalysis{
-				Summary: card.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+			Analysis: &genhighbay.CP1RevisionAnalysis{
+				Summary: card.Summary, Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
 				Examples: examples, RemovedExampleIds: []string{}, PreservedBehaviors: card.PreservedBehaviors,
 			},
 		})
@@ -70,9 +70,9 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 		require.NotNil(t, revised.ProposedRevision)
 		return revised
 	}
-	adopt := func(revised *gensurla.ChangeCardResult) {
+	adopt := func(revised *genhighbay.ChangeCardResult) {
 		t.Helper()
-		adopted, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+		adopted, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 			ChangeID: card.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
 			Answers: card.Answers, Examples: revised.ProposedRevision.Examples,
 		})
@@ -82,7 +82,7 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 	read(false)
 	// A waiting pre-drop proposal and even its adoption cannot repair provenance.
 	stale := revise(nil)
-	dropped, err := cp.DropBuild(user, &gensurla.DropBuildPayload{
+	dropped, err := cp.DropBuild(user, &genhighbay.DropBuildPayload{
 		ChangeID: card.ChangeID, StartedAt: verdictTime(original.StartedAt),
 	})
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 	adopt(stale)
 	staleBuild := read(true)
 	assert.True(t, staleBuild.InForce)
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	assertRefused(t, err, "drafted_before_drop")
@@ -102,26 +102,26 @@ func TestDroppedBuildSameRevisionRecovery(t *testing.T) {
 	revised := revise(refreshed.OpID)
 	read(true) // A refreshed proposal still waits beside the stale agreement.
 	adopt(revised)
-	beforeCard, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	beforeCard, err := cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, beforeCard.RequestRevision)
 	assert.Nil(t, beforeCard.ProposedRevision)
 	before := read(false)
 	assert.True(t, before.InForce)
-	assert.Equal(t, gensurla.BuildTakingKindDropped, before.Taking.Kind())
-	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{
+	assert.Equal(t, genhighbay.BuildTakingKindDropped, before.Taking.Kind())
+	started, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: beforeCard.RequestRevision,
 	})
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, started.Build.RequestRevision)
-	afterCard, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: card.ChangeID})
+	afterCard, err := cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	assert.Equal(t, beforeCard.RequestRevision, afterCard.RequestRevision)
 	assert.Equal(t, beforeCard.Examples, afterCard.Examples)
 	assert.Nil(t, afterCard.ProposedRevision)
 	after := read(false)
 	assert.True(t, after.InForce)
-	assert.Equal(t, gensurla.BuildTakingKindBuilding, after.Taking.Kind())
+	assert.Equal(t, genhighbay.BuildTakingKindBuilding, after.Taking.Kind())
 	assert.False(t, after.Builder.Read)
 	assert.False(t, after.TestWriter.Read)
 	assert.Zero(t, after.TestWriter.Report)
@@ -152,7 +152,7 @@ func TestDraftedBeforeDropMatchesOnlyAgreedProvenance(t *testing.T) {
 		{name: "no saved provenance", agreed: true, dropped: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			record := storedChangeCard{card: &gensurla.ChangeCardResult{
+			record := storedChangeCard{card: &genhighbay.ChangeCardResult{
 				Status: StatusNeedsConfirmation, RequestRevision: "revision",
 			}}
 			if tc.agreed {

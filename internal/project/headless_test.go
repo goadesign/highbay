@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ func TestHeadlessArgs(t *testing.T) {
 		want   []string
 	}{
 		{"claude yolo", "claude", &model, &effort, true, []string{"--model", model, "--effort", effort, "--dangerously-skip-permissions", "--print"}},
-		{"claude non-yolo", "claude", &model, &effort, false, []string{"--model", model, "--effort", effort, "--allowedTools", "mcp__surla__*", "--print"}},
+		{"claude non-yolo", "claude", &model, &effort, false, []string{"--model", model, "--effort", effort, "--allowedTools", "mcp__highbay__*", "--print"}},
 		{"codex non-yolo", "codex", &model, &effort, false, []string{"exec", "--sandbox", "workspace-write", "--model", model, "-c", `model_reasoning_effort="high"`}},
 		{"codex yolo", "codex", nil, nil, true, []string{"exec", "--dangerously-bypass-approvals-and-sandbox"}},
 		{"antigravity yolo", "antigravity", &model, &effort, true, []string{"--model", model, "--effort", effort, "--dangerously-skip-permissions", "--print"}},
@@ -40,14 +40,14 @@ func TestHeadlessArgs(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			const prompt = "Read assignment; run tests and report."
-			got, err := headlessArgs(&gensurla.RoleAgentChoice{
+			got, err := headlessArgs(&genhighbay.RoleAgentChoice{
 				Client: test.client, Model: test.model, Thinking: test.effort, Yolo: test.yolo,
 			}, prompt)
 			require.NoError(t, err)
 			assert.Equal(t, append(test.want, prompt), got)
 		})
 	}
-	_, err := headlessArgs(&gensurla.RoleAgentChoice{Client: "unknown"}, "Assignment")
+	_, err := headlessArgs(&genhighbay.RoleAgentChoice{Client: "unknown"}, "Assignment")
 	assert.Error(t, err)
 }
 
@@ -61,11 +61,11 @@ fi
 printf '%s\n' "$PWD" "$WORKER_LOGIN" "$@" >> invocation
 `)
 	s := &Server{team: teamOperation{dependencies: TeamDependencies{
-		Lifetime: t.Context(), WorkerEnv: []string{"WORKER_LOGIN=fixture-login", "PWD=surla"},
+		Lifetime: t.Context(), WorkerEnv: []string{"WORKER_LOGIN=fixture-login", "PWD=highbay"},
 	}}}
 	t.Cleanup(func() { assert.NoError(t, s.closeHeadless()) })
 	roles := []launcherRole{{Role: "builder", Folder: t.TempDir()}, {Role: "test_writer", Folder: t.TempDir()}}
-	choices := map[string]*gensurla.RoleAgentChoice{
+	choices := map[string]*genhighbay.RoleAgentChoice{
 		"builder":     {Client: "codex", Program: program},
 		"test_writer": {Client: "claude", Program: program},
 	}
@@ -103,7 +103,7 @@ printf '%s\n' "$PWD" "$WORKER_LOGIN" "$@" >> invocation
 		require.NoError(t, err)
 		assert.Equal(t, wantFolder, gotFolder)
 		assert.Equal(t, "fixture-login", lines[1])
-		assert.Contains(t, string(readback), "Work on your current Surla assignment")
+		assert.Contains(t, string(readback), "Work on your current Highbay assignment")
 		assert.NotContains(t, strings.ToLower(string(readback)), "chorus")
 	}
 
@@ -142,7 +142,7 @@ printf '%s\n' "$PWD" "$WORKER_LOGIN" "$@" >> invocation
 
 	readback, err := os.ReadFile(filepath.Join(roles[0].Folder, "invocation"))
 	require.NoError(t, err)
-	assert.Equal(t, 3, strings.Count(string(readback), "Work on your current Surla assignment"))
+	assert.Equal(t, 3, strings.Count(string(readback), "Work on your current Highbay assignment"))
 }
 
 // TestHeadlessStopDrains checks real signal delivery and reaping through the
@@ -172,7 +172,7 @@ IFS= read -r input <&3
 	for _, role := range roles {
 		require.NoError(t, syscall.Mkfifo(filepath.Join(role.Folder, "gate"), 0o600))
 	}
-	choices := map[string]*gensurla.RoleAgentChoice{
+	choices := map[string]*genhighbay.RoleAgentChoice{
 		"builder":     {Client: "codex", Program: graceful},
 		"test_writer": {Client: "claude", Program: stubborn},
 	}

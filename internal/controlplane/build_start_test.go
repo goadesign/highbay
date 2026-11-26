@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/designeval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -64,18 +64,18 @@ func TestBuildStartAdmissionOwnsCancellation(t *testing.T) {
 // TestBuildTeamOutcomeUsesTypedConditions keeps peer-authored messages out of
 // every warning and returns the original team result when admission succeeds.
 func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
-	team := &gensurla.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture team is ready for its assignment.", Roles: []*gensurla.ProjectTeamRole{}}
+	team := &genhighbay.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture team is ready for its assignment.", Roles: []*genhighbay.ProjectTeamRole{}}
 	private := "private external reply"
 	cases := []struct {
 		name string
 		err  error
-		kind gensurla.TeamKind
+		kind genhighbay.TeamKind
 	}{
-		{name: "ready", kind: gensurla.TeamKindReady},
-		{name: "window busy", err: gensurla.MakeWindowBusy(errors.New(private)), kind: gensurla.TeamKindWindowBusy},
-		{name: "ambiguous", err: fmt.Errorf("%s: %w", private, &TeamSpaceConflict{Count: 3}), kind: gensurla.TeamKindAmbiguousSpace},
-		{name: "unavailable", err: gensurla.MakeTeamUnavailable(errors.New(private)), kind: gensurla.TeamKindUnavailable},
-		{name: "unexpected failure", err: errors.New(private), kind: gensurla.TeamKindUnavailable},
+		{name: "ready", kind: genhighbay.TeamKindReady},
+		{name: "window busy", err: genhighbay.MakeWindowBusy(errors.New(private)), kind: genhighbay.TeamKindWindowBusy},
+		{name: "ambiguous", err: fmt.Errorf("%s: %w", private, &TeamSpaceConflict{Count: 3}), kind: genhighbay.TeamKindAmbiguousSpace},
+		{name: "unavailable", err: genhighbay.MakeTeamUnavailable(errors.New(private)), kind: genhighbay.TeamKindUnavailable},
+		{name: "unexpected failure", err: errors.New(private), kind: genhighbay.TeamKindUnavailable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 				assert.Same(t, team, ready)
 				assert.Equal(t, team.Step, ready.Step, "the ready wrapper preserves the owner's instruction")
 			}
-			var step gensurla.BuildStartStep
+			var step genhighbay.BuildStartStep
 			if busy, ok := outcome.AsWindowBusy(); ok {
 				step = busy.Step
 			}
@@ -110,22 +110,22 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 // failure, and checks that each cause gets its own repair before the step to
 // start the team agents for the saved build, not one Herdr check for all. An
 // error without a typed cause asks for that retry alone. No step tells the
-// user to type surla, which neither prints a team step nor starts agents.
+// user to type hbay, which neither prints a team step nor starts agents.
 func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 	for _, tc := range []struct{ name, cause, repair string }{
-		{name: "stopping", cause: "stopping", repair: "Ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion; either starts the server again and opens a fresh page"},
+		{name: "stopping", cause: "stopping", repair: "Ask your coding agent to open Highbay views, or choose Start Highbay in the Herdr companion; either starts the server again and opens a fresh page"},
 		{name: "herdr", cause: "herdr", repair: "Open the Herdr app"},
 		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
-		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Surla no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Surla will prepare a replacement space."},
+		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Highbay no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Highbay will prepare a replacement space."},
 		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
-		{name: "project state", cause: "project_state", repair: "Make sure this account can read and write this project's Surla state (under surla/operator in your user configuration folder) and restore anything missing or damaged there from a backup"},
+		{name: "project state", cause: "project_state", repair: "Make sure this account can read and write this project's Highbay state (under highbay/operator in your user configuration folder) and restore anything missing or damaged there from a backup"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},
 		{name: "no typed cause", repair: "The project team could not be prepared. Use Team → Start workers on the views page"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := error(gensurla.MakeTeamUnavailable(errors.New("private external reply")))
+			err := error(genhighbay.MakeTeamUnavailable(errors.New("private external reply")))
 			if tc.cause != "" {
-				failure := gensurla.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: tc.cause})
+				failure := genhighbay.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: tc.cause})
 				failure.Message = "the views page's step"
 				err = failure
 			}
@@ -137,7 +137,7 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 				assert.True(t, strings.HasSuffix(step, "the team agents for this saved build."), step)
 			}
 			assert.NotContains(t, step, "Check that Herdr is available")
-			assert.NotContains(t, strings.ToLower(step), "run surla")
+			assert.NotContains(t, strings.ToLower(step), "run hbay")
 			assert.NotContains(t, step, "private external reply")
 			assert.True(t, boundedText(step, maxCheckStep), "the step fits the contract")
 		})
@@ -164,15 +164,15 @@ func TestStartedBuildDerivesRequiredTestCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			build, err := startedBuild(heldBuild{file: buildFile{
 				Stories: tc.stories, TestWriter: testWriterAssignment{State: testsAssigned},
-			}}, gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{}))
+			}}, genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{}))
 			require.NoError(t, err)
 			assert.NotNil(t, build.RequiredTests)
 			assert.Len(t, build.RequiredTests, tc.count)
 			if tc.count > 0 {
-				assert.Equal(t, &gensurla.RequiredTest{Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"}, build.RequiredTests[0])
+				assert.Equal(t, &genhighbay.RequiredTest{Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"}, build.RequiredTests[0])
 			}
 			if tc.count == 2 {
-				assert.Equal(t, &gensurla.RequiredTest{Story: "Receipts", FlowKey: "receipt-refund", Scenario: "receipt_refund", Hook: "ReceiptRefund"}, build.RequiredTests[1])
+				assert.Equal(t, &genhighbay.RequiredTest{Story: "Receipts", FlowKey: "receipt-refund", Scenario: "receipt_refund", Hook: "ReceiptRefund"}, build.RequiredTests[1])
 			}
 			assert.Equal(t, tc.count, build.RequiredTestCount)
 		})

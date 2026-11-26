@@ -3,8 +3,8 @@ package dsl_test
 import (
 	"fmt"
 
-	. "github.com/goadesign/surla/story/dsl"
-	"github.com/goadesign/surla/story/expr"
+	. "github.com/goadesign/highbay/story/dsl"
+	"github.com/goadesign/highbay/story/expr"
 	"goa.design/goa/v3/eval"
 )
 

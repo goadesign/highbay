@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // draftGoMod is the go.mod of every draft these tests read.

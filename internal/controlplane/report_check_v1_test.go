@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -53,13 +53,13 @@ func TestReportV1DropDuringCheckSavesNothing(t *testing.T) {
 			reportTests(t, cp, revision)
 			require.Equal(t, 1, receive(t, checking))
 			build := mustOpenBuildFile(t, cp)
-			_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+			_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 				ChangeID: build.ChangeID, StartedAt: verdictTime(build.StartedAt),
 			})
 			require.NoError(t, err)
 			before := readBuildFile(t, cp, build.ChangeID)
 			close(release)
-			span := waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
+			span := waitForSpan(t, exporter, "highbay.controlplane.check_reported_tests")
 			require.Len(t, span.Events, 1)
 			assert.Equal(t, replacedEvent, span.Events[0].Name)
 			assert.Equal(t, before, readBuildFile(t, cp, build.ChangeID))
@@ -139,7 +139,7 @@ func TestReportV1TipGateChecksTheRealCopy(t *testing.T) {
 					productionBuildGit(t, workspace, "checkout", "-q", projectBranch)
 				}
 				productionBuildGit(t, folder, "merge", "--no-edit", foreign)
-				checkedTip = productionBuildGit(t, workspace, "rev-parse", "refs/heads/surla/tests-1")
+				checkedTip = productionBuildGit(t, workspace, "rev-parse", "refs/heads/highbay/tests-1")
 				if scenario != "same build branch" {
 					want = "merges work the user has not taken"
 				}
@@ -148,21 +148,21 @@ func TestReportV1TipGateChecksTheRealCopy(t *testing.T) {
 				productionBuildGit(t, folder, "reset", "--hard", tip)
 				want = "does not descend from this build's base " + build.Base
 			case "other branch at B":
-				productionBuildGit(t, workspace, "branch", "surla/build-2", build.Base)
+				productionBuildGit(t, workspace, "branch", "highbay/build-2", build.Base)
 			}
-			before := productionBuildGit(t, workspace, "rev-parse", "refs/heads/surla/tests-1")
+			before := productionBuildGit(t, workspace, "rev-parse", "refs/heads/highbay/tests-1")
 			close(release)
 			if want == "" {
-				accepted := waitForTests(t, cp, gensurla.TestsKindAccepted)
+				accepted := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 				assert.Equal(t, 1, accepted.TestWriter.Report)
 				assert.Equal(t, []string{checkedTip}, tests.recordedParents())
 				assert.Equal(t, 1, tests.recordCalls())
 				return
 			}
-			buildResult := waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+			buildResult := waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 			assert.Equal(t, 1, buildResult.TestWriter.Report)
 			assert.Zero(t, tests.recordCalls())
-			assert.Equal(t, before, productionBuildGit(t, workspace, "rev-parse", "refs/heads/surla/tests-1"))
+			assert.Equal(t, before, productionBuildGit(t, workspace, "rev-parse", "refs/heads/highbay/tests-1"))
 			status, body = httpCall(t, server.URL, "user", http.MethodGet, "/changes/chg/build/findings", "")
 			require.Equal(t, http.StatusOK, status, body)
 			assert.Contains(t, body, want)
@@ -185,7 +185,7 @@ func TestReportV1TipGateChecksTheRealCopy(t *testing.T) {
 				gitDir := productionBuildGit(t, folder, "rev-parse", "--absolute-git-dir")
 				require.NoError(t, os.Remove(filepath.Join(gitDir, "MERGE_HEAD")))
 			} else if scenario == "wrong branch" || scenario == "detached" {
-				productionBuildGit(t, folder, "switch", "-q", "surla/tests-1")
+				productionBuildGit(t, folder, "switch", "-q", "highbay/tests-1")
 			}
 			failure, result := mcpToolCall(t, server.URL, "tests", "get_test_writer_assignment", `{"change_id":"chg"}`)
 			require.Empty(t, failure)
@@ -207,33 +207,33 @@ func TestReportV1RetainsADeletedDroppedBranch(t *testing.T) {
 	writeWorkspaceFiles(t, folder, map[string]string{"eval/retained_test.txt": "Dropped build's tests.\n"})
 	foreign := commitAllForLayoutTest(t, folder)
 	user := asCaller("alice@example.com", CallerUser)
-	_, err := cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: first.ChangeID, StartedAt: verdictTime(first.StartedAt)})
+	_, err := cp.DropBuild(user, &genhighbay.DropBuildPayload{ChangeID: first.ChangeID, StartedAt: verdictTime(first.StartedAt)})
 	require.NoError(t, err)
 	readDraftForTest(t, cp)
 	writeBuilderDesignFixture(t, filepath.Join(workspace, draftFolderName), first.DesignSource)
 	op := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	card, err := cp.ProposeChange(asCaller("alice@example.com", CallerGuide), &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(asCaller("alice@example.com", CallerGuide), &genhighbay.ProposeChangePayload{
 		ChangeID: "next", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &op,
 	})
 	require.NoError(t, err)
 	card = mustConfirmNoop(t, cp, user, card)
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	_, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+	_, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
-	productionBuildGit(t, workspace, "branch", "-D", "surla/tests-1")
+	productionBuildGit(t, workspace, "branch", "-D", "highbay/tests-1")
 	productionBuildGit(t, folder, "merge", "--no-edit", foreign)
-	before := productionBuildGit(t, workspace, "rev-parse", "surla/tests-2")
-	_, err = cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+	before := productionBuildGit(t, workspace, "rev-parse", "highbay/tests-2")
+	_, err = cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
+		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 	require.NoError(t, err)
-	waitForNamedTests(t, cp, card.ChangeID, gensurla.TestsKindNeedsChanges)
-	findings, err := cp.GetTestFindings(user, &gensurla.GetTestFindingsPayload{ChangeID: card.ChangeID})
+	waitForNamedTests(t, cp, card.ChangeID, genhighbay.TestsKindNeedsChanges)
+	findings, err := cp.GetTestFindings(user, &genhighbay.GetTestFindingsPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
-	assert.Contains(t, strings.Join(findings.Findings, "\n"), "commit "+foreign+" on surla/tests-1 merges work the user has not taken")
+	assert.Contains(t, strings.Join(findings.Findings, "\n"), "commit "+foreign+" on highbay/tests-1 merges work the user has not taken")
 	assert.Contains(t, strings.Join(findings.Findings, "\n"), "eval/retained_test.txt")
 	assert.Zero(t, tests.recordCalls())
-	assert.Equal(t, before, productionBuildGit(t, workspace, "rev-parse", "surla/tests-2"))
+	assert.Equal(t, before, productionBuildGit(t, workspace, "rev-parse", "highbay/tests-2"))
 }
 
 // TestReportV1DropDuringRecordRetryStopsPublication proves c.mu is released
@@ -254,14 +254,14 @@ func TestReportV1DropDuringRecordRetryStopsPublication(t *testing.T) {
 	reportTests(t, cp, revision)
 	receive(t, firstAttempt)
 	build := mustOpenBuildFile(t, cp)
-	_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+	_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 		ChangeID: build.ChangeID, StartedAt: verdictTime(build.StartedAt),
 	})
 	require.NoError(t, err)
 	callsAtDrop := tests.recordCalls()
 	require.Less(t, callsAtDrop, recordLockRetries+1, "the fixture dropped while a retry was still pending")
 	before := readBuildFile(t, cp, build.ChangeID)
-	waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
+	waitForSpan(t, exporter, "highbay.controlplane.check_reported_tests")
 	assert.Equal(t, callsAtDrop, tests.recordCalls(), "no Record attempt follows accepted Drop")
 	assert.Equal(t, before, readBuildFile(t, cp, build.ChangeID))
 	for _, parent := range tests.recordedParents() {
@@ -284,13 +284,13 @@ func TestReportV1RecordRetriesKeepTheCheckedParent(t *testing.T) {
 				workspace := cp.activeWorkspaceDir // Record already holds c.mu.
 				if call == 1 {
 					foreign := productionBuildGit(t, workspace, "commit-tree", checkedTip+"^{tree}", "-p", checkedTip, "-m", "Concurrent other build")
-					productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/build-2", foreign)
-					productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/tests-1", foreign, checkedTip)
+					productionBuildGit(t, workspace, "update-ref", "refs/heads/highbay/build-2", foreign)
+					productionBuildGit(t, workspace, "update-ref", "refs/heads/highbay/tests-1", foreign, checkedTip)
 					if duringRetry {
 						return "", &testwriter.IndexLockError{Path: "index.lock", Err: fmt.Errorf("index.lock is held")}
 					}
 				}
-				current := productionBuildGit(t, workspace, "rev-parse", "surla/tests-1")
+				current := productionBuildGit(t, workspace, "rev-parse", "highbay/tests-1")
 				require.NotEqual(t, checkedTip, current, "Record must keep the earlier L1-checked parent")
 				return "", &testwriter.AuthorError{Finding: testwriter.Finding{
 					Kind: testwriter.FindingWorkingCopy, Message: "The tests branch moved from checked commit " + checkedTip + "; report again.",
@@ -302,7 +302,7 @@ func TestReportV1RecordRetriesKeepTheCheckedParent(t *testing.T) {
 			readBothAssignments(t, cp)
 			base := mustOpenBuildFile(t, cp).Base
 			reportTests(t, cp, revision)
-			waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+			waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 			wantCalls := 1
 			if duringRetry {
 				wantCalls = 2
@@ -328,18 +328,18 @@ func TestReportV1OperationalTipReadFailure(t *testing.T) {
 	realGit, err := exec.LookPath("git")
 	require.NoError(t, err)
 	bin := t.TempDir()
-	script := "#!/bin/sh\nfor arg do\nif [ \"$arg\" = for-each-ref ]; then printf 'tip_read_fault /private/report-tip-details\\n' >&2; exit 42; fi\ndone\nexec \"$SURLA_REPORT_REAL_GIT\" \"$@\"\n"
+	script := "#!/bin/sh\nfor arg do\nif [ \"$arg\" = for-each-ref ]; then printf 'tip_read_fault /private/report-tip-details\\n' >&2; exit 42; fi\ndone\nexec \"$HIGHBAY_REPORT_REAL_GIT\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
-	t.Setenv("SURLA_REPORT_REAL_GIT", realGit)
+	t.Setenv("HIGHBAY_REPORT_REAL_GIT", realGit)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	reportTests(t, cp, revision)
-	build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+	build := waitForTests(t, cp, genhighbay.TestsKindCouldNotRun)
 	failed, ok := build.TestWriter.Tests.AsCouldNotRun()
 	require.True(t, ok)
 	assert.Contains(t, failed.Reason, "tip_read_fault")
 	assert.NotContains(t, failed.Reason, "/private/report-tip-details")
 	assert.Equal(t, stepFailure, failed.Step)
-	span := waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
+	span := waitForSpan(t, exporter, "highbay.controlplane.check_reported_tests")
 	foundRaw := false
 	for _, event := range span.Events {
 		for _, attr := range event.Attributes {
@@ -366,12 +366,12 @@ func TestReportV1PublishedCommitFailureIsTruthful(t *testing.T) {
 			tests := &standInCopy{check: accepting, record: func(ctx context.Context, _ int, checkedTip string) (string, error) {
 				workspace := cp.activeWorkspaceDir
 				commit := productionBuildGit(t, workspace, "commit-tree", checkedTip+"^{tree}", "-p", checkedTip, "-m", "Accepted tests")
-				productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/tests-1", commit, checkedTip)
+				productionBuildGit(t, workspace, "update-ref", "refs/heads/highbay/tests-1", commit, checkedTip)
 				published <- commit
 				if expired {
 					<-ctx.Done()
 				}
-				return commit, fmt.Errorf("recorded tests as commit %s on surla/tests-1, but could not finish updating the working copy's index: rename /private/report-index-details: permission denied", commit)
+				return commit, fmt.Errorf("recorded tests as commit %s on highbay/tests-1, but could not finish updating the working copy's index: rename /private/report-index-details: permission denied", commit)
 			}}
 			var revision string
 			cp, revision = newReportFixture(t, Options{}, tests)
@@ -381,7 +381,7 @@ func TestReportV1PublishedCommitFailureIsTruthful(t *testing.T) {
 			readBothAssignments(t, cp)
 			reportTests(t, cp, revision)
 			commit := receive(t, published)
-			build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+			build := waitForTests(t, cp, genhighbay.TestsKindCouldNotRun)
 			failed, ok := build.TestWriter.Tests.AsCouldNotRun()
 			require.True(t, ok)
 			assert.Contains(t, failed.Reason, "recorded tests as commit "+commit)
@@ -391,7 +391,7 @@ func TestReportV1PublishedCommitFailureIsTruthful(t *testing.T) {
 			assert.NotContains(t, failed.Reason, "did not finish within")
 			assert.Equal(t, stepFailure, failed.Step)
 			assert.Equal(t, 1, tests.recordCalls(), "a published reference is never retried against the stale parent")
-			assert.Equal(t, commit, productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "surla/tests-1"))
+			assert.Equal(t, commit, productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "highbay/tests-1"))
 		})
 	}
 }
@@ -411,12 +411,12 @@ func TestReportV1DropDuringTipReadSavesNothing(t *testing.T) {
 	defer func() { assert.NoError(t, gate.release()) }()
 	bin := t.TempDir()
 	script := "#!/bin/sh\nfor arg do\n" +
-		"if [ \"$arg\" = for-each-ref ] && mkdir \"$SURLA_REPORT_GATE/claimed\" 2>/dev/null; then\n" +
-		"exec 3<> \"$SURLA_REPORT_GATE/release\"\n: > \"$SURLA_REPORT_GATE/in-write\"\ndd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nfi\ndone\n" +
-		"exec \"$SURLA_REPORT_REAL_GIT\" \"$@\"\n"
+		"if [ \"$arg\" = for-each-ref ] && mkdir \"$HIGHBAY_REPORT_GATE/claimed\" 2>/dev/null; then\n" +
+		"exec 3<> \"$HIGHBAY_REPORT_GATE/release\"\n: > \"$HIGHBAY_REPORT_GATE/in-write\"\ndd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nfi\ndone\n" +
+		"exec \"$HIGHBAY_REPORT_REAL_GIT\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
-	t.Setenv("SURLA_REPORT_GATE", gate.dir)
-	t.Setenv("SURLA_REPORT_REAL_GIT", realGit)
+	t.Setenv("HIGHBAY_REPORT_GATE", gate.dir)
+	t.Setenv("HIGHBAY_REPORT_REAL_GIT", realGit)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	reportTests(t, cp, revision)
 	select {
@@ -425,13 +425,13 @@ func TestReportV1DropDuringTipReadSavesNothing(t *testing.T) {
 		t.Fatal("report did not reach its L1 tip read")
 	}
 	build := mustOpenBuildFile(t, cp)
-	_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+	_, err = cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 		ChangeID: build.ChangeID, StartedAt: verdictTime(build.StartedAt),
 	})
 	require.NoError(t, err)
 	before := readBuildFile(t, cp, build.ChangeID)
 	require.NoError(t, gate.release())
-	waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
+	waitForSpan(t, exporter, "highbay.controlplane.check_reported_tests")
 	assert.Zero(t, tests.recordCalls())
 	assert.Equal(t, before, readBuildFile(t, cp, build.ChangeID))
 }
@@ -455,7 +455,7 @@ func TestReportV1DropCapturesTipsAtPublication(t *testing.T) {
 	}, record: func(_ context.Context, _ int, checkedTip string) (string, error) {
 		workspace := cp.activeWorkspaceDir
 		commit := productionBuildGit(t, workspace, "commit-tree", checkedTip+"^{tree}", "-p", checkedTip, "-m", "Concurrent accepted tests")
-		productionBuildGit(t, workspace, "update-ref", "refs/heads/surla/tests-1", commit, checkedTip)
+		productionBuildGit(t, workspace, "update-ref", "refs/heads/highbay/tests-1", commit, checkedTip)
 		published <- commit
 		return commit, nil
 	}}
@@ -474,17 +474,17 @@ func TestReportV1DropCapturesTipsAtPublication(t *testing.T) {
 	defer func() { assert.NoError(t, gate.release()) }()
 	bin := t.TempDir()
 	script := "#!/bin/sh\nfor arg do\n" +
-		"if [ \"$arg\" = 'refs/heads/surla/tests-1^{commit}' ] && mkdir \"$SURLA_DROP_GATE/claimed\" 2>/dev/null; then\n" +
-		"\"$SURLA_DROP_REAL_GIT\" \"$@\" > \"$SURLA_DROP_GATE/tip\" || exit $?\ncat \"$SURLA_DROP_GATE/tip\"\n" +
-		"exec 3<> \"$SURLA_DROP_GATE/release\"\n: > \"$SURLA_DROP_GATE/in-write\"\ndd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nexit 0\nfi\ndone\n" +
-		"exec \"$SURLA_DROP_REAL_GIT\" \"$@\"\n"
+		"if [ \"$arg\" = 'refs/heads/highbay/tests-1^{commit}' ] && mkdir \"$HIGHBAY_DROP_GATE/claimed\" 2>/dev/null; then\n" +
+		"\"$HIGHBAY_DROP_REAL_GIT\" \"$@\" > \"$HIGHBAY_DROP_GATE/tip\" || exit $?\ncat \"$HIGHBAY_DROP_GATE/tip\"\n" +
+		"exec 3<> \"$HIGHBAY_DROP_GATE/release\"\n: > \"$HIGHBAY_DROP_GATE/in-write\"\ndd bs=1 count=1 <&3 >/dev/null 2>&1\nexec 3>&-\nexit 0\nfi\ndone\n" +
+		"exec \"$HIGHBAY_DROP_REAL_GIT\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
-	t.Setenv("SURLA_DROP_GATE", gate.dir)
-	t.Setenv("SURLA_DROP_REAL_GIT", realGit)
+	t.Setenv("HIGHBAY_DROP_GATE", gate.dir)
+	t.Setenv("HIGHBAY_DROP_REAL_GIT", realGit)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	dropped := make(chan error, 1)
 	go func() {
-		_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &gensurla.DropBuildPayload{
+		_, err := cp.DropBuild(asCaller("alice@example.com", CallerUser), &genhighbay.DropBuildPayload{
 			ChangeID: build.ChangeID, StartedAt: verdictTime(build.StartedAt),
 		})
 		dropped <- err
@@ -507,13 +507,13 @@ func TestReportV1DropCapturesTipsAtPublication(t *testing.T) {
 	}
 	require.NoError(t, gate.release())
 	require.NoError(t, receive(t, dropped))
-	waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
-	actual := productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "surla/tests-1")
+	waitForSpan(t, exporter, "highbay.controlplane.check_reported_tests")
+	actual := productionBuildGit(t, cp.currentWorkspaceDir(), "rev-parse", "highbay/tests-1")
 	provenance, found, err := cp.cards.loadMadeFrom()
 	require.NoError(t, err)
 	require.True(t, found)
 	require.NotNil(t, provenance.Start.Dropped)
-	assert.Equal(t, actual, provenance.Start.Dropped.BranchTips["surla/tests-1"], "Drop must retain the last durable Record tip")
+	assert.Equal(t, actual, provenance.Start.Dropped.BranchTips["highbay/tests-1"], "Drop must retain the last durable Record tip")
 	if serialized {
 		assert.Zero(t, tests.recordCalls(), "the report cannot publish after Drop's captured tips")
 	}

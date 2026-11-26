@@ -20,9 +20,9 @@ import (
 	"syscall"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/designeval"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 type (
@@ -62,11 +62,11 @@ type (
 		// Summary is the plain-English summary of requested behavior.
 		Summary string
 		// Ambiguities lists surfaced domain questions.
-		Ambiguities []*gensurla.AmbiguityQuestion
+		Ambiguities []*genhighbay.AmbiguityQuestion
 		// Answers maps each ambiguity question ID to its confirmed answer.
 		Answers map[string]string
 		// Examples lists concrete examples mapped to evaluator checks.
-		Examples []*gensurla.ExampleItem
+		Examples []*genhighbay.ExampleItem
 		// PreservedBehaviors lists contract invariants preserved by this change.
 		PreservedBehaviors []string
 		// ConfirmedBy is the project owner whose user session confirmed the card.
@@ -74,7 +74,7 @@ type (
 		// RequestRevision is the SHA-256 digest of the canonical versioned card.
 		RequestRevision string
 		// UIComposition is the optional OpenUI Lang decision view for this revision.
-		UIComposition *gensurla.UICompositionItem
+		UIComposition *genhighbay.UICompositionItem
 		// Approval is the recorded Checkpoint 5 promotion approval for this revision.
 		Approval *savedApproval
 	}
@@ -319,9 +319,9 @@ func decodeRevision(
 	saved *savedCard,
 	designSource string,
 	savedStories []designeval.StorySummary,
-) (*gensurla.ChangeCardResult, []designeval.StorySummary, error) {
+) (*genhighbay.ChangeCardResult, []designeval.StorySummary, error) {
 	stories := cloneStorySummaries(savedStories)
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID:           saved.ChangeID,
 		Status:             saved.Status,
 		Prompt:             saved.Prompt,
@@ -428,7 +428,7 @@ func (s *cardStore) path(changeID string) string {
 
 // savedCardOf is card's saved form, without the response-only
 // UnverifiedApproval and ProposedRevision fields.
-func savedCardOf(card *gensurla.ChangeCardResult) *savedCard {
+func savedCardOf(card *genhighbay.ChangeCardResult) *savedCard {
 	return &savedCard{
 		ChangeID:           card.ChangeID,
 		Status:             card.Status,
@@ -448,7 +448,7 @@ func savedCardOf(card *gensurla.ChangeCardResult) *savedCard {
 
 // approvalItemOf converts a stored approval into an ApprovalItem without
 // TestSource, which currentCard derives when the approval is read.
-func approvalItemOf(saved *savedApproval) *gensurla.ApprovalItem {
+func approvalItemOf(saved *savedApproval) *genhighbay.ApprovalItem {
 	if saved == nil {
 		return nil
 	}
@@ -456,7 +456,7 @@ func approvalItemOf(saved *savedApproval) *gensurla.ApprovalItem {
 	if artifacts == nil {
 		artifacts = map[string]string{}
 	}
-	return &gensurla.ApprovalItem{
+	return &genhighbay.ApprovalItem{
 		ApprovedBy:      saved.ApprovedBy,
 		ReportDigest:    saved.ReportDigest,
 		CandidateCommit: saved.CandidateCommit,
@@ -470,7 +470,7 @@ func approvalItemOf(saved *savedApproval) *gensurla.ApprovalItem {
 
 // savedApprovalOf converts an ApprovalItem into its on-disk form without the
 // derived TestSource union.
-func savedApprovalOf(item *gensurla.ApprovalItem) *savedApproval {
+func savedApprovalOf(item *genhighbay.ApprovalItem) *savedApproval {
 	if item == nil {
 		return nil
 	}
@@ -488,7 +488,7 @@ func savedApprovalOf(item *gensurla.ApprovalItem) *savedApproval {
 
 // persistedStories returns the Stories saved with card: stories, or the
 // card's own Stories when stories is empty.
-func persistedStories(card *gensurla.ChangeCardResult, stories []designeval.StorySummary) []designeval.StorySummary {
+func persistedStories(card *genhighbay.ChangeCardResult, stories []designeval.StorySummary) []designeval.StorySummary {
 	out := cloneStorySummaries(stories)
 	if len(out) == 0 && len(card.Stories) > 0 {
 		out = canonicalStorySummariesFromItems(card.Stories)

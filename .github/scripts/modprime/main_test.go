@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 // TestPrimeProfilesCoverAllFixtureVersionsWithoutInitialGoSum verifies that
@@ -43,15 +43,15 @@ func TestPrimeProfilesCoverAllFixtureVersionsWithoutInitialGoSum(t *testing.T) {
 
 	combined := allGoMods.String()
 	for _, want := range []string{
-		"github.com/goadesign/surla " + testmodule.PublishedSurlaVersion,
-		"github.com/goadesign/surla/story " + testmodule.SurlaVersion(t, "github.com/goadesign/surla/story"),
-		"goa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3"),
+		"github.com/goadesign/highbay " + testmodule.PublishedHighbayVersion,
+		"github.com/goadesign/highbay/story " + testmodule.HighbayVersion(t, "github.com/goadesign/highbay/story"),
+		"goa.design/goa/v3 " + testmodule.HighbayVersion(t, "goa.design/goa/v3"),
 		"goa.design/goa/v3 " + testmodule.CompleteSourcesGoaVersion,
 		"goa.design/goa/v3 " + testmodule.StarterPreCompleteSourcesGoaVersion,
 		"goa.design/goa/v3 " + testmodule.MinimumGoaAIGoaVersion,
 		"goa.design/goa/v3 " + testmodule.OlderThanGoaAIGoaVersion,
-		"goa.design/goa-ai " + testmodule.SurlaVersion(t, "goa.design/goa-ai"),
-		"goa.design/model " + testmodule.SurlaVersion(t, "goa.design/model"),
+		"goa.design/goa-ai " + testmodule.HighbayVersion(t, "goa.design/goa-ai"),
+		"goa.design/model " + testmodule.HighbayVersion(t, "goa.design/model"),
 		"rsc.io/binaryregexp " + testmodule.BinaryRegexpVersion,
 		"rsc.io/qr " + testmodule.QRVersion,
 		"github.com/kr/text " + testmodule.KRTextVersion,

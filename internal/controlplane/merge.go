@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/procgroup"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -42,8 +42,8 @@ var errMergeGitProcessActive = errors.New("Git still has running child processes
 // a failed write rolls back to the original HEAD before the copy turns release.
 // A branch that already contains the result needs only worker cleanup.
 func (c *ControlPlane) MergeChange(
-	ctx context.Context, p *gensurla.MergeChangePayload,
-) (*gensurla.MergeChangeResult, error) {
+	ctx context.Context, p *genhighbay.MergeChangePayload,
+) (*genhighbay.MergeChangeResult, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
@@ -61,9 +61,9 @@ func (c *ControlPlane) MergeChange(
 // transaction. The team calls back into the control plane to read assignments,
 // so cleanup must run after this returns and releases those locks.
 func (c *ControlPlane) mergeApproved(
-	ctx context.Context, principal Principal, p *gensurla.MergeChangePayload,
-) (*gensurla.MergeChangeResult, BuildIdentity, error) {
-	busy := gensurla.MakeWorkingCopyBusy(errors.New("Surla is using the project or its build working copies. Try merging when that operation finishes."))
+	ctx context.Context, principal Principal, p *genhighbay.MergeChangePayload,
+) (*genhighbay.MergeChangeResult, BuildIdentity, error) {
+	busy := genhighbay.MakeWorkingCopyBusy(errors.New("Highbay is using the project or its build working copies. Try merging when that operation finishes."))
 	if !c.workspaceMu.TryRLock() {
 		return nil, BuildIdentity{}, busy
 	}
@@ -143,7 +143,7 @@ func (c *ControlPlane) mergeApproved(
 
 // mergeBuild reads the undropped current build and its saved approval. The
 // caller holds c.mu and still has to verify the approval's live inputs.
-func (c *ControlPlane) mergeBuild(principal Principal, p *gensurla.MergeChangePayload) (heldBuild, error) {
+func (c *ControlPlane) mergeBuild(principal Principal, p *genhighbay.MergeChangePayload) (heldBuild, error) {
 	held, err := c.ownedBuild(principal, p.ChangeID)
 	var refusal *goa.ServiceError
 	if errors.As(err, &refusal) && refusal.Name == "not_found" {
@@ -167,7 +167,7 @@ func (c *ControlPlane) mergeBuild(principal Principal, p *gensurla.MergeChangePa
 
 // mergeNotApproved gives every stale approval or build the same recovery.
 func mergeNotApproved() error {
-	return gensurla.MakeNotApproved(errors.New("This result has no current approval for the open build. Review the current result and approve it before merging."))
+	return genhighbay.MakeNotApproved(errors.New("This result has no current approval for the open build. Review the current result and approve it before merging."))
 }
 
 // mergeIntoCurrentBranch completes the Git transaction while the approved
@@ -175,18 +175,18 @@ func mergeNotApproved() error {
 // and does not need a clean worktree because the call makes no Git writes.
 func (c *ControlPlane) mergeIntoCurrentBranch(
 	ctx context.Context, repo string, plan verify.Plan,
-) (*gensurla.MergeChangeResult, error) {
+) (*genhighbay.MergeChangeResult, error) {
 	refOut, err := runGitRead(ctx, repo, "symbolic-ref", "-q", "HEAD")
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && exit.ExitCode() == 1 {
-		return nil, gensurla.MakeDetachedHead(errors.New("The project has a detached HEAD. Check out the branch that should receive the approved result."))
+		return nil, genhighbay.MakeDetachedHead(errors.New("The project has a detached HEAD. Check out the branch that should receive the approved result."))
 	}
 	if err != nil {
 		return nil, err
 	}
 	branch, local := strings.CutPrefix(strings.TrimSuffix(string(refOut), "\n"), "refs/heads/")
 	if !local || branch == "" {
-		return nil, gensurla.MakeDetachedHead(errors.New("HEAD must point to a local branch before merging."))
+		return nil, genhighbay.MakeDetachedHead(errors.New("HEAD must point to a local branch before merging."))
 	}
 	headOut, err := runGitRead(ctx, repo, "rev-parse", "--verify", "HEAD")
 	if err != nil {
@@ -198,7 +198,7 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 		return nil, err
 	}
 	if taken {
-		return &gensurla.MergeChangeResult{Branch: branch, HeadCommit: origHEAD}, nil
+		return &genhighbay.MergeChangeResult{Branch: branch, HeadCommit: origHEAD}, nil
 	}
 	commits := []string{plan.CandidateCommit}
 	if plan.Tests == verify.TestsWritten {
@@ -220,14 +220,14 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 
 	// Once Git can change the project, a disconnected browser cannot interrupt
 	// the transaction. Both commands and rollback remain bounded.
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.merge_change")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.merge_change")
 	defer span.End()
 	write, cancel := context.WithTimeout(context.WithoutCancel(ctx), mergeWriteTimeout)
 	defer cancel()
 	for i, commit := range commits {
 		if err := checkMergeOverwrites(write, repo, branch, commit); err != nil {
 			if i == 0 {
-				return nil, gensurla.MakeMergeConflict(err)
+				return nil, genhighbay.MakeMergeConflict(err)
 			}
 			return nil, rollbackMerge(ctx, span, repo, hooks, branch, origHEAD, err)
 		}
@@ -240,7 +240,7 @@ func (c *ControlPlane) mergeIntoCurrentBranch(
 	if err != nil {
 		return nil, rollbackMerge(ctx, span, repo, hooks, branch, origHEAD, err)
 	}
-	return &gensurla.MergeChangeResult{Branch: branch, HeadCommit: strings.TrimSpace(string(headOut))}, nil
+	return &genhighbay.MergeChangeResult{Branch: branch, HeadCommit: strings.TrimSpace(string(headOut))}, nil
 }
 
 // checkMergeGitSettings establishes which Git configuration may participate
@@ -286,7 +286,7 @@ func checkMergeConfig(ctx context.Context, repo, commonDir string, localPaths []
 		return err
 	}
 	if key, _, _ := strings.Cut(hooks, "\x00"); key != "" {
-		return gensurla.MakeMergeConflict(fmt.Errorf("Git has a command hook configured by %q. Review the hook and merge the approved commits manually.", key))
+		return genhighbay.MakeMergeConflict(fmt.Errorf("Git has a command hook configured by %q. Review the hook and merge the approved commits manually.", key))
 	}
 	includes, err := readMergeConfig(ctx, repo, "--show-origin", "--type=path", "--get-regexp",
 		`^(include\.path|includeif\..*\.path)$`)
@@ -341,7 +341,7 @@ func checkMergeConfigLocation(repo, commonDir, path string) error {
 		return err
 	}
 	if inside {
-		return gensurla.MakeMergeConflict(errors.New("Git reads configuration from the project working tree. Review the configuration and merge the approved commits manually."))
+		return genhighbay.MakeMergeConflict(errors.New("Git reads configuration from the project working tree. Review the configuration and merge the approved commits manually."))
 	}
 	return nil
 }
@@ -453,13 +453,13 @@ func checkDefaultMergeDriver(ctx context.Context, repo string) error {
 	if err != nil || command == "" {
 		return err
 	}
-	return gensurla.MakeMergeConflict(fmt.Errorf("Git's merge.default selects the custom driver configured by %q. Review the driver and merge the approved commits manually.", key))
+	return genhighbay.MakeMergeConflict(fmt.Errorf("Git's merge.default selects the custom driver configured by %q. Review the driver and merge the approved commits manually.", key))
 }
 
 // refuseMergeAttributes identifies the source Git may read instead of
 // returning its configuration contents to the browser.
 func refuseMergeAttributes(source string) error {
-	return gensurla.MakeMergeConflict(fmt.Errorf("Git can read attribute rules from %s. Review the attributes and merge the approved commits manually.", source))
+	return genhighbay.MakeMergeConflict(fmt.Errorf("Git can read attribute rules from %s. Review the attributes and merge the approved commits manually.", source))
 }
 
 // checkMergeOverwrites checks the paths that Git's computed merge tree adds.
@@ -550,7 +550,7 @@ func checkMergeWorktree(ctx context.Context, repo string) error {
 		return err
 	}
 	if len(status) != 0 {
-		return gensurla.MakeDirtyWorktree(fmt.Errorf("Commit or stash these tracked changes before merging:\n%s", strings.TrimRight(status, "\n")))
+		return genhighbay.MakeDirtyWorktree(fmt.Errorf("Commit or stash these tracked changes before merging:\n%s", strings.TrimRight(status, "\n")))
 	}
 	paths, err := runGitRead(ctx, repo, "rev-parse", "--path-format=absolute",
 		"--git-path", "MERGE_HEAD", "--git-path", "CHERRY_PICK_HEAD", "--git-path", "REVERT_HEAD",
@@ -560,7 +560,7 @@ func checkMergeWorktree(ctx context.Context, repo string) error {
 	}
 	for _, path := range strings.Split(strings.TrimSuffix(string(paths), "\n"), "\n") {
 		if _, err := os.Lstat(path); err == nil {
-			return gensurla.MakeWorkingCopyBusy(errors.New("Finish or abort the Git operation already in progress before merging."))
+			return genhighbay.MakeWorkingCopyBusy(errors.New("Finish or abort the Git operation already in progress before merging."))
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -612,7 +612,7 @@ func checkMergeHookPath(repo, commonDir, path string) error {
 		return err
 	}
 	if owned {
-		return gensurla.MakeMergeConflict(errors.New("Git hooks for this merge are in the tracked working tree. Move the hooks outside the working tree or merge manually."))
+		return genhighbay.MakeMergeConflict(errors.New("Git hooks for this merge are in the tracked working tree. Move the hooks outside the working tree or merge manually."))
 	}
 	return nil
 }
@@ -665,10 +665,10 @@ func rollbackMerge(
 	if err != nil || errors.Is(mergeErr, errMergeGitProcessActive) {
 		span.RecordError(errors.New("git merge rollback failed"))
 		span.SetStatus(codes.Error, "original Git state could not be restored")
-		return gensurla.MakeMergeConflict(fmt.Errorf("Merge failed and Surla could not confirm restoration to %s. Inspect the branch, index and working tree before retrying.\n%w", origHEAD, errors.Join(mergeErr, err)))
+		return genhighbay.MakeMergeConflict(fmt.Errorf("Merge failed and Highbay could not confirm restoration to %s. Inspect the branch, index and working tree before retrying.\n%w", origHEAD, errors.Join(mergeErr, err)))
 	}
 	span.AddEvent("merge_rolled_back")
-	return gensurla.MakeMergeConflict(fmt.Errorf("Git restored the branch and tracked files to %s after the merge failed. Inspect the Git output before retrying.\n%w", origHEAD, mergeErr))
+	return genhighbay.MakeMergeConflict(fmt.Errorf("Git restored the branch and tracked files to %s after the merge failed. Inspect the Git output before retrying.\n%w", origHEAD, mergeErr))
 }
 
 // restoreMergeWorktree refuses to reset a different branch and checks that
@@ -700,8 +700,8 @@ func restoreMergeWorktree(ctx context.Context, repo, hooks, branch, origHEAD str
 func (c *ControlPlane) stopFinishedBuildWorkers(ctx context.Context, team Team, build BuildIdentity) {
 	work, cancel := context.WithTimeout(context.WithoutCancel(ctx), workerStopTimeout)
 	defer cancel()
-	work, span := c.tracer("surla/controlplane").Start(work, "surla.controlplane.stop_finished_build_workers",
-		trace.WithAttributes(attribute.String("surla.change_id", build.ChangeID)))
+	work, span := c.tracer("highbay/controlplane").Start(work, "highbay.controlplane.stop_finished_build_workers",
+		trace.WithAttributes(attribute.String("highbay.change_id", build.ChangeID)))
 	defer span.End()
 	if err := team.StopWorkers(work, build); err != nil {
 		span.RecordError(errors.New("project team could not stop build workers"))

@@ -26,12 +26,12 @@ var notAcceptedStates = []testWriterAssignment{
 // builder can take: keep watching Chorus, read its assignment and retry
 // verification or the live target after acceptance.
 func TestTestsNotAcceptedEndsWithBuilderStep(t *testing.T) {
-	step := "; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again"
+	step := "; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again"
 	firstClauses := map[string]string{
 		testsAssigned:    "their state is assigned: the test writer writes the required tests and reports them finished" + step,
-		testsReported:    "their state is reported: Surla is checking the test writer's report" + step,
-		testsNeedChanges: "their state is needs changes: the test writer fixes Surla's findings and reports again" + step,
-		testsCouldNotRun: "their state is could not run: Surla's check could not run (git could not write the tests branch); the user's step: Free disk space, then report again" + step,
+		testsReported:    "their state is reported: Highbay is checking the test writer's report" + step,
+		testsNeedChanges: "their state is needs changes: the test writer fixes Highbay's findings and reports again" + step,
+		testsCouldNotRun: "their state is could not run: Highbay's check could not run (git could not write the tests branch); the user's step: Free disk space, then report again" + step,
 	}
 	for _, saved := range notAcceptedStates {
 		t.Run(saved.State, func(t *testing.T) {

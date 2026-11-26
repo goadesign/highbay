@@ -37,14 +37,14 @@ func TestRecordV1RefusesAMovedCheckedTip(t *testing.T) {
 				require.NoError(t, os.Remove(filepath.Join(wc.gitDir, "index.lock")))
 			}
 			foreign := runGit(t, repo, "commit-tree", "--no-gpg-sign", tip+"^{tree}", "-p", tip, "-m", "Other build work")
-			runGit(t, repo, "update-ref", "refs/heads/surla/build-2", foreign)
+			runGit(t, repo, "update-ref", "refs/heads/highbay/build-2", foreign)
 			runGit(t, repo, "update-ref", "refs/heads/"+branch, foreign, tip)
 			commit, err := Record(t.Context(), verdict, branch, tip, "Accept tests")
 			var author *AuthorError
 			require.ErrorAs(t, err, &author)
 			assert.Equal(t, FindingWorkingCopy, author.Finding.Kind)
 			assert.Contains(t, author.Finding.Message, "moved from checked commit "+tip+" to "+foreign)
-			assert.Contains(t, author.Finding.Message, "uncommitted (Surla commits what it accepts), and report again")
+			assert.Contains(t, author.Finding.Message, "uncommitted (Highbay commits what it accepts), and report again")
 			assert.Empty(t, commit)
 			assert.Equal(t, foreign, runGit(t, repo, "rev-parse", branch))
 			after, err := os.ReadFile(filepath.Join(wc.gitDir, "index"))
@@ -91,7 +91,7 @@ func TestRecordV1CASRejectionPreservesTheIndex(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "judged\n", string(file))
 	assert.NoFileExists(t, filepath.Join(wc.gitDir, "index.lock"))
-	left, err := filepath.Glob(filepath.Join(wc.gitDir, "surla-record-*"))
+	left, err := filepath.Glob(filepath.Join(wc.gitDir, "highbay-record-*"))
 	require.NoError(t, err)
 	assert.Empty(t, left)
 }
@@ -135,16 +135,16 @@ func armRecordGitMutation(t *testing.T, repo, ref, checkedTip, foreign, index st
 	require.NoError(t, err)
 	bin := t.TempDir()
 	script := "#!/bin/sh\nfor arg do\nif [ \"$arg\" = update-ref ]; then\n" +
-		"if [ -n \"$SURLA_RECORD_FOREIGN\" ]; then\n" +
-		"\"$SURLA_RECORD_GIT\" -C \"$SURLA_RECORD_REPO\" -c core.hooksPath=/dev/null update-ref \"$SURLA_RECORD_REF\" \"$SURLA_RECORD_FOREIGN\" \"$SURLA_RECORD_TIP\" || exit $?\n" +
-		"exec \"$SURLA_RECORD_GIT\" \"$@\"\nfi\n" +
-		"\"$SURLA_RECORD_GIT\" \"$@\" || exit $?\n" +
-		"mv \"$SURLA_RECORD_INDEX\" \"$SURLA_RECORD_INDEX.before\" && mkdir \"$SURLA_RECORD_INDEX\"\nexit $?\nfi\ndone\n" +
-		"exec \"$SURLA_RECORD_GIT\" \"$@\"\n"
+		"if [ -n \"$HIGHBAY_RECORD_FOREIGN\" ]; then\n" +
+		"\"$HIGHBAY_RECORD_GIT\" -C \"$HIGHBAY_RECORD_REPO\" -c core.hooksPath=/dev/null update-ref \"$HIGHBAY_RECORD_REF\" \"$HIGHBAY_RECORD_FOREIGN\" \"$HIGHBAY_RECORD_TIP\" || exit $?\n" +
+		"exec \"$HIGHBAY_RECORD_GIT\" \"$@\"\nfi\n" +
+		"\"$HIGHBAY_RECORD_GIT\" \"$@\" || exit $?\n" +
+		"mv \"$HIGHBAY_RECORD_INDEX\" \"$HIGHBAY_RECORD_INDEX.before\" && mkdir \"$HIGHBAY_RECORD_INDEX\"\nexit $?\nfi\ndone\n" +
+		"exec \"$HIGHBAY_RECORD_GIT\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
 	for key, value := range map[string]string{
-		"SURLA_RECORD_GIT": realGit, "SURLA_RECORD_REPO": repo, "SURLA_RECORD_REF": ref,
-		"SURLA_RECORD_TIP": checkedTip, "SURLA_RECORD_FOREIGN": foreign, "SURLA_RECORD_INDEX": index,
+		"HIGHBAY_RECORD_GIT": realGit, "HIGHBAY_RECORD_REPO": repo, "HIGHBAY_RECORD_REF": ref,
+		"HIGHBAY_RECORD_TIP": checkedTip, "HIGHBAY_RECORD_FOREIGN": foreign, "HIGHBAY_RECORD_INDEX": index,
 	} {
 		t.Setenv(key, value)
 	}
@@ -177,14 +177,14 @@ func TestRecordV1SwitchBeforeIndexReservation(t *testing.T) {
 				trigger = tip + "^{tree}"
 			}
 			script := "#!/bin/sh\nfor arg do\n" +
-				"if [ \"$arg\" = \"$SURLA_SWITCH_TRIGGER\" ] && mkdir \"$SURLA_SWITCH_DIR/claimed\" 2>/dev/null; then\n" +
-				"\"$SURLA_SWITCH_GIT\" -C \"$SURLA_SWITCH_WC\" -c core.hooksPath=/dev/null switch -q -c side-work || exit $?\n" +
-				"cp \"$SURLA_SWITCH_INDEX\" \"$SURLA_SWITCH_DIR/index\" || exit $?\nfi\ndone\n" +
-				"exec \"$SURLA_SWITCH_GIT\" \"$@\"\n"
+				"if [ \"$arg\" = \"$HIGHBAY_SWITCH_TRIGGER\" ] && mkdir \"$HIGHBAY_SWITCH_DIR/claimed\" 2>/dev/null; then\n" +
+				"\"$HIGHBAY_SWITCH_GIT\" -C \"$HIGHBAY_SWITCH_WC\" -c core.hooksPath=/dev/null switch -q -c side-work || exit $?\n" +
+				"cp \"$HIGHBAY_SWITCH_INDEX\" \"$HIGHBAY_SWITCH_DIR/index\" || exit $?\nfi\ndone\n" +
+				"exec \"$HIGHBAY_SWITCH_GIT\" \"$@\"\n"
 			require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
 			for key, value := range map[string]string{
-				"SURLA_SWITCH_GIT": realGit, "SURLA_SWITCH_WC": wc.Dir(), "SURLA_SWITCH_TRIGGER": trigger,
-				"SURLA_SWITCH_INDEX": filepath.Join(wc.gitDir, "index"), "SURLA_SWITCH_DIR": bin,
+				"HIGHBAY_SWITCH_GIT": realGit, "HIGHBAY_SWITCH_WC": wc.Dir(), "HIGHBAY_SWITCH_TRIGGER": trigger,
+				"HIGHBAY_SWITCH_INDEX": filepath.Join(wc.gitDir, "index"), "HIGHBAY_SWITCH_DIR": bin,
 			} {
 				t.Setenv(key, value)
 			}

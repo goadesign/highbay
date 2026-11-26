@@ -53,7 +53,7 @@ func processDiagnosticPlan(t *testing.T, mode string) Plan {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "case"), []byte(mode), 0o600))
 	t.Setenv("PATH", filepath.Join(root, "bin")+string(os.PathListSeparator)+filepath.Join(root, "goroot", "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("SURLA_TEST_SERVER_VALUE", "FAKE_SERVER_VALUE_521")
+	t.Setenv("HIGHBAY_TEST_SERVER_VALUE", "FAKE_SERVER_VALUE_521")
 	t.Setenv("ANTHROPIC_API_KEY", "FAKE_PROVIDER_VALUE_521")
 	return Plan{
 		CandidateRepo: filepath.Join(root, "repo"), CandidateCommit: strings.TrimSpace(string(commit)), CandidateModule: "app", Binaries: map[string]string{"app": "."},

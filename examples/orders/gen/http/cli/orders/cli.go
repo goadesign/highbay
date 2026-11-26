@@ -3,7 +3,7 @@
 // orders HTTP client CLI support package
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package cli
 
@@ -13,10 +13,10 @@ import (
 	"net/http"
 	"os"
 
-	commercec "github.com/goadesign/surla/examples/orders/gen/http/commerce/client"
-	ordersc "github.com/goadesign/surla/examples/orders/gen/http/orders/client"
-	paymentsc "github.com/goadesign/surla/examples/orders/gen/http/payments/client"
-	promptsc "github.com/goadesign/surla/examples/orders/gen/http/prompts/client"
+	commercec "github.com/goadesign/highbay/examples/orders/gen/http/commerce/client"
+	ordersc "github.com/goadesign/highbay/examples/orders/gen/http/orders/client"
+	paymentsc "github.com/goadesign/highbay/examples/orders/gen/http/payments/client"
+	promptsc "github.com/goadesign/highbay/examples/orders/gen/http/prompts/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -380,7 +380,7 @@ func paymentsRefundUsage() {
 
 // promptsUsage displays the usage of the prompts command and its subcommands.
 func promptsUsage() {
-	fmt.Fprintln(os.Stderr, `Prompt text a live copy of the orders platform lets Surla replace. Each call replaces the text of one registered prompt for every tenant served by this orders process, until it exits.`)
+	fmt.Fprintln(os.Stderr, `Prompt text a live copy of the orders platform lets Highbay replace. Each call replaces the text of one registered prompt for every tenant served by this orders process, until it exits.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] prompts COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    override-prompt: Replace the text of a registered prompt. The agent's next model request planned by this process uses the new text, and a restarted process starts again with the built-in text. The template must render with the prompt's registered spec, so text that does not render is rejected and the text in use stays the same. Returns the version of the accepted text.`)

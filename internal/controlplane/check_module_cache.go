@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 // validateCheckModuleCacheDir admits an existing physical, private directory

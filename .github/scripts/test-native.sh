@@ -93,7 +93,7 @@ run_selected ./internal/controlplane \
   TestCheckModuleCacheAdmission
 
 # Project process start/attach/stop, signal survival, private paths and native command launch.
-run_selected ./cmd/surla \
+run_selected ./cmd/hbay \
   TestCommandErrorsNeverIncludeArguments \
   TestConfigureServeWorkspaceBindsTheNamedProject \
   TestConfigureServeWorkspaceKeepsHistoryAcrossSpellingsOfTheWorkspace \

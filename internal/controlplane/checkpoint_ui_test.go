@@ -11,18 +11,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // checkpointUIProposal is the guide's analysis the editor tests start from.
-func checkpointUIProposal() *gensurla.CP1Analysis {
-	return &gensurla.CP1Analysis{
+func checkpointUIProposal() *genhighbay.CP1Analysis {
+	return &genhighbay.CP1Analysis{
 		Summary: "Route refunds >= $50 to manager approval.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{
 			Question: "Does the $50 limit include tax?",
 			Options:  []string{"subtotal_only", "total_with_tax"},
 		}},
-		Examples: []*gensurla.CP1AnalysisExample{{
+		Examples: []*genhighbay.CP1AnalysisExample{{
 			Scenario: "Refund under $50", InputSummary: "$40 subtotal",
 			ExpectedOutcome: "Auto-approved", VerificationKind: "deterministic",
 		}},
@@ -46,13 +46,13 @@ func TestCheckpointUIEditorConfirmAndRevisionRecovery(t *testing.T) {
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, map[string]any{"r1": proposed.RequestRevision}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
-const editor = () => page.$("#surla-cp1-editor");
+const editor = () => page.$("#highbay-cp1-editor");
 const outcome = () => page.$('textarea[data-example-id="check_01"][data-field="expected_outcome"]');
 const pill = (option) => page.$('[data-ambiguity-id="chg-ui-test-ambiguity-01"][data-option="' + option + '"]');
 const confirms = () => page.sent("POST", "/changes/confirm");
 await until(() => editor().dataset.changeId === "chg-ui-test", "the change did not open");
 expect(page.state() === "cp1-change-card" && editor().dataset.requestRevision === input.r1, "unexpected CP1 dataset: " + JSON.stringify(editor().dataset));
-const cp1Text = page.text("#surla-checkpoint-view");
+const cp1Text = page.text("#highbay-checkpoint-view");
 expect(cp1Text.includes(input.r1) && cp1Text.includes("Does the $50 limit include tax?"), "CP1 view missing the revision or question");
 for (const [field, label] of [["scenario", "Scenario"], ["input_summary", "Input"], ["expected_outcome", "Expected result"]]) {
   expect(page.$('textarea[data-field="' + field + '"]').labels[0]?.firstElementChild?.textContent === label,
@@ -63,21 +63,21 @@ for (const [field, label] of [["scenario", "Scenario"], ["input_summary", "Input
 pill("subtotal_only").click();
 page.type(outcome(), "  Instant store credit\nup to $50.00  ");
 await control(origin, "hold", { key: "POST /changes/confirm" });
-page.$("#surla-confirm-submit").click();
-page.$("#surla-confirm-submit").click();
+page.$("#highbay-confirm-submit").click();
+page.$("#highbay-confirm-submit").click();
 page.type(outcome(), "typed while saving");
 expect(confirms().length === 1, "a second click sent another confirmation");
-expect(page.$("#surla-cp1-form-card").getAttribute("aria-busy") === "true" && page.$("#surla-confirm-submit").disabled && outcome().disabled && page.$$('[data-ambiguity-id="chg-ui-test-ambiguity-01"]').every((p) => p.disabled), "controls were not busy and disabled while saving");
+expect(page.$("#highbay-cp1-form-card").getAttribute("aria-busy") === "true" && page.$("#highbay-confirm-submit").disabled && outcome().disabled && page.$$('[data-ambiguity-id="chg-ui-test-ambiguity-01"]').every((p) => p.disabled), "controls were not busy and disabled while saving");
 expect(outcome().value === "  Instant store credit\nup to $50.00  ", "typing while saving changed the submitted text");
 const sentConfirm = confirms()[0].body;
 expect(sentConfirm.request_revision === input.r1 && sentConfirm.answers["chg-ui-test-ambiguity-01"] === "subtotal_only" && sentConfirm.examples[0].expected_outcome === "  Instant store credit\nup to $50.00  ", "unexpected confirm_intent payload: " + JSON.stringify(sentConfirm));
 await control(origin, "release", { key: "POST /changes/confirm" });
-await until(() => editor().dataset.requestRevision !== input.r1 && !page.$("#surla-cp1-form-card").getAttribute("aria-busy"), "the confirmed revision did not replace the busy form");
+await until(() => editor().dataset.requestRevision !== input.r1 && !page.$("#highbay-cp1-form-card").getAttribute("aria-busy"), "the confirmed revision did not replace the busy form");
 const r2 = editor().dataset.requestRevision;
 
 // A later list change does not overwrite edits typed after the confirmation.
 page.type(outcome(), "post-confirm draft edit");
-page.$("#surla-nav-changes").click();
+page.$("#highbay-nav-changes").click();
 // On failure, project only bounded response facts: never request headers,
 // session credentials, query strings, or unrestricted response bodies.
 const crossChangeDiagnostics = () => {
@@ -100,31 +100,31 @@ const crossChangeDiagnostics = () => {
     });
   return { state: page.state(), status: page.status().slice(0, 2048), hidden: page.doc.hidden,
     editor: { changeId: editor()?.dataset.changeId, requestRevision: editor()?.dataset.requestRevision },
-    renderedChanges: page.$$("#surla-change-list [data-change-id]").slice(0, 10).map((el) => el.dataset.changeId), requests };
+    renderedChanges: page.$$("#highbay-change-list [data-change-id]").slice(0, 10).map((el) => el.dataset.changeId), requests };
 };
 await propose("chg-elsewhere", "Show carriers on receipts.", "Carrier shown");
 try {
-  await until(() => page.$("#surla-open-change-chg-elsewhere"), "the other change did not reach the page");
+  await until(() => page.$("#highbay-open-change-chg-elsewhere"), "the other change did not reach the page");
 } catch (err) {
   console.error("cross-change update: " + JSON.stringify(crossChangeDiagnostics()));
   throw err;
 }
 expect(outcome().value === "post-confirm draft edit", "a list change overwrote a post-confirm edit");
-page.$("#surla-nav-cp1").click();
+page.$("#highbay-nav-cp1").click();
 
 // Refining without edits keeps multiline, space-padded text and the revision.
 page.type(outcome(), "  Instant store credit\nup to $50.00  ");
-page.$("#surla-confirm-submit").click();
-await until(() => confirms().length === 2 && !page.$("#surla-confirm-submit").disabled, "the no-edit refinement did not finish");
+page.$("#highbay-confirm-submit").click();
+await until(() => confirms().length === 2 && !page.$("#highbay-confirm-submit").disabled, "the no-edit refinement did not finish");
 expect(confirms()[1].body.examples[0].expected_outcome === "  Instant store credit\nup to $50.00  ", "no-edit refine mutated multiline/whitespace field");
 expect(editor().dataset.requestRevision === r2, "no-edit refine changed request_revision");
 expect((await readCard("chg-ui-test")).examples[0].expected_outcome === "  Instant store credit\nup to $50.00  ", "the saved text lost its exact whitespace");
 
 // The recovery paths below need a change that was never confirmed, which a guide revision replaces.
 await propose("chg-ui-recovery", "Route refunds >= $50 to manager approval.", "Manager approval");
-page.$("#surla-nav-changes").click();
-await until(() => page.$("#surla-open-change-chg-ui-recovery"), "the second change did not appear");
-page.$("#surla-open-change-chg-ui-recovery").click();
+page.$("#highbay-nav-changes").click();
+await until(() => page.$("#highbay-open-change-chg-ui-recovery"), "the second change did not appear");
+page.$("#highbay-open-change-chg-ui-recovery").click();
 await until(() => editor().dataset.changeId === "chg-ui-recovery", "the second change did not open");
 const choice = (option) => page.$('[data-ambiguity-id="chg-ui-recovery-ambiguity-01"][data-option="' + option + '"]');
 
@@ -133,70 +133,70 @@ page.setHidden(true);
 const r3card = await revise(await readCard("chg-ui-recovery"), "Route refunds >= $50 to manager approval, with an audit.", "Audited approval");
 choice("total_with_tax").click();
 page.type(outcome(), "Edited outcome preserved across stale error");
-page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-confirm-error"), "a stale confirmation showed no error");
-const staleText = page.text("#surla-cp1-editor");
+page.$("#highbay-confirm-submit").click();
+await until(() => page.$("#highbay-confirm-error"), "a stale confirmation showed no error");
+const staleText = page.text("#highbay-cp1-editor");
 expect(page.status().includes("Change Card request failed; unsaved edits preserved.") && staleText.includes("request_revision mismatch") && staleText.includes("Your edited answers and examples remain in this form"), "stale submission did not explain itself: " + page.status() + " / " + staleText);
 expect(!outcome().disabled && outcome().value === "Edited outcome preserved across stale error", "stale submission lost edits or kept controls disabled");
-expect(page.doc.activeElement === page.$("#surla-confirm-error"), "the refused confirmation did not take focus");
+expect(page.doc.activeElement === page.$("#highbay-confirm-error"), "the refused confirmation did not take focus");
 
 // Load Latest Card shows the latest saved card beside the preserved edits.
-page.$("#surla-load-latest-card").click();
+page.$("#highbay-load-latest-card").click();
 await until(() => editor().dataset.requestRevision === r3card.request_revision, "Load Latest Card did not show the latest card");
-const recovered = page.text("#surla-checkpoint-view");
-expect(page.$("#surla-preserved-draft") && recovered.includes("Preserved Unsaved Draft Edits") && recovered.includes("total_with_tax") && recovered.includes("Edited outcome preserved across stale error"), "recovery did not keep the preserved draft: " + recovered);
+const recovered = page.text("#highbay-checkpoint-view");
+expect(page.$("#highbay-preserved-draft") && recovered.includes("Preserved Unsaved Draft Edits") && recovered.includes("total_with_tax") && recovered.includes("Edited outcome preserved across stale error"), "recovery did not keep the preserved draft: " + recovered);
 
 // Local validation focuses the unanswered question. A second genuine stale
 // request still offers recovery and keeps the lines already preserved.
 const beforeLocalValidation = confirms().length;
-page.$("#surla-confirm-submit").click();
-expect(page.text("#surla-confirm-error").includes("Choose an answer") &&
+page.$("#highbay-confirm-submit").click();
+expect(page.text("#highbay-confirm-error").includes("Choose an answer") &&
        page.doc.activeElement === choice("subtotal_only") &&
-       !page.$("#surla-load-latest-card") && confirms().length === beforeLocalValidation,
+       !page.$("#highbay-load-latest-card") && confirms().length === beforeLocalValidation,
        "an unanswered question did not focus the local input");
 const recoveredAgain = await revise(r3card, "Route refunds to manager approval and save the decision trail.", "Recorded approval");
 choice("total_with_tax").click();
-page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-load-latest-card"), "a second stale request did not offer recovery");
-page.$("#surla-load-latest-card").click();
+page.$("#highbay-confirm-submit").click();
+await until(() => page.$("#highbay-load-latest-card"), "a second stale request did not offer recovery");
+page.$("#highbay-load-latest-card").click();
 await until(() => editor().dataset.requestRevision === recoveredAgain.request_revision, "the second recovery did not finish");
-expect(page.text("#surla-cp1-editor").includes("Edited outcome preserved across stale error"), "repeated recovery lost the preserved draft");
+expect(page.text("#highbay-cp1-editor").includes("Edited outcome preserved across stale error"), "repeated recovery lost the preserved draft");
 
 // An incoming revision waits beside unsaved edits; switching keeps every unsaved line.
 page.type(outcome(), "Dirty edit on confirmed card before incoming switch");
 page.setHidden(false);
 const r4card = await revise(recoveredAgain, "Route refunds >= $50 to manager approval, with an audit and a notice.", "Audited approval with notice");
-await until(() => page.$("#surla-replace-incoming-card"), "an incoming revision did not wait beside unsaved edits");
-expect(page.$("#surla-replace-incoming-card").textContent.includes("Keep Unsaved Edits"), "expected the switch button to say it keeps unsaved edits");
-page.$("#surla-replace-incoming-card").click();
-const switched = page.$("#surla-preserved-draft");
+await until(() => page.$("#highbay-replace-incoming-card"), "an incoming revision did not wait beside unsaved edits");
+expect(page.$("#highbay-replace-incoming-card").textContent.includes("Keep Unsaved Edits"), "expected the switch button to say it keeps unsaved edits");
+page.$("#highbay-replace-incoming-card").click();
+const switched = page.$("#highbay-preserved-draft");
 const switchedText = switched ? switched.textContent : "";
-expect(editor().dataset.requestRevision === r4card.request_revision && editor().dataset.changeId === "chg-ui-recovery" && page.$("#surla-result-view").dataset.state === undefined && !page.$("#surla-replace-incoming-card"), "switching did not show the incoming card alone");
+expect(editor().dataset.requestRevision === r4card.request_revision && editor().dataset.changeId === "chg-ui-recovery" && page.$("#highbay-result-view").dataset.state === undefined && !page.$("#highbay-replace-incoming-card"), "switching did not show the incoming card alone");
 expect(switchedText.includes("Edited outcome preserved across stale error") && switchedText.includes("Dirty edit on confirmed card before incoming switch") && switchedText.includes(r3card.request_revision), "switching did not preserve earlier and new unsaved lines: " + switchedText);
 expect(outcome().value === r4card.examples[0].expected_outcome, "the switched form did not start from the incoming card's saved values");
-page.$("#surla-discard-draft").click();
-expect(editor().dataset.requestRevision === r4card.request_revision && !page.$("#surla-preserved-draft"), "Discard Unsaved Edits did not clear the preserved draft");
+page.$("#highbay-discard-draft").click();
+expect(editor().dataset.requestRevision === r4card.request_revision && !page.$("#highbay-preserved-draft"), "Discard Unsaved Edits did not clear the preserved draft");
 
 // A revision held beside unsaved edits stays held while a confirmation is in flight and after its answer.
 page.type(outcome(), "Edit on R4 before the guide's revision");
 const r5card = await revise(r4card, "Route refunds >= $50 to manager approval, audited twice.", "Audited twice");
-await until(() => page.$("#surla-replace-incoming-card"), "R5 did not wait beside unsaved edits");
+await until(() => page.$("#highbay-replace-incoming-card"), "R5 did not wait beside unsaved edits");
 choice("subtotal_only").click();
 await control(origin, "hold", { key: "POST /changes/confirm" });
-page.$("#surla-confirm-submit").click();
-page.$("#surla-replace-incoming-card").click();
+page.$("#highbay-confirm-submit").click();
+page.$("#highbay-replace-incoming-card").click();
 expect(page.status().includes("Wait for the pending CP1 Change Card request"), "switching during a pending confirmation did not ask to wait");
 await control(origin, "release", { key: "POST /changes/confirm" });
-await until(() => page.$("#surla-confirm-error"), "confirming a replaced revision was not refused");
-expect(page.$("#surla-replace-incoming-card") && page.$("#surla-result-view").dataset.requestRevision === r5card.request_revision, "the confirmation's answer dropped the held revision");
-page.$("#surla-replace-incoming-card").click();
-expect(editor().dataset.requestRevision === r5card.request_revision && page.$("#surla-prior-revision") && page.text("#surla-prior-revision").includes(r4card.request_revision) && page.text("#surla-preserved-draft").includes("Edit on R4 before the guide's revision"), "switching after the answer did not keep the previous revision and the unsaved edit");
-page.$("#surla-discard-draft").click();
+await until(() => page.$("#highbay-confirm-error"), "confirming a replaced revision was not refused");
+expect(page.$("#highbay-replace-incoming-card") && page.$("#highbay-result-view").dataset.requestRevision === r5card.request_revision, "the confirmation's answer dropped the held revision");
+page.$("#highbay-replace-incoming-card").click();
+expect(editor().dataset.requestRevision === r5card.request_revision && page.$("#highbay-prior-revision") && page.text("#highbay-prior-revision").includes(r4card.request_revision) && page.text("#highbay-preserved-draft").includes("Edit on R4 before the guide's revision"), "switching after the answer did not keep the previous revision and the unsaved edit");
+page.$("#highbay-discard-draft").click();
 
 // A revision another caller saves while the page's own confirmation awaits its answer is not shown as the page's own; it appears once the answer arrives.
 await control(origin, "answer-later", { key: "POST /changes/confirm" });
 choice("subtotal_only").click();
-page.$("#surla-confirm-submit").click();
+page.$("#highbay-confirm-submit").click();
 let confirmedR5 = await readCard("chg-ui-recovery");
 for (let tries = 0; confirmedR5.status !== "confirmed" && tries < 200; tries++) {
   await sleep(20);
@@ -205,9 +205,9 @@ for (let tries = 0; confirmedR5.status !== "confirmed" && tries < 200; tries++) 
 expect(confirmedR5.status === "confirmed", "the held confirmation was not saved");
 const r6 = await revise(confirmedR5, "Route refunds >= $50 to manager approval, audited.", "Audited");
 await sleep(300);
-expect(!page.$("#surla-proposal") && !page.status().includes("proposed a new revision"), "a save during the page's own confirmation was announced before its answer");
+expect(!page.$("#highbay-proposal") && !page.status().includes("proposed a new revision"), "a save during the page's own confirmation was announced before its answer");
 await control(origin, "release", { key: "POST /changes/confirm" });
-await until(() => page.$("#surla-proposal") && page.$("#surla-proposal").dataset.requestRevision === r6.proposed_revision.request_revision, "the revision saved during the confirmation did not appear after its answer");
+await until(() => page.$("#highbay-proposal") && page.$("#highbay-proposal").dataset.requestRevision === r6.proposed_revision.request_revision, "the revision saved during the confirmation did not appear after its answer");
 expect(editor().dataset.requestRevision === confirmedR5.request_revision && page.status().includes("proposed a new revision"), "the guide's revision did not wait beside the confirmed change");
 page.close();
 `)
@@ -223,7 +223,7 @@ func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
 	cp := pageControlPlane(t, Options{WorkspaceDir: workspace})
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
 	refreshed := seedArchitectureRefreshForTest(t, cp, guide, "orders")
-	_, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	_, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg-arch", Prompt: "Route refunds >= $50 to manager approval.",
 		Analysis: checkpointUIProposal(), StoryRefreshOpID: refreshed.OpID,
 	})
@@ -231,31 +231,31 @@ func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
 	ps := startPageServer(t, cp)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-arch", "the change did not open");
-page.$("#surla-nav-cp2").click();
-await until(() => page.$("#surla-cp2-error"), "an unconfirmed card's architecture showed no refusal", 60000);
-expect(page.text("#surla-cp2-error").includes("must be confirmed before architecture preview"), "the page did not show the server's own error: " + page.text("#surla-cp2-error"));
-page.$("#surla-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-arch", "the change did not open");
+page.$("#highbay-nav-cp2").click();
+await until(() => page.$("#highbay-cp2-error"), "an unconfirmed card's architecture showed no refusal", 60000);
+expect(page.text("#highbay-cp2-error").includes("must be confirmed before architecture preview"), "the page did not show the server's own error: " + page.text("#highbay-cp2-error"));
+page.$("#highbay-nav-cp1").click();
 page.$('[data-ambiguity-id="chg-arch-ambiguity-01"][data-option="subtotal_only"]').click();
-page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-agreement-details"), "confirmation did not finish");
-const revision = page.$("#surla-cp1-editor").dataset.requestRevision;
-page.$("#surla-nav-cp2").click();
-expect(page.$("#surla-cp2-loading") && page.$("#surla-cp2-loading").getAttribute("aria-busy") === "true", "evaluating showed no loading state");
+page.$("#highbay-confirm-submit").click();
+await until(() => page.$("#highbay-agreement-details"), "confirmation did not finish");
+const revision = page.$("#highbay-cp1-editor").dataset.requestRevision;
+page.$("#highbay-nav-cp2").click();
+expect(page.$("#highbay-cp2-loading") && page.$("#highbay-cp2-loading").getAttribute("aria-busy") === "true", "evaluating showed no loading state");
 const previews = page.sent("POST", "/changes/preview");
 expect(JSON.stringify(previews[previews.length - 1].body) === JSON.stringify({ change_id: "chg-arch", request_revision: revision }), "the preview did not ask for the exact revision shown");
-const result = page.$("#surla-result-view");
+const result = page.$("#highbay-result-view");
 await until(() => result.dataset.designDigest, "the architecture was not drawn", 120000);
-const cp2Text = page.text("#surla-checkpoint-view");
+const cp2Text = page.text("#highbay-checkpoint-view");
 expect(page.state() === "cp2-architecture-preview" && result.dataset.requestRevision === revision, "unexpected CP2 dataset: " + JSON.stringify(result.dataset));
 expect(cp2Text.includes(revision) && cp2Text.includes(result.dataset.designDigest) && cp2Text.includes("Inject: tenant_id") && cp2Text.includes("Confirmation"), "CP2 view missing digests or guardrails: " + cp2Text);
-const wrap = page.$$(".surla-graph-wrap");
-const nodes = page.$$("#surla-c4-svg .surla-svg-node");
-const texts = page.$$("#surla-c4-svg text");
+const wrap = page.$$(".highbay-graph-wrap");
+const nodes = page.$$("#highbay-c4-svg .highbay-svg-node");
+const texts = page.$$("#highbay-c4-svg text");
 expect(wrap.length === 1 && wrap[0].getAttribute("role") === "region" && wrap[0].getAttribute("aria-label") === "C4 architecture diagram" && wrap[0].getAttribute("tabindex") === "0", "the graph is not a focusable region");
-expect(nodes.length > 0 && nodes.length === page.$$("#surla-result-view .surla-arch-grid .surla-compact-list")[0].children.length, "the graph does not draw every container");
+expect(nodes.length > 0 && nodes.length === page.$$("#highbay-result-view .highbay-arch-grid .highbay-compact-list")[0].children.length, "the graph does not draw every container");
 expect(texts.length > 0 && texts.every((text) => text.getAttribute("fill") === "currentColor"), "SVG text does not follow the theme color");
-expect(!page.$("#surla-cp1-editor").dataset.changeId, "a clean editor stayed beside the architecture");
+expect(!page.$("#highbay-cp1-editor").dataset.changeId, "a clean editor stayed beside the architecture");
 page.close();
 `)
 }
@@ -267,7 +267,7 @@ func TestCheckpointUIArchitectureDrawingGeometry(t *testing.T) {
 	cp := pageControlPlane(t, Options{})
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
 	mustPropose(t, cp, guide, "chg-geometry", "Draw a large architecture.", refundAnalysis("Draw a large architecture."))
-	containers := make([]*gensurla.C4ContainerItem, 0, 15)
+	containers := make([]*genhighbay.C4ContainerItem, 0, 15)
 	for i := 1; i <= 15; i++ {
 		kind := "container"
 		switch {
@@ -280,37 +280,37 @@ func TestCheckpointUIArchitectureDrawingGeometry(t *testing.T) {
 		if i <= 3 {
 			name = "Duplicate Display Name"
 		}
-		containers = append(containers, &gensurla.C4ContainerItem{
+		containers = append(containers, &genhighbay.C4ContainerItem{
 			ID: fmt.Sprintf("node-%d", i), Name: name, Kind: kind, Description: fmt.Sprintf("Description for node-%d", i),
 		})
 	}
-	ps := startPageServer(t, &previewFixture{ControlPlane: cp, preview: &gensurla.ArchitecturePreviewResult{
+	ps := startPageServer(t, &previewFixture{ControlPlane: cp, preview: &genhighbay.ArchitecturePreviewResult{
 		DesignDigest: "d" + fmt.Sprintf("%063d", 0), SystemName: "orders", Banner: "15 containers evaluated",
 		Containers: containers,
-		Edges: []*gensurla.C4EdgeItem{
+		Edges: []*genhighbay.C4EdgeItem{
 			{FromID: "node-1", ToID: "node-2", Protocol: "HTTPS"},
 			{FromID: "node-2", ToID: "node-3", Protocol: "gRPC"},
 			{FromID: "node-3", ToID: "node-2", Protocol: "Callback gRPC"},
 			{FromID: "node-2", ToID: "node-2", Protocol: "Self Loop"},
 			{FromID: "node-8", ToID: "node-15", Protocol: "SQLite"},
 		},
-		AgentPolicies: []*gensurla.AgentPolicyItem{},
-		Tools:         []*gensurla.ToolContractItem{},
+		AgentPolicies: []*genhighbay.AgentPolicyItem{},
+		Tools:         []*genhighbay.ToolContractItem{},
 	}})
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor").dataset.changeId === "chg-geometry", "the change did not open");
-page.$("#surla-nav-cp2").click();
-await until(() => page.$("#surla-c4-svg"), "the architecture was not drawn");
-const svg = page.$$("#surla-c4-svg");
-const nodes = page.$$("#surla-c4-svg .surla-svg-node");
-const edges = page.$$("#surla-c4-svg .surla-svg-edge");
-const scope = page.$("#surla-cp2-scope-note");
-const confirmation = page.$("#surla-cp2-confirmation-note");
+await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-geometry", "the change did not open");
+page.$("#highbay-nav-cp2").click();
+await until(() => page.$("#highbay-c4-svg"), "the architecture was not drawn");
+const svg = page.$$("#highbay-c4-svg");
+const nodes = page.$$("#highbay-c4-svg .highbay-svg-node");
+const edges = page.$$("#highbay-c4-svg .highbay-svg-edge");
+const scope = page.$("#highbay-cp2-scope-note");
+const confirmation = page.$("#highbay-cp2-confirmation-note");
 expect(scope && scope.textContent.includes("does not compare the design with the Change Card") && confirmation && confirmation.textContent.includes("does not show that the service asks the right person") && confirmation.textContent.includes("examples/orders"), "expected the scope and confirmation notes");
 const edge23 = edges[1].children[0].getAttribute("d");
 const edge32 = edges[2].children[0].getAttribute("d");
-const text = page.text("#surla-checkpoint-view");
+const text = page.text("#highbay-checkpoint-view");
 expect(svg.length === 1 && svg[0].getAttribute("width") === "840" && nodes.length === 15 && edges.length === 5 && edge23 !== edge32 && edge23.includes("Q 526") && edge32.includes("Q 544") && text.includes("node-15") && text.includes("Self Loop"), "expected 840px SVG with 15 nodes and distinct intra-column cyclic/self-loop edges, got width=" + (svg[0] && svg[0].getAttribute("width")) + " e23=" + edge23 + " e32=" + edge32);
 page.close();
 `)
@@ -321,14 +321,14 @@ page.close();
 type previewFixture struct {
 	*ControlPlane
 	// preview is the drawing returned for every request.
-	preview *gensurla.ArchitecturePreviewResult
+	preview *genhighbay.ArchitecturePreviewResult
 }
 
 // PreviewArchitecture returns the fixed drawing for the requested revision.
 func (p *previewFixture) PreviewArchitecture(
 	_ context.Context,
-	req *gensurla.PreviewArchitecturePayload,
-) (*gensurla.ArchitecturePreviewResult, error) {
+	req *genhighbay.PreviewArchitecturePayload,
+) (*genhighbay.ArchitecturePreviewResult, error) {
 	out := *p.preview
 	out.ChangeID, out.RequestRevision = req.ChangeID, req.RequestRevision
 	return &out, nil

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // This file holds the Checkpoint 1 checks applied to the caller's analysis and
@@ -57,13 +57,13 @@ const (
 // tests' commit chosen for this revision and its binary digests still match
 // the promotion target's current binaries, or in UnverifiedApproval when
 // current binaries cannot be verified.
-func (c *ControlPlane) ConfirmIntent(ctx context.Context, p *gensurla.ConfirmIntentPayload) (*gensurla.ChangeCardResult, error) {
+func (c *ControlPlane) ConfirmIntent(ctx context.Context, p *genhighbay.ConfirmIntentPayload) (*genhighbay.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	if p == nil || strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.RequestRevision) == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New("change_id and request_revision are required"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("change_id and request_revision are required"))
 	}
 	record, changed, err := c.confirm(principal, p)
 	if err != nil {
@@ -85,15 +85,15 @@ func (c *ControlPlane) ConfirmIntent(ctx context.Context, p *gensurla.ConfirmInt
 // left, an ambiguity that repeats an option.
 func proposedCardContent(
 	changeID string,
-	in *gensurla.CP1Analysis,
-) ([]*gensurla.AmbiguityQuestion, []*gensurla.ExampleItem, []string, error) {
+	in *genhighbay.CP1Analysis,
+) ([]*genhighbay.AmbiguityQuestion, []*genhighbay.ExampleItem, []string, error) {
 	ambiguities, err := validateAmbiguities(changeID, in.Ambiguities)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	examples := make([]*gensurla.ExampleItem, 0, len(in.Examples))
+	examples := make([]*genhighbay.ExampleItem, 0, len(in.Examples))
 	for i, item := range in.Examples {
-		examples = append(examples, &gensurla.ExampleItem{
+		examples = append(examples, &genhighbay.ExampleItem{
 			ID:               fmt.Sprintf("check_%02d", i+1),
 			Scenario:         item.Scenario,
 			InputSummary:     item.InputSummary,
@@ -115,9 +115,9 @@ func proposedCardContent(
 // names the first broken rule.
 func revisedCardContent(
 	changeID string,
-	priorExamples []*gensurla.ExampleItem,
-	in *gensurla.CP1RevisionAnalysis,
-) ([]*gensurla.AmbiguityQuestion, []*gensurla.ExampleItem, []string, error) {
+	priorExamples []*genhighbay.ExampleItem,
+	in *genhighbay.CP1RevisionAnalysis,
+) ([]*genhighbay.AmbiguityQuestion, []*genhighbay.ExampleItem, []string, error) {
 	ambiguities, err := validateAmbiguities(changeID, in.Ambiguities)
 	if err != nil {
 		return nil, nil, nil, err
@@ -177,7 +177,7 @@ func revisedCardContent(
 		reserved[strings.TrimSpace(id)] = true
 	}
 
-	examples := make([]*gensurla.ExampleItem, 0, len(in.Examples))
+	examples := make([]*genhighbay.ExampleItem, 0, len(in.Examples))
 	for _, item := range in.Examples {
 		var id string
 		if item.PriorID != nil {
@@ -185,7 +185,7 @@ func revisedCardContent(
 		} else {
 			id = allocateExampleID(reserved)
 		}
-		examples = append(examples, &gensurla.ExampleItem{
+		examples = append(examples, &genhighbay.ExampleItem{
 			ID:               id,
 			Scenario:         item.Scenario,
 			InputSummary:     item.InputSummary,
@@ -213,11 +213,11 @@ func allocateExampleID(reserved map[string]bool) string {
 // repeats an option, comparing options both exactly and with surrounding
 // whitespace removed. It returns nil when in is empty, so a card without
 // ambiguities hashes them as null, as saved cards always have.
-func validateAmbiguities(changeID string, in []*gensurla.CP1AnalysisAmbiguity) ([]*gensurla.AmbiguityQuestion, error) {
+func validateAmbiguities(changeID string, in []*genhighbay.CP1AnalysisAmbiguity) ([]*genhighbay.AmbiguityQuestion, error) {
 	if len(in) == 0 {
 		return nil, nil
 	}
-	out := make([]*gensurla.AmbiguityQuestion, 0, len(in))
+	out := make([]*genhighbay.AmbiguityQuestion, 0, len(in))
 	for i, q := range in {
 		id := fmt.Sprintf("%s-ambiguity-%02d", changeID, i+1)
 		seenOpts := make(map[string]bool, len(q.Options)*2)
@@ -236,7 +236,7 @@ func validateAmbiguities(changeID string, in []*gensurla.CP1AnalysisAmbiguity) (
 		if q.DraftOption != nil && !slices.Contains(opts, *q.DraftOption) {
 			return nil, fmt.Errorf("ambiguity %q (ambiguities[%d]) has draft_option %q, which is not one of its options: %q", id, i, *q.DraftOption, opts)
 		}
-		out = append(out, &gensurla.AmbiguityQuestion{
+		out = append(out, &genhighbay.AmbiguityQuestion{
 			ID:          id,
 			Question:    q.Question,
 			Options:     opts,
@@ -256,7 +256,7 @@ func validateAmbiguities(changeID string, in []*gensurla.CP1AnalysisAmbiguity) (
 // option, the error points to revise_change for a decision that none of the
 // options expresses; when an answer is not what the draft implements, it
 // points to revise_change so the draft implements it before confirmation.
-func validateAmbiguityAnswers(questions []*gensurla.AmbiguityQuestion, answers map[string]string) error {
+func validateAmbiguityAnswers(questions []*genhighbay.AmbiguityQuestion, answers map[string]string) error {
 	known := make(map[string]bool, len(questions))
 	var problems []string
 	for _, q := range questions {
@@ -305,12 +305,12 @@ func validateAmbiguityAnswers(questions []*gensurla.AmbiguityQuestion, answers m
 
 // validateConfirmedExamples validates that every confirmed ExampleItem has a
 // unique non-empty ID and valid fields.
-func validateConfirmedExamples(in []*gensurla.ExampleItem) ([]*gensurla.ExampleItem, error) {
+func validateConfirmedExamples(in []*genhighbay.ExampleItem) ([]*genhighbay.ExampleItem, error) {
 	if len(in) == 0 {
 		return nil, errors.New("at least one example is required")
 	}
 	seenIDs := make(map[string]bool, len(in)*2)
-	out := make([]*gensurla.ExampleItem, 0, len(in))
+	out := make([]*genhighbay.ExampleItem, 0, len(in))
 	for i, item := range in {
 		if item == nil {
 			return nil, fmt.Errorf("examples[%d] is nil", i)
@@ -330,7 +330,7 @@ func validateConfirmedExamples(in []*gensurla.ExampleItem) ([]*gensurla.ExampleI
 		}
 		seenIDs[item.ID] = true
 		seenIDs[trimmedID] = true
-		out = append(out, &gensurla.ExampleItem{
+		out = append(out, &genhighbay.ExampleItem{
 			ID:               item.ID,
 			Scenario:         item.Scenario,
 			InputSummary:     item.InputSummary,
@@ -383,7 +383,7 @@ func cp1SafeFaultSummary(revise bool, stage cp1FaultStage) string {
 // confirm applies a confirm_intent submission under c.mu. It returns the
 // saved change and true when the submission adopted the proposal or changed
 // the answers or examples, or the unchanged saved change and false.
-func (c *ControlPlane) confirm(principal Principal, p *gensurla.ConfirmIntentPayload) (storedChangeCard, bool, error) {
+func (c *ControlPlane) confirm(principal Principal, p *genhighbay.ConfirmIntentPayload) (storedChangeCard, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -392,10 +392,10 @@ func (c *ControlPlane) confirm(principal Principal, p *gensurla.ConfirmIntentPay
 		return storedChangeCard{}, false, err
 	}
 	if !ok {
-		return storedChangeCard{}, false, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return storedChangeCard{}, false, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return storedChangeCard{}, false, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return storedChangeCard{}, false, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	// base is the revision these answers and examples confirm: the proposal
 	// when the request adopts it, otherwise the revision in force.
@@ -408,29 +408,29 @@ func (c *ControlPlane) confirm(principal Principal, p *gensurla.ConfirmIntentPay
 	case adopting:
 		base = *record.proposed
 	case record.proposed != nil && record.agreedRevision() == p.RequestRevision:
-		return storedChangeCard{}, false, gensurla.MakeConflict(fmt.Errorf(
+		return storedChangeCard{}, false, genhighbay.MakeConflict(fmt.Errorf(
 			"change_id %q has a proposed revision %q waiting; Adopt it (confirm it with its request_revision) or Decline it (decline_revision) before refining the confirmed revision",
 			p.ChangeID,
 			record.proposed.card.RequestRevision,
 		))
 	case record.card.RequestRevision != p.RequestRevision:
-		return storedChangeCard{}, false, gensurla.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.latest().card.RequestRevision))
+		return storedChangeCard{}, false, genhighbay.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.latest().card.RequestRevision))
 	}
 	existing := base.card
 
 	if err := validateAmbiguityAnswers(existing.Ambiguities, p.Answers); err != nil {
-		return storedChangeCard{}, false, gensurla.MakeUnprocessable(err)
+		return storedChangeCard{}, false, genhighbay.MakeUnprocessable(err)
 	}
 	examples, err := validateConfirmedExamples(p.Examples)
 	if err != nil {
-		return storedChangeCard{}, false, gensurla.MakeUnprocessable(fmt.Errorf("invalid confirmed examples: %w", err))
+		return storedChangeCard{}, false, genhighbay.MakeUnprocessable(fmt.Errorf("invalid confirmed examples: %w", err))
 	}
 	// confirmed carries no ui_composition: a composition describes only the
 	// revision it was composed for, and changed answers or examples produce a
 	// new revision. An unchanged submission returns existing, composition
 	// included, below.
 	confirmedBy := principal.ID
-	confirmed := &gensurla.ChangeCardResult{
+	confirmed := &genhighbay.ChangeCardResult{
 		ChangeID:           existing.ChangeID,
 		Status:             StatusConfirmed,
 		Prompt:             existing.Prompt,

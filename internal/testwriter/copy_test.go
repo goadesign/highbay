@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/shquote"
+	"github.com/goadesign/highbay/internal/shquote"
 )
 
 // TestMakeCopyCreatesOneCopy opens the working copy of a project at
 // its repository's top level and of one in a subfolder, twice each. The copy
-// is created once, in a .surla-prefixed folder of the project (the prefix
+// is created once, in a .highbay-prefixed folder of the project (the prefix
 // check_project skips; check_copy_test covers that rule), on its own branch
 // at the project's commit, the repository's own exclude file names it once,
 // the project's status stays clean, and no hook runs.
@@ -42,7 +42,7 @@ func TestMakeCopyCreatesOneCopy(t *testing.T) {
 
 			wc, err := MakeCopy(t.Context(), project, TestsRole, branch, "HEAD")
 			require.NoError(t, err)
-			assert.True(t, strings.HasPrefix(Folder, ".surla"), "check_project skips .surla-prefixed folders")
+			assert.True(t, strings.HasPrefix(Folder, ".highbay"), "check_project skips .highbay-prefixed folders")
 			assert.Equal(t, filepath.Join(project, Folder), wc.Dir())
 			assert.Equal(t, filepath.Join(wc.Dir(), tc.project), wc.Project())
 			assert.FileExists(t, filepath.Join(wc.Project(), "README.md"), "the copy holds the project's files")
@@ -339,7 +339,7 @@ func heldElsewhere(t *testing.T, repo, branch string, locked bool) string {
 
 // TestMakeCopyRecreatesADeletedCopy deletes the copy's folder with the
 // file system after a commit on its branch, while git still registers it as
-// holding the branch: making again drops that registration of Surla's own
+// holding the branch: making again drops that registration of Highbay's own
 // copy and checks the same branch out again, so the accepted commit is kept,
 // and restores the exclude entry the user removed.
 func TestMakeCopyRecreatesADeletedCopy(t *testing.T) {
@@ -370,8 +370,8 @@ func TestMakeCopyRecreatesADeletedCopy(t *testing.T) {
 
 // TestOpenCopyAndMakeCopyForBothRoles verifies that OpenCopy returns false, nil
 // without effects when a role's folder is absent, MakeCopy creates both
-// BuilderRole (.surla-build on surla/build-1) and TestsRole (.surla-tests on
-// surla/tests-1) at the given base commit and excludes both folders once in
+// BuilderRole (.highbay-build on highbay/build-1) and TestsRole (.highbay-tests on
+// highbay/tests-1) at the given base commit and excludes both folders once in
 // info/exclude, OpenCopy opens each copy even after it switches to another
 // branch or a detached commit, and an untracked go.work in the project folder
 // is left untouched.
@@ -446,15 +446,15 @@ func TestOpenCopyAndMakeCopyForBothRoles(t *testing.T) {
 }
 
 // TestBuilderRoleFolderAndBranchRefusals verifies ErrFolderInUse and
-// ErrBranchInUse for BuilderRole (.surla-build and surla/build-<n>).
+// ErrBranchInUse for BuilderRole (.highbay-build and highbay/build-<n>).
 func TestBuilderRoleFolderAndBranchRefusals(t *testing.T) {
 	t.Parallel()
-	t.Run("copy_folder_in_use for .surla-build", func(t *testing.T) {
+	t.Run("copy_folder_in_use for .highbay-build", func(t *testing.T) {
 		t.Parallel()
 		repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
 		writeFiles(t, repo, map[string]string{BuilderRole.Folder + "/notes.txt": "mine\n"})
 		before := folderState(t, repo)
-		wantMsg := "the project's .surla-build entry is not Surla's working copy (" +
+		wantMsg := "the project's .highbay-build entry is not Highbay's working copy (" +
 			shquote.Quote(filepath.Join(repo, BuilderRole.Folder)) +
 			" is not a linked working copy of the project's repository): move it out of the project, then try again"
 
@@ -474,7 +474,7 @@ func TestBuilderRoleFolderAndBranchRefusals(t *testing.T) {
 		assert.Equal(t, before, folderState(t, repo))
 	})
 
-	t.Run("branch-in-use for surla/build-1", func(t *testing.T) {
+	t.Run("branch-in-use for highbay/build-1", func(t *testing.T) {
 		t.Parallel()
 		repo, _ := newProject(t, map[string]string{"README.md": "shop\n"})
 		branch := BuilderRole.Branch(1)
@@ -484,13 +484,13 @@ func TestBuilderRoleFolderAndBranchRefusals(t *testing.T) {
 		_, ok, err := InspectCopy(t.Context(), repo, BuilderRole, branch)
 		require.ErrorIs(t, err, ErrBranchInUse)
 		assert.False(t, ok)
-		assert.ErrorContains(t, err, "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy")
+		assert.ErrorContains(t, err, "branch highbay/build-1, which Highbay reserves for the builder's working copy, is held by another working copy")
 		assert.ErrorContains(t, err, shquote.Quote(repo)+" has it checked out; switch that folder to another branch")
 		assert.Equal(t, before, folderState(t, repo))
 
 		_, err = MakeCopy(t.Context(), repo, BuilderRole, branch, "HEAD")
 		require.ErrorIs(t, err, ErrBranchInUse)
-		assert.ErrorContains(t, err, "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy")
+		assert.ErrorContains(t, err, "branch highbay/build-1, which Highbay reserves for the builder's working copy, is held by another working copy")
 		assert.ErrorContains(t, err, shquote.Quote(repo)+" has it checked out; switch that folder to another branch")
 		assert.Equal(t, before, folderState(t, repo))
 	})

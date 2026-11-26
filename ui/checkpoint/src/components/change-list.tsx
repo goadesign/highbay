@@ -65,23 +65,23 @@ export function ChangeListView({
   if (list !== null && list.changes.length === 0 && error === null && openError === null) {
     const empty = emptyChangeState(list, guideConnected, guideInHerdr, guideState);
     return (
-      <Card id="surla-change-list" className="surla-card surla-welcome-card"
-        aria-labelledby="surla-change-list-title" aria-busy={loading ? "true" : undefined}>
-        <h2 id="surla-change-list-title">{empty.title}</h2>
-        <p id="surla-change-list-empty" role={empty.liveStatus ? "status" : undefined}>
+      <Card id="highbay-change-list" className="highbay-card highbay-welcome-card"
+        aria-labelledby="highbay-change-list-title" aria-busy={loading ? "true" : undefined}>
+        <h2 id="highbay-change-list-title">{empty.title}</h2>
+        <p id="highbay-change-list-empty" role={empty.liveStatus ? "status" : undefined}>
           {empty.body}
         </p>
         {guideConnected && guideInHerdr ? (
-          <div className="surla-field-row">
-            <Button id="surla-empty-show-guide" variant={empty.primaryShowPane ? "primary" : "default"}
+          <div className="highbay-field-row">
+            <Button id="highbay-empty-show-guide" variant={empty.primaryShowPane ? "primary" : "default"}
               disabled={disabled || showingGuide} aria-busy={showingGuide} onClick={onShowGuidePane}>
               {showingGuide ? "Showing coding agent pane…" : "Show coding agent pane"}
             </Button>
           </div>
         ) : null}
-        {empty.showSteps ? <ol className="surla-welcome-steps">
+        {empty.showSteps ? <ol className="highbay-welcome-steps">
           <li><strong>Confirm intent</strong> Answer open questions and lock concrete examples before code is written.</li>
-          <li><strong>Build &amp; verify</strong> Surla coordinates implementation and independent checks.</li>
+          <li><strong>Build &amp; verify</strong> Highbay coordinates implementation and independent checks.</li>
           <li><strong>Approve &amp; merge</strong> Review the verified evidence and merge the change into your branch.</li>
         </ol> : null}
       </Card>
@@ -89,38 +89,38 @@ export function ChangeListView({
   }
   return (
     <Card
-      id="surla-change-list"
-      className="surla-card"
-      aria-labelledby="surla-change-list-title"
+      id="highbay-change-list"
+      className="highbay-card"
+      aria-labelledby="highbay-change-list-title"
       aria-busy={loading ? "true" : undefined}
     >
-      <h2 id="surla-change-list-title">Changes</h2>
+      <h2 id="highbay-change-list-title">Changes</h2>
       {list?.changes.some((item) => item.latest_verification !== undefined) ? (
-        <p id="surla-change-run-history" className="surla-muted">
+        <p id="highbay-change-run-history" className="highbay-muted">
           Run results describe their recorded candidate. The server compares each latest run
           with the agreed revision and selected tests. Open a change, then Check, to inspect it.
         </p>
       ) : null}
       {error !== null ? (
-        <Alert id="surla-change-list-error" variant="destructive" role="alert">
+        <Alert id="highbay-change-list-error" variant="destructive" role="alert">
           <strong>Could not read this project's changes. </strong>
           {error}
-          <div className="surla-field-row">
-            <Button id="surla-change-list-retry" disabled={loading} onClick={onRetry}>
+          <div className="highbay-field-row">
+            <Button id="highbay-change-list-retry" disabled={loading} onClick={onRetry}>
               Read the changes again
             </Button>
           </div>
         </Alert>
       ) : null}
       {openError !== null ? (
-        <Alert id="surla-change-open-error" variant="destructive" role="alert">
+        <Alert id="highbay-change-open-error" variant="destructive" role="alert">
           {openError}
         </Alert>
       ) : null}
       {list === null ? (
         error === null ? <p role="status">Reading this project's changes...</p> : null
       ) : list.changes.length > 0 ? (
-        <ul className="surla-compact-list" aria-label="Project changes">
+        <ul className="highbay-compact-list" aria-label="Project changes">
           {list.changes.map((item) => (
             <ChangeListRow
               key={item.change_id}
@@ -137,7 +137,7 @@ export function ChangeListView({
 }
 
 // emptyChangeState selects the empty-project heading, live progress copy, and
-// button emphasis from Surla's initialization/draft facts and observed guide state.
+// button emphasis from Highbay's initialization/draft facts and observed guide state.
 function emptyChangeState(
   list: ChangeList,
   guideConnected: boolean,
@@ -161,10 +161,10 @@ function emptyChangeState(
   }
   if (!guideConnected) {
     return {
-      title: "Start in your coding agent with /surla",
+      title: "Start in your coding agent with /highbay",
       body: (
         <>
-          Open your coding agent in this folder and invoke <code>/surla</code> (<code>$surla</code> in Codex)
+          Open your coding agent in this folder and invoke <code>/highbay</code> (<code>$highbay</code> in Codex)
           to connect it, then describe what you want to build. Your Change Card will appear here automatically.
         </>
       ),
@@ -287,8 +287,8 @@ function ChangeListRow({
   return (
     <li data-change-id={item.change_id}>
       <Button
-        id={"surla-open-change-" + item.change_id}
-        className="surla-change-open"
+        id={"highbay-open-change-" + item.change_id}
+        className="highbay-change-open"
         aria-label={openLabel + " (" + item.change_id + ")"}
         aria-current={open ? "true" : undefined}
         disabled={busy}
@@ -301,7 +301,7 @@ function ChangeListRow({
       </Badge>{" "}
       {item.proposed_revision ? (
         <>
-          <Badge variant="warning" className="surla-proposal-badge">
+          <Badge variant="warning" className="highbay-proposal-badge">
             New revision proposed
           </Badge>{" "}
         </>
@@ -309,7 +309,7 @@ function ChangeListRow({
       {item.latest_verification ? (
         <>
           <Badge
-            aria-describedby={"surla-change-run-history " + inputsDescriptionId}
+            aria-describedby={"highbay-change-run-history " + inputsDescriptionId}
             variant={item.latest_verification.inputs_current && item.latest_verification.state === "passed"
               ? "success" : "default"}
           >
@@ -317,7 +317,7 @@ function ChangeListRow({
           </Badge>
           <p
             id={inputsDescriptionId}
-            className="surla-muted"
+            className="highbay-muted"
             data-inputs-current={String(item.latest_verification.inputs_current)}
           >
             {item.latest_verification.inputs_current
@@ -328,14 +328,14 @@ function ChangeListRow({
       ) : (
         <Badge>No saved runs</Badge>
       )}{" "}
-      <span className="surla-muted">
+      <span className="highbay-muted">
         Saved <time dateTime={item.saved_at}>{new Date(item.saved_at).toLocaleString()}</time>
       </span>
-      <p className="surla-muted">
+      <p className="highbay-muted">
         {item.status === "confirmed" ? "Agreed revision" : "Draft revision"} <code>{item.request_revision.slice(0, 12)}</code>
         {item.proposed_revision ? <> · Proposed revision <code>{item.proposed_revision.slice(0, 12)}</code></> : null}
       </p>
-      <details className="surla-details">
+      <details className="highbay-details">
         <summary>Details</summary>
         <p>
           change_id: <code>{item.change_id}</code> · request_revision:{" "}

@@ -1,4 +1,4 @@
-module github.com/goadesign/surla/examples/orders
+module github.com/goadesign/highbay/examples/orders
 
 go 1.27.3
 

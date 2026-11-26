@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// hookNames are the hooks the commands Surla runs could start: checkout,
+// hookNames are the hooks the commands Highbay runs could start: checkout,
 // commit, reference updates and index writes.
 var hookNames = []string{
 	"pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-checkout",

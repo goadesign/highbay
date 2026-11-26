@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa-ai/eval"
 
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 // plantedArtifactToken stands for text a test program could put in a
@@ -183,7 +183,7 @@ func TestForBuildersExposesNoHoldoutDetail(t *testing.T) {
 // sentence on every assembly.
 func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
 	const (
-		start = "The test program's record of the binaries it ran does not match what Surla built ("
+		start = "The test program's record of the binaries it ran does not match what Highbay built ("
 		end   = "), so no check of this scenario counts; the full detail is in the saved report named by report_digest."
 	)
 	orders := eval.Artifact{Name: "candidate:orders", URI: "sha256:d1"}
@@ -214,27 +214,27 @@ func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
 			name:      "missing",
 			artifacts: []eval.Artifact{orders},
 			detail:    `scenario did not report executing bound binary "worker"`,
-			sentence:  start + "it did not record running a binary Surla built" + end,
+			sentence:  start + "it did not record running a binary Highbay built" + end,
 		},
 		{
 			name:      "digest mismatch",
 			artifacts: []eval.Artifact{orders, {Name: "candidate:worker", URI: "sha256:" + plantedArtifactToken}},
 			detail:    "scenario executed worker with digest " + plantedArtifactToken + ", bound d2",
-			sentence:  start + "it recorded a binary whose digest is not that of the binary Surla built" + end,
+			sentence:  start + "it recorded a binary whose digest is not that of the binary Highbay built" + end,
 			planted:   true,
 		},
 		{
 			name:      "undeclared",
 			artifacts: []eval.Artifact{orders, worker, planted},
 			detail:    `scenario executed unbound binary "` + plantedArtifactToken + `"`,
-			sentence:  start + "it recorded running a binary Surla did not build" + end,
+			sentence:  start + "it recorded running a binary Highbay did not build" + end,
 			planted:   true,
 		},
 		{
 			name:      "nothing recorded names the first bound binary",
 			artifacts: nil,
 			detail:    `scenario did not report executing bound binary "orders"`,
-			sentence:  start + "it did not record running a binary Surla built" + end,
+			sentence:  start + "it did not record running a binary Highbay built" + end,
 		},
 		{
 			name: "missing comes before a mismatch and an undeclared binary",
@@ -242,7 +242,7 @@ func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
 				planted, {Name: "candidate:orders", URI: "sha256:" + plantedArtifactToken},
 			},
 			detail:   `scenario did not report executing bound binary "worker"`,
-			sentence: start + "it did not record running a binary Surla built" + end,
+			sentence: start + "it did not record running a binary Highbay built" + end,
 			planted:  true,
 		},
 		{
@@ -252,7 +252,7 @@ func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
 				{Name: "candidate:orders", URI: "sha256:" + plantedArtifactToken},
 			},
 			detail:   "scenario executed orders with digest " + plantedArtifactToken + ", bound d1",
-			sentence: start + "it recorded a binary whose digest is not that of the binary Surla built" + end,
+			sentence: start + "it recorded a binary whose digest is not that of the binary Highbay built" + end,
 			planted:  true,
 		},
 		{
@@ -271,7 +271,7 @@ func TestForBuildersNamesTheFailedArtifactCheckOnly(t *testing.T) {
 				{Name: "candidate:zeta", URI: "sha256:d3"}, {Name: "candidate:alpha", URI: "sha256:d4"},
 			},
 			detail:   `scenario executed unbound binary "alpha"`,
-			sentence: start + "it recorded running a binary Surla did not build" + end,
+			sentence: start + "it recorded running a binary Highbay did not build" + end,
 		},
 	}
 	for _, c := range cases {

@@ -3,7 +3,7 @@
 // prompts HTTP server encoders and decoders
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design/targetprompt -o
+// $ goa gen github.com/goadesign/highbay/design/targetprompt -o
 // internal/targetprompt
 
 package server
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	prompts "github.com/goadesign/surla/internal/targetprompt/gen/prompts"
+	prompts "github.com/goadesign/highbay/internal/targetprompt/gen/prompts"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )

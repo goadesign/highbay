@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,16 +38,16 @@ func commitGenerationProject(t *testing.T, project string) {
 // snapshot, starts a build, and reads the resulting builder working folder.
 func generationNativeBuild(
 	t *testing.T, cp *ControlPlane,
-) (*gensurla.ChangeCardResult, *gensurla.BuilderAssignment) {
+) (*genhighbay.ChangeCardResult, *genhighbay.BuilderAssignment) {
 	t.Helper()
 	refreshed := generationRefresh(t, cp)
 	const prompt = "Generate the order lookup service."
 	card, err := cp.ProposeChange(asCaller("developer@example.com", CallerGuide),
-		&gensurla.ProposeChangePayload{
+		&genhighbay.ProposeChangePayload{
 			ChangeID: "generation", Prompt: prompt, StoryRefreshOpID: refreshed.OpID,
-			Analysis: &gensurla.CP1Analysis{
-				Summary: prompt, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
-				Examples: []*gensurla.CP1AnalysisExample{{
+			Analysis: &genhighbay.CP1Analysis{
+				Summary: prompt, Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
+				Examples: []*genhighbay.CP1AnalysisExample{{
 					Scenario: "Read an order", InputSummary: "Order ID 42",
 					ExpectedOutcome: "Returns the order", VerificationKind: "deterministic",
 				}},
@@ -61,30 +61,30 @@ func generationNativeBuild(
 // generationNativeRevision edits only the guide's returned draft and adopts a
 // real evaluated revision before restarting and reading the same build.
 func generationNativeRevision(
-	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult, design string,
-) *gensurla.BuilderAssignment {
+	t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult, design string,
+) *genhighbay.BuilderAssignment {
 	t.Helper()
 	guide := asCaller("developer@example.com", CallerGuide)
 	previous, err := cp.GetStoryRefresh(guide)
 	require.NoError(t, err)
 	writeGenerationFiles(t, previous.DraftFolder, map[string]string{"design/design.go": design})
 	refreshed := generationRefresh(t, cp)
-	examples := make([]*gensurla.CP1RevisionAnalysisExample, 0, len(card.Examples))
+	examples := make([]*genhighbay.CP1RevisionAnalysisExample, 0, len(card.Examples))
 	for _, example := range card.Examples {
 		id := example.ID
-		examples = append(examples, &gensurla.CP1RevisionAnalysisExample{
+		examples = append(examples, &genhighbay.CP1RevisionAnalysisExample{
 			PriorID: &id, Scenario: example.Scenario, InputSummary: example.InputSummary,
 			ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
 		})
 	}
-	revised, err := cp.ReviseChange(guide, &gensurla.ReviseChangePayload{
+	revised, err := cp.ReviseChange(guide, &genhighbay.ReviseChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		Prompt:           "Generate the order lookup service with its revised description.",
 		RevisionNote:     "Revise the change.",
 		StoryRefreshOpID: refreshed.OpID,
-		Analysis: &gensurla.CP1RevisionAnalysis{
+		Analysis: &genhighbay.CP1RevisionAnalysis{
 			Summary:     "Keep order lookup and update its description.",
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, Examples: examples,
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, Examples: examples,
 			RemovedExampleIds: []string{}, PreservedBehaviors: []string{},
 		},
 	})
@@ -98,12 +98,12 @@ func generationNativeRevision(
 // generationConfirmBuild uses the same user's explicit replacement identity
 // when a build is already open; reading the assignment then joins that build.
 func generationConfirmBuild(
-	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
-	revision string, examples []*gensurla.ExampleItem,
-) (*gensurla.ChangeCardResult, *gensurla.BuilderAssignment) {
+	t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult,
+	revision string, examples []*genhighbay.ExampleItem,
+) (*genhighbay.ChangeCardResult, *genhighbay.BuilderAssignment) {
 	t.Helper()
 	user := asCaller("developer@example.com", CallerUser)
-	confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: revision,
 		Answers: map[string]string{}, Examples: examples,
 	})
@@ -111,20 +111,20 @@ func generationConfirmBuild(
 	_, err = startBuildAgain(t, cp, user, confirmed.ChangeID, confirmed.RequestRevision)
 	require.NoError(t, err)
 	assignment, err := cp.GetBuilderAssignment(asCaller("developer@example.com", CallerBuilder),
-		&gensurla.GetBuilderAssignmentPayload{ChangeID: confirmed.ChangeID})
+		&genhighbay.GetBuilderAssignmentPayload{ChangeID: confirmed.ChangeID})
 	require.NoError(t, err)
 	return confirmed, assignment
 }
 
 // generationRefresh waits for the actual owner's terminal result, preserving
 // its diagnostic and allowing cleanup beyond the owner's five-minute deadline.
-func generationRefresh(t *testing.T, cp *ControlPlane) *gensurla.StoryRefreshResult {
+func generationRefresh(t *testing.T, cp *ControlPlane) *genhighbay.StoryRefreshResult {
 	t.Helper()
 	guide := asCaller("developer@example.com", CallerGuide)
 	started, err := cp.RefreshStory(guide)
 	require.NoError(t, err)
 	require.NotNil(t, started.OpID)
-	var result *gensurla.StoryRefreshResult
+	var result *genhighbay.StoryRefreshResult
 	var readErr error
 	require.Eventually(t, func() bool {
 		result, readErr = cp.GetStoryRefresh(guide)

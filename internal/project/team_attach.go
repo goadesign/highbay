@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/testwriter"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -42,7 +42,7 @@ func (s *Server) AttachGuide(ctx context.Context, p *genproject.AttachGuidePaylo
 	}
 	ctx, cancel := s.acceptedTeamContext(ctx)
 	defer cancel()
-	ctx, span := otel.Tracer("surla/project").Start(ctx, "surla.project.attach_guide")
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.attach_guide")
 	defer span.End()
 	s.team.Lock()
 	defer s.team.Unlock()
@@ -203,7 +203,7 @@ func paneMatchesPIDs(target TeamTerminal, pids []int) bool {
 }
 
 // guidePaneInProject reports whether cwd is at or inside projectDir and lies
-// outside the builder (.surla-build) and test-writer (.surla-tests) copies.
+// outside the builder (.highbay-build) and test-writer (.highbay-tests) copies.
 func guidePaneInProject(projectDir, cwd string) bool {
 	if projectDir == "" || !filepath.IsAbs(cwd) {
 		return false
@@ -416,7 +416,7 @@ func (s *Server) openCompanion(ctx context.Context) {
 	}
 	host := s.team.dependencies.Host
 	overlays, err := host.Overlays(ctx)
-	if err != nil || (!slices.Contains(overlays, "surla") && host.OpenCompanion(ctx) != nil) {
+	if err != nil || (!slices.Contains(overlays, "highbay") && host.OpenCompanion(ctx) != nil) {
 		return
 	}
 	s.state.mu.Lock()

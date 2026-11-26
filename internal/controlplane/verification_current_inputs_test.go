@@ -17,9 +17,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // TestVerificationCurrentInputsFollowWrittenSelection checks each historical
@@ -50,21 +50,21 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 		[]byte(`{"kind":"no_report","failure":"interrupted","stage":"supervise","summary":"Stopped."}`), 0o600))
 	check := func(wantOld, wantNew bool) {
 		t.Helper()
-		listed, err := cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+		listed, err := cp.ListVerifications(user, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 		require.Len(t, listed.Runs, 2)
 		assert.Equal(t, newer, listed.Runs[0].RunID)
 		assert.Equal(t, older, listed.Runs[1].RunID)
 		for i, want := range []bool{wantNew, wantOld} {
 			assert.Equal(t, want, listed.Runs[i].InputsCurrent)
-			got, err := cp.GetVerification(user, &gensurla.GetVerificationPayload{RunID: listed.Runs[i].RunID})
+			got, err := cp.GetVerification(user, &genhighbay.GetVerificationPayload{RunID: listed.Runs[i].RunID})
 			require.NoError(t, err)
 			assert.Equal(t, listed.Runs[i], got)
 		}
 		completed, ok := listed.Runs[1].State.AsCompleted()
 		require.True(t, ok)
 		assert.True(t, completed.Report.Passed, "historical verdict does not change")
-		assert.Equal(t, gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{
+		assert.Equal(t, genhighbay.NewTestSourceWrittenTests(&genhighbay.AgentWrittenTests{
 			Commit: oldCommit, Notice: writtenTestsNotice,
 		}), listed.Runs[1].TestSource)
 	}
@@ -79,10 +79,10 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	for _, state := range []string{testsReported, testsNeedChanges, testsCouldNotRun} {
 		saveListedTestState(t, cp, card.ChangeID, state, "")
 		check(false, false)
-		got, err := cp.GetVerification(writer, &gensurla.GetVerificationPayload{RunID: older})
+		got, err := cp.GetVerification(writer, &genhighbay.GetVerificationPayload{RunID: older})
 		require.NoError(t, err, "historical assignment, not current acceptance, grants access")
 		assert.False(t, got.InputsCurrent)
-		_, err = cp.ListVerifications(writer, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+		_, err = cp.ListVerifications(writer, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 	}
 	saveListedTestState(t, cp, card.ChangeID, testsAccepted, oldCommit)
@@ -112,9 +112,9 @@ func TestVerificationCurrentInputsFollowWrittenSelection(t *testing.T) {
 	assert.False(t, build.Builder.Read)
 	assert.False(t, build.TestWriter.Read)
 
-	updated, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	updated, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Answers: map[string]string{},
-		Examples: append(card.Examples, &gensurla.ExampleItem{
+		Examples: append(card.Examples, &genhighbay.ExampleItem{
 			ID: "check_02", Scenario: "Refund over the limit", InputSummary: "Order total $50.01",
 			ExpectedOutcome: "Waits for a manager", VerificationKind: "deterministic",
 		}),
@@ -157,10 +157,10 @@ func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 			tc.change(&selected)
 			reopened := newControlPlane(t, opts(selected))
 			user := asCaller("alice@example.com", CallerUser)
-			got, err := reopened.GetVerification(user, &gensurla.GetVerificationPayload{RunID: runID})
+			got, err := reopened.GetVerification(user, &genhighbay.GetVerificationPayload{RunID: runID})
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got.InputsCurrent)
-			list, err := reopened.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+			list, err := reopened.ListVerifications(user, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 			require.NoError(t, err)
 			require.Len(t, list.Runs, 1)
 			assert.Equal(t, got, list.Runs[0])
@@ -170,10 +170,10 @@ func TestVerificationCurrentInputsUseFullStoredTuple(t *testing.T) {
 	}
 	setListedRunSource(t, runsDir, runID, verify.TestsWritten)
 	reopened := newControlPlane(t, opts(plan))
-	got, err := reopened.GetVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: runID})
+	got, err := reopened.GetVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: runID})
 	require.NoError(t, err)
 	assert.False(t, got.InputsCurrent, "the same commit cannot erase a different test source")
-	listed, err := reopened.ListVerifications(asCaller("alice@example.com", CallerUser), &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+	listed, err := reopened.ListVerifications(asCaller("alice@example.com", CallerUser), &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	require.Len(t, listed.Runs, 1)
 	assert.False(t, listed.Runs[0].InputsCurrent)
@@ -208,24 +208,24 @@ func TestVerificationCurrentInputsSafeFailures(t *testing.T) {
 				require.NoError(t, os.WriteFile(target, []byte(`{"private_path":"/private/secret"`), 0o600))
 			}
 			user := asCaller("alice@example.com", CallerUser)
-			_, err := cp.GetVerification(user, &gensurla.GetVerificationPayload{RunID: runID})
+			_, err := cp.GetVerification(user, &genhighbay.GetVerificationPayload{RunID: runID})
 			require.Error(t, err)
 			assert.Equal(t, `read verification "`+runID+`": saved verification inputs could not be read`, err.Error())
 			assert.NotContains(t, err.Error(), cp.cards.dir)
-			_, err = cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+			_, err = cp.ListVerifications(user, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 			require.Error(t, err)
 			assert.NotContains(t, err.Error(), cp.cards.dir)
 			assert.NotContains(t, err.Error(), "private_path")
 			writer := asCaller("alice@example.com", CallerTestWriter)
-			_, err = cp.GetVerification(writer, &gensurla.GetVerificationPayload{RunID: runID})
+			_, err = cp.GetVerification(writer, &genhighbay.GetVerificationPayload{RunID: runID})
 			require.Error(t, err)
 			assert.Equal(t, `read verification "`+runID+`": saved verification inputs could not be read`, err.Error())
-			_, err = cp.ListVerifications(writer, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+			_, err = cp.ListVerifications(writer, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 			require.Error(t, err)
 			assert.NotContains(t, err.Error(), cp.cards.dir)
 			assert.NotContains(t, err.Error(), "private_path")
 			spans := exporter.GetSpans().Snapshots()
-			for _, name := range []string{"surla.controlplane.get_verification", "surla.controlplane.list_verifications"} {
+			for _, name := range []string{"highbay.controlplane.get_verification", "highbay.controlplane.list_verifications"} {
 				found := false
 				for _, span := range spans {
 					if span.Name() == name {
@@ -239,7 +239,7 @@ func TestVerificationCurrentInputsSafeFailures(t *testing.T) {
 			// Foreign access must be refused before reading the damaged card or
 			// a malformed result from an otherwise attributable run request.
 			require.NoError(t, os.WriteFile(filepath.Join(cfg.RunsDir, runID, "result.json"), []byte("{"), 0o600))
-			_, err = cp.GetVerification(asCaller("bob@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: runID})
+			_, err = cp.GetVerification(asCaller("bob@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: runID})
 			assert.ErrorContains(t, err, "is not the owner of run_id")
 			assert.NotContains(t, err.Error(), "saved verification")
 		})
@@ -261,10 +261,10 @@ func TestVerificationCurrentInputsIgnoreForeignCard(t *testing.T) {
 	saveProposedCardFixture(t, cp, "bob@example.com", card.ChangeID,
 		"Bob's current change.", refundAnalysis("Bob's current change."))
 	require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), []byte("{"), 0o600))
-	got, err := cp.GetVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: runID})
+	got, err := cp.GetVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: runID})
 	require.NoError(t, err)
 	assert.False(t, got.InputsCurrent)
-	_, err = cp.GetVerification(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetVerificationPayload{RunID: runID})
+	_, err = cp.GetVerification(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetVerificationPayload{RunID: runID})
 	assertRefusalSays(t, err, "forbidden", "is not the owner of change_id")
 }
 
@@ -288,7 +288,7 @@ func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 			} else {
 				require.NoError(t, os.WriteFile(buildPath, []byte("{"), 0o600))
 			}
-			_, err := cp.VerifyChange(asCaller("alice@example.com", CallerUser), &gensurla.VerifyChangePayload{
+			_, err := cp.VerifyChange(asCaller("alice@example.com", CallerUser), &genhighbay.VerifyChangePayload{
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: strings.Repeat("a", 40),
 			})
 			require.Error(t, err)
@@ -299,7 +299,7 @@ func TestVerifyChangeReadsCurrentInputsBeforeAcceptance(t *testing.T) {
 			assert.Empty(t, runs, "no accepted run is hidden behind a failed open-build read")
 			spans := exporter.GetSpans().Snapshots()
 			require.Len(t, spans, 1)
-			assert.Equal(t, "surla.controlplane.start_verification", spans[0].Name())
+			assert.Equal(t, "highbay.controlplane.start_verification", spans[0].Name())
 			assert.Equal(t, codes.Error, spans[0].Status().Code)
 			var raw string
 			for _, event := range spans[0].Events() {
@@ -341,15 +341,15 @@ func TestDroppedWrittenBuildMakesVerificationInputsNonCurrent(t *testing.T) {
 	runID := strings.Repeat("a", 32)
 	writeListedRun(t, runs, "alice@example.com", card, runID, time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), true)
 	setListedRunSource(t, runs, runID, verify.TestsWritten)
-	first, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	first, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	saveListedTestState(t, cp, card.ChangeID, testsAccepted, strings.Repeat("2", 40))
 	check := func(want bool) {
 		t.Helper()
-		one, err := cp.GetVerification(user, &gensurla.GetVerificationPayload{RunID: runID})
+		one, err := cp.GetVerification(user, &genhighbay.GetVerificationPayload{RunID: runID})
 		require.NoError(t, err)
 		assert.Equal(t, want, one.InputsCurrent)
-		list, err := cp.ListVerifications(user, &gensurla.ListVerificationsPayload{ChangeID: card.ChangeID})
+		list, err := cp.ListVerifications(user, &genhighbay.ListVerificationsPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 		require.Len(t, list.Runs, 1)
 		assert.Equal(t, want, list.Runs[0].InputsCurrent)
@@ -360,7 +360,7 @@ func TestDroppedWrittenBuildMakesVerificationInputsNonCurrent(t *testing.T) {
 		assert.Equal(t, want, changes.Changes[0].LatestVerification.InputsCurrent)
 	}
 	check(true)
-	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: first.Build.StartedAt})
+	_, err = cp.DropBuild(user, &genhighbay.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: first.Build.StartedAt})
 	require.NoError(t, err)
 	check(false)
 }

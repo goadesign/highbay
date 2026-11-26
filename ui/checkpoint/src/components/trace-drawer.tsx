@@ -24,22 +24,22 @@ interface TraceDrawerProps {
 // Unset remains visible as unset; a missing error status never proves success.
 export function TraceDrawer(props: TraceDrawerProps) {
   return (
-    <div className="surla-trace-view">
+    <div className="highbay-trace-view">
       <section
-        id="surla-trace-drawer"
+        id="highbay-trace-drawer"
         hidden={!props.open}
-        aria-labelledby="surla-trace-title"
+        aria-labelledby="highbay-trace-title"
         aria-busy={props.busy}
-        className="surla-trace-panel"
+        className="highbay-trace-panel"
       >
-        <h2 id="surla-trace-title">Operation diagnostics</h2>
-        <Button id="surla-trace-close" onClick={props.onToggle}>Close diagnostics</Button>
-        <p className="surla-muted">
+        <h2 id="highbay-trace-title">Operation diagnostics</h2>
+        <Button id="highbay-trace-close" onClick={props.onToggle}>Close diagnostics</Button>
+        <p className="highbay-muted">
           Saved diagnostics for your instrumented operations, newest first.
           Raw errors and inputs stay with the server operator.
         </p>
-        <div className="surla-trace-actions">
-          <div role="group" aria-label="Trace status filter" className="surla-trace-actions">
+        <div className="highbay-trace-actions">
+          <div role="group" aria-label="Trace status filter" className="highbay-trace-actions">
             <Button variant="pill" aria-pressed={props.filter === "error"} disabled={props.busy} onClick={() => props.onFilter("error")}>
               Errors
             </Button>
@@ -50,7 +50,7 @@ export function TraceDrawer(props: TraceDrawerProps) {
               Without error status
             </Button>
           </div>
-          <Button id="surla-trace-refresh" disabled={props.busy} onClick={props.onRefresh}>Refresh</Button>
+          <Button id="highbay-trace-refresh" disabled={props.busy} onClick={props.onRefresh}>Refresh</Button>
         </div>
         {props.busy && <p role="status">Loading diagnostics…</p>}
         {props.error && (
@@ -68,16 +68,16 @@ export function TraceDrawer(props: TraceDrawerProps) {
                   : "No matching diagnostics in the remaining history. Refresh after another operation."}
               </p>
             ) : (
-              <ol className="surla-trace-list" aria-label="Completed operation spans">
+              <ol className="highbay-trace-list" aria-label="Completed operation spans">
                 {props.page.spans.map((span) => <TraceRow key={span.trace_id + ":" + span.span_id} span={span} />)}
               </ol>
             )}
             {props.page.has_more && (
-              <Button id="surla-trace-load-more" disabled={props.busy} onClick={props.onOlder}>
+              <Button id="highbay-trace-load-more" disabled={props.busy} onClick={props.onOlder}>
                 Load older traces
               </Button>
             )}
-            <p className="surla-muted">Each page replaces the previous page. Refresh returns to the newest records.</p>
+            <p className="highbay-muted">Each page replaces the previous page. Refresh returns to the newest records.</p>
           </>
         )}
       </section>
@@ -89,22 +89,22 @@ export function TraceDrawer(props: TraceDrawerProps) {
 function TraceRow({ span }: { span: TraceSpan }) {
   return (
     <li>
-      <div className="surla-trace-heading">
+      <div className="highbay-trace-heading">
         <strong>{span.name || "Unnamed operation"}</strong>
         <span>
-          <Badge>{callerLabel(span.attributes["surla.caller_kind"])}</Badge>{" "}
+          <Badge>{callerLabel(span.attributes["highbay.caller_kind"])}</Badge>{" "}
           {span.status === "error" ? "Error" : span.status === "ok" ? "OK" : "Status unset"}
         </span>
       </div>
       <p>{span.summary}</p>
-      <p className="surla-muted">
+      <p className="highbay-muted">
         <time dateTime={span.end_time}>{new Date(span.end_time).toLocaleString()}</time>
         {" · "}{span.duration_ms.toLocaleString()} ms
       </p>
-      {span.shortened && <p className="surla-muted">Some text was shortened. Ask the operator for full telemetry if needed.</p>}
-      <details className="surla-details">
+      {span.shortened && <p className="highbay-muted">Some text was shortened. Ask the operator for full telemetry if needed.</p>}
+      <details className="highbay-details">
         <summary>Identifiers and details</summary>
-        <dl className="surla-trace-details">
+        <dl className="highbay-trace-details">
           <dt>Trace</dt><dd><code>{span.trace_id}</code></dd>
           <dt>Span</dt><dd><code>{span.span_id}</code></dd>
           {span.parent_span_id && <><dt>Parent span</dt><dd><code>{span.parent_span_id}</code></dd></>}

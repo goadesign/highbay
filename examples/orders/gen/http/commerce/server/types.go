@@ -3,12 +3,12 @@
 // commerce HTTP server types
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package server
 
 import (
-	commerce "github.com/goadesign/surla/examples/orders/gen/commerce"
+	commerce "github.com/goadesign/highbay/examples/orders/gen/commerce"
 	goa "goa.design/goa/v3/pkg"
 )
 

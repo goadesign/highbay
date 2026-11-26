@@ -1,8 +1,8 @@
 // This file checks which tests verification runs and live copies use in a
-// project without stored verification settings: a run uses the tests Surla
+// project without stored verification settings: a run uses the tests Highbay
 // accepted for the change's build, at their commit, and a live copy uses the
 // same accepted tests against its candidate commit. Both read the layout
-// `surla init` makes from a real git repository and refuse a commit lacking it.
+// `hbay init` makes from a real git repository and refuse a commit lacking it.
 package controlplane
 
 import (
@@ -19,11 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 type (
@@ -52,7 +52,7 @@ type (
 	}
 )
 
-// shopLayout is the layout `surla init` makes for example.com/shop, with a
+// shopLayout is the layout `hbay init` makes for example.com/shop, with a
 // hand-made generated entry point at the path the generator writes it to.
 var shopLayout = map[string]string{
 	"go.mod":                          "module example.com/shop\n\ngo 1.26\n",
@@ -85,11 +85,11 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	runsDir := filepath.Join(root, "ops", "runs")
 	options := func() Options {
 		return Options{BuildCacheDir: t.TempDir(),
-			Team:         &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
-			CardsDir:     filepath.Join(root, "ops", "cards"),
-			WorkspaceDir: repo.workspace,
-			RunsDir:      runsDir,
-			SurlaVersion: testSurlaVersion,
+			Team:           &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
+			CardsDir:       filepath.Join(root, "ops", "cards"),
+			WorkspaceDir:   repo.workspace,
+			RunsDir:        runsDir,
+			HighbayVersion: testHighbayVersion,
 			WrittenTestRuns: &WrittenTestRuns{
 				ReportDir: filepath.Join(root, "ops", "reports"),
 				// The supervisor records its cache argument and exits; this
@@ -106,20 +106,20 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	}
 	user := asCaller("alice@example.com", CallerUser)
 	builder := asCaller("alice@example.com", CallerBuilder)
-	writtenTests := gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{Commit: repo.tests, Notice: writtenTestsNotice})
+	writtenTests := genhighbay.NewTestSourceWrittenTests(&genhighbay.AgentWrittenTests{Commit: repo.tests, Notice: writtenTestsNotice})
 
 	// Its Close at the test's end is idempotent, so the explicit Close below
 	// can reopen the card store.
 	first := newBuildControlPlane(t, options())
 
 	card := buildableChange(t, first, "chg")
-	verifyPayload := &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate}
-	livePayload := &gensurla.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: repo.candidate}
+	verifyPayload := &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate}
+	livePayload := &genhighbay.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: repo.candidate}
 	_, err = first.VerifyChange(builder, verifyPayload)
 	assertRefusalSays(t, err, "no_build", "change \"chg\" has no build with a test writer")
 	_, err = first.StartLiveTarget(builder, livePayload)
 	assertRefusalSays(t, err, "no_build", "change \"chg\" has no build with a test writer")
-	_, err = first.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err = first.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	readBuilderCandidateFixture(t, first, card, repo.candidate)
 	_, err = first.VerifyChange(builder, verifyPayload)
@@ -128,7 +128,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	assertRefusalSays(t, err, "tests_not_accepted", "the tests of this build are not accepted; their state is assigned")
 	acceptTests(t, first, "chg", repo.tests)
 	gateway := "127.0.0.1:9090"
-	_, err = first.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &gateway})
+	_, err = first.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &gateway})
 	require.NoError(t, err)
 
 	for _, server := range []struct {
@@ -146,7 +146,7 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 	} {
 		t.Run(server.name, func(t *testing.T) {
 			cp := server.open(t)
-			_, err := cp.ConfigureModel(user, &gensurla.ConfigureModelPayload{GatewayAddr: &gateway})
+			_, err := cp.ConfigureModel(user, &genhighbay.ConfigureModelPayload{GatewayAddr: &gateway})
 			require.NoError(t, err)
 			started, err := cp.StartLiveTarget(builder, livePayload)
 			require.NoError(t, err)
@@ -181,19 +181,19 @@ func TestVerificationAndLiveTargetsUseTheAcceptedTests(t *testing.T) {
 			want.WorkDir = filepath.Join(runsDir, run.RunID, "work")
 			assert.Equal(t, want, withoutReport(req.Plan), "the run builds the candidate and runs the accepted tests")
 
-			read, err := cp.GetVerification(builder, &gensurla.GetVerificationPayload{RunID: run.RunID})
+			read, err := cp.GetVerification(builder, &genhighbay.GetVerificationPayload{RunID: run.RunID})
 			require.NoError(t, err)
 			assert.Equal(t, writtenTests, read.TestSource, "get_verification")
-			listed, err := cp.ListVerifications(builder, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+			listed, err := cp.ListVerifications(builder, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			require.NotEmpty(t, listed.Runs)
 			assert.Equal(t, writtenTests, listed.Runs[0].TestSource, "list_verifications")
 			if server.name == "server reopened from the same card store" {
-				build, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: card.ChangeID})
+				build, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: card.ChangeID})
 				require.NoError(t, err)
 				open, ok := build.Build.AsStarted()
 				require.True(t, ok)
-				_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: open.StartedAt})
+				_, err = cp.DropBuild(user, &genhighbay.DropBuildPayload{ChangeID: card.ChangeID, StartedAt: open.StartedAt})
 				require.NoError(t, err)
 				_, err = cp.StartLiveTarget(builder, livePayload)
 				assertRefusalSays(t, err, "no_build", "change \"chg\" has no build with a test writer")
@@ -255,7 +255,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 		{
 			name: "tests not accepted", build: assigned, candidate: repo.candidate,
 			refusal: "tests_not_accepted", reason: "the tests of this build are not accepted; their state is assigned",
-			step: "the test writer writes the required tests and reports them finished; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
+			step: "the test writer writes the required tests and reports them finished; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
 		},
 		{
 			name: "unknown candidate commit", build: accepted, tests: repo.tests, candidate: unknown,
@@ -265,19 +265,19 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 		{
 			name: "candidate without its command package", build: accepted, tests: repo.tests, candidate: repo.noProgram,
 			refusal: "no_test_layout",
-			reason:  "commit " + repo.noProgram + " does not have the test layout surla init makes (it has no folder services/shop/cmd/shop)",
-			step:    "the builder commits the layout surla init makes and verifies again",
+			reason:  "commit " + repo.noProgram + " does not have the test layout hbay init makes (it has no folder services/shop/cmd/shop)",
+			step:    "the builder commits the layout hbay init makes and verifies again",
 		},
 		{
 			name: "accepted tests without their entry point", build: accepted, tests: repo.noEntry, candidate: repo.candidate,
 			refusal: "no_test_layout",
-			reason:  "commit " + repo.noEntry + " does not have the test layout surla init makes (it has no folder services/shop/eval/gen/cmd/shop-evals)",
-			step:    "the test writer reports again, so Surla checks and records its tests again",
+			reason:  "commit " + repo.noEntry + " does not have the test layout hbay init makes (it has no folder services/shop/eval/gen/cmd/shop-evals)",
+			step:    "the test writer reports again, so Highbay checks and records its tests again",
 		},
 		{
 			name: "accepted tests' commit no longer in the repository", build: accepted, tests: strings.Repeat("f", 40), candidate: repo.candidate,
 			refusal: "no_test_layout", reason: "the accepted tests' commit " + strings.Repeat("f", 40) + " is not in the project's repository",
-			step: "the test writer reports again, so Surla records the tests anew, or the user builds again",
+			step: "the test writer reports again, so Highbay records the tests anew, or the user builds again",
 		},
 		{
 			name: "project folder outside any git repository", workspace: plain, build: accepted, tests: repo.tests, candidate: repo.candidate,
@@ -317,12 +317,12 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			opts := Options{BuildCacheDir: t.TempDir(),
 				WorkspaceDir:    workspace,
 				RunsDir:         runsDir,
-				SurlaVersion:    testSurlaVersion,
+				HighbayVersion:  testHighbayVersion,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 				Live:            &LiveConfig{Command: []string{self}, Env: append(os.Environ(), liveTargetModeEnv+"=serve"), StartTimeout: time.Minute},
 			}
 			var cp *ControlPlane
-			var card *gensurla.ChangeCardResult
+			var card *genhighbay.ChangeCardResult
 			if tc.build == withoutTestWriter {
 				cp, card = builtWithoutTestWriter(t, opts)
 			} else {
@@ -331,7 +331,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			}
 			builder := asCaller("alice@example.com", CallerBuilder)
 			if tc.build == assigned || tc.build == accepted {
-				_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				_, err = cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 				require.NoError(t, err)
 			}
 			if tc.build == accepted {
@@ -367,7 +367,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 				step = "make your own work again from that build's base."
 			}
 
-			_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate})
+			_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: candidate})
 			assertRefusalSays(t, err, refusal, reason)
 			status, raw := httpCall(t, srv.URL, "builder", http.MethodPost, "/changes/chg/verifications", body)
 			assert.Equal(t, http.StatusConflict, status, raw)
@@ -393,7 +393,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, runs, "no run is accepted")
 
-			_, err = cp.StartLiveTarget(builder, &gensurla.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: candidate})
+			_, err = cp.StartLiveTarget(builder, &genhighbay.StartLiveTargetPayload{ChangeID: "chg", CandidateCommit: candidate})
 			assertRefusalSays(t, err, tc.refusal, tc.reason)
 			if tc.candidate == repo.modifiedTestFile || tc.candidate == repo.addedTestFile {
 				assert.ErrorContains(t, err, tc.step)
@@ -406,7 +406,7 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 }
 
 // TestANewAcceptanceChangesOnlyTheTestsCommit verifies that verifying the
-// same candidate after Surla accepted the tests again, at another commit,
+// same candidate after Highbay accepted the tests again, at another commit,
 // saves a plan equal to the one before except for the tests' commit (and the
 // run's own work folder).
 func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
@@ -417,18 +417,18 @@ func TestANewAcceptanceChangesOnlyTheTestsCommit(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         runsDir,
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	readBuilderCandidateFixture(t, cp, card, repo.candidate)
 	// verifyAfterAccepting accepts the tests at commit, verifies the
 	// candidate and returns the saved plan.
 	verifyAfterAccepting := func(commit string) verify.Plan {
 		acceptTests(t, cp, "chg", commit)
-		run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+		run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 			ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
 		})
 		require.NoError(t, err)
@@ -460,18 +460,18 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 	}{
 		{
 			name: "reported", tw: testWriterAssignment{State: testsReported, Findings: []string{}},
-			want: "reported: Surla is checking the test writer's report; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
+			want: "reported: Highbay is checking the test writer's report; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
 		},
 		{
 			name: "needs changes", tw: testWriterAssignment{State: testsNeedChanges, Findings: []string{"refund_over_limit is missing"}, CheckedAt: time.Now()},
-			want: "needs changes: the test writer fixes Surla's findings and reports again; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
+			want: "needs changes: the test writer fixes Highbay's findings and reports again; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
 		},
 		{
 			name: "could not run", tw: testWriterAssignment{
 				State: testsCouldNotRun, Findings: []string{}, Reason: "git could not write the tests branch",
 				Step: "Free disk space, then report again.", CheckedAt: time.Now(),
 			},
-			want: "could not run: Surla's check could not run (git could not write the tests branch); the user's step: Free disk space, then report again; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
+			want: "could not run: Highbay's check could not run (git could not write the tests branch); the user's step: Free disk space, then report again; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again",
 		},
 	}
 	for _, tc := range cases {
@@ -482,16 +482,16 @@ func TestVerifyChangeSaysWhoActsUntilTheTestsAreAccepted(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 				WorkspaceDir:    repo.workspace,
 				RunsDir:         runsDir,
-				SurlaVersion:    testSurlaVersion,
+				HighbayVersion:  testHighbayVersion,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 			})
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
-			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			saveTestWriter(t, cp, "chg", tc.tw)
 			readBuilderCandidateFixture(t, cp, card, repo.candidate)
 
-			_, err = cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+			_, err = cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
 			})
 			assertRefusalSays(t, err, "tests_not_accepted", "the tests of this build are not accepted; their state is "+tc.want)
@@ -511,19 +511,19 @@ func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         filepath.Join(realTempDir(t), "runs"),
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	saveTestWriter(t, cp, "chg", testWriterAssignment{State: testsReported, Findings: []string{}})
 	readBuilderCandidateFixture(t, cp, card, repo.candidate)
 
-	_, verifyErr := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+	_, verifyErr := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
 	})
-	_, approveErr := cp.ApproveMerge(asCaller("alice@example.com", CallerUser), &gensurla.ApproveMergePayload{
+	_, approveErr := cp.ApproveMerge(asCaller("alice@example.com", CallerUser), &genhighbay.ApproveMergePayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate, ReportDigest: strings.Repeat("a", 64),
 	})
 	for _, tc := range []struct {
@@ -531,8 +531,8 @@ func TestTestsNotAcceptedIsWordedForEachReader(t *testing.T) {
 		err    error
 		want   string
 	}{
-		{"builder", verifyErr, "the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; your step: keep your Chorus watcher running; Surla messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again"},
-		{"user", approveErr, "the tests of this build are not accepted; their state is reported: Surla is checking the test writer's report; the builder verifies again after its verdict"},
+		{"builder", verifyErr, "the tests of this build are not accepted; their state is reported: Highbay is checking the test writer's report; your step: keep your Chorus watcher running; Highbay messages you there when the tests are accepted; then read get_builder_assignment and verify or call start_live_target again"},
+		{"user", approveErr, "the tests of this build are not accepted; their state is reported: Highbay is checking the test writer's report; the builder verifies again after its verdict"},
 	} {
 		t.Run(tc.reader, func(t *testing.T) {
 			var refusal *goa.ServiceError
@@ -568,7 +568,7 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 			repo := cloneLayoutRepo(t, repo)
 			gitForLayoutTest(t, repo.workspace, "checkout", "-q", "--detach", repo.tests)
 			runsDir := filepath.Join(realTempDir(t), "runs")
-			opts := Options{WorkspaceDir: repo.workspace, RunsDir: runsDir, SurlaVersion: testSurlaVersion}
+			opts := Options{WorkspaceDir: repo.workspace, RunsDir: runsDir, HighbayVersion: testHighbayVersion}
 			exit := []string{"/bin/sh", "-c", "exit 0", "sh"}
 			if tc.stored {
 				plan := layoutPlan(repo, "", repo.tests)
@@ -580,7 +580,7 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 				opts.WrittenTestRuns = &WrittenTestRuns{ReportDir: realTempDir(t), Command: exit, Timeout: time.Hour}
 			}
 			var cp *ControlPlane
-			var card *gensurla.ChangeCardResult
+			var card *genhighbay.ChangeCardResult
 			if tc.builder {
 				cp, card = builtWithoutTestWriter(t, opts)
 			} else {
@@ -589,7 +589,7 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 			}
 			testWriter := asCaller("alice@example.com", CallerTestWriter)
 			if tc.build {
-				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 				require.NoError(t, err)
 			}
 			if !tc.stored && tc.build {
@@ -600,8 +600,8 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 			}
 			runID := startRunFor(t, cp, tc.stored || tc.build, card, repo, runsDir)
 
-			read, getErr := cp.GetVerification(testWriter, &gensurla.GetVerificationPayload{RunID: runID})
-			listed, listErr := cp.ListVerifications(testWriter, &gensurla.ListVerificationsPayload{ChangeID: "chg"})
+			read, getErr := cp.GetVerification(testWriter, &genhighbay.GetVerificationPayload{RunID: runID})
+			listed, listErr := cp.ListVerifications(testWriter, &genhighbay.ListVerificationsPayload{ChangeID: "chg"})
 			if !tc.allowed {
 				assertRefusalSays(t, getErr, "forbidden", "the test writer reads only the runs of a change it has an assignment for")
 				assertRefusalSays(t, listErr, "forbidden", "the test writer reads only the runs of a change it has an assignment for")
@@ -626,7 +626,7 @@ func TestTestWriterReadsOnlyTheRunsOfAnAssignedChange(t *testing.T) {
 //   - merging the numbered tests branch into the builder branch (or committing on top of
 //     that merge) is allowed when hand-written files in <testModule> match
 //     the accepted tests, and refused when a merge commit tampers with <testModule>;
-//   - on the next change after the user takes the builder's merge, .surla-tests
+//   - on the next change after the user takes the builder's merge, .highbay-tests
 //     joins the new numbered branch at M1. A builder commit that edits, adds,
 //     deletes, or replaces hand-written files with a symlink in <testModule>
 //     is refused against M1. Restoring the named files to their versions or
@@ -642,7 +642,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		CardsDir:        filepath.Join(root, "cards"),
 		WorkspaceDir:    repo.workspace,
 		RunsDir:         runsDir,
-		SurlaVersion:    testSurlaVersion,
+		HighbayVersion:  testHighbayVersion,
 		WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
 	user := asCaller("alice@example.com", CallerUser)
@@ -663,15 +663,15 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	storedPlan := layoutPlan(storedRepo, "", storedRepo.tests)
 	storedPlan.ReportDir = realTempDir(t)
 	storedCP := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
-		WorkspaceDir: storedRepo.workspace,
-		RunsDir:      storedRunsDir,
-		SurlaVersion: testSurlaVersion,
-		Verification: &VerificationConfig{RunsDir: storedRunsDir, Plan: storedPlan, Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
+		WorkspaceDir:   storedRepo.workspace,
+		RunsDir:        storedRunsDir,
+		HighbayVersion: testHighbayVersion,
+		Verification:   &VerificationConfig{RunsDir: storedRunsDir, Plan: storedPlan, Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 	})
 	storedCard := saveBuildStoryCard(t, storedCP, "chg-stored", StatusConfirmed, refundStory("Refund over the limit waits"))
 	saveStoredBuildFixture(t, storedCP, storedCard)
 	readBuilderCandidateFixture(t, storedCP, storedCard, storedRepo.modifiedTestFile)
-	storedRun, err := storedCP.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	storedRun, err := storedCP.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-stored", RequestRevision: storedCard.RequestRevision, CandidateCommit: storedRepo.modifiedTestFile,
 	})
 	require.NoError(t, err, "stored verification is not guarded by starterPlanAt")
@@ -680,12 +680,12 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	// Change 1 starts from repo.candidate; both workers use this build's
 	// numbered branches in their owner-created linked copies.
 	card1 := saveBuildStoryCard(t, cp, "chg-1", StatusConfirmed, refundStory("Refund over the limit waits"))
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-1", RequestRevision: card1.RequestRevision})
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg-1", RequestRevision: card1.RequestRevision})
 	require.NoError(t, err)
 	builderProject = readBuilderCandidateFixture(t, cp, card1, repo.candidate)
 	// A marking test-writer read joins its numbered branch. The established
 	// buildCopyFixture owns preparation here, so no generator runs.
-	readTests := func(card *gensurla.ChangeCardResult) string {
+	readTests := func(card *genhighbay.ChangeCardResult) string {
 		cp.mu.RLock()
 		build, found, err := cp.cards.loadOpenBuild()
 		cp.mu.RUnlock()
@@ -695,7 +695,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 			testwriter.TestsRole.Branch(build.Number), build.Base)
 		require.NoError(t, err)
 		assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter),
-			&gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+			&genhighbay.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 		require.Equal(t, copy.Project(), assignment.WorkingFolder)
 		return assignment.WorkingFolder
@@ -716,7 +716,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		"eval/AGENTS_QUICKSTART.md":       "# Quickstart\n",
 		"eval/gen/cmd/shop-evals/main.go": "package main\n\n// Regenerated.\nfunc main() {}\n",
 	})
-	run, err := cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	run, err := cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: regenCommit,
 	})
 	require.NoError(t, err, "generated files in eval/gen and eval/AGENTS_QUICKSTART.md must be allowed")
@@ -726,7 +726,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	genxCommit := commitInBuilder(map[string]string{
 		"eval/genx/notgen.go": "package genx\n",
 	})
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: genxCommit,
 	})
 	assertRefusalSays(t, err, "conflict",
@@ -743,7 +743,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	gitForLayoutTest(t, builderProject, "add", "-A")
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "tampered merge")
 	tamperedMerge := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: tamperedMerge,
 	})
 	assertRefusalSays(t, err, "conflict",
@@ -751,28 +751,28 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 			" (services/shop/eval/acceptance/hooks.go)")
 	gitForLayoutTest(t, builderProject, "reset", "-q", "--hard", regenCommit)
 
-	gitForLayoutTest(t, builderProject, "merge", "-q", "--no-ff", "-m", "merge surla/tests", t1)
+	gitForLayoutTest(t, builderProject, "merge", "-q", "--no-ff", "-m", "merge highbay/tests", t1)
 	m1 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
-	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	run, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: m1,
 	})
-	require.NoError(t, err, "merge commit of surla/tests must be allowed")
+	require.NoError(t, err, "merge commit of highbay/tests must be allowed")
 	assert.Equal(t, m1, run.CandidateCommit)
 
 	afterMerge := commitInBuilder(map[string]string{
 		"cmd/shop/refund.go": "package main\n\n// Post-merge service edit.\n",
 	})
-	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	run, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: afterMerge,
 	})
-	require.NoError(t, err, "service commit on top of merged surla/tests must be allowed")
+	require.NoError(t, err, "service commit on top of merged highbay/tests must be allowed")
 	assert.Equal(t, afterMerge, run.CandidateCommit)
 
 	// The user takes M1 into the project before starting the next change.
 	// A candidate already merged by the user remains verifiable.
 	gitForLayoutTest(t, builderProject, "reset", "-q", "--hard", m1)
 	gitForLayoutTest(t, repo.workspace, "merge", "-q", "--ff-only", m1)
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-1", RequestRevision: card1.RequestRevision, CandidateCommit: m1,
 	})
 	require.NoError(t, err, "the user taking the candidate must not invalidate its verification")
@@ -782,11 +782,11 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	card2 := saveBuildStoryCard(t, cp, "chg-2", StatusConfirmed, refundStory("Refund over the limit waits for a director"))
 	// The first build has no passed run in this fixture. Drop it before the
 	// second change and refresh its revision from the new draft generation.
-	current, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg-1"})
+	current, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg-1"})
 	require.NoError(t, err)
 	open, ok := current.Build.AsStarted()
 	require.True(t, ok)
-	_, err = cp.DropBuild(user, &gensurla.DropBuildPayload{ChangeID: "chg-1", StartedAt: open.StartedAt})
+	_, err = cp.DropBuild(user, &genhighbay.DropBuildPayload{ChangeID: "chg-1", StartedAt: open.StartedAt})
 	require.NoError(t, err)
 	// Refresh and adopt the same change through its owners after Drop starts
 	// a new draft generation. The snapshot keeps the new folder's real base.
@@ -795,30 +795,30 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	writeBuilderDesignFixture(t, filepath.Join(repo.workspace, draftFolderName), record.designSource)
 	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, record.stories, "")
 	require.Empty(t, card2.Ambiguities)
-	examples := make([]*gensurla.CP1RevisionAnalysisExample, 0, len(card2.Examples))
+	examples := make([]*genhighbay.CP1RevisionAnalysisExample, 0, len(card2.Examples))
 	for _, example := range card2.Examples {
-		examples = append(examples, &gensurla.CP1RevisionAnalysisExample{
+		examples = append(examples, &genhighbay.CP1RevisionAnalysisExample{
 			PriorID: &example.ID, Scenario: example.Scenario, InputSummary: example.InputSummary,
 			ExpectedOutcome: example.ExpectedOutcome, VerificationKind: example.VerificationKind,
 		})
 	}
-	revised, err := cp.ReviseChange(asCaller("alice@example.com", CallerGuide), &gensurla.ReviseChangePayload{
+	revised, err := cp.ReviseChange(asCaller("alice@example.com", CallerGuide), &genhighbay.ReviseChangePayload{
 		ChangeID: card2.ChangeID, RequestRevision: card2.RequestRevision, Prompt: card2.Prompt,
 		RevisionNote:     "Revise the change.",
-		StoryRefreshOpID: &opID, Analysis: &gensurla.CP1RevisionAnalysis{
-			Summary: card2.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{},
+		StoryRefreshOpID: &opID, Analysis: &genhighbay.CP1RevisionAnalysis{
+			Summary: card2.Summary, Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{},
 			Examples: examples, RemovedExampleIds: []string{}, PreservedBehaviors: card2.PreservedBehaviors,
 		},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, revised.ProposedRevision)
-	card2, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	card2, err = cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: card2.ChangeID, RequestRevision: revised.ProposedRevision.RequestRevision,
 		Answers: map[string]string{}, Examples: revised.ProposedRevision.Examples,
 	})
 	require.NoError(t, err)
 	record = loadMetadataRecord(t, cp, card2.ChangeID)
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg-2", RequestRevision: card2.RequestRevision})
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg-2", RequestRevision: card2.RequestRevision})
 	require.NoError(t, err)
 	builderProject = readBuilderCandidateFixture(t, cp, card2, m1)
 	writeBuilderDesignFixture(t, builderProject, record.designSource)
@@ -843,7 +843,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		"eval/acceptance/story_test.go": "package acceptance\n\n// Builder tampered with story_test.go.\n",
 		"eval/acceptance/helper.go":     "package acceptance\n\n// Builder added helper.go.\n",
 	})
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: badCommit,
 	})
 	assertRefusalSays(t, err, "conflict",
@@ -863,7 +863,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "restore eval")
 	fixedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
-	run, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	run, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: fixedCommit,
 	})
 	require.NoError(t, err, "verify_change must succeed after meeting the refusal's recovery goal from the project folder")
@@ -879,7 +879,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	gitForLayoutTest(t, builderProject, "add", "-A")
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "delete hooks.go")
 	deletedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: deletedCommit,
 	})
 	assertRefusalSays(t, err, "conflict",
@@ -888,7 +888,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 		":(top,literal)services/shop/eval/acceptance/hooks.go")
 	gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "restore deleted hooks.go")
 	restoredDeletedCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: restoredDeletedCommit,
 	})
 	require.NoError(t, err)
@@ -901,7 +901,7 @@ func TestVerifyChangeTestModuleGuardAcrossRegenerationMergeAndNextChange(t *test
 	squashedCandidate := commitInBuilder(map[string]string{
 		"cmd/shop/refund.go": "package main\n\n// Commit on squashed main.\n",
 	})
-	_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+	_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 		ChangeID: "chg-2", RequestRevision: card2.RequestRevision, CandidateCommit: squashedCandidate,
 	})
 	assertRefusalSays(t, err, "build_branch_mismatch",
@@ -921,13 +921,13 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			cp := newBuildControlPlane(t, Options{BuildCacheDir: t.TempDir(),
 				WorkspaceDir:    repo.workspace,
 				RunsDir:         filepath.Join(root, "runs"),
-				SurlaVersion:    testSurlaVersion,
+				HighbayVersion:  testHighbayVersion,
 				WrittenTestRuns: &WrittenTestRuns{ReportDir: realTempDir(t), Command: []string{"/bin/sh", "-c", "exit 0", "sh"}, Timeout: time.Hour},
 			})
 			user := asCaller("alice@example.com", CallerUser)
 			builder := asCaller("alice@example.com", CallerBuilder)
 			card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
-			_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			acceptTests(t, cp, "chg", repo.tests)
 			builderProject := readBuilderCandidateFixture(t, cp, card, repo.candidate)
@@ -944,7 +944,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "touch test files")
 			badCommit := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
-			_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+			_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: badCommit,
 			})
 			var refusal *goa.ServiceError
@@ -984,7 +984,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			afterRound1 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
 			if count <= 20 {
-				run, err := cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+				run, err := cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 					ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: afterRound1,
 				})
 				require.NoError(t, err)
@@ -994,7 +994,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 
 			// For 21 files, round 1 removed the first 20 (added_01..added_20)
 			// and round 2 names the 21st (hooks.go).
-			_, err = cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+			_, err = cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: afterRound1,
 			})
 			require.ErrorAs(t, err, &refusal)
@@ -1007,7 +1007,7 @@ func TestVerifyChangeTestModuleFileLimitBelowAtAndAbove(t *testing.T) {
 			gitForLayoutTest(t, builderProject, "commit", "-q", "-m", "round 2 restore")
 			afterRound2 := strings.TrimSpace(gitForLayoutTest(t, builderProject, "rev-parse", "HEAD"))
 
-			run, err := cp.VerifyChange(builder, &gensurla.VerifyChangePayload{
+			run, err := cp.VerifyChange(builder, &genhighbay.VerifyChangePayload{
 				ChangeID: "chg", RequestRevision: card.RequestRevision, CandidateCommit: afterRound2,
 			})
 			require.NoError(t, err)
@@ -1105,7 +1105,7 @@ func gitForLayoutTest(t *testing.T, dir string, args ...string) string {
 // while the project has stored verification settings, which saves the build
 // without a test writer, and then returns a control plane on the same card
 // store with opts, which has none, together with the change.
-func builtWithoutTestWriter(t *testing.T, opts Options) (*ControlPlane, *gensurla.ChangeCardResult) {
+func builtWithoutTestWriter(t *testing.T, opts Options) (*ControlPlane, *genhighbay.ChangeCardResult) {
 	t.Helper()
 	opts.CardsDir = filepath.Join(realTempDir(t), "cards")
 	stored := opts
@@ -1116,7 +1116,7 @@ func builtWithoutTestWriter(t *testing.T, opts Options) (*ControlPlane, *gensurl
 	}
 	first := newBuildControlPlane(t, stored)
 	card := saveBuildStoryCard(t, first, "chg", StatusConfirmed, refundStory("Refund over the limit waits"))
-	_, err := first.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := first.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, `"`+buildRolesBuilderOnly+`"`, jsonAt(t, readBuildFile(t, first, "chg"), "roles"), "a stored evaluator's build has no test writer")
 	require.NoError(t, first.Close())
@@ -1148,7 +1148,7 @@ func withoutReport(plan verify.Plan) verify.Plan {
 	return plan
 }
 
-// acceptTests records, through the build store's save path, that Surla
+// acceptTests records, through the build store's save path, that Highbay
 // accepted the test writer's tests of changeID's build at commit.
 func acceptTests(t *testing.T, cp *ControlPlane, changeID, commit string) {
 	t.Helper()
@@ -1176,10 +1176,10 @@ func saveTestWriter(t *testing.T, cp *ControlPlane, changeID string, tw testWrit
 // startRunFor starts a verification run of card for its owner and returns its
 // run ID: through verify_change when verifiable, or, for a change without a
 // build, by saving the run directly, since verify_change refuses it.
-func startRunFor(t *testing.T, cp *ControlPlane, verifiable bool, card *gensurla.ChangeCardResult, repo layoutRepo, runsDir string) string {
+func startRunFor(t *testing.T, cp *ControlPlane, verifiable bool, card *genhighbay.ChangeCardResult, repo layoutRepo, runsDir string) string {
 	t.Helper()
 	if verifiable {
-		run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+		run, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: repo.candidate,
 		})
 		require.NoError(t, err)

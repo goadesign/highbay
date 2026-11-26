@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"goa.design/goa-ai/eval"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 // TestInitBuildsForNamesThatCollideWithTemplatesOrGo creates real example
@@ -28,14 +28,14 @@ func TestInitBuildsForNamesThatCollideWithTemplatesOrGo(t *testing.T) {
 	for _, name := range []string{"helper", "service", "catalog", "errors", "string"} {
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), name)
-			_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + name, SurlaVersion: published, Example: true}, RunCommand, starterGenerator(t))
+			_, err := Init(t.Context(), Options{Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + name, HighbayVersion: published, Example: true}, RunCommand, starterGenerator(t))
 			require.NoError(t, err, "Init runs go vet on both modules")
 		})
 	}
 }
 
 // TestInitCreatesAProjectWhoseSuitePasses creates real projects of both
-// variants with the published Surla version (it needs the network and macOS
+// variants with the published Highbay version (it needs the network and macOS
 // or Linux), builds the service and its evaluator suite, and runs the suite
 // against the service: every scenario must pass. For the blank project that
 // is the one scenario that starts the program; for the example it includes
@@ -74,7 +74,7 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 			service, scenarios := tc.service, tc.scenarios
 			dir := filepath.Join(t.TempDir(), service)
 			name, err := Init(t.Context(), Options{
-				Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + service, SurlaVersion: published, Example: tc.example,
+				Dir: dir, WorkDir: t.TempDir(), Module: "example.com/" + service, HighbayVersion: published, Example: tc.example,
 			}, RunCommand, starterGenerator(t))
 			require.NoError(t, err)
 			// With the real generator, the project holds exactly what its
@@ -165,7 +165,7 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 			// The user makes the first commit, as the README says.
 			for _, args := range [][]string{
 				{"init", "--quiet"}, {"config", "user.name", "Test User"}, {"config", "user.email", "test@example.com"},
-				{"config", "commit.gpgsign", "false"}, {"add", "--all"}, {"commit", "--quiet", "-m", "Start from surla init"},
+				{"config", "commit.gpgsign", "false"}, {"add", "--all"}, {"commit", "--quiet", "-m", "Start from hbay init"},
 			} {
 				out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 				require.NoError(t, err, "git %v: %s", args, out)

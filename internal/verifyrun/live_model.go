@@ -17,8 +17,8 @@ import (
 	"goa.design/goa-ai/runtime/agent/model"
 	"google.golang.org/grpc"
 
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 type (
@@ -229,7 +229,7 @@ func liveModelFailure(name string, err error) error {
 
 // liveSettingsSummary names the user action without quoting a setting value.
 func liveSettingsSummary(provider string) string {
-	return fmt.Sprintf("The project server's %s settings could not be used; the user restarts Surla from a shell with corrected settings.", provider)
+	return fmt.Sprintf("The project server's %s settings could not be used; the user restarts Highbay from a shell with corrected settings.", provider)
 }
 
 // liveSuiteSummary names the owner who can repair this profile's live program.

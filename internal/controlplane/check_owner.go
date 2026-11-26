@@ -16,7 +16,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 type (
@@ -39,7 +39,7 @@ type (
 
 	// ownedContainer is one recorded container of an operation.
 	ownedContainer struct {
-		// Name is surla-check-<op>-<n>.
+		// Name is highbay-check-<op>-<n>.
 		Name string `json:"name"`
 		// State is what is known about the container's creation and start.
 		State containerState `json:"state"`
@@ -76,7 +76,7 @@ var (
 // decodeCheckOwner strictly decodes the recovery record of operation id:
 // one JSON object with exactly the docker path (absolute), the local engine
 // endpoint (unix://) and the containers array (present, possibly empty),
-// each name surla-check-<id>-<n> and listed once. Version must equal
+// each name highbay-check-<id>-<n> and listed once. Version must equal
 // ownerVersion and each entry has a current containerState. Anything else is
 // an error, so recovery never acts on a record it does not fully understand.
 func decodeCheckOwner(raw []byte, id string) (checkOwner, error) {
@@ -102,7 +102,7 @@ func decodeCheckOwner(raw []byte, id string) (checkOwner, error) {
 	case !strings.HasPrefix(owner.Host, "unix://"):
 		return checkOwner{}, fmt.Errorf("host %q is not a local engine endpoint", owner.Host)
 	}
-	prefix := "surla-check-" + id + "-"
+	prefix := "highbay-check-" + id + "-"
 	seen := map[string]bool{}
 	for _, c := range owner.Containers {
 		n, ok := strings.CutPrefix(c.Name, prefix)

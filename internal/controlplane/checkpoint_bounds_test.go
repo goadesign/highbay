@@ -44,11 +44,11 @@ else if (input.field === "report") build.test_writer.report = -1;
 else build.required_test_count = -1;
 await control(origin, "reply", { key: "GET " + path, status: 200, body: { change_id: "chg", build } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-error"), "a negative declared bound was accepted");
-expect(page.text("#surla-build-error").includes("did not match its declared result"), "numeric violation bypassed the normal result decoder");
-expect(!page.$("#surla-build-start") && !page.$("#surla-build-again"), "an invalid result enabled a build effect");
-page.$("#surla-build-refresh").click();
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "a valid result did not recover the page");
+await until(() => page.$("#highbay-build-error"), "a negative declared bound was accepted");
+expect(page.text("#highbay-build-error").includes("did not match its declared result"), "numeric violation bypassed the normal result decoder");
+expect(!page.$("#highbay-build-start") && !page.$("#highbay-build-again"), "an invalid result enabled a build effect");
+page.$("#highbay-build-refresh").click();
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "a valid result did not recover the page");
 expect(page.sent("POST", path).length === 0, "validation or recovery sent a start");
 page.close();
 `)

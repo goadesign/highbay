@@ -175,10 +175,10 @@ jobs:
         run: |
           npm ci --prefix ui/checkpoint --no-audit --no-fund </dev/null
           npm --prefix ui/checkpoint run typecheck </dev/null
-          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design </dev/null
-          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design/targetprompt -o internal/targetprompt </dev/null
-          (cd examples/orders && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/examples/orders/design) </dev/null
-          (cd examples/orders-eval && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/examples/orders-eval/design) </dev/null
+          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design </dev/null
+          go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design/targetprompt -o internal/targetprompt </dev/null
+          (cd examples/orders && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/examples/orders/design) </dev/null
+          (cd examples/orders-eval && go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/examples/orders-eval/design) </dev/null
           node ui/checkpoint/build.mjs --check </dev/null
           if [ -n "$(git status --porcelain)" ]; then
             echo "Generated files differ from the committed ones:"

@@ -1,4 +1,4 @@
-// Package openui defines the Surla Decision Studio component library using
+// Package openui defines the Highbay Decision Studio component library using
 // @openuidev/react-lang and Zod v4 schemas, validates completed CP1 OpenUI
 // compositions against the active Change Card, and exports the catalog prompt.
 
@@ -103,12 +103,12 @@ export const PolicySimulatorTable = defineComponent({
 
     return (
       <Card
-        className="surla-openui-card"
+        className="highbay-openui-card"
         data-openui-component="PolicySimulatorTable"
         data-openui-ambiguity-index={String(props.ambiguityIndex)}
       >
         <CardHeader>
-          <div className="surla-field-row">
+          <div className="highbay-field-row">
             <CardTitle>{props.title}</CardTitle>
             <Badge>{"Question " + String(props.ambiguityIndex)}</Badge>
           </div>
@@ -209,12 +209,12 @@ export const AmbiguityChoiceCard = defineComponent({
 
     return (
       <Card
-        className="surla-openui-card"
+        className="highbay-openui-card"
         data-openui-component="AmbiguityChoiceCard"
         data-openui-ambiguity-index={String(props.ambiguityIndex)}
       >
         <CardHeader>
-          <div className="surla-field-row">
+          <div className="highbay-field-row">
             <CardTitle>{showsChoices ? amb.question : "Question " + String(props.ambiguityIndex) + " rationale"}</CardTitle>
           </div>
           {props.rationale ? <CardDescription>{props.rationale}</CardDescription> : null}
@@ -243,8 +243,8 @@ export const WorkflowStep = defineComponent({
   }),
   description: "A single workflow step showing the step name, actor, detail, and optional policy gate.",
   component: ({ props }) => (
-    <li className="surla-timeline-step" data-openui-component="WorkflowStep">
-      <div className="surla-field-row">
+    <li className="highbay-timeline-step" data-openui-component="WorkflowStep">
+      <div className="highbay-field-row">
         <strong>{props.step}</strong>
         <Badge>{props.actor}</Badge>
         {props.gate ? <Badge variant="accent">Gate: {props.gate}</Badge> : null}
@@ -263,12 +263,12 @@ export const WorkflowTimeline = defineComponent({
   }),
   description: "Ordered workflow sequence illustrating how actors and policy gates interact.",
   component: ({ props, renderNode }) => (
-    <Card className="surla-openui-card" data-openui-component="WorkflowTimeline">
+    <Card className="highbay-openui-card" data-openui-component="WorkflowTimeline">
       <CardHeader>
         <CardTitle>{props.title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ol className="surla-timeline">{renderNode(props.steps)}</ol>
+        <ol className="highbay-timeline">{renderNode(props.steps)}</ol>
       </CardContent>
     </Card>
   ),
@@ -311,7 +311,7 @@ export const DecisionWorkspace = defineComponent({
       .min(1),
   }),
   description:
-    "Root container for a Surla CP1 Decision Workspace combining policy simulators, decision cards, workflow timelines, and impact callouts.",
+    "Root container for a Highbay CP1 Decision Workspace combining policy simulators, decision cards, workflow timelines, and impact callouts.",
   component: ({ props, renderNode }) => {
     const draft = useCP1Draft();
     const questions = new Set<number>();
@@ -324,8 +324,8 @@ export const DecisionWorkspace = defineComponent({
       </ShowsQuestionChoices.Provider>;
     });
     return (
-      <div className="surla-decision-workspace" data-openui-component="DecisionWorkspace">
-        <div className="surla-field-row">
+      <div className="highbay-decision-workspace" data-openui-component="DecisionWorkspace">
+        <div className="highbay-field-row">
           <h3>{props.title}</h3>
           <Badge variant="outline">Model-Proposed Illustration</Badge>
         </div>
@@ -333,20 +333,20 @@ export const DecisionWorkspace = defineComponent({
           Compare the proposed options. Your selection becomes your draft answer.
         </p> : null}
         {draft?.localExamplesEdited ? (
-          <Alert id="surla-openui-local-edit-notice" variant="warning">
+          <Alert id="highbay-openui-local-edit-notice" variant="warning">
             <strong>Local Examples Modified: </strong>
             You have edited the confirmation examples below. Instruments in this workspace reflect
             the model-proposed illustration for the saved revision until the change is re-analyzed.
           </Alert>
         ) : null}
-        <div className="surla-decision-grid">{instruments}</div>
+        <div className="highbay-decision-grid">{instruments}</div>
       </div>
     );
   },
 });
 
-// surlaDecisionLibrary is the canonical OpenUI component library for Surla CP1.
-export const surlaDecisionLibrary = createLibrary({
+// highbayDecisionLibrary is the canonical OpenUI component library for Highbay CP1.
+export const highbayDecisionLibrary = createLibrary({
   root: "DecisionWorkspace",
   components: [
     DecisionWorkspace,
@@ -380,13 +380,13 @@ export const surlaDecisionLibrary = createLibrary({
   ],
 });
 
-const surlaDecisionParser = createParser(
-  surlaDecisionLibrary.toJSONSchema(),
-  surlaDecisionLibrary.root
+const highbayDecisionParser = createParser(
+  highbayDecisionLibrary.toJSONSchema(),
+  highbayDecisionLibrary.root
 );
 
 const schemaToComponentName = new Map<unknown, string>(
-  Object.values(surlaDecisionLibrary.components).map((comp) => [comp.props, comp.name])
+  Object.values(highbayDecisionLibrary.components).map((comp) => [comp.props, comp.name])
 );
 
 // allowedSlotComponentNames inspects a Zod v4 property schema and returns the
@@ -449,7 +449,7 @@ function projectAndValidateNode(
         ").",
     };
   }
-  const compDef = surlaDecisionLibrary.components[el.typeName];
+  const compDef = highbayDecisionLibrary.components[el.typeName];
   if (!compDef) {
     return { ok: false, error: "Unknown OpenUI component " + el.typeName + "." };
   }
@@ -561,7 +561,7 @@ function projectAndValidateNode(
 }
 
 // validateCompletedOpenUI validates a settled openui-lang program against both
-// the Surla Decision Library schema and the active ChangeCardResult's
+// the Highbay Decision Library schema and the active ChangeCardResult's
 // 1-based ambiguity/example ordinals and option counts.
 export function validateCompletedOpenUI(
   program: string,
@@ -585,8 +585,8 @@ export function validateCompletedOpenUI(
   if (!trimmed) {
     return { ok: false, error: "OpenUI program is empty." };
   }
-  const parsed = surlaDecisionParser.parse(trimmed);
-  if (!parsed.root || parsed.root.typeName !== surlaDecisionLibrary.root) {
+  const parsed = highbayDecisionParser.parse(trimmed);
+  if (!parsed.root || parsed.root.typeName !== highbayDecisionLibrary.root) {
     return {
       ok: false,
       error: "OpenUI program must define root = DecisionWorkspace(...).",
@@ -638,7 +638,7 @@ export function validateCompletedOpenUI(
 
   const rootCheck = projectAndValidateNode(
     parsed.root,
-    [surlaDecisionLibrary.root || "DecisionWorkspace"],
+    [highbayDecisionLibrary.root || "DecisionWorkspace"],
     card
   );
   if (!rootCheck.ok) {
@@ -656,12 +656,12 @@ export function validateCompletedOpenUI(
 }
 
 // generateDecisionCatalogMarkdown exports the OpenUI component catalog that the
-// surla://golden-path resource serves to a coding agent composing the optional
+// highbay://golden-path resource serves to a coding agent composing the optional
 // ui_composition of a propose_change or revise_change analysis.
 export function generateDecisionCatalogMarkdown(): string {
-  return surlaDecisionLibrary.prompt({
+  return highbayDecisionLibrary.prompt({
     preamble:
-      "When emitting `ui_composition` for a Surla CP1 Change Card, write a valid `openui-lang` program starting with `root = DecisionWorkspace(...)` using ONLY the components below.",
+      "When emitting `ui_composition` for a Highbay CP1 Change Card, write a valid `openui-lang` program starting with `root = DecisionWorkspace(...)` using ONLY the components below.",
     additionalRules: [
       "Refer to ambiguities ONLY by 1-based `ambiguityIndex` (1..N matching the `ambiguities` array order in the analysis you send). Never invent `<change_id>-ambiguity-NN` IDs.",
       "Refer to confirmation examples ONLY by 1-based `exampleIndex` (1..M matching the `examples` array order in the analysis you send).",

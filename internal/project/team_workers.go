@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -50,10 +50,10 @@ func (s *Server) EnsureTeam(ctx context.Context) (*genproject.ProjectTeam, error
 // StartAgents snapshots the current build and admits only workers with work.
 // The control plane authorizes the user once. A disconnected request can
 // repeat the operation without replacing a running guide or worker.
-func (s *Server) StartAgents(ctx context.Context, requested map[string]*gensurla.RoleAgentChoice) (*gensurla.ProjectTeam, error) {
+func (s *Server) StartAgents(ctx context.Context, requested map[string]*genhighbay.RoleAgentChoice) (*genhighbay.ProjectTeam, error) {
 	ctx, cancel := s.acceptedTeamContext(ctx)
 	defer cancel()
-	ctx, span := otel.Tracer("surla/project").Start(ctx, "surla.project.start_agents")
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.start_agents")
 	defer span.End()
 	s.team.Lock()
 	defer s.team.Unlock()
@@ -118,7 +118,7 @@ func (s *Server) StartAgents(ctx context.Context, requested map[string]*gensurla
 func (s *Server) StopWorkers(ctx context.Context, build controlplane.BuildIdentity) error {
 	ctx, cancel := s.acceptedTeamContext(ctx)
 	defer cancel()
-	ctx, span := otel.Tracer("surla/project").Start(ctx, "surla.project.stop_workers")
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.stop_workers")
 	defer span.End()
 	s.team.Lock()
 	defer s.team.Unlock()
@@ -158,14 +158,14 @@ func (s *Server) Close() error {
 }
 
 // workersStep is the management read's stable next action.
-const workersStep = "Start build workers from the Surla page."
+const workersStep = "Start build workers from the Highbay page."
 
 // startHerdrWorkers rereads the active team, uses an attached guide as a
 // reference, and passes only missing worker choices to Chorus.
 func (s *Server) startHerdrWorkers(
 	ctx context.Context, record Record, roles, workers []launcherRole,
-	choices map[string]*gensurla.RoleAgentChoice,
-) (*gensurla.ProjectTeam, error) {
+	choices map[string]*genhighbay.RoleAgentChoice,
+) (*genhighbay.ProjectTeam, error) {
 	host := s.team.dependencies.Host
 	connection, err := s.team.dependencies.Connect(ctx)
 	if err != nil {
@@ -207,7 +207,7 @@ func (s *Server) startHerdrWorkers(
 		rosterRoles = append(rosterRoles, role)
 	}
 	rosterRoles = append(rosterRoles, workers...)
-	missing := make(map[string]*gensurla.RoleAgentChoice, len(choices))
+	missing := make(map[string]*genhighbay.RoleAgentChoice, len(choices))
 	var missingRoles []launcherRole
 	for _, role := range rosterRoles {
 		choice, ok := choices[role.Role]
@@ -487,7 +487,7 @@ func teamRoster(record Record, roles []launcherRole) (launcherRoster, error) {
 			return launcherRoster{}, errors.New("a role working folder cannot be used")
 		}
 		if workerRole(role.Role) {
-			role.FirstMessage += " Keep your Chorus watcher running. Surla messages you there when you have an unread assignment; read your assignments when asked. If you cannot join Chorus or its watcher fails, do not stop and do not inspect, start, stop or reconfigure Chorus or any other service or process on this computer: carry on through your surla connection alone."
+			role.FirstMessage += " Keep your Chorus watcher running. Highbay messages you there when you have an unread assignment; read your assignments when asked. If you cannot join Chorus or its watcher fails, do not stop and do not inspect, start, stop or reconfigure Chorus or any other service or process on this computer: carry on through your highbay connection alone."
 		}
 		if i := len(roster.Roles); i > 0 {
 			direction := "down"
@@ -514,14 +514,14 @@ func (s *Server) writeTeamRoster(ctx context.Context, space string, roster launc
 }
 
 // startResult projects registered actors and current launch observations.
-func startResult(record Record, mode string, roles []launcherRole, live map[string]liveRole, step string) *gensurla.ProjectTeam {
-	result := &gensurla.ProjectTeam{
+func startResult(record Record, mode string, roles []launcherRole, live map[string]liveRole, step string) *genhighbay.ProjectTeam {
+	result := &genhighbay.ProjectTeam{
 		Team: record.Team, Space: localSpace(record.Space), HerdrMode: mode, Step: step,
-		Roles: make([]*gensurla.ProjectTeamRole, 0, len(roles)),
+		Roles: make([]*genhighbay.ProjectTeamRole, 0, len(roles)),
 	}
 	for _, role := range roles {
 		_, running := live[role.Role]
-		result.Roles = append(result.Roles, &gensurla.ProjectTeamRole{Role: role.Role, Handle: role.Handle, Running: running})
+		result.Roles = append(result.Roles, &genhighbay.ProjectTeamRole{Role: role.Role, Handle: role.Handle, Running: running})
 	}
 	return result
 }
@@ -546,7 +546,7 @@ func guideRole(roles []launcherRole) (launcherRole, bool) {
 
 // guideAlreadyRunning preserves the active guide pane or external session.
 func guideAlreadyRunning() error {
-	return gensurla.MakeUnprocessable(errors.New("the current guide session is already running"))
+	return genhighbay.MakeUnprocessable(errors.New("the current guide session is already running"))
 }
 
 // activeTeamState describes snapshots whose states establish a running agent.
@@ -567,7 +567,7 @@ func (s *Server) prepareWorkerTrust(
 	ctx context.Context,
 	record Record,
 	roles []launcherRole,
-	choices map[string]*gensurla.RoleAgentChoice,
+	choices map[string]*genhighbay.RoleAgentChoice,
 	requireChorus bool,
 ) error {
 	prepare := s.team.dependencies.PrepareWorkerTrust

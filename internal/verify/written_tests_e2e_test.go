@@ -52,7 +52,7 @@ func main() {
 		sum := sha256.Sum256(b)
 		artifacts = append(artifacts, artifact{Name: "candidate:" + name, URI: "sha256:" + hex.EncodeToString(sum[:])})
 	}
-	_, server := os.LookupEnv("SURLA_TEST_SERVER_VAR")
+	_, server := os.LookupEnv("HIGHBAY_TEST_SERVER_VAR")
 	_, key := os.LookupEnv("ANTHROPIC_API_KEY")
 	passed := !server && !key && os.Getenv("TMPDIR") != ""
 	now := time.Now().UTC()
@@ -76,7 +76,7 @@ func main() {
 `
 
 // TestRunGivesWrittenTestsOnlyTheirRunsEnvironment runs a whole verification
-// of a commit with the layout `surla init` makes, whose test program sits at
+// of a commit with the layout `hbay init` makes, whose test program sits at
 // the generated entry point (./gen/cmd/shop-evals in eval). Run checks the
 // commit out, builds the candidate and the test program,
 // describes and runs the program, and assembles the report. From a server
@@ -85,7 +85,7 @@ func main() {
 // so the same program fails. It needs git and macOS or Linux. Run with: go test
 // -tags e2e ./internal/verify
 func TestRunGivesWrittenTestsOnlyTheirRunsEnvironment(t *testing.T) {
-	t.Setenv("SURLA_TEST_SERVER_VAR", "present")
+	t.Setenv("HIGHBAY_TEST_SERVER_VAR", "present")
 	t.Setenv("ANTHROPIC_API_KEY", "ant-k")
 	repo, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)

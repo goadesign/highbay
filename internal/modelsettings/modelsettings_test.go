@@ -65,7 +65,7 @@ func TestTableListsEachProvidersRequestSettings(t *testing.T) {
 		{name: "OPENAI_ORG_ID", family: true, openai: true},
 		{name: "OPENAI_ADMIN_KEY", family: true},
 		{name: "OPENAI_WEBHOOK_SECRET", family: true},
-		{name: "SURLA_LIVE_MODEL_PROVIDER"},
+		{name: "HIGHBAY_LIVE_MODEL_PROVIDER"},
 		{name: "XANTHROPIC_API_KEY"},
 		{name: "anthropic_api_key"},
 	} {
@@ -204,7 +204,7 @@ func TestNewRefusesSettingsThatCannotBeHeld(t *testing.T) {
 }
 
 // TestSelectSendsRequestSettingsWithTheirKeyAndNamesTheRest covers what the
-// surla command hands over from its shell.
+// hbay command hands over from its shell.
 func TestSelectSendsRequestSettingsWithTheirKeyAndNamesTheRest(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

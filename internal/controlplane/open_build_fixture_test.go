@@ -14,22 +14,22 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/designversion"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/designversion"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/require"
 )
 
 // buildableChange confirms a unit fixture whose saved evaluation snapshot is
 // supplied explicitly before confirmation. confirmedChange remains the helper
 // for legacy cards without metadata and tests of producer behavior.
-func buildableChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
+func buildableChange(t *testing.T, cp *ControlPlane, changeID string) *genhighbay.ChangeCardResult {
 	t.Helper()
 	proposed := saveProposedCardFixture(t, cp, "alice@example.com", changeID,
 		"Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	proposed = attachBuildSnapshot(t, cp, proposed.ChangeID)
-	confirmed, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &genhighbay.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func buildableChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.
 // constructed Story unit fixture; it does not claim to exercise evaluation.
 func saveBuildStoryCard(
 	t *testing.T, cp *ControlPlane, changeID, status string, stories []designeval.StorySummary,
-) *gensurla.ChangeCardResult {
+) *genhighbay.ChangeCardResult {
 	t.Helper()
 	saveStoryCard(t, cp, changeID, status, stories)
 	return attachBuildSnapshot(t, cp, changeID)
@@ -49,7 +49,7 @@ func saveBuildStoryCard(
 // attachBuildSnapshot saves a canonical authored design, module and provenance
 // with the card. Story-only fixture designs have an empty evaluated topology;
 // their digest names the actual snapshot rather than a sentinel value.
-func attachBuildSnapshot(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
+func attachBuildSnapshot(t *testing.T, cp *ControlPlane, changeID string) *genhighbay.ChangeCardResult {
 	t.Helper()
 	workspace, _, _ := cp.currentWorkspaceTarget()
 	require.NotEmpty(t, workspace, "a build fixture must bind its real project folder")
@@ -121,7 +121,7 @@ func attachBuildSnapshot(t *testing.T, cp *ControlPlane, changeID string) *gensu
 // fixtureOpenBuild constructs the record of an explicitly snapshotted card at
 // the fixture repository's actual base. Tests then vary the field they own.
 func fixtureOpenBuild(
-	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult, roles string,
+	t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult, roles string,
 ) buildFile {
 	t.Helper()
 	record := loadMetadataRecord(t, cp, card.ChangeID)
@@ -140,8 +140,8 @@ func fixtureOpenBuild(
 // saveStoredCardBuildFixture supplies authored card and build records for
 // persistence/approval consumer tests, without claiming a runtime refresh.
 func saveStoredCardBuildFixture(
-	t *testing.T, cp *ControlPlane, approval *gensurla.ApprovalItem,
-) *gensurla.ChangeCardResult {
+	t *testing.T, cp *ControlPlane, approval *genhighbay.ApprovalItem,
+) *genhighbay.ChangeCardResult {
 	t.Helper()
 	saveCard(t, cp, approval)
 	card := attachBuildSnapshot(t, cp, "chg")
@@ -151,7 +151,7 @@ func saveStoredCardBuildFixture(
 
 // saveStoredBuildFixture supplies an explicit builder-only numbered record for
 // stored-evaluator unit tests. It exercises consumers, not build production.
-func saveStoredBuildFixture(t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult) {
+func saveStoredBuildFixture(t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult) {
 	t.Helper()
 	build := fixtureOpenBuild(t, cp, card, buildRolesBuilderOnly)
 	cp.mu.Lock()
@@ -164,15 +164,15 @@ func saveStoredBuildFixture(t *testing.T, cp *ControlPlane, card *gensurla.Chang
 // as a user's second Build confirmation does. It never bypasses a refusal.
 func startBuildAgain(
 	t *testing.T, cp *ControlPlane, caller context.Context, changeID, revision string,
-) (*gensurla.StartBuildResult, error) {
+) (*genhighbay.StartBuildResult, error) {
 	t.Helper()
 	cp.mu.RLock()
 	open, found, err := cp.cards.loadOpenBuild()
 	cp.mu.RUnlock()
 	require.NoError(t, err)
-	payload := &gensurla.StartBuildPayload{ChangeID: changeID, RequestRevision: revision}
+	payload := &genhighbay.StartBuildPayload{ChangeID: changeID, RequestRevision: revision}
 	if found && open.ChangeID == changeID {
-		payload.Replaces = &gensurla.ReplacedBuild{ChangeID: changeID, StartedAt: open.StartedAt.Format(time.RFC3339Nano)}
+		payload.Replaces = &genhighbay.ReplacedBuild{ChangeID: changeID, StartedAt: open.StartedAt.Format(time.RFC3339Nano)}
 	}
 	return cp.StartBuild(caller, payload)
 }
@@ -213,7 +213,7 @@ func buildStorySource(t *testing.T, stories []designeval.StorySummary) string {
 	if len(stories) == 0 {
 		return source.String()
 	}
-	source.WriteString("import . \"github.com/goadesign/surla/story/dsl\"\n")
+	source.WriteString("import . \"github.com/goadesign/highbay/story/dsl\"\n")
 	for _, story := range stories {
 		fmt.Fprintf(&source, "var _ = Story(%q, func() {\n", story.Name)
 		fmt.Fprintf(&source, "Description(%q)\n", story.Description)

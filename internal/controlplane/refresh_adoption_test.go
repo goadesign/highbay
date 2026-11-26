@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -48,7 +48,7 @@ func TestAdoptionKeepsOnlyItsOwnSnapshotHistory(t *testing.T) {
 	// Neither folder remains readable as a design. Adoption still selects B.
 	writeWorkspaceFiles(t, project, map[string]string{"go.mod": "broken", file: "not Go"})
 	writeWorkspaceFiles(t, filepath.Join(project, draftFolderName), map[string]string{file: "not Go"})
-	card, err := cp.ProposeChange(asCaller("alice@example.com", CallerGuide), &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(asCaller("alice@example.com", CallerGuide), &genhighbay.ProposeChangePayload{
 		ChangeID: "selected-b", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"),
 		StoryRefreshOpID: &opID,
 	})
@@ -86,7 +86,7 @@ func TestSnapshotStorageFailureLeavesTheCardAbsent(t *testing.T) {
 	before, err := os.ReadFile(filepath.Join(cp.cards.dir, madeFromFileName))
 	require.NoError(t, err)
 	require.NoError(t, os.Mkdir(filepath.Join(cp.cards.dir, madeFromStagingFile), 0o700))
-	_, err = cp.ProposeChange(asCaller("alice@example.com", CallerGuide), &gensurla.ProposeChangePayload{
+	_, err = cp.ProposeChange(asCaller("alice@example.com", CallerGuide), &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
 	})
 	require.Error(t, err)
@@ -99,7 +99,7 @@ func TestSnapshotStorageFailureLeavesTheCardAbsent(t *testing.T) {
 	spans := exporter.GetSpans()
 	require.NotEmpty(t, spans)
 	operation := spans[len(spans)-1]
-	assert.Equal(t, "surla.controlplane.propose_change", operation.Name)
+	assert.Equal(t, "highbay.controlplane.propose_change", operation.Name)
 	assert.Equal(t, codes.Error, operation.Status.Code)
 	assert.NotEmpty(t, operation.Events)
 }
@@ -111,17 +111,17 @@ func TestADropBetweenSelectionAndSaveRejectsTheSnapshot(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			project := t.TempDir()
 			writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))
-			hold := &spanHold{name: "surla.controlplane." + operation, started: make(chan struct{}), release: make(chan struct{})}
+			hold := &spanHold{name: "highbay.controlplane." + operation, started: make(chan struct{}), release: make(chan struct{})}
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(hold))
 			t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 			cp := newControlPlane(t, Options{WorkspaceDir: project, TracerProvider: provider})
 			guide := asCaller("alice@example.com", CallerGuide)
 			opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-			var card *gensurla.ChangeCardResult
+			var card *genhighbay.ChangeCardResult
 			var before []byte
 			if operation == "revise_change" {
 				var err error
-				card, err = cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+				card, err = cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 					ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
 				})
 				require.NoError(t, err)
@@ -132,7 +132,7 @@ func TestADropBetweenSelectionAndSaveRejectsTheSnapshot(t *testing.T) {
 			hold.armed.Store(true)
 			done := hold.run(t, func() error {
 				if operation == "propose_change" {
-					_, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+					_, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 						ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
 					})
 					return err
@@ -177,7 +177,7 @@ func TestNoOpRevisionAfterDropPreservesItsEntireSavedSnapshot(t *testing.T) {
 			}
 			guide := asCaller("alice@example.com", CallerGuide)
 			opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, stories, "")
-			card, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+			card, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 				ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
 			})
 			require.NoError(t, err)
@@ -205,13 +205,13 @@ func TestNoOpRevisionAfterDropPreservesItsEntireSavedSnapshot(t *testing.T) {
 func TestNoOpRevisionKeepsAConcurrentMetadataOnlyRefresh(t *testing.T) {
 	project := t.TempDir()
 	writeWorkspaceFiles(t, project, validWorkspaceStub("package design\n"))
-	hold := &spanHold{name: "surla.controlplane.revise_change", started: make(chan struct{}), release: make(chan struct{})}
+	hold := &spanHold{name: "highbay.controlplane.revise_change", started: make(chan struct{}), release: make(chan struct{})}
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(hold))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
 	cp := newControlPlane(t, Options{WorkspaceDir: project, TracerProvider: provider})
 	guide := asCaller("alice@example.com", CallerGuide)
 	opA := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	card, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opA,
 	})
 	require.NoError(t, err)
@@ -220,14 +220,14 @@ func TestNoOpRevisionKeepsAConcurrentMetadataOnlyRefresh(t *testing.T) {
 		"go.mod": old.goMod + "\n// newer module snapshot\n",
 	})
 	opB := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	payload := func(op *string) *gensurla.ReviseChangePayload {
+	payload := func(op *string) *genhighbay.ReviseChangePayload {
 		prior := card.Examples[0]
-		return &gensurla.ReviseChangePayload{
+		return &genhighbay.ReviseChangePayload{
 			ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, Prompt: card.Prompt, RevisionNote: "Revise the change.", StoryRefreshOpID: op,
-			Analysis: &gensurla.CP1RevisionAnalysis{
-				Summary: card.Summary, Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
+			Analysis: &genhighbay.CP1RevisionAnalysis{
+				Summary: card.Summary, Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
 				PreservedBehaviors: card.PreservedBehaviors,
-				Examples: []*gensurla.CP1RevisionAnalysisExample{{
+				Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 					PriorID: &prior.ID, Scenario: prior.Scenario, InputSummary: prior.InputSummary,
 					ExpectedOutcome: prior.ExpectedOutcome, VerificationKind: prior.VerificationKind,
 				}},
@@ -278,7 +278,7 @@ func TestSavingACurrentRevisionClearsTheDropNote(t *testing.T) {
 	before, err := cp.GetStoryRefresh(guide)
 	require.NoError(t, err)
 	assert.Contains(t, before.Message, "user dropped change")
-	_, err = cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	_, err = cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
 	})
 	require.NoError(t, err)
@@ -319,7 +319,7 @@ func TestMissingRefreshOpCannotReadAProjectDesign(t *testing.T) {
 	writeWorkspaceFiles(t, project, map[string]string{"go.mod": "broken module", "design/design.go": "not Go"})
 	cp := newControlPlane(t, Options{WorkspaceDir: project})
 	guide := asCaller("alice@example.com", CallerGuide)
-	_, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	_, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "new", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"),
 	})
 	assertServiceError(t, err, "unprocessable")

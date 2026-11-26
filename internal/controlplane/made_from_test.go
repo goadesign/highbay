@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/designversion"
+	"github.com/goadesign/highbay/internal/designversion"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -113,7 +113,7 @@ func TestMadeFromRecordStrictDecode(t *testing.T) {
 			r.Start.Dropped = &droppedBuild{ChangeID: "refund", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}
 		}},
 		{name: "drop foreign branch", edit: func(r *madeFromRecord) {
-			r.Start.Dropped = &droppedBuild{ChangeID: "refund", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Number: 2, BranchTips: map[string]string{"surla/build-1": strings.Repeat("a", 40)}}
+			r.Start.Dropped = &droppedBuild{ChangeID: "refund", StartedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), Number: 2, BranchTips: map[string]string{"highbay/build-1": strings.Repeat("a", 40)}}
 		}},
 	}
 	for _, tc := range cases {
@@ -156,7 +156,7 @@ func TestMadeFromRecordReloadAndFailedSave(t *testing.T) {
 	saved := codecMadeFrom()
 	saved.Start.Dropped = &droppedBuild{ChangeID: "refund", Number: 2,
 		StartedAt:  time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("offset", 2*60*60)),
-		BranchTips: map[string]string{"surla/build-2": strings.Repeat("a", 40)}}
+		BranchTips: map[string]string{"highbay/build-2": strings.Repeat("a", 40)}}
 	require.NoError(t, store.saveMadeFrom(saved))
 	assert.NotEqual(t, time.UTC, saved.Start.Dropped.StartedAt.Location(), "saving must not mutate its caller's snapshot")
 	guard := filepath.Join(t.TempDir(), "guard")
@@ -300,8 +300,8 @@ func TestDesignVersionAndRecordFIFOStaging(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 				defer cancel()
 				command := exec.CommandContext(ctx, executable, "-test.run=^TestRecordStagingFIFOHelper$")
-				command.Env = append(os.Environ(), "SURLA_TEST_RECORD_STAGING_DIR="+dir,
-					"SURLA_TEST_RECORD_STAGING_KIND="+kind)
+				command.Env = append(os.Environ(), "HIGHBAY_TEST_RECORD_STAGING_DIR="+dir,
+					"HIGHBAY_TEST_RECORD_STAGING_KIND="+kind)
 				output, err := command.CombinedOutput()
 				require.NoError(t, ctx.Err(), "FIFO staging write blocked: %s", output)
 				require.NoError(t, err, "FIFO staging helper failed: %s", output)
@@ -334,14 +334,14 @@ func TestDesignVersionAndRecordFIFOStaging(t *testing.T) {
 // TestRecordStagingFIFOHelper invokes only the selected store write. Its parent
 // supplies and owns the directory, deadline, FIFO readers and cleanup.
 func TestRecordStagingFIFOHelper(t *testing.T) {
-	dir := os.Getenv("SURLA_TEST_RECORD_STAGING_DIR")
+	dir := os.Getenv("HIGHBAY_TEST_RECORD_STAGING_DIR")
 	if dir == "" {
 		t.Skip("runs only as the bounded FIFO staging subprocess")
 	}
 	store, err := openCardStore(dir)
 	require.NoError(t, err)
 	defer func() { assert.NoError(t, store.close()) }()
-	switch os.Getenv("SURLA_TEST_RECORD_STAGING_KIND") {
+	switch os.Getenv("HIGHBAY_TEST_RECORD_STAGING_KIND") {
 	case "build":
 		build := codecOpenBuild()
 		build.Number++

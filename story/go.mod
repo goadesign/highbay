@@ -1,4 +1,4 @@
-module github.com/goadesign/surla/story
+module github.com/goadesign/highbay/story
 
 go 1.27.3
 

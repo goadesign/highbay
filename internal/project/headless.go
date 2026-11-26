@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
-	"github.com/goadesign/surla/internal/procgroup"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/procgroup"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -76,7 +76,7 @@ const (
 func (s *Server) startHeadless(
 	ctx context.Context,
 	roles []launcherRole,
-	choices map[string]*gensurla.RoleAgentChoice,
+	choices map[string]*genhighbay.RoleAgentChoice,
 	assignments controlplane.TeamAssignments,
 ) error {
 	workers := &s.team.headless
@@ -272,13 +272,13 @@ func (w *headlessWorker) running() bool {
 // headlessPrompt wraps the same role obligations as pane launch in a finite task.
 func headlessPrompt(role string) string {
 	_, instruction := roleFirstMessage(role)
-	return "Work on your current Surla assignment. " + instruction +
+	return "Work on your current Highbay assignment. " + instruction +
 		" Exit after submitting your work or when the next step must wait on a test report or verification result." +
 		" The project server starts another invocation when those results provide new work."
 }
 
 // headlessArgs translates one validated role choice to a non-interactive invocation.
-func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, error) {
+func headlessArgs(choice *genhighbay.RoleAgentChoice, prompt string) ([]string, error) {
 	var args []string
 	if choice.Client == "codex" {
 		args = append(args, "exec")
@@ -300,7 +300,7 @@ func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, er
 		if choice.Yolo {
 			args = append(args, "--dangerously-skip-permissions")
 		} else {
-			args = append(args, "--allowedTools", "mcp__surla__*")
+			args = append(args, "--allowedTools", "mcp__highbay__*")
 		}
 		args = append(args, "--print")
 	case "antigravity":
@@ -334,7 +334,7 @@ func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, er
 	case "opencode":
 		// OpenCode uses the selected model's variant and configured permissions.
 	default:
-		return nil, errors.New("this agent does not support headless Surla workers")
+		return nil, errors.New("this agent does not support headless Highbay workers")
 	}
 	return append(args, prompt), nil
 }
@@ -342,8 +342,8 @@ func headlessArgs(choice *gensurla.RoleAgentChoice, prompt string) ([]string, er
 // start owns process admission and gives the background invocation its own
 // deadline and its server's lifetime, independent of the requesting HTTP call.
 func (launch headlessLaunch) start(ctx context.Context, deps TeamDependencies) (*headlessTurn, error) {
-	ctx, span := otel.Tracer("surla/project").Start(context.WithoutCancel(ctx),
-		"surla.project.headless_turn", trace.WithAttributes(attribute.String("team.role", launch.role)))
+	ctx, span := otel.Tracer("highbay/project").Start(context.WithoutCancel(ctx),
+		"highbay.project.headless_turn", trace.WithAttributes(attribute.String("team.role", launch.role)))
 	ctx, cancel := context.WithTimeout(ctx, headlessTurnTimeout)
 	unbind := context.AfterFunc(deps.Lifetime, cancel)
 	if deps.Lifetime.Err() != nil {

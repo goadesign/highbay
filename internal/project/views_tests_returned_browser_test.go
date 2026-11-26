@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,18 +24,18 @@ import (
 // browserTestReviewService serves one immutable layout case at a time through
 // the real project's authentication, browser session and generated codecs.
 type browserTestReviewService struct {
-	gensurla.Service
+	genhighbay.Service
 	// mu protects the fixture while background reads remain in flight.
 	mu sync.RWMutex
 	// build and findings name the same saved build/report in each case.
-	build    *gensurla.ChangeBuild
-	findings *gensurla.TestFindings
+	build    *genhighbay.ChangeBuild
+	findings *genhighbay.TestFindings
 }
 
 // GetBuild returns the typed saved build without recording a read.
 func (s *browserTestReviewService) GetBuild(
-	context.Context, *gensurla.GetBuildPayload,
-) (*gensurla.ChangeBuild, error) {
+	context.Context, *genhighbay.GetBuildPayload,
+) (*genhighbay.ChangeBuild, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.build, nil
@@ -43,8 +43,8 @@ func (s *browserTestReviewService) GetBuild(
 
 // GetTestFindings returns text bound to the fixture's exact saved verdict.
 func (s *browserTestReviewService) GetTestFindings(
-	context.Context, *gensurla.GetTestFindingsPayload,
-) (*gensurla.TestFindings, error) {
+	context.Context, *genhighbay.GetTestFindingsPayload,
+) (*genhighbay.TestFindings, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.findings, nil
@@ -63,7 +63,7 @@ func TestTestsReturnedAtDesktopAndPhoneWidth(t *testing.T) {
 	card := proposeChange(t, vp.state.Origin(), vp.agent(t, "guide"), "tests-returned-layout", "")
 	card, err = vp.cp.Load().ConfirmIntent(controlplane.WithPrincipal(t.Context(), controlplane.Principal{
 		ID: vp.state.Record.Owner, CallerID: "tests-layout-user", Kind: controlplane.CallerUser,
-	}), &gensurla.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+	}), &genhighbay.ConfirmIntentPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 		Answers: map[string]string{}, Examples: card.Examples})
 	require.NoError(t, err)
 	service := &browserTestReviewService{Service: vp.cp.Load()}
@@ -72,7 +72,7 @@ func TestTestsReturnedAtDesktopAndPhoneWidth(t *testing.T) {
 	application.Handle("/", controlplane.NewHTTPHandler(service, vp.server.Load().Authenticate))
 	handler := vp.server.Load().Handler(application)
 	vp.handler.Store(&handler)
-	capture := os.Getenv("SURLA_TEST_RETURNED_CAPTURE_DIR")
+	capture := os.Getenv("HIGHBAY_TEST_RETURNED_CAPTURE_DIR")
 	if capture == "" {
 		capture = t.TempDir()
 	}
@@ -80,31 +80,31 @@ func TestTestsReturnedAtDesktopAndPhoneWidth(t *testing.T) {
 	browser := startBrowser(t, executable, t.TempDir())
 	for _, state := range []string{"needs_changes", "could_not_run", "accepted", "stale", "closed"} {
 		at := time.Now().UTC().Format(time.RFC3339Nano)
-		required := []*gensurla.RequiredTest{
+		required := []*genhighbay.RequiredTest{
 			{Story: "Refunds and long customer-visible requirements", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit"},
 			{Story: "Receipts", FlowKey: "receipt-refund", Scenario: "receipt_refund", Hook: "ReceiptRefund"},
 		}
-		build := &gensurla.StartedBuild{RequestRevision: card.RequestRevision, StartedAt: at, InForce: state != "stale",
+		build := &genhighbay.StartedBuild{RequestRevision: card.RequestRevision, StartedAt: at, InForce: state != "stale",
 			RequiredTestCount: len(required), RequiredTests: required,
-			Builder: &gensurla.BuilderProgress{Read: true},
-			TestWriter: &gensurla.TestWriterProgress{Read: true, Report: 2,
-				Tests: gensurla.NewTestsNeedsChanges(&gensurla.TestsNeedChanges{FindingCount: 2, CheckedAt: at})},
-			Taking: gensurla.NewBuildTakingBuilding(&gensurla.BuildBuilding{})}
+			Builder: &genhighbay.BuilderProgress{Read: true},
+			TestWriter: &genhighbay.TestWriterProgress{Read: true, Report: 2,
+				Tests: genhighbay.NewTestsNeedsChanges(&genhighbay.TestsNeedChanges{FindingCount: 2, CheckedAt: at})},
+			Taking: genhighbay.NewBuildTakingBuilding(&genhighbay.BuildBuilding{})}
 		if state == "could_not_run" {
-			build.TestWriter.Tests = gensurla.NewTestsCouldNotRun(&gensurla.TestsCouldNotRun{
+			build.TestWriter.Tests = genhighbay.NewTestsCouldNotRun(&genhighbay.TestsCouldNotRun{
 				Reason: "The tests could not be checked because their dependencies were unavailable.",
 				Step:   "Restore the module connection, then ask the test writer to report again.", CheckedAt: at})
 		}
 		if state == "accepted" {
-			build.TestWriter.Tests = gensurla.NewTestsAccepted(&gensurla.TestsAccepted{Commit: strings.Repeat("a", 40), CheckedAt: at,
-				NotJudged: "Surla checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert."})
+			build.TestWriter.Tests = genhighbay.NewTestsAccepted(&genhighbay.TestsAccepted{Commit: strings.Repeat("a", 40), CheckedAt: at,
+				NotJudged: "Highbay checked that these tests build into the generated test program and declare every required scenario; it did not judge what they assert."})
 		}
 		if state == "closed" {
-			build.Taking = gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: []string{}})
+			build.Taking = genhighbay.NewBuildTakingDropped(&genhighbay.BuildDropped{KeptBranches: []string{}})
 		}
 		service.mu.Lock()
-		service.build = &gensurla.ChangeBuild{ChangeID: card.ChangeID, Build: gensurla.NewBuildStarted(build)}
-		service.findings = &gensurla.TestFindings{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
+		service.build = &genhighbay.ChangeBuild{ChangeID: card.ChangeID, Build: genhighbay.NewBuildStarted(build)}
+		service.findings = &genhighbay.TestFindings{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 			StartedAt: at, CheckedAt: at, Report: 2, Findings: []string{
 				"Implement RefundOverLimit. " + strings.Repeat("The acceptance check explains the missing behavior without assigning this work to the user. ", 30),
 				"The test writer corrects the reported test module and reports again.",

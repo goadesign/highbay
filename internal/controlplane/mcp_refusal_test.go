@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
@@ -20,11 +20,11 @@ import (
 // the copy owner. Starting or dropping a build remains a user HTTP operation.
 func TestMCPWorkerRefusalKeepsItsNameAndFacts(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
-	branch, own := "'topic'", "surla/build-2"
-	message := "Your working copy is on 'topic'; change exports is built on surla/build-2. " +
+	branch, own := "'topic'", "highbay/build-2"
+	message := "Your working copy is on 'topic'; change exports is built on highbay/build-2. " +
 		"A merge is in progress. Uncommitted: 'a.go', 'b.go', 'c.go', 'd.go', 'e.go' (7 paths). " +
-		"Put your work on surla/build-2, commit it, then call get_builder_assignment again."
-	refusal := &gensurla.CopyOffBranch{
+		"Put your work on highbay/build-2, commit it, then call get_builder_assignment again."
+	refusal := &genhighbay.CopyOffBranch{
 		Name: "copy_off_branch", Message: message, Branch: &branch, BuildBranch: &own,
 		Operation: "merge", Uncommitted: []string{"'a.go'", "'b.go'", "'c.go'", "'d.go'", "'e.go'"},
 		UncommittedCount: 7,
@@ -55,7 +55,7 @@ func TestMCPWorkerRefusalKeepsItsNameAndFacts(t *testing.T) {
 // TestMCPRefusalMappingKeepsIndependentFailureOwnership prevents the mapper
 // from selecting one typed child of a joined storage or cleanup failure.
 func TestMCPRefusalMappingKeepsIndependentFailureOwnership(t *testing.T) {
-	refusal := &gensurla.CopyOffBranch{Name: "copy_off_branch", Message: "Put your work on your build's branch."}
+	refusal := &genhighbay.CopyOffBranch{Name: "copy_off_branch", Message: "Put your work on your build's branch."}
 	for _, failure := range []error{
 		errors.New("storage failed"),
 		&goa.ServiceError{Name: "fault", Message: "storage failed", Fault: true},
@@ -72,6 +72,6 @@ func TestMCPRefusalMappingKeepsIndependentFailureOwnership(t *testing.T) {
 		assert.Equal(t, refusal.Name+": "+refusal.Message, disclosed.Message)
 		assert.False(t, disclosed.Fault)
 	}
-	open := &gensurla.OpenBuildRefusal{Name: "previous_change_open", Message: "Merge exports or drop it."}
+	open := &genhighbay.OpenBuildRefusal{Name: "previous_change_open", Message: "Merge exports or drop it."}
 	assert.EqualError(t, mapMCPRefusal(open), "previous_change_open: Merge exports or drop it.")
 }

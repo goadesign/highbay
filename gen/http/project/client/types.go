@@ -3,14 +3,14 @@
 // project HTTP client types
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package client
 
 import (
 	"unicode/utf8"
 
-	project "github.com/goadesign/surla/gen/project"
+	project "github.com/goadesign/highbay/gen/project"
 	goa "goa.design/goa/v3/pkg"
 )
 
@@ -41,10 +41,10 @@ type IdentityResponseBody struct {
 	Directory *string `form:"directory,omitempty" json:"directory,omitempty" xml:"directory,omitempty"`
 	// Immutable operating-system account identity.
 	Owner *string `form:"owner,omitempty" json:"owner,omitempty" xml:"owner,omitempty"`
-	// SHA-256 of the surla executable the server started from, read when it
+	// SHA-256 of the hbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and surla stop must still reach them, so it is not required.
+	// field omit it, and hbay stop must still reach them, so it is not required.
 	Build *string `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
 }
 
@@ -233,7 +233,7 @@ type AttachGuideTeamUnavailableResponseBody struct {
 	// What could not be used: stopping (the server is shutting down), chorus (the
 	// managed Chorus server or its settings are unavailable), herdr (a Herdr
 	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Surla no longer accepts and is still open), roster_folder
+	// version of Highbay no longer accepts and is still open), roster_folder
 	// (Herdr's launcher roster folder could not be written), project_state (the
 	// project's private record or an agent credential could not be read or
 	// written), or role_folder (a role's working folder could not be read).
@@ -390,7 +390,7 @@ type ExchangeBrowserLinkUnprocessableResponseBody struct {
 type ProjectTeamRoleResponseBody struct {
 	// Trusted role.
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
-	// Stable Chorus handle and Surla actor identity.
+	// Stable Chorus handle and Highbay actor identity.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
 	// The matching live terminal is not reported as an idle shell; missing
 	// foreground information counts as running.

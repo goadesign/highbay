@@ -38,11 +38,11 @@ const outcomeLabels: Record<VerificationScenario["outcome"], string> = {
   passed: "Passed", failed: "Failed", not_run: "Not run", harness_error: "Could not evaluate",
 };
 
-// ApprovalStage is Surla-authored and preserves readable evidence during refresh.
+// ApprovalStage is Highbay-authored and preserves readable evidence during refresh.
 export function ApprovalStage(props: ApprovalStageProps) {
   const { run, review } = props;
-  if (run === null) return <section className="surla-approval-stage" id="surla-approval-stage" aria-labelledby="surla-cp5-title">
-    <h2 id="surla-cp5-title" tabIndex={-1}>Review a verification result</h2>
+  if (run === null) return <section className="highbay-approval-stage" id="highbay-approval-stage" aria-labelledby="highbay-cp5-title">
+    <h2 id="highbay-cp5-title" tabIndex={-1}>Review a verification result</h2>
     <p>Select a saved run in Check to review its agreed Story, test results and approval requirements.</p>
     {props.savedRecord !== null ? <>
       <p>No verification run is selected. The saved approval remains readable below.</p>
@@ -52,8 +52,8 @@ export function ApprovalStage(props: ApprovalStageProps) {
     {props.historyError !== null ? <Alert variant="warning" role="status">
       Saved verification history unavailable: {props.historyError} Current build membership is unknown.
     </Alert> : null}
-    {props.error !== null ? <Alert id="surla-cp5-read-error" variant="destructive" role="alert">{props.error}</Alert> : null}
-    <Button id="surla-cp5-refresh-approval" disabled={props.busy} onClick={props.onRefresh}>Check current approval</Button>
+    {props.error !== null ? <Alert id="highbay-cp5-read-error" variant="destructive" role="alert">{props.error}</Alert> : null}
+    <Button id="highbay-cp5-refresh-approval" disabled={props.busy} onClick={props.onRefresh}>Check current approval</Button>
     <Button onClick={props.onOpenProof}>Open saved runs</Button>
     {props.mergeAction}
   </section>;
@@ -73,52 +73,52 @@ export function ApprovalStage(props: ApprovalStageProps) {
   const names = new Set(mapping?.state === "mapped" ? mapping.required_tests.map((test) => test.scenario) : []);
   const other = report?.scenarios.filter((test) => !names.has(test.id)) ?? [];
 
-  return <section className="surla-approval-stage" id="surla-approval-stage"
-    aria-labelledby="surla-cp5-title" aria-busy={props.loading || props.busy ? "true" : undefined}
+  return <section className="highbay-approval-stage" id="highbay-approval-stage"
+    aria-labelledby="highbay-cp5-title" aria-busy={props.loading || props.busy ? "true" : undefined}
     data-run-id={run.run_id} data-request-revision={run.request_revision}>
-    <div className="surla-approval-heading">
-      <div><h2 id="surla-cp5-title" tabIndex={-1}>{heading}</h2>
+    <div className="highbay-approval-heading">
+      <div><h2 id="highbay-cp5-title" tabIndex={-1}>{heading}</h2>
         <p>{approval?.state === "blocked" ? "Approval is unavailable for this result. Its saved evidence remains below." :
           approval?.state === "recorded" ? "Your permission is recorded for these verified inputs." :
           approval?.state === "unverified" ? "The saved approval cannot currently be verified." :
           "Review this saved result before deciding whether to approve it."}</p></div>
-      <div className="surla-field-row">
-        <Button id="surla-cp5-refresh-approval" disabled={props.loading || props.busy}
+      <div className="highbay-field-row">
+        <Button id="highbay-cp5-refresh-approval" disabled={props.loading || props.busy}
           onClick={props.onRefresh}>Refresh result</Button>
       </div>
     </div>
     {props.newerCheck ? <p role="status">A newer check is available. Review the latest check to see its result;
       this saved result remains selected until you do.</p> : null}
-    <dl className="surla-approval-binding">
+    <dl className="highbay-approval-binding">
       <div><dt>Agreement</dt><dd><code>{run.request_revision.slice(0, 12)}</code></dd></div>
       <div><dt>Builder’s commit</dt><dd><code>{run.candidate_commit.slice(0, 12)}</code></dd></div>
       <div><dt>Selected tests</dt><dd><RunTestBinding run={run} review={review} /></dd></div>
       <div><dt>Run</dt><dd><code>{run.run_id.slice(0, 12)}</code></dd></div>
     </dl>
-    {props.unsaved ? <Alert id="surla-cp5-approval-dirty-warning" variant="warning" role="status">
+    {props.unsaved ? <Alert id="highbay-cp5-approval-dirty-warning" variant="warning" role="status">
       Your unsaved agreement edits are kept. This saved run describes its recorded agreement.
       Saving different answers creates a new revision and clears its approval.
       <Button onClick={props.onOpenAgreement}>Return to your edits</Button>
     </Alert> : null}
-    {!props.fresh ? <p className="surla-approval-notice" id="surla-cp5-observation-status" role="status">
+    {!props.fresh ? <p className="highbay-approval-notice" id="highbay-cp5-observation-status" role="status">
       {props.loading ? "Reading the owner’s current approval requirements…" :
         "This evidence is retained. Refresh the result to check current approval requirements."}
     </p> : null}
-    {props.error !== null ? <Alert id="surla-cp5-read-error" variant="destructive" role="alert">
+    {props.error !== null ? <Alert id="highbay-cp5-read-error" variant="destructive" role="alert">
       <strong>Could not refresh this result. </strong>{props.error}
     </Alert> : null}
-    {props.unavailableReason !== null ? <Alert id="surla-cp5-unavailable" variant="warning" role="status">
+    {props.unavailableReason !== null ? <Alert id="highbay-cp5-unavailable" variant="warning" role="status">
       <strong>Approval is unavailable on this server. </strong>{props.unavailableReason}
-      <p>Start Surla from a project directory so verification is configured.</p>
+      <p>Start Highbay from a project directory so verification is configured.</p>
     </Alert> : null}
-    {props.approvalError !== null ? <Alert id="surla-cp5-approve-error" variant="destructive" role="alert" tabIndex={-1}>
+    {props.approvalError !== null ? <Alert id="highbay-cp5-approve-error" variant="destructive" role="alert" tabIndex={-1}>
       <strong>Approval was not recorded. </strong>{props.approvalError}
       {run.candidate_binaries_dir !== undefined ? <p>Binaries built by this run: <code>{run.candidate_binaries_dir}</code></p> : null}
     </Alert> : null}
-    {approval?.state === "blocked" ? <Alert id="surla-cp5-approve-blocked" variant="warning" role="status" tabIndex={-1}>
+    {approval?.state === "blocked" ? <Alert id="highbay-cp5-approve-blocked" variant="warning" role="status" tabIndex={-1}>
       <strong>Approval is unavailable for this result. </strong>{approval.reason}
     </Alert> : null}
-    {approval?.state === "unverified" ? <Alert id="surla-cp5-unverified-approval-reason" variant="warning" role="status">
+    {approval?.state === "unverified" ? <Alert id="highbay-cp5-unverified-approval-reason" variant="warning" role="status">
       {approval.reason}
     </Alert> : null}
     {run.state.type === "not_completed" ? <Alert variant="warning" role="status">
@@ -126,39 +126,39 @@ export function ApprovalStage(props: ApprovalStageProps) {
       {run.state.value.summary} <span>Stage: {run.state.value.stage}.</span>
       <p>No completed report is available; individual flow outcomes are unknown.</p>
     </Alert> : null}
-    <div className="surla-approval-evidence">
+    <div className="highbay-approval-evidence">
       <div>
-        <section aria-labelledby="surla-approval-flows-title">
-          <h3 id="surla-approval-flows-title">Agreed flows and their tests</h3>
+        <section aria-labelledby="highbay-approval-flows-title">
+          <h3 id="highbay-approval-flows-title">Agreed flows and their tests</h3>
           {stories === null ? <p>{context?.state === "not_recorded"
             ? "Story context was not recorded for this run. Its saved test results remain available in Test details."
             : "Reading the Story recorded for this run…"}</p> : stories.length === 0 ?
             <p>This agreement recorded no Story flows. The declared tests below do not establish Story coverage.</p> :
             stories.map((story) => <StoryEvidence key={story.name} story={story} report={report} mapping={mapping} />)}
         </section>
-        {review !== null ? coverage?.state === "recorded" ? <TestCoverage id="surla-approval-coverage" heading="h3"
+        {review !== null ? coverage?.state === "recorded" ? <TestCoverage id="highbay-approval-coverage" heading="h3"
           answers={coverage.answers} examples={coverage.examples} statements={coverage.coverage_statements} report={report} /> :
-          <section id="surla-approval-coverage" className="surla-test-coverage" aria-labelledby="surla-approval-coverage-title">
-            <h3 id="surla-approval-coverage-title">Test writer's stated coverage</h3>
+          <section id="highbay-approval-coverage" className="highbay-test-coverage" aria-labelledby="highbay-approval-coverage-title">
+            <h3 id="highbay-approval-coverage-title">Test writer's stated coverage</h3>
             <p>{run.test_source.source === "written_tests"
               ? "Agreed answers and examples were not recorded for this run. Coverage: Not stated."
               : "This run uses the configured evaluator. Test-writer coverage: Not stated."}</p>
           </section> : null}
-        <RunEvidenceLimits id="surla-approval-exclusions" run={run} review={review} />
-        {other.length > 0 ? <section aria-labelledby="surla-approval-other-tests-title">
-          <h3 id="surla-approval-other-tests-title">{mapping?.state === "mapped" ? "Other declared tests" : "Declared test results"}</h3>
-          <ul className="surla-approval-test-list">{other.map((test) => <li key={test.id}>
+        <RunEvidenceLimits id="highbay-approval-exclusions" run={run} review={review} />
+        {other.length > 0 ? <section aria-labelledby="highbay-approval-other-tests-title">
+          <h3 id="highbay-approval-other-tests-title">{mapping?.state === "mapped" ? "Other declared tests" : "Declared test results"}</h3>
+          <ul className="highbay-approval-test-list">{other.map((test) => <li key={test.id}>
             <code>{test.id}</code><span data-outcome={test.outcome}>{outcomeLabels[test.outcome]}</span>
           </li>)}</ul>
         </section> : null}
       </div>
-      <aside className="surla-approval-basis" aria-labelledby="surla-approval-basis-title">
-        <h3 id="surla-approval-basis-title">The basis of this result</h3>
+      <aside className="highbay-approval-basis" aria-labelledby="highbay-approval-basis-title">
+        <h3 id="highbay-approval-basis-title">The basis of this result</h3>
         <p>{run.test_source.source === "written_tests" ? "Agent-written tests" : "Operator’s evaluator"}</p>
         {report !== null ? <p>{report.counts.passed} of {report.counts.required} declared tests passed.
           {report.suite_failed ? " The suite itself failed." : ""}</p> : <p>No completed report yet.</p>}
         <p>The run’s evidence and commit bindings stay fixed when you change the agreement or choose new tests.</p>
-        {saved !== null ? <section id="surla-cp5-approval" data-approval-state={approval?.state} tabIndex={-1} aria-label="Recorded promotion approval">
+        {saved !== null ? <section id="highbay-cp5-approval" data-approval-state={approval?.state} tabIndex={-1} aria-label="Recorded promotion approval">
           <h4>{approval?.state === "unverified" ? "Saved approval, unverified" : "Approval recorded"}</h4>
           <p>Approval records permission to promote these verified inputs.</p>
           <details><summary>Approval record and artifacts</summary>
@@ -173,7 +173,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
           testsCommit={run.test_source.source === "written_tests" ? run.suite_commit : null}
           build={props.build} />
         {props.mergeAction}
-        <details className="surla-details" id="surla-cp5-approval-details">
+        <details className="highbay-details" id="highbay-cp5-approval-details">
           <summary>Verified inputs and digests</summary>
           <dl>
             <dt>Change Card</dt><dd><code>{run.change_id}</code></dd>
@@ -191,7 +191,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
         </details>
       </aside>
     </div>
-    <details className="surla-details surla-approval-proof" id="surla-approval-proof">
+    <details className="highbay-details highbay-approval-proof" id="highbay-approval-proof">
       <summary>Test details and saved runs</summary>
       {props.rawDetails}
     </details>
@@ -202,9 +202,9 @@ export function ApprovalStage(props: ApprovalStageProps) {
 // loaded; it does not invent Story context or infer current build membership.
 function SavedApprovalRecord({ record }: { record: NonNullable<ApprovalStageProps["savedRecord"]> }) {
   const approval = record.approval;
-  return <section id="surla-cp5-approval" data-approval-state={record.reason === null ? "recorded" : "unverified"} tabIndex={-1} aria-label="Saved promotion approval">
+  return <section id="highbay-cp5-approval" data-approval-state={record.reason === null ? "recorded" : "unverified"} tabIndex={-1} aria-label="Saved promotion approval">
     <h3>{record.reason !== null ? "Saved approval, unverified" : "Approval recorded"}</h3>
-    {record.reason !== null ? <Alert id="surla-cp5-unverified-approval-reason" variant="warning" role="status">{record.reason}</Alert> : null}
+    {record.reason !== null ? <Alert id="highbay-cp5-unverified-approval-reason" variant="warning" role="status">{record.reason}</Alert> : null}
     <p>Approval records permission to promote the inputs below. Approval alone does not merge or deploy anything.</p>
     <dl>
       <dt>Agreement</dt><dd><code>{record.requestRevision}</code></dd>
@@ -228,9 +228,9 @@ function StoryEvidence({ story, report, mapping }: {
 }) {
   const finished = story.flows.filter((flow) => flow.complete);
   if (finished.length === 0) return <p><strong>{story.name}</strong> has no finished flows.</p>;
-  return <div className="surla-approval-story">
+  return <div className="highbay-approval-story">
     <h4>{story.name}</h4>
-    <table className="surla-flow-evidence" role="table">
+    <table className="highbay-flow-evidence" role="table">
       <thead><tr><th scope="col">Finished flow</th><th scope="col">Required test</th><th scope="col">Run result</th></tr></thead>
       <tbody>{finished.map((flow) => {
         const test = mapping?.state === "mapped"

@@ -86,18 +86,18 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
   const changeStories = card !== null ? card.stories ?? [] : [];
   return (
     <Card
-      id="surla-story-stage"
-      className="surla-card surla-story-stage"
+      id="highbay-story-stage"
+      className="highbay-card highbay-story-stage"
       role="region"
-      aria-labelledby="surla-story-title"
+      aria-labelledby="highbay-story-title"
       aria-busy={loading ? "true" : undefined}
     >
-      <div className="surla-region-header">
-        <h2 id="surla-story-title">Story</h2>
+      <div className="highbay-region-header">
+        <h2 id="highbay-story-title">Story</h2>
       </div>
       {card !== null ? (
-        <section id="surla-story-change" aria-labelledby="surla-story-change-title">
-          <h3 id="surla-story-change-title">Story of this change</h3>
+        <section id="highbay-story-change" aria-labelledby="highbay-story-change-title">
+          <h3 id="highbay-story-change-title">Story of this change</h3>
           <p>
             Saved with revision <code>{card.request_revision.slice(0, 15)}</code> of Change Card{" "}
             <code>{card.change_id}</code>.{" "}
@@ -106,7 +106,7 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
               : null}
           </p>
           {changeStories.length === 0 ? (
-            <p id="surla-story-change-empty">
+            <p id="highbay-story-change-empty">
               This change has no Story. Your coding agent adds one by revising the change with a refreshed
               Story.
             </p>
@@ -116,23 +116,23 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
         </section>
       ) : null}
       <section
-        id="surla-story-draft"
+        id="highbay-story-draft"
         data-state={evaluation !== null ? evaluation.state : "unread"}
-        aria-labelledby="surla-story-draft-title"
+        aria-labelledby="highbay-story-draft-title"
       >
-        <h3 id="surla-story-draft-title">Current Story draft</h3>
+        <h3 id="highbay-story-draft-title">Current Story draft</h3>
         <p>
           This draft reflects your coding agent's latest Story evaluation of the project’s design files.
         </p>
-        <p id="surla-story-draft-announcement" className="surla-visually-hidden" role="status">
+        <p id="highbay-story-draft-announcement" className="highbay-visually-hidden" role="status">
           {evaluation !== null ? STATE_ANNOUNCEMENTS[evaluation.state] : ""}
         </p>
         {error !== null ? (
-          <Alert id="surla-story-draft-error" variant="destructive" role="alert">
+          <Alert id="highbay-story-draft-error" variant="destructive" role="alert">
             <strong>Could not read the current draft. </strong>
             {error}
-            <div className="surla-field-row">
-              <Button id="surla-story-draft-retry" disabled={loading} onClick={onRetry}>
+            <div className="highbay-field-row">
+              <Button id="highbay-story-draft-retry" disabled={loading} onClick={onRetry}>
                 Read the draft again
               </Button>
             </div>
@@ -152,22 +152,22 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
 // title, its mark, and its steps as cards in order.
 export function StoryDrawing({ stories, label }: { stories: StorySummaryItem[]; label: string }) {
   return (
-    <div className="surla-story" role="group" aria-label={label}>
+    <div className="highbay-story" role="group" aria-label={label}>
       {stories.map((story) => {
         const actors = new Map(story.actors.map((actor) => [actor.key, actor.title]));
         return (
           <section
             key={story.name}
-            className="surla-story-section"
+            className="highbay-story-section"
             data-story-name={story.name}
             aria-label={"Story: " + story.name}
           >
             <h4>{story.name}</h4>
-            {story.description ? <p className="surla-story-muted">{story.description}</p> : null}
+            {story.description ? <p className="highbay-story-muted">{story.description}</p> : null}
             {story.flows.length === 0 ? (
               <p>This Story declares no flows.</p>
             ) : (
-              <ol className="surla-story-flows">
+              <ol className="highbay-story-flows">
                 {story.flows.map((flow) => (
                   <FlowRow key={flow.key} flow={flow} actors={actors} />
                 ))}
@@ -298,13 +298,13 @@ function DraftBody({ card, evaluation }: { card: ChangeCardResult | null; evalua
   switch (evaluation.state) {
     case "none":
       return (
-        <p id="surla-story-draft-none">
+        <p id="highbay-story-draft-none">
           Ask your coding agent to refresh the Story. The result appears here automatically.
         </p>
       );
     case "running":
       return (
-        <p id="surla-story-draft-running">
+        <p id="highbay-story-draft-running">
           Your coding agent's Story evaluation is running for snapshot{" "}
           <code>{evaluation.snapshot_digest ?? "unknown"}</code>. The result appears here when it
           finishes.
@@ -312,12 +312,12 @@ function DraftBody({ card, evaluation }: { card: ChangeCardResult | null; evalua
       );
     case "failed":
       return (
-        <div id="surla-story-draft-failed" className="shadcn-alert-destructive">
+        <div id="highbay-story-draft-failed" className="shadcn-alert-destructive">
           <p>
             <strong>The Story evaluation failed</strong> for snapshot{" "}
             <code>{evaluation.snapshot_digest ?? "unknown"}</code>. The server reported:
           </p>
-          <pre id="surla-story-draft-diagnostic">{evaluation.diagnostic ?? evaluation.message}</pre>
+          <pre id="highbay-story-draft-diagnostic">{evaluation.diagnostic ?? evaluation.message}</pre>
           <p>Ask your coding agent to fix the Story and refresh it.</p>
         </div>
       );
@@ -333,7 +333,7 @@ function SucceededDraft({ card, evaluation }: { card: ChangeCardResult | null; e
   const counts = storyCounts(evaluation.stories);
   const drawing =
     evaluation.stories.length === 0 ? (
-      <p id="surla-story-draft-empty">The design declares no Story.</p>
+      <p id="highbay-story-draft-empty">The design declares no Story.</p>
     ) : (
       <StoryDrawing stories={evaluation.stories} label="Current Story draft" />
     );
@@ -344,7 +344,7 @@ function SucceededDraft({ card, evaluation }: { card: ChangeCardResult | null; e
     (evaluation.stories.length > 0 ? " The draft has " + countsPhrase(counts) + "." : "");
   if (card === null) {
     return (
-      <div id="surla-story-draft-succeeded">
+      <div id="highbay-story-draft-succeeded">
         <p>{summary}</p>
         {drawing}
       </div>
@@ -352,23 +352,23 @@ function SucceededDraft({ card, evaluation }: { card: ChangeCardResult | null; e
   }
   const difference = compareStories(card.stories ?? [], evaluation.stories);
   return (
-    <div id="surla-story-draft-succeeded">
+    <div id="highbay-story-draft-succeeded">
       {difference.same ? (
-        <p id="surla-story-comparison" data-same="true">
+        <p id="highbay-story-comparison" data-same="true">
           This change's Story is current: the latest draft has the same content.
         </p>
       ) : (
-        <div id="surla-story-comparison" data-same="false" role="note">
+        <div id="highbay-story-comparison" data-same="false" role="note">
           <p>
             <strong>The current draft differs from this change's Story.</strong>
           </p>
           <StoryDifferenceList difference={difference} subject="the draft" />
-          <p id="surla-story-rule">
+          <p id="highbay-story-rule">
             The draft becomes part of this change after your coding agent proposes it and you confirm the new revision.
           </p>
         </div>
       )}
-      <details id="surla-story-draft-details" className="surla-details">
+      <details id="highbay-story-draft-details" className="highbay-details">
         <summary>{"Show the current draft. " + summary}</summary>
         {drawing}
       </details>
@@ -381,7 +381,7 @@ function SucceededDraft({ card, evaluation }: { card: ChangeCardResult | null; e
 // as "the draft".
 export function StoryDifferenceList({ difference, subject }: { difference: StoryDifference; subject: string }) {
   return (
-    <ul className="surla-story-differences">
+    <ul className="highbay-story-differences">
       <DifferenceItem kind="added" label={"Flows added in " + subject} names={difference.added} />
       <DifferenceItem kind="removed" label={"Flows removed in " + subject} names={difference.removed} />
       <DifferenceItem kind="changed" label={"Flows changed in " + subject} names={difference.changed} />
@@ -415,22 +415,22 @@ function DifferenceItem({ kind, label, names }: { kind: string; label: string; n
 // as cards in a row that scrolls inside the stage, and its open questions.
 function FlowRow({ flow, actors }: { flow: StoryFlowItem; actors: Map<string, string> }) {
   return (
-    <li className="surla-story-flow" data-flow-key={flow.key} data-complete={flow.complete ? "true" : "false"}>
-      <div className="surla-story-flow-header">
+    <li className="highbay-story-flow" data-flow-key={flow.key} data-complete={flow.complete ? "true" : "false"}>
+      <div className="highbay-story-flow-header">
         <h5>{flow.title}</h5>
         {flow.complete ? (
-          <Badge variant="success" className="surla-story-mark">
+          <Badge variant="success" className="highbay-story-mark">
             will be tested end to end
           </Badge>
         ) : (
-          <Badge variant="warning" className="surla-story-mark">
+          <Badge variant="warning" className="highbay-story-mark">
             draft: not tested
           </Badge>
         )}
       </div>
-      {flow.description ? <p className="surla-story-muted">{flow.description}</p> : null}
+      {flow.description ? <p className="highbay-story-muted">{flow.description}</p> : null}
       {!flow.complete ? (
-        <ul className="surla-story-reasons" aria-label={"Why " + flow.title + " is a draft"}>
+        <ul className="highbay-story-reasons" aria-label={"Why " + flow.title + " is a draft"}>
           {draftReasons(flow).map((reason) => (
             <li key={reason}>{reason}</li>
           ))}
@@ -466,16 +466,16 @@ function StepRow({ flow, actors }: { flow: StoryFlowItem; actors: Map<string, st
   return (
     <ol
       ref={ref}
-      className="surla-story-steps"
+      className="highbay-story-steps"
       aria-label={"Steps of " + flow.title}
       tabIndex={scrolls ? 0 : undefined}
     >
       {flow.steps.map((step) => (
-        <li key={step.key} className="surla-story-step" data-step-key={step.key} data-kind={step.kind}>
-          <span className="surla-story-actor">{actors.get(step.actor_key) ?? step.actor_key}</span>
-          <p className="surla-story-summary">{step.summary}</p>
-          <span className="surla-story-kind">{STEP_KIND_LABELS[step.kind]}</span>
-          {step.description ? <p className="surla-story-muted">{step.description}</p> : null}
+        <li key={step.key} className="highbay-story-step" data-step-key={step.key} data-kind={step.kind}>
+          <span className="highbay-story-actor">{actors.get(step.actor_key) ?? step.actor_key}</span>
+          <p className="highbay-story-summary">{step.summary}</p>
+          <span className="highbay-story-kind">{STEP_KIND_LABELS[step.kind]}</span>
+          {step.description ? <p className="highbay-story-muted">{step.description}</p> : null}
           <QuestionList questions={step.questions} label={"Open questions on " + step.summary} />
         </li>
       ))}
@@ -489,19 +489,19 @@ function QuestionList({ questions, label }: { questions: StoryQuestionItem[]; la
     return null;
   }
   return (
-    <ul className="surla-story-questions" aria-label={label}>
+    <ul className="highbay-story-questions" aria-label={label}>
       {questions.map((question) => (
         <li key={question.key} data-question-key={question.key}>
           <strong>{question.prompt}</strong>
-          {question.description ? <p className="surla-story-muted">{question.description}</p> : null}
+          {question.description ? <p className="highbay-story-muted">{question.description}</p> : null}
           {question.options.length > 0 ? (
-            <ul className="surla-story-options" aria-label="Suggested answers">
+            <ul className="highbay-story-options" aria-label="Suggested answers">
               {question.options.map((option) => (
                 <li key={option}>{option}</li>
               ))}
             </ul>
           ) : (
-            <p className="surla-story-muted">No answers suggested.</p>
+            <p className="highbay-story-muted">No answers suggested.</p>
           )}
         </li>
       ))}

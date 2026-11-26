@@ -107,7 +107,7 @@ func TestPublishGuideFailureIsAWarning(t *testing.T) {
 	require.Len(t, result.Warnings, 1)
 	assert.Contains(t, result.Warnings[0], "gen/ was updated; AGENTS_QUICKSTART.md was not:")
 	assert.Equal(t, "package orders\n", files(t, dir, "gen")["gen/orders/service.go"])
-	stages, err := filepath.Glob(filepath.Join(dir, ".*surla-*"))
+	stages, err := filepath.Glob(filepath.Join(dir, ".*highbay-*"))
 	require.NoError(t, err)
 	assert.Empty(t, stages, "failed guide writing removes its temporary file")
 }
@@ -168,12 +168,12 @@ func TestPublishExchangeHandleCloseFailureIsAWarning(t *testing.T) {
 // without reading or deleting its files.
 func TestPublishLeavesEarlierStagesAlone(t *testing.T) {
 	dir, root := moduleRoot(t)
-	layout(t, dir, map[string]string{".surla-gen-earlier/gen/keep.txt": "keep\n"})
+	layout(t, dir, map[string]string{".highbay-gen-earlier/gen/keep.txt": "keep\n"})
 	result, err := Publish(t.Context(), root, generatedFiles)
 	require.NoError(t, err)
 	require.Len(t, result.Warnings, 1)
-	assert.Contains(t, result.Warnings[0], ".surla-gen-earlier")
-	got, err := os.ReadFile(filepath.Join(dir, ".surla-gen-earlier/gen/keep.txt"))
+	assert.Contains(t, result.Warnings[0], ".highbay-gen-earlier")
+	got, err := os.ReadFile(filepath.Join(dir, ".highbay-gen-earlier/gen/keep.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "keep\n", string(got))
 }

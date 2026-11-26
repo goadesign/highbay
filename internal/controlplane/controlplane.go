@@ -1,4 +1,4 @@
-// Package controlplane implements the Surla MCP software factory control
+// Package controlplane implements the Highbay MCP software factory control
 // plane: authenticated intent & ambiguity resolution (CP1), evaluated C4
 // architecture & cost/safety guardrail preview (CP2), target-bound Fast Draft
 // Mode prompt overrides (CP3), and recorded promotion approval of a passed
@@ -22,19 +22,19 @@ import (
 	"time"
 	"unicode/utf8"
 
-	gensurlahttp "github.com/goadesign/surla/gen/http/surla/server"
-	genmcpsurla "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/server"
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/diff"
-	"github.com/goadesign/surla/internal/goldenpath"
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/traceview"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbayhttp "github.com/goadesign/highbay/gen/http/highbay/server"
+	genmcphighbay "github.com/goadesign/highbay/gen/jsonrpc/mcp_highbay/server"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/diff"
+	"github.com/goadesign/highbay/internal/goldenpath"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/traceview"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/verify/candidate"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -45,7 +45,7 @@ import (
 )
 
 type (
-	// Principal identifies the authenticated operator invoking the Surla control plane.
+	// Principal identifies the authenticated operator invoking the Highbay control plane.
 	Principal struct {
 		// ID is the stable authenticated operator identifier (for example, "alice@example.com").
 		ID string
@@ -137,10 +137,10 @@ type (
 		// InitRunner runs external commands (`git`, `go`) during init_project.
 		// When nil, scaffold.RunCommand is used.
 		InitRunner scaffold.Runner
-		// SurlaVersion is the exact canonical Surla module version pinned in
+		// HighbayVersion is the exact canonical Highbay module version pinned in
 		// `eval/go.mod` by init_project. When empty, init_project returns
 		// not_implemented.
-		SurlaVersion string
+		HighbayVersion string
 		// PromotionTarget optionally supplies CP5 verification reports and
 		// measured release binary digests. When nil and ResolvePromotionTarget
 		// resolves nil, approve_merge loads reports from the configured
@@ -152,7 +152,7 @@ type (
 		// PromotionTarget is nil.
 		ResolvePromotionTarget func(ctx context.Context, workspaceDir string) (PromotionTarget, error)
 		// Verification is the operator's stored evaluator: the CP4
-		// configuration stored with `surla verification set`. Every change
+		// configuration stored with `hbay verification set`. Every change
 		// verifies with it and needs no build; New refuses it together with
 		// WrittenTestRuns, because a project verifies with one source.
 		Verification *VerificationConfig
@@ -202,7 +202,7 @@ type (
 	// adopted domain Stories, and the revision proposed beside it, if any.
 	storedChangeCard struct {
 		// card is the revision in force.
-		card *gensurla.ChangeCardResult
+		card *genhighbay.ChangeCardResult
 		// owner is the authenticated Principal.ID that created the card.
 		owner string
 		// designSource is the Goa design source snapshot inspected at CP1.
@@ -230,7 +230,7 @@ type (
 	// is computed and checked on its own.
 	storedRevision struct {
 		// card is the proposed revision, always in needs_confirmation status.
-		card *gensurla.ChangeCardResult
+		card *genhighbay.ChangeCardResult
 		// designSource is the Goa design source the proposal was made from.
 		designSource string
 		// stories holds the proposal's evaluated domain Stories, or nil.
@@ -271,18 +271,18 @@ type (
 		// Summary is the plain-English summary.
 		Summary string `json:"summary"`
 		// Ambiguities is the ordered slice of surfaced domain questions.
-		Ambiguities []*gensurla.AmbiguityQuestion `json:"ambiguities"`
+		Ambiguities []*genhighbay.AmbiguityQuestion `json:"ambiguities"`
 		// Answers is the key-sorted slice of confirmed ambiguity answers.
 		Answers []canonicalAnswerPair `json:"answers"`
 		// Examples is the ordered slice of confirmed example checks.
-		Examples []*gensurla.ExampleItem `json:"examples"`
+		Examples []*genhighbay.ExampleItem `json:"examples"`
 		// PreservedBehaviors is the ordered slice of preserved contract invariants.
 		PreservedBehaviors []string `json:"preserved_behaviors"`
 		// ConfirmedBy is the authenticated principal ID that confirmed the card.
 		ConfirmedBy string `json:"confirmed_by"`
 	}
 
-	// ControlPlane implements gensurla.Service.
+	// ControlPlane implements genhighbay.Service.
 	ControlPlane struct {
 		// traces owns the bounded diagnostic records under the card-store lock.
 		traces *traceview.Store
@@ -301,8 +301,8 @@ type (
 		// liveModel is the model choice the next CP3 live target receives:
 		// none until a hand-over brings a provider's default or
 		// configure_model replaces it. get_model_connection reports it.
-		liveModel gensurla.Connection
-		// heldSettings maps each provider whose request settings the surla
+		liveModel genhighbay.Connection
+		// heldSettings maps each provider whose request settings the hbay
 		// command handed over to those settings. It lives in memory only,
 		// never shrinks while the server runs, and is never returned.
 		heldSettings map[string]modelsettings.Settings
@@ -408,9 +408,9 @@ type (
 		newGenerator func() scaffold.Generator
 		// initRunner runs external commands during InitProject.
 		initRunner scaffold.Runner
-		// surlaVersion pins the Surla module version in eval/go.mod during
+		// highbayVersion pins the Highbay module version in eval/go.mod during
 		// InitProject.
-		surlaVersion string
+		highbayVersion string
 		// initStepHook is an optional test hook invoked in InitProject at
 		// "after_wal" (after Step 1 writeWorkspaceRecord before renameat.NoReplace)
 		// and "after_rename" (after renameat.NoReplace and Fsync before verifyPublishedTarget).
@@ -532,9 +532,9 @@ func newWithWorkspaceGitTimeout(
 	if opts.Team.Owner == "" || opts.Team.Service == nil {
 		return nil, errors.Join(errors.New("Team requires an owner and service"), cleanupFailedNew())
 	}
-	surlaVersion := strings.TrimSpace(opts.SurlaVersion)
-	if surlaVersion != "" && !scaffold.ValidVersion(surlaVersion) {
-		err := fmt.Errorf("surla version %q must be a canonical semantic version such as v0.1.0", opts.SurlaVersion)
+	highbayVersion := strings.TrimSpace(opts.HighbayVersion)
+	if highbayVersion != "" && !scaffold.ValidVersion(highbayVersion) {
+		err := fmt.Errorf("hbay version %q must be a canonical semantic version such as v0.1.0", opts.HighbayVersion)
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
 	wsRoot, wsDev, wsIno, err := openWorkspaceRootAndStat(opts.WorkspaceDir)
@@ -609,7 +609,7 @@ func newWithWorkspaceGitTimeout(
 		cards:                  cards,
 		traces:                 traces,
 		traceProvider:          opts.TracerProvider,
-		liveModel:              gensurla.NewConnectionNone(&gensurla.ModelNone{}),
+		liveModel:              genhighbay.NewConnectionNone(&genhighbay.ModelNone{}),
 		heldSettings:           map[string]modelsettings.Settings{},
 		promotionTarget:        opts.PromotionTarget,
 		resolvePromotionTarget: opts.ResolvePromotionTarget,
@@ -632,7 +632,7 @@ func newWithWorkspaceGitTimeout(
 		goProxyEnv:             opts.GoProxyEnv,
 		newGenerator:           opts.NewGenerator,
 		initRunner:             opts.InitRunner,
-		surlaVersion:           surlaVersion,
+		highbayVersion:         highbayVersion,
 		liveState:              newLiveState(opts.Live, cards.dir),
 		builderCopyTurn:        make(chan struct{}, 1),
 		workingCopyTurn:        make(chan struct{}, 1),
@@ -679,15 +679,15 @@ func newWithWorkspaceGitTimeout(
 // auth is required and is supplied by the project credential owner. A request
 // sent with GET carries a private mark the diagnostics history uses to leave
 // out the user's reads that succeed or are refused.
-func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handler {
+func NewHTTPHandler(svc genhighbay.Service, auth RequestAuthenticator) http.Handler {
 	mux := goahttp.NewMuxer()
-	endpoints := gensurla.NewEndpoints(svc)
-	recorder := otel.Tracer("surla/requests")
+	endpoints := genhighbay.NewEndpoints(svc)
+	recorder := otel.Tracer("highbay/requests")
 	if owner, ok := svc.(*ControlPlane); ok {
-		recorder = owner.tracer("surla/requests")
+		recorder = owner.tracer("highbay/requests")
 	}
 	applyOperationPolicy(endpoints, recorder)
-	httpServer := gensurlahttp.New(
+	httpServer := genhighbayhttp.New(
 		endpoints,
 		mux,
 		StrictJSONRequestDecoder,
@@ -695,27 +695,27 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 		nil,
 		nil,
 	)
-	gensurlahttp.Mount(mux, httpServer)
+	genhighbayhttp.Mount(mux, httpServer)
 
 	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, &genmcpadapter.MCPAdapterOptions{
 		ErrorMapper: mapMCPRefusal,
 	})
 	mcpEndpoints := genmcpadapter.NewEndpoints(mcpAdapter)
 	filterMCPDiscovery(mcpEndpoints)
-	mcpServer := genmcpsurla.New(
+	mcpServer := genmcphighbay.New(
 		mcpEndpoints,
 		mux,
 		goahttp.RequestDecoder,
 		goahttp.ResponseEncoder,
 		func(ctx context.Context, _ http.ResponseWriter, err error) {
-			_, span := recorder.Start(ctx, "surla.mcp.transport_error")
+			_, span := recorder.Start(ctx, "highbay.mcp.transport_error")
 			defer span.End()
 			span.SetAttributes(attribute.String("error.classification", "mcp_transport"))
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "MCP transport failure")
 		},
 	)
-	genmcpsurla.Mount(mux, mcpServer)
+	genmcphighbay.Mount(mux, mcpServer)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, err := auth(r)
@@ -723,7 +723,7 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), gensurla.MakeForbidden(errors.New("session or credential is no longer valid; ask your coding agent to open Surla views, or choose Open Surla Window in the Herdr companion")))); encodeErr != nil {
+			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), genhighbay.MakeForbidden(errors.New("session or credential is no longer valid; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")))); encodeErr != nil {
 				otel.Handle(encodeErr)
 			}
 			return
@@ -736,7 +736,7 @@ func NewHTTPHandler(svc gensurla.Service, auth RequestAuthenticator) http.Handle
 	})
 }
 
-// GoldenPath returns the Markdown `surla://golden-path` serves: the Golden
+// GoldenPath returns the Markdown `highbay://golden-path` serves: the Golden
 // Path architecture playbook followed by the decision component catalog for
 // an analysis's optional ui_composition.
 func (c *ControlPlane) GoldenPath(_ context.Context) (string, error) {
@@ -745,7 +745,7 @@ func (c *ControlPlane) GoldenPath(_ context.Context) (string, error) {
 
 // ProposeChange saves a new Checkpoint 1 (CP1) Change Card from the caller's
 // feature request and analysis. It first checks p against the design's rules
-// with the generated gensurla.ValidateProposeChangePayloadValue, so a Go
+// with the generated genhighbay.ValidateProposeChangePayloadValue, so a Go
 // caller gets the same structural checks the HTTP and MCP decoders apply
 // (required, non-blank and valid UTF-8 text, minimum counts, enums, no null
 // list items); invalid UTF-8 matters because a change_id saved as U+FFFD
@@ -760,16 +760,16 @@ func (c *ControlPlane) GoldenPath(_ context.Context) (string, error) {
 // already has a card is a conflict; a payload that breaks a rule, a blank
 // change_id or prompt, an invalid or stale story_refresh_op_id, or an
 // unreadable workspace design is unprocessable, and none saves anything.
-func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeChangePayload) (*gensurla.ChangeCardResult, error) {
+func (c *ControlPlane) ProposeChange(ctx context.Context, p *genhighbay.ProposeChangePayload) (*genhighbay.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	if err := gensurla.ValidateProposeChangePayloadValue(p); err != nil {
-		return nil, gensurla.MakeUnprocessable(err)
+	if err := genhighbay.ValidateProposeChangePayloadValue(p); err != nil {
+		return nil, genhighbay.MakeUnprocessable(err)
 	}
 	if strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.Prompt) == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New("change_id and prompt are required"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("change_id and prompt are required"))
 	}
 	var snapshot refreshedSnapshot
 	if p.StoryRefreshOpID != nil {
@@ -782,21 +782,21 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		return nil, err
 	}
 
-	_, span := c.tracer("surla/controlplane").Start(
+	_, span := c.tracer("highbay/controlplane").Start(
 		ctx,
-		"surla.controlplane.propose_change",
-		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)),
+		"highbay.controlplane.propose_change",
+		trace.WithAttributes(attribute.String("highbay.change_id", p.ChangeID)),
 	)
 	defer span.End()
 
 	ambiguities, examples, preserved, err := proposedCardContent(p.ChangeID, p.Analysis)
 	if err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1RejectedAnalysisSummary(false)))
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("invalid analysis: %w", err))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1RejectedAnalysisSummary(false)))
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf("invalid analysis: %w", err))
 	}
 	status := StatusNeedsConfirmation
 
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID:           p.ChangeID,
 		Status:             status,
 		Prompt:             p.Prompt,
@@ -808,7 +808,7 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 	}
 	rev, err := computeCanonicalRevision(card, principal.ID, snapshot.designSource)
 	if err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultRevision)))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1SafeFaultSummary(false, cp1FaultRevision)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "compute cp1 card revision")
 		return nil, err
@@ -817,7 +817,7 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 	// The composition is bound to the revision it was composed with but is
 	// not part of it: request_revision covers only the authoritative card.
 	if p.Analysis.UIComposition != nil {
-		card.UIComposition = &gensurla.UICompositionItem{Program: *p.Analysis.UIComposition, ComposedForRevision: rev}
+		card.UIComposition = &genhighbay.UICompositionItem{Program: *p.Analysis.UIComposition, ComposedForRevision: rev}
 	}
 
 	if snapshot.madeFrom != nil {
@@ -828,14 +828,14 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 	defer c.mu.Unlock()
 	_, exists, err := c.cards.load(p.ChangeID)
 	if err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageRead)))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageRead)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "load cp1 change card")
 		return nil, err
 	}
 	if exists {
-		span.SetAttributes(attribute.String("surla.public_summary", "Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id."))
-		return nil, gensurla.MakeConflict(fmt.Errorf("change_id %q already exists", p.ChangeID))
+		span.SetAttributes(attribute.String("highbay.public_summary", "Change Card ID already exists (this request did not overwrite the existing Change Card); call get_change or choose a new change_id."))
+		return nil, genhighbay.MakeConflict(fmt.Errorf("change_id %q already exists", p.ChangeID))
 	}
 	if snapshot.madeFrom != nil {
 		if err := c.recordRefreshedSnapshot(span, snapshot); err != nil {
@@ -849,13 +849,13 @@ func (c *ControlPlane) ProposeChange(ctx context.Context, p *gensurla.ProposeCha
 		stories:      snapshot.stories,
 		architecture: snapshot.architecture, goMod: snapshot.goMod, madeFrom: snapshot.madeFrom,
 	}); err != nil {
-		span.SetAttributes(attribute.String("surla.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageSave)))
+		span.SetAttributes(attribute.String("highbay.public_summary", cp1SafeFaultSummary(false, cp1FaultStorageSave)))
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "save cp1 change card")
 		return nil, err
 	}
 	c.suppressDraftDropNote(snapshot.madeFrom)
-	span.SetAttributes(attribute.String("surla.public_summary", fmt.Sprintf("Proposed Change Card (%s).", status)))
+	span.SetAttributes(attribute.String("highbay.public_summary", fmt.Sprintf("Proposed Change Card (%s).", status)))
 	return card, nil
 }
 
@@ -913,7 +913,7 @@ func (c *ControlPlane) Close() error {
 // cannot measure the candidate's binaries (see currentCard). A revision
 // proposed beside a confirmed card is returned in ProposedRevision while it
 // waits.
-func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePayload) (*gensurla.ChangeCardResult, error) {
+func (c *ControlPlane) GetChange(ctx context.Context, p *genhighbay.GetChangePayload) (*genhighbay.ChangeCardResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
@@ -925,10 +925,10 @@ func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePaylo
 		return nil, err
 	}
 	if !ok {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return nil, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return nil, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	return c.changeResult(ctx, record)
 }
@@ -937,13 +937,13 @@ func (c *ControlPlane) GetChange(ctx context.Context, p *gensurla.GetChangePaylo
 // confirmed revision. It reads no workspace and runs no evaluation, so a later
 // draft, project edit or waiting proposal cannot change that agreed preview.
 // Older cards without architecture must adopt a succeeded refresh first.
-func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.PreviewArchitecturePayload) (*gensurla.ArchitecturePreviewResult, error) {
+func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *genhighbay.PreviewArchitecturePayload) (*genhighbay.ArchitecturePreviewResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	if p == nil || strings.TrimSpace(p.ChangeID) == "" || strings.TrimSpace(p.RequestRevision) == "" {
-		return nil, gensurla.MakeUnprocessable(errors.New("change_id and request_revision are required"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("change_id and request_revision are required"))
 	}
 
 	c.mu.RLock()
@@ -953,20 +953,20 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		return nil, err
 	}
 	if !exists {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return nil, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	}
 	if record.owner != principal.ID {
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return nil, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 	if record.card.Status != StatusConfirmed {
-		return nil, gensurla.MakeConflict(fmt.Errorf("change_id %q must be confirmed before architecture preview (status %q)", p.ChangeID, record.card.Status))
+		return nil, genhighbay.MakeConflict(fmt.Errorf("change_id %q must be confirmed before architecture preview (status %q)", p.ChangeID, record.card.Status))
 	}
 	if record.card.RequestRevision != p.RequestRevision {
-		return nil, gensurla.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.card.RequestRevision))
+		return nil, genhighbay.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", p.ChangeID, p.RequestRevision, record.card.RequestRevision))
 	}
 
 	if record.architecture == nil {
-		return nil, gensurla.MakeUnprocessable(errors.New("no architecture to show; call refresh_story, then revise_change with its op_id"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("no architecture to show; call refresh_story, then revise_change with its op_id"))
 	}
 	evaluated := designeval.Result{
 		SystemName: record.architecture.SystemName, Containers: record.architecture.Containers,
@@ -974,18 +974,18 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 		Tools: record.architecture.Tools,
 	}
 	if evaluated.SystemName == "" || len(evaluated.Containers) == 0 {
-		return nil, gensurla.MakeUnprocessable(errors.New("design must declare at least one Goa API or Service container"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("design must declare at least one Goa API or Service container"))
 	}
 	for _, pol := range evaluated.AgentPolicies {
 		if pol.MaxExecutionSeconds <= 0 || pol.MaxToolCalls <= 0 {
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf("agent %q must declare positive TimeBudget and DefaultCaps(MaxToolCalls) in RunPolicy", pol.AgentID))
+			return nil, genhighbay.MakeUnprocessable(fmt.Errorf("agent %q must declare positive TimeBudget and DefaultCaps(MaxToolCalls) in RunPolicy", pol.AgentID))
 		}
 	}
 
 	designDigest := record.architecture.DesignDigest
 	banner := evaluated.Summary()
 
-	return &gensurla.ArchitecturePreviewResult{
+	return &genhighbay.ArchitecturePreviewResult{
 		ChangeID:        p.ChangeID,
 		RequestRevision: p.RequestRevision,
 		DesignDigest:    designDigest,
@@ -1000,11 +1000,11 @@ func (c *ControlPlane) PreviewArchitecture(ctx context.Context, p *gensurla.Prev
 
 // DraftOverride sends a prompt template to the live target start_live_target
 // runs when target_kind is "prompt_template", or refuses to mask a compiled
-// Go business rule when target_kind is "compiled_rule". Surla changes prompts
+// Go business rule when target_kind is "compiled_rule". Highbay changes prompts
 // only in a live target it built and started itself, so a prompt template
 // with no live target running is refused with no_live_target, which names
 // start_live_target as the step that enables it.
-func (c *ControlPlane) DraftOverride(ctx context.Context, p *gensurla.DraftOverridePayload) (*gensurla.DraftOverrideResult, error) {
+func (c *ControlPlane) DraftOverride(ctx context.Context, p *genhighbay.DraftOverridePayload) (*genhighbay.DraftOverrideResult, error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
@@ -1013,7 +1013,7 @@ func (c *ControlPlane) DraftOverride(ctx context.Context, p *gensurla.DraftOverr
 	}
 	switch p.TargetKind {
 	case TargetKindCompiledRule:
-		return &gensurla.DraftOverrideResult{
+		return &genhighbay.DraftOverrideResult{
 			AppliedInStore:  false,
 			RequiresRebuild: true,
 			Message:         "Compiled Go business rule cannot be overridden in prompt.Store; requires Go rebuild and CP4 verification.",
@@ -1037,7 +1037,7 @@ func (c *ControlPlane) DraftOverride(ctx context.Context, p *gensurla.DraftOverr
 
 // Diff compares two Goa design sources and go.mod snapshots and returns the
 // structural diff without emitting a blanket compatibility verdict.
-func (c *ControlPlane) Diff(ctx context.Context, p *gensurla.DiffPayload) (*gensurla.DiffResult, error) {
+func (c *ControlPlane) Diff(ctx context.Context, p *genhighbay.DiffPayload) (*genhighbay.DiffResult, error) {
 	if p == nil {
 		return nil, errors.New("diff payload is required")
 	}
@@ -1045,7 +1045,7 @@ func (c *ControlPlane) Diff(ctx context.Context, p *gensurla.DiffPayload) (*gens
 	if err != nil {
 		return nil, err
 	}
-	return &gensurla.DiffResult{
+	return &genhighbay.DiffResult{
 		HasChanges:           rep.HasChanges,
 		AddedDeclarations:    rep.AddedDeclarations,
 		RemovedDeclarations:  rep.RemovedDeclarations,
@@ -1074,7 +1074,7 @@ func StrictJSONRequestDecoder(r *http.Request) goahttp.Decoder {
 // computeCanonicalRevision computes a collision-free SHA-256 hex digest over
 // the canonical JSON encoding of the ChangeCardResult, its owner principal, and
 // its inspected design source.
-func computeCanonicalRevision(card *gensurla.ChangeCardResult, owner, designSource string) (string, error) {
+func computeCanonicalRevision(card *genhighbay.ChangeCardResult, owner, designSource string) (string, error) {
 	keys := make([]string, 0, len(card.Answers))
 	for k := range card.Answers {
 		keys = append(keys, k)

@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
 )
 
 // TestValidateAmbiguityAnswersReportsEveryProblemOnce verifies that
@@ -25,7 +25,7 @@ import (
 // answer; a question that names none accepts each of its options.
 func TestValidateAmbiguityAnswersReportsEveryProblemOnce(t *testing.T) {
 	drafted := "Listing seller"
-	questions := []*gensurla.AmbiguityQuestion{
+	questions := []*genhighbay.AmbiguityQuestion{
 		{ID: "chg-ambiguity-01", Question: "Who signs in?", Options: []string{"Bearer token auth", "Demo persona header"}},
 		{ID: "chg-ambiguity-02", Question: "Who accepts offers?", Options: []string{"Listing seller", "Any seller"}, DraftOption: &drafted},
 		{ID: "chg-ambiguity-03", Question: "Keep history?", Options: []string{"Yes", "No"}},
@@ -131,7 +131,7 @@ func TestValidateAmbiguitiesKeepsTheDraftOption(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := validateAmbiguities("chg", []*gensurla.CP1AnalysisAmbiguity{{Question: "Who accepts offers?", Options: options, DraftOption: tc.draft}})
+			got, err := validateAmbiguities("chg", []*genhighbay.CP1AnalysisAmbiguity{{Question: "Who accepts offers?", Options: options, DraftOption: tc.draft}})
 			if tc.want != "" {
 				require.Error(t, err)
 				assert.Equal(t, tc.want, err.Error())
@@ -149,11 +149,11 @@ func TestValidateAmbiguitiesKeepsTheDraftOption(t *testing.T) {
 // and approvals refer to that revision. Naming one changes the revision.
 func TestRequestRevisionIgnoresAnAbsentDraftOption(t *testing.T) {
 	by := "user"
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID: "orders", Status: StatusConfirmed, Prompt: "p", Summary: "s",
-		Ambiguities: []*gensurla.AmbiguityQuestion{{ID: "orders-ambiguity-01", Question: "q?", Options: []string{"a", "b"}}},
+		Ambiguities: []*genhighbay.AmbiguityQuestion{{ID: "orders-ambiguity-01", Question: "q?", Options: []string{"a", "b"}}},
 		Answers:     map[string]string{"orders-ambiguity-01": "a"},
-		Examples:    []*gensurla.ExampleItem{{ID: "check_01", Scenario: "sc", InputSummary: "in", ExpectedOutcome: "out", VerificationKind: "deterministic"}},
+		Examples:    []*genhighbay.ExampleItem{{ID: "check_01", Scenario: "sc", InputSummary: "in", ExpectedOutcome: "out", VerificationKind: "deterministic"}},
 		ConfirmedBy: &by,
 	}
 	rev, err := computeCanonicalRevision(card, "owner", "package design")
@@ -179,16 +179,16 @@ func TestConfirmIntentRefusesAnAnswerTheDraftDoesNotImplement(t *testing.T) {
 	drafted := "original_payment"
 	proposed := saveProposedCardFixture(t, cp, agreedOwner, "chg", "Refunds up to $50 are instant.", refundAnalysis(
 		"Refunds up to $50 are instant.",
-		&gensurla.CP1AnalysisAmbiguity{Question: "Where does an instant refund go?", Options: []string{"original_payment", "store_credit"}, DraftOption: &drafted},
+		&genhighbay.CP1AnalysisAmbiguity{Question: "Where does an instant refund go?", Options: []string{"original_payment", "store_credit"}, DraftOption: &drafted},
 	))
-	read, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err := cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.Len(t, read.Ambiguities, 1)
 	require.NotNil(t, read.Ambiguities[0].DraftOption)
 	assert.Equal(t, drafted, *read.Ambiguities[0].DraftOption)
 
-	confirm := func(answer string) (*gensurla.ChangeCardResult, error) {
-		return cp.ConfirmIntent(agreedUser, &gensurla.ConfirmIntentPayload{
+	confirm := func(answer string) (*genhighbay.ChangeCardResult, error) {
+		return cp.ConfirmIntent(agreedUser, &genhighbay.ConfirmIntentPayload{
 			ChangeID: "chg", RequestRevision: proposed.RequestRevision,
 			Answers: map[string]string{read.Ambiguities[0].ID: answer}, Examples: proposed.Examples,
 		})
@@ -197,7 +197,7 @@ func TestConfirmIntentRefusesAnAnswerTheDraftDoesNotImplement(t *testing.T) {
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, `answer "store_credit" for ambiguity "chg-ambiguity-01" is not what the draft implements ("original_payment")`)
 	assert.ErrorContains(t, err, "ask your coding agent to revise the change")
-	unchanged, err := cp.GetChange(agreedUser, &gensurla.GetChangePayload{ChangeID: "chg"})
+	unchanged, err := cp.GetChange(agreedUser, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, StatusNeedsConfirmation, unchanged.Status)
 	assert.Equal(t, proposed.RequestRevision, unchanged.RequestRevision)
@@ -219,10 +219,10 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
 	aliceCtx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
-	ambiguous := &gensurla.CP1Analysis{
+	ambiguous := &genhighbay.CP1Analysis{
 		Summary:     "Refunds up to $50 are instant.",
-		Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{Question: "Who approves?", Options: []string{"instant", "manager"}}},
-		Examples: []*gensurla.CP1AnalysisExample{{
+		Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{Question: "Who approves?", Options: []string{"instant", "manager"}}},
+		Examples: []*genhighbay.CP1AnalysisExample{{
 			Scenario: "Refund at limit", InputSummary: "$50", ExpectedOutcome: "Instant", VerificationKind: "deterministic",
 		}},
 		PreservedBehaviors: []string{},
@@ -234,11 +234,11 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 	// Both preview refusals use one server so its evaluator reuses its own
 	// compiler workspace while the handler preserves each distinct error.
 	cp := newControlPlane(t, Options{})
-	pending, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds.", Analysis: ambiguous})
+	pending, err := cp.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds.", Analysis: ambiguous})
 	require.NoError(t, err)
-	confirmed, err := cp.ConfirmIntent(aliceCtx, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(aliceCtx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg-ok", RequestRevision: func() string {
-			c, err := cp.ProposeChange(aliceCtx, &gensurla.ProposeChangePayload{ChangeID: "chg-ok", Prompt: "Refunds.", Analysis: ambiguous})
+			c, err := cp.ProposeChange(aliceCtx, &genhighbay.ProposeChangePayload{ChangeID: "chg-ok", Prompt: "Refunds.", Analysis: ambiguous})
 			require.NoError(t, err)
 			return c.RequestRevision
 		}(),
@@ -330,7 +330,7 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 		})
 	}
 
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 	argsJSON, err := json.Marshal(map[string]any{
 		"change_id": "chg", "request_revision": pending.RequestRevision,
 	})
@@ -358,7 +358,7 @@ func TestChangeCardHTTPErrorsAndMCPToolPreservation(t *testing.T) {
 func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 	alice := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	t.Cleanup(srv.Close)
 
@@ -373,28 +373,28 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 
 	// proposal and revision build the analyses with every required text
 	// passed through text, so one case can pad or replace all of them.
-	proposal := func(text func(string) string) *gensurla.CP1Analysis {
-		return &gensurla.CP1Analysis{
+	proposal := func(text func(string) string) *genhighbay.CP1Analysis {
+		return &genhighbay.CP1Analysis{
 			Summary: text("Refunds up to $50 are instant."),
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{
 				Question: text("Is $50.00 itself instant?"),
 				Options:  []string{"instant", text("manager")},
 			}},
-			Examples: []*gensurla.CP1AnalysisExample{{
+			Examples: []*genhighbay.CP1AnalysisExample{{
 				Scenario: text("Refund at the limit"), InputSummary: text("Order total $50.00"),
 				ExpectedOutcome: text("Instant store credit"), VerificationKind: "deterministic",
 			}},
 			PreservedBehaviors: []string{text("Cross-tenant order lookups return 404 Not Found.")},
 		}
 	}
-	revision := func(text func(string) string) *gensurla.CP1RevisionAnalysis {
-		return &gensurla.CP1RevisionAnalysis{
+	revision := func(text func(string) string) *genhighbay.CP1RevisionAnalysis {
+		return &genhighbay.CP1RevisionAnalysis{
 			Summary: text("Refunds up to $50 are instant."),
-			Ambiguities: []*gensurla.CP1AnalysisAmbiguity{{
+			Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{{
 				Question: text("Is $50.00 itself instant?"),
 				Options:  []string{"instant", text("manager")},
 			}},
-			Examples: []*gensurla.CP1RevisionAnalysisExample{{
+			Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 				PriorID: &check01, Scenario: text("Refund at the limit"), InputSummary: text("Order total $50.00"),
 				ExpectedOutcome: text("Instant store credit"), VerificationKind: "deterministic",
 			}},
@@ -426,12 +426,12 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 			goErr       error
 		)
 		switch p := payload.(type) {
-		case *gensurla.ProposeChangePayload:
+		case *genhighbay.ProposeChangePayload:
 			tool, route = "propose_change", "/changes/propose"
 			if entry == "go" {
 				_, goErr = cp.ProposeChange(alice, p)
 			}
-		case *gensurla.ReviseChangePayload:
+		case *genhighbay.ReviseChangePayload:
 			tool, route = "revise_change", "/changes/revise"
 			if entry == "go" {
 				_, goErr = cp.ReviseChange(alice, p)
@@ -470,20 +470,20 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 		// proposal and in a revision.
 		textField struct {
 			name    string
-			propose func(*gensurla.CP1Analysis, string)
-			revise  func(*gensurla.CP1RevisionAnalysis, string)
+			propose func(*genhighbay.CP1Analysis, string)
+			revise  func(*genhighbay.CP1RevisionAnalysis, string)
 		}
 		// blankText is a value made only of whitespace.
 		blankText struct{ name, value string }
 	)
 	fields := []textField{
-		{"summary", func(a *gensurla.CP1Analysis, v string) { a.Summary = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.Summary = v }},
-		{"question", func(a *gensurla.CP1Analysis, v string) { a.Ambiguities[0].Question = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.Ambiguities[0].Question = v }},
-		{"options", func(a *gensurla.CP1Analysis, v string) { a.Ambiguities[0].Options[1] = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.Ambiguities[0].Options[1] = v }},
-		{"scenario", func(a *gensurla.CP1Analysis, v string) { a.Examples[0].Scenario = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.Examples[0].Scenario = v }},
-		{"input_summary", func(a *gensurla.CP1Analysis, v string) { a.Examples[0].InputSummary = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.Examples[0].InputSummary = v }},
-		{"expected_outcome", func(a *gensurla.CP1Analysis, v string) { a.Examples[0].ExpectedOutcome = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.Examples[0].ExpectedOutcome = v }},
-		{"preserved_behaviors", func(a *gensurla.CP1Analysis, v string) { a.PreservedBehaviors[0] = v }, func(a *gensurla.CP1RevisionAnalysis, v string) { a.PreservedBehaviors[0] = v }},
+		{"summary", func(a *genhighbay.CP1Analysis, v string) { a.Summary = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.Summary = v }},
+		{"question", func(a *genhighbay.CP1Analysis, v string) { a.Ambiguities[0].Question = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.Ambiguities[0].Question = v }},
+		{"options", func(a *genhighbay.CP1Analysis, v string) { a.Ambiguities[0].Options[1] = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.Ambiguities[0].Options[1] = v }},
+		{"scenario", func(a *genhighbay.CP1Analysis, v string) { a.Examples[0].Scenario = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.Examples[0].Scenario = v }},
+		{"input_summary", func(a *genhighbay.CP1Analysis, v string) { a.Examples[0].InputSummary = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.Examples[0].InputSummary = v }},
+		{"expected_outcome", func(a *genhighbay.CP1Analysis, v string) { a.Examples[0].ExpectedOutcome = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.Examples[0].ExpectedOutcome = v }},
+		{"preserved_behaviors", func(a *genhighbay.CP1Analysis, v string) { a.PreservedBehaviors[0] = v }, func(a *genhighbay.CP1RevisionAnalysis, v string) { a.PreservedBehaviors[0] = v }},
 	}
 	blanks := []blankText{
 		{"empty", ""},
@@ -505,7 +505,7 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 		t.Helper()
 		proposed := proposal(asSent)
 		field.propose(proposed, placeholder)
-		propose := &gensurla.ProposeChangePayload{
+		propose := &genhighbay.ProposeChangePayload{
 			ChangeID: "chg-blank", Prompt: "Refunds up to $50 are instant.", Analysis: proposed,
 		}
 		args := withText(t, proposeArgs(t, propose), blank.value)
@@ -516,7 +516,7 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 
 		revised := revision(asSent)
 		field.revise(revised, placeholder)
-		revise := &gensurla.ReviseChangePayload{
+		revise := &genhighbay.ReviseChangePayload{
 			ChangeID: "chg-revise", RequestRevision: current.RequestRevision,
 			Prompt: "Refunds up to $50 are instant.", RevisionNote: "Revise the change.", Analysis: revised,
 		}
@@ -554,7 +554,7 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 	_, saved, err := cp.cards.load("chg-blank")
 	require.NoError(t, err)
 	assert.False(t, saved, "no refused proposal saves a card")
-	unchanged, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: "chg-revise"})
+	unchanged, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: "chg-revise"})
 	require.NoError(t, err)
 	assert.Equal(t, current.RequestRevision, unchanged.RequestRevision, "no refused revision changes the card")
 
@@ -579,22 +579,22 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 		for _, entry := range entries {
 			t.Run("saves "+tc.name+" as sent via "+entry, func(t *testing.T) {
 				changeID := fmt.Sprintf("chg-padded-%d-%s", i, entry)
-				propose := &gensurla.ProposeChangePayload{
+				propose := &genhighbay.ProposeChangePayload{
 					ChangeID: changeID, Prompt: "Refunds up to $50 are instant.", Analysis: proposal(tc.text),
 				}
 				ok, msg := send(t, entry, propose, proposeArgs(t, propose))
 				require.True(t, ok, msg)
-				proposed, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: changeID})
+				proposed, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: changeID})
 				require.NoError(t, err)
 				assertCardTexts(t, proposed, tc.text)
 
-				revise := &gensurla.ReviseChangePayload{
+				revise := &genhighbay.ReviseChangePayload{
 					ChangeID: changeID, RequestRevision: proposed.RequestRevision,
 					Prompt: "Refunds up to $50 are instant, tax included.", RevisionNote: "Revise the change.", Analysis: revision(tc.text),
 				}
 				ok, msg = send(t, entry, revise, reviseArgs(t, revise))
 				require.True(t, ok, msg)
-				revised, err := cp.GetChange(alice, &gensurla.GetChangePayload{ChangeID: changeID})
+				revised, err := cp.GetChange(alice, &genhighbay.GetChangePayload{ChangeID: changeID})
 				require.NoError(t, err)
 				assert.Equal(t, "Refunds up to $50 are instant, tax included.", revised.Prompt, "the revision was saved")
 				assertCardTexts(t, revised, tc.text)
@@ -605,7 +605,7 @@ func TestAnalysisTextsMustHoldMoreThanWhitespace(t *testing.T) {
 
 // assertCardTexts checks that card holds, byte for byte, the analysis texts
 // TestAnalysisTextsMustHoldMoreThanWhitespace sent through text.
-func assertCardTexts(t *testing.T, card *gensurla.ChangeCardResult, text func(string) string) {
+func assertCardTexts(t *testing.T, card *genhighbay.ChangeCardResult, text func(string) string) {
 	t.Helper()
 	assert.Equal(t, text("Refunds up to $50 are instant."), card.Summary)
 	require.Len(t, card.Ambiguities, 1)

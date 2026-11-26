@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 // buildDropped identifies the one start named by the current provenance generation.
@@ -21,7 +21,7 @@ func buildDropped(record madeFromRecord, build buildFile) bool {
 }
 
 // DropBuild records a new provenance generation without changing any Git ref or draft.
-func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPayload) (*gensurla.ChangeBuild, error) {
+func (c *ControlPlane) DropBuild(ctx context.Context, p *genhighbay.DropBuildPayload) (*genhighbay.ChangeBuild, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		return nil, loadErr
 	}
 	if !found {
-		return nil, gensurla.MakeNotFound(errors.New("There is no open build to drop."))
+		return nil, genhighbay.MakeNotFound(errors.New("There is no open build to drop."))
 	}
 	work, cancel := context.WithTimeout(ctx, layoutReadTimeout)
 	defer cancel()
@@ -69,7 +69,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	if !currentFound {
 		c.mu.Unlock()
 		c.draftMu.Unlock()
-		return nil, gensurla.MakeNotFound(errors.New("There is no open build to drop."))
+		return nil, genhighbay.MakeNotFound(errors.New("There is no open build to drop."))
 	}
 	if current.ChangeID != saved.ChangeID || !current.StartedAt.Equal(saved.StartedAt) || p.ChangeID != current.ChangeID || p.StartedAt != current.StartedAt.UTC().Format(time.RFC3339Nano) {
 		currentCard, cardErr := c.ownedCard(principal, current.ChangeID)
@@ -82,12 +82,12 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 		if readErr != nil {
 			return nil, readErr
 		}
-		return nil, &gensurla.OpenBuildRefusal{Name: "build_changed", Message: "The open build changed. Review the current build before dropping it.", ChangeID: current.ChangeID, Build: progress}
+		return nil, &genhighbay.OpenBuildRefusal{Name: "build_changed", Message: "The open build changed. Review the current build before dropping it.", ChangeID: current.ChangeID, Build: progress}
 	}
 	if exists && buildDropped(provenance, current) {
 		c.mu.Unlock()
 		c.draftMu.Unlock()
-		return nil, gensurla.MakeConflict(errors.New("This build was already dropped."))
+		return nil, genhighbay.MakeConflict(errors.New("This build was already dropped."))
 	}
 	// Merge and Record share c.mu for publication. Capture HEAD and the
 	// numbered tips here so the new generation records the branch and the
@@ -112,7 +112,7 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	}
 	progress, err := startedBuild(heldBuild{
 		file: current, inForce: buildInForce(current, record), storedEvaluator: c.storedEvaluator(),
-	}, gensurla.NewBuildTakingDropped(&gensurla.BuildDropped{KeptBranches: branches}))
+	}, genhighbay.NewBuildTakingDropped(&genhighbay.BuildDropped{KeptBranches: branches}))
 	if err != nil {
 		c.mu.Unlock()
 		c.draftMu.Unlock()
@@ -133,9 +133,9 @@ func (c *ControlPlane) DropBuild(ctx context.Context, p *gensurla.DropBuildPaylo
 	}
 
 	c.stopFinishedBuildWorkers(ctx, team, BuildIdentity{ChangeID: current.ChangeID, StartedAt: current.StartedAt})
-	return &gensurla.ChangeBuild{
+	return &genhighbay.ChangeBuild{
 		ChangeID: current.ChangeID, DraftedBeforeDrop: draftedBeforeDrop(record, provenance),
-		Build: gensurla.NewBuildStarted(progress),
+		Build: genhighbay.NewBuildStarted(progress),
 	}, nil
 }
 

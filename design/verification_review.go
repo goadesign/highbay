@@ -84,7 +84,7 @@ var VerificationReviewResult = Type("VerificationReviewResult", func() {
 	Required("review")
 })
 
-// verificationReviewMethod registers the user-only read in the Surla service.
+// verificationReviewMethod registers the user-only read in the Highbay service.
 func verificationReviewMethod() {
 	Method("review_verification", func() {
 		Description("Read one saved run for the authenticated user before approval: its existing builder-safe result, the Story recorded at acceptance and exact required-test mapping when known, and the owner's current approval observation. This read records no approval and changes no workflow state. Agents use get_verification instead.")

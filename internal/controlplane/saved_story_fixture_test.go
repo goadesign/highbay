@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 )
@@ -41,7 +41,7 @@ func refundStoryFixtureForTest(t *testing.T) (map[string]string, []designeval.St
 	require.NoError(t, err)
 	require.Len(t, module.Require, 2, "the Story fixture retains only its Story and Goa requirements")
 	for _, dependency := range module.Require {
-		require.Equal(t, testmodule.SurlaVersion(t, dependency.Mod.Path), dependency.Mod.Version,
+		require.Equal(t, testmodule.HighbayVersion(t, dependency.Mod.Path), dependency.Mod.Version,
 			"update the committed fixture profile after changing root requirements")
 	}
 	return files, stories

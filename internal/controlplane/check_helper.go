@@ -1,10 +1,10 @@
 // This file runs each check_project and update_dependencies operation in a
 // check helper process, so the operation's containers are removed and its
-// record and output finished even when surla serve dies.
+// record and output finished even when hbay serve dies.
 //
-// surla serve binds the workspace, creates the operation directory and takes
+// hbay serve binds the workspace, creates the operation directory and takes
 // an exclusive flock on it, then starts the helper the composition root
-// bound (CheckHelper, `surla check-run`) in its own session:
+// bound (CheckHelper, `hbay check-run`) in its own session:
 //
 //	stdin   one JSON checkHelperSpec; stdin then stays open, and its end
 //	        (serve canceled the operation or exited) cancels the operation
@@ -40,9 +40,9 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 type (
@@ -51,11 +51,11 @@ type (
 	// standard streams. The control plane sets the command's standard
 	// streams, extra descriptors and session before starting it, so the
 	// returned command must not set them; it inherits the server's
-	// environment unless it sets one. The composition root binds it: surla
-	// serve binds `surla check-run`. New requires one with a Checker.
+	// environment unless it sets one. The composition root binds it: hbay
+	// serve binds `hbay check-run`. New requires one with a Checker.
 	CheckHelper func() *exec.Cmd
 
-	// checkHelperSpec is what surla serve sends a check helper on stdin: the
+	// checkHelperSpec is what hbay serve sends a check helper on stdin: the
 	// operation to run and the facts serve verified when it bound the
 	// workspace. The helper checks its inherited descriptors against it.
 	checkHelperSpec struct {
@@ -92,9 +92,9 @@ type (
 	// one field is set: the tool's result, or the error the caller gets.
 	checkHelperResult struct {
 		// Check is check_project's result.
-		Check *gensurla.CheckProjectResult `json:"check,omitempty"`
+		Check *genhighbay.CheckProjectResult `json:"check,omitempty"`
 		// Update is update_dependencies' result.
-		Update *gensurla.UpdateDependenciesResult `json:"update,omitempty"`
+		Update *genhighbay.UpdateDependenciesResult `json:"update,omitempty"`
 		// Error is the operation's caller-facing error.
 		Error *checkHelperError `json:"error,omitempty"`
 	}
@@ -148,15 +148,15 @@ const (
 )
 
 // errServeReleased is the cancellation cause a check helper records when
-// its stdin ends: surla serve canceled the operation or exited.
-var errServeReleased = errors.New("surla serve canceled the operation or exited")
+// its stdin ends: hbay serve canceled the operation or exited.
+var errServeReleased = errors.New("hbay serve canceled the operation or exited")
 
 // errCheckTimeLimit is the cancellation cause of a check operation that
 // reached the server's configured check timeout, which tells that limit from
 // a deadline the caller set.
 var errCheckTimeLimit = errors.New("the check reached its configured time limit")
 
-// RunCheckHelper runs as `surla check-run`, the check helper process of one
+// RunCheckHelper runs as `hbay check-run`, the check helper process of one
 // check_project or update_dependencies operation. runner resolves the
 // engine; tp receives the helper's spans. It reads the spec from stdin,
 // verifies the descriptors it inherited, and runs the operation; when stdin
@@ -194,9 +194,9 @@ func RunCheckHelper(runner *candidate.ContainerRunner, tp trace.TracerProvider, 
 	defer cancel(nil)
 	go watchServe(io.MultiReader(dec.Buffered(), stdin), cancel)
 
-	ctx, span := tp.Tracer("surla/controlplane").Start(ctx, "surla.check.helper", trace.WithAttributes(
-		attribute.String("surla.check.tool", spec.Tool),
-		attribute.String("surla.check.op_id", spec.OpID),
+	ctx, span := tp.Tracer("highbay/controlplane").Start(ctx, "highbay.check.helper", trace.WithAttributes(
+		attribute.String("highbay.check.tool", spec.Tool),
+		attribute.String("highbay.check.op_id", spec.OpID),
 	))
 	var result checkHelperResult
 	switch spec.Tool {
@@ -209,7 +209,7 @@ func RunCheckHelper(runner *candidate.ContainerRunner, tp trace.TracerProvider, 
 		result = checkHelperResult{Error: newCheckHelperError(err)}
 	}
 	if cause := context.Cause(ctx); cause != nil {
-		span.AddEvent("operation_canceled", trace.WithAttributes(attribute.String("surla.check.reason", cause.Error())))
+		span.AddEvent("operation_canceled", trace.WithAttributes(attribute.String("highbay.check.reason", cause.Error())))
 	}
 	endCheckSpan(span, err)
 	raw, err := json.Marshal(result)
@@ -231,7 +231,7 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 
 // lockNewOperationDir creates the operation directory dir and returns it
-// open with an exclusive flock held, which surla serve hands to the check
+// open with an exclusive flock held, which hbay serve hands to the check
 // helper. A directory that cannot be locked is removed.
 func lockNewOperationDir(dir string) (*os.File, error) {
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -298,7 +298,7 @@ func openCheckHelperOperation(spec checkHelperSpec, runner *candidate.ContainerR
 	return op, os.NewFile(checkHelperDirFD, spec.Dir), nil
 }
 
-// watchServe reads the rest of the helper's stdin, which surla serve never
+// watchServe reads the rest of the helper's stdin, which hbay serve never
 // writes to after the spec, and cancels the operation when it ends: serve
 // closed it to cancel the operation, or exited. A read error ends it the
 // same way.
@@ -319,9 +319,9 @@ func decodeCheckHelperResult(raw []byte, tool string) (checkHelperResult, error)
 	case r.Error != nil && r.Check == nil && r.Update == nil && r.Error.Message != "":
 		return r, nil
 	case r.Check != nil && r.Update == nil && r.Error == nil && tool == checkToolProject:
-		return r, gensurla.ValidateCheckProjectResultValue(r.Check)
+		return r, genhighbay.ValidateCheckProjectResultValue(r.Check)
 	case r.Update != nil && r.Check == nil && r.Error == nil && tool == checkToolDependencies:
-		return r, gensurla.ValidateUpdateDependenciesResultValue(r.Update)
+		return r, genhighbay.ValidateUpdateDependenciesResultValue(r.Update)
 	}
 	return checkHelperResult{}, fmt.Errorf("the check result %s is not one %s result or error", raw, tool)
 }
@@ -358,7 +358,7 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return checkHelperResult{}, gensurla.MakeWorkingCopyBusy(fmt.Errorf("The builder's working copy is in use; call %s again when the current operation finishes.", tool))
+		return checkHelperResult{}, genhighbay.MakeWorkingCopyBusy(fmt.Errorf("The builder's working copy is in use; call %s again when the current operation finishes.", tool))
 	}
 	defer func() { <-c.builderCopyTurn }()
 	ready, err := c.builderCopyReady(ctx, wsDir, tool)
@@ -376,7 +376,7 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 	// The helper receives its own copies of the held directories.
 	defer func() { retErr = errors.Join(retErr, op.closeLive()) }()
 	op.dir = filepath.Join(c.checkWorkDir, op.id)
-	trace.SpanFromContext(ctx).SetAttributes(attribute.String("surla.check.op_id", op.id))
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("highbay.check.op_id", op.id))
 	lock, err := lockNewOperationDir(op.dir)
 	if err != nil {
 		return checkHelperResult{}, err
@@ -412,7 +412,7 @@ func (c *ControlPlane) runCheckHelper(ctx context.Context, tool string) (res che
 func (op *checkOperation) openBuilderLive(project *os.Root, ready builderReadyCopy) (retErr error) {
 	_, grant, err := openBuildGenerationRoot(project, ready.copyRoot)
 	if err != nil {
-		return gensurla.MakeUnprocessable(fmt.Errorf("open the builder's working copy: %w", err))
+		return genhighbay.MakeUnprocessable(fmt.Errorf("open the builder's working copy: %w", err))
 	}
 	defer func() { retErr = errors.Join(retErr, grant.Close()) }()
 	held, err := grant.Open(".")
@@ -425,12 +425,12 @@ func (op *checkOperation) openBuilderLive(project *os.Root, ready builderReadyCo
 	}
 	rel, err := filepath.Rel(ready.copyRoot, ready.folder)
 	if err != nil || !filepath.IsLocal(rel) {
-		return gensurla.MakeUnprocessable(errors.New("the builder's module is outside its working copy"))
+		return genhighbay.MakeUnprocessable(errors.New("the builder's module is outside its working copy"))
 	}
 	op.workspaceRel = filepath.ToSlash(rel)
 	op.workspaceFD, err = openDirAt(op.grantFD, op.workspaceRel)
 	if err != nil {
-		return gensurla.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
+		return genhighbay.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
 	}
 	var st unix.Stat_t
 	if err := unix.Fstat(op.workspaceFD, &st); err != nil {

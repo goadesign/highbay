@@ -1,6 +1,6 @@
 package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Order Refunds", func() {
 	Description("Domain timeline for customer refund requests.")

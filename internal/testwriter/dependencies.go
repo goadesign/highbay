@@ -3,14 +3,14 @@
 // author's changes, which is ErrDependencies and the user's to clear.
 //
 // The download runs with the user's proxy settings, so
-// its output is withheld and cannot say why it failed. What Surla can know
+// its output is withheld and cannot say why it failed. What Highbay can know
 // without it is whether the failure follows the author's changes. A download
 // reads only the module's go.mod and go.sum, so:
 //
 //   - when both are the ones of the copy's base, the project's own lists fail,
 //     and the author changed nothing that could explain it;
 //   - when the author changed them, the same download is run on the base's
-//     lists. If those fail too, downloading does not work where Surla runs,
+//     lists. If those fail too, downloading does not work where Highbay runs,
 //     whatever the author changed. If they download, the author's change is
 //     what cannot be downloaded, and it stays the author's finding.
 //
@@ -20,7 +20,7 @@
 // always a finding.
 //
 // What this cannot tell apart: a module the author added that exists but
-// cannot be reached from where Surla runs (no network while everything the
+// cannot be reached from where Highbay runs (no network while everything the
 // base lists is already in the module cache, or a private module the server
 // has no access to) reads the same as one that does not exist. Both are the
 // author's finding, whose text says to tell the user when the download works
@@ -39,7 +39,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // dependencyLists is the content of a module's go.mod and go.sum, the two

@@ -1,6 +1,6 @@
-# Surla Agent Guide
+# Highbay Agent Guide
 
-Surla is a Goa and goa-ai control plane that takes a feature request through
+Highbay is a Goa and goa-ai control plane that takes a feature request through
 intent (CP1), architecture preview (CP2), live prompt drafts (CP3),
 verification (CP4), and promotion checks (CP5). Make the smallest correct
 change while preserving strong contracts, clear ownership, and required
@@ -23,7 +23,7 @@ Use the relevant entry below, not the entire document set before each task:
 
 | Question | Authoritative starting point |
 | --- | --- |
-| What is Surla and how does a user start? | [README.md](README.md) |
+| What is Highbay and how does a user start? | [README.md](README.md) |
 | How does the user journey work? | [How it works](docs/HOW_IT_WORKS.md) |
 | What do commands and contracts accept/return? | [Reference](docs/REFERENCE.md) |
 | Which component owns a concern? | [Architecture playbook](docs/ARCHITECTURE_PLAYBOOK.md), then owning source |
@@ -119,7 +119,7 @@ shared docs must not contain machine-local paths or private evidence.
   Verify consumer-visible success, including save/reload persistence when
   claimed; exit zero or file readback alone does not prove that outcome.
 
-## 2. Preserve Surla's user journey
+## 2. Preserve Highbay's user journey
 
 - For a new surface or substantial redesign, establish the user, value,
   built-in rules, and scope from the README, Golden Path, and user decisions.
@@ -134,7 +134,7 @@ shared docs must not contain machine-local paths or private evidence.
   the execution boundary. Developers build/test before committing.
 - Before splitting a usability report into fixes, identify shared flaws
   across the whole journey. Verify onboarding or multistep changes with
-  `surla-ux-review` or an equivalent end-to-end walkthrough and record the
+  `highbay-ux-review` or an equivalent end-to-end walkthrough and record the
   findings; a walkthrough is evidence for the change, not a test to repeat
   in every package. Keep examples/starters focused on CP1–CP5 and validate
   them through the real CLI/MCP entrypoints in the named journey tests,
@@ -147,14 +147,14 @@ shared docs must not contain machine-local paths or private evidence.
 ## 3. Ownership and model-facing contracts
 
 - `internal/controlplane` owns Change Card files. `internal/verifyrun` owns
-  verification run directories; the project server that `surla` starts and
-  its `surla verify-run` processes share them through that package as one
+  verification run directories; the project server that `hbay` starts and
+  its `hbay verify-run` processes share them through that package as one
   logical service. Distinct
   services do not share private storage. Ask the owner through its generated
   API rather than adding shared persistence or copying running facts into
   configuration.
 - The project server binds `PromotionTarget` from the promotion settings
-  stored with `surla promotion set`; Surla never fabricates the promotion
+  stored with `hbay promotion set`; Highbay never fabricates the promotion
   inputs it reports. Accepted verification work
   runs in a server-owned process and survives client disconnects; correctness
   must not depend on client retries except fresh client-held credentials.
@@ -248,13 +248,13 @@ Never hand-edit these generated files/directories:
 After changing `design/`, run the module-pinned generator:
 
 ```sh
-go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design </dev/null
+go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design </dev/null
 ```
 
 After changing `design/targetprompt/`:
 
 ```sh
-go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/surla/design/targetprompt -o internal/targetprompt </dev/null
+go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design/targetprompt -o internal/targetprompt </dev/null
 ```
 
 After changing `design/` or `ui/checkpoint/src/`, rebuild (this also writes
@@ -306,11 +306,11 @@ invocations.
 | Root Go module | `bash .github/scripts/go-test.sh -count=1 -- ./...` and `go run ./.github/scripts/racecheck` |
 | Portable Story language | `bash ../.github/scripts/go-test.sh -vet=all -- ./...` from `story` |
 | Verification flow | `go test -count=1 -tags e2e ./internal/verify` |
-| `surla gen` / `surla init` generation | `go test -race -count=1 -tags e2e ./cmd/surla` |
+| `hbay gen` / `hbay init` generation | `go test -race -count=1 -tags e2e ./cmd/hbay` |
 | `examples/orders` | `bash ../../.github/scripts/go-test.sh -- ./...` from `examples/orders` |
 | `examples/orders` or `examples/orders-eval` | `go test -race -tags e2e ./acceptance` from `examples/orders-eval` |
 | Starter generation | `go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold` |
-| Project server with Herdr (opt-in) | `go test -race -count=1 -tags herdr -run TestHC ./cmd/surla` |
+| Project server with Herdr (opt-in) | `go test -race -count=1 -tags herdr -run TestHC ./cmd/hbay` |
 | Views page policy, session, or layout (opt-in) | `go test -race -count=1 -tags browser ./internal/project` |
 | Views page TypeScript | `npm --prefix ui/checkpoint run typecheck` |
 
@@ -318,7 +318,7 @@ invocations.
 `.github/race-packages.txt`, which own production concurrency; `racecheck`
 fails when an unlisted package gains goroutines, channels, or `sync`. The
 Herdr test needs `hc` and skips without it. The browser test needs Node 22
-or newer and Chrome or Chromium (set `SURLA_TEST_BROWSER` when it is not in
+or newer and Chrome or Chromium (set `HIGHBAY_TEST_BROWSER` when it is not in
 a standard location).
 
 Each contract has one owning test, at the cheapest layer that can observe
@@ -329,12 +329,12 @@ code generation belong in their owners (`verify/candidate`,
 named tagged journeys. Control-plane, project, page, and CLI tests start from
 saved fixtures or snapshots, or the control plane's build-copy seam, unless
 their own contract is that compilation. A forwarding layer (`verifyrun`,
-`controlplane`, `cmd/surla`) tests one passing and one refused case, not its
+`controlplane`, `cmd/hbay`) tests one passing and one refused case, not its
 owner's table. Every declared refusal has a test that triggers it.
 
 Tests share expensive immutable inputs and isolate mutable state:
 `t.TempDir()` holds scratch and outputs, while compiled packages come from
-the job's shared cache (`SURLA_TEST_BUILD_CACHE`, or the project build
+the job's shared cache (`HIGHBAY_TEST_BUILD_CACHE`, or the project build
 cache). A fresh cache belongs only in tests about the cache. Each CI job runs
 an explicit set of tests that no other job runs; a build tag adds files and
 does not select tests, so a tagged job names its tests with `-run`. An opt-in

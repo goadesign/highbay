@@ -1,4 +1,4 @@
-// Package design declares the reference orders platform that Surla builds
+// Package design declares the reference orders platform that Highbay builds
 // and verifies: a refund agent over a commerce system and a payment provider.
 package design
 
@@ -15,16 +15,16 @@ var JWTAuth = JWTSecurity("jwt", func() {
 	Scope("refunds:approve", "Approve or deny refunds that need a manager.")
 })
 
-// LiveKey is the key Surla mints for a live copy of this platform and passes
+// LiveKey is the key Highbay mints for a live copy of this platform and passes
 // to the orders process through its environment. Only the prompts service's
 // override_prompt requires it.
 var LiveKey = APIKeySecurity("live_key", func() {
-	Description("Key Surla minted for this process and passed to it at start.")
+	Description("Key Highbay minted for this process and passed to it at start.")
 })
 
 var _ = API("orders", func() {
 	Title("Orders reference platform")
-	Description("Refund assistant used as Surla's reference target under test.")
+	Description("Refund assistant used as Highbay's reference target under test.")
 })
 
 // orderTools are the tools the refund agent can call. Tenant and customer
@@ -235,15 +235,15 @@ Never promise a refund before a tool result confirms it. If a tool refuses, expl
 	})
 })
 
-// The prompts service is the operation Surla's draft_override calls on a live
-// copy of this platform that Surla built and started itself. It follows
-// Surla's live target prompt contract: the key travels in the
+// The prompts service is the operation Highbay's draft_override calls on a live
+// copy of this platform that Highbay built and started itself. It follows
+// Highbay's live target prompt contract: the key travels in the
 // X-Live-Target-Key header, the new text in the body, and a missing or wrong
 // key answers 401 with a plain-text unauthorized error. It is a service of its
 // own because the orders service's errors and bearer-token security are not
 // that contract's.
 var _ = Service("prompts", func() {
-	Description("Prompt text a live copy of the orders platform lets Surla replace. Each call replaces the text of one registered prompt for every tenant served by this orders process, until it exits.")
+	Description("Prompt text a live copy of the orders platform lets Highbay replace. Each call replaces the text of one registered prompt for every tenant served by this orders process, until it exits.")
 	Error("unauthorized", String, "The key is missing or is not this process's live key.")
 	Error("unknown_prompt", ErrorResult, "No prompt with this ID is registered.")
 	Error("invalid_prompt", ErrorResult, "The template does not render with the prompt's registered spec.")

@@ -3,7 +3,7 @@
 // HTTP request path constructors for the project service.
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package server
 

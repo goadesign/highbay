@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/procgroup"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -315,7 +315,7 @@ func TestExecLeavesChildrenInTheCallersGroup(t *testing.T) {
 }
 
 // TestRunAndOutputStopTheGroupTheirRunnerOwns runs the probe through Run and
-// Output with a runner that gives it its own process group, as Surla's
+// Output with a runner that gives it its own process group, as Highbay's
 // in-server callers do. The probe starts a child that outlives it and, under
 // Output, holds its standard output open: both calls return within the
 // runner's grace, and the child no longer exists afterwards.

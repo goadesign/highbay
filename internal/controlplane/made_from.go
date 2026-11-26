@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/goadesign/surla/internal/designversion"
-	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/highbay/internal/designversion"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"golang.org/x/sys/unix"
 )
 

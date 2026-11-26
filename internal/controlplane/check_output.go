@@ -19,7 +19,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 )
 
 // opIDPattern is the shape of an operation ID: 32 lowercase hex digits.
@@ -30,28 +30,28 @@ var opIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
 // cursor and the operation's captured and dropped byte counts (raw bytes).
 // A saved output shorter than its accounting is an error, never an empty
 // page. It requires an authenticated principal.
-func (c *ControlPlane) ReadCheckOutput(ctx context.Context, p *gensurla.ReadCheckOutputPayload) (res *gensurla.CheckOutputPage, retErr error) {
+func (c *ControlPlane) ReadCheckOutput(ctx context.Context, p *genhighbay.ReadCheckOutputPayload) (res *genhighbay.CheckOutputPage, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.read_check_output")
-	span.SetAttributes(attribute.String("surla.check.op_id", p.OpID))
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.read_check_output")
+	span.SetAttributes(attribute.String("highbay.check.op_id", p.OpID))
 	defer func() { endCheckSpan(span, retErr) }()
 	if !opIDPattern.MatchString(p.OpID) || c.checkWorkDir == "" {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("no output exists for op_id %q", p.OpID))
+		return nil, genhighbay.MakeNotFound(fmt.Errorf("no output exists for op_id %q", p.OpID))
 	}
 	var offset int64
 	if p.Cursor != nil {
 		off, err := decodeCursor(p.OpID, *p.Cursor)
 		if err != nil {
-			return nil, gensurla.MakeUnprocessable(err)
+			return nil, genhighbay.MakeUnprocessable(err)
 		}
 		offset = off
 	}
 	dir := filepath.Join(c.checkWorkDir, p.OpID)
 	raw, err := os.ReadFile(filepath.Join(dir, outputMetaFile))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, gensurla.MakeNotFound(fmt.Errorf("no output exists for op_id %q; it may still be running or was removed", p.OpID))
+		return nil, genhighbay.MakeNotFound(fmt.Errorf("no output exists for op_id %q; it may still be running or was removed", p.OpID))
 	}
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (c *ControlPlane) ReadCheckOutput(ctx context.Context, p *gensurla.ReadChec
 		return nil, fmt.Errorf("decode the output accounting of op_id %q: %w", p.OpID, err)
 	}
 	if offset > meta.Captured {
-		return nil, gensurla.MakeUnprocessable(errors.New("cursor is past the end of the output"))
+		return nil, genhighbay.MakeUnprocessable(errors.New("cursor is past the end of the output"))
 	}
 	f, err := os.Open(filepath.Join(dir, outputFile))
 	if err != nil {
@@ -74,7 +74,7 @@ func (c *ControlPlane) ReadCheckOutput(ctx context.Context, p *gensurla.ReadChec
 		return nil, fmt.Errorf("the output of op_id %q ends before byte %d that its accounting records; its operation directory was changed: %w", p.OpID, offset+int64(len(buf)), err)
 	}
 	text, consumed := outputText(buf, offset+int64(len(buf)) == meta.Captured)
-	page := &gensurla.CheckOutputPage{Text: text, CapturedBytes: meta.Captured, DroppedBytes: meta.Dropped}
+	page := &genhighbay.CheckOutputPage{Text: text, CapturedBytes: meta.Captured, DroppedBytes: meta.Dropped}
 	if next := offset + int64(consumed); next < meta.Captured {
 		cursor := encodeCursor(p.OpID, next)
 		page.NextCursor = &cursor

@@ -15,9 +15,9 @@ import (
 	"slices"
 	"strings"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/designversion"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/designversion"
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/sys/unix"
@@ -44,15 +44,15 @@ const (
 
 // UpdateDraft brings the project folder's changes into the draft, preserving
 // merge conflicts for the guide. Evaluation remains a separate refresh action.
-func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateResult, error) {
+func (c *ControlPlane) UpdateDraft(ctx context.Context) (*genhighbay.DraftUpdateResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	wsDir, dev, ino := c.currentWorkspaceTarget()
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.update_draft")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.update_draft")
 	defer span.End()
-	result := &gensurla.DraftUpdateResult{DraftFolder: filepath.Join(wsDir, draftFolderName), Taken: []string{}, Merged: []string{}, ToCorrect: []*gensurla.DraftCorrection{}}
+	result := &genhighbay.DraftUpdateResult{DraftFolder: filepath.Join(wsDir, draftFolderName), Taken: []string{}, Merged: []string{}, ToCorrect: []*genhighbay.DraftCorrection{}}
 	err := c.withDraftSnapshot(ctx, wsDir, dev, ino, func(project, draft *os.Root, list madeFromRecord) error {
 		draftFiles, err := readUpdateFolder(correctInDraft, result.DraftFolder, draft)
 		if err != nil {
@@ -82,7 +82,7 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 			_, _, after, err := currentProjectCommit(ctx, wsDir)
 			readErr = err
 			if err == nil && after != head {
-				readErr = gensurla.MakeConflict(errors.New("The project's commit changed while preparing the draft update; call update_draft again."))
+				readErr = genhighbay.MakeConflict(errors.New("The project's commit changed while preparing the draft update; call update_draft again."))
 			}
 		}
 		c.draftMu.Lock()
@@ -104,7 +104,7 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 		if err != nil {
 			// The draft folder or its marker stopped being readable while Git
 			// ran: the next call refuses the same state before reading it.
-			return gensurla.MakeUnprocessable(fmt.Errorf(
+			return genhighbay.MakeUnprocessable(fmt.Errorf(
 				"draft %s could no longer be read while preparing the update: %w; restore it or move it aside, then call update_draft again",
 				result.DraftFolder, err,
 			))
@@ -118,7 +118,7 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 			return err
 		}
 		if !found || !same || !reflect.DeepEqual(current, list) || !maps.Equal(nowDraft, draftFiles) || !maps.Equal(nowProject, projectFiles) {
-			return gensurla.MakeConflict(errors.New("The draft, project files or design provenance changed while preparing the update; call update_draft again."))
+			return genhighbay.MakeConflict(errors.New("The draft, project files or design provenance changed while preparing the update; call update_draft again."))
 		}
 		for _, update := range updates {
 			if err := c.applyDraftUpdate(draft, &list, update); err != nil {
@@ -138,14 +138,14 @@ func (c *ControlPlane) UpdateDraft(ctx context.Context) (*gensurla.DraftUpdateRe
 	c.draftOwner.Store(&owner)
 	slices.Sort(result.Taken)
 	slices.Sort(result.Merged)
-	slices.SortStableFunc(result.ToCorrect, func(a, b *gensurla.DraftCorrection) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortStableFunc(result.ToCorrect, func(a, b *genhighbay.DraftCorrection) int { return strings.Compare(a.Path, b.Path) })
 	return result, nil
 }
 
 // planDraftUpdates performs immutable reads and single merges outside the lock.
 func (c *ControlPlane) planDraftUpdates(
 	ctx context.Context, dir, head string, original madeFromRecord, draft, project map[string]string,
-	result *gensurla.DraftUpdateResult,
+	result *genhighbay.DraftUpdateResult,
 ) ([]draftFileUpdate, error) {
 	list := cloneDraftRecord(original)
 	design := maps.Clone(draft)
@@ -177,7 +177,7 @@ func (c *ControlPlane) planDraftUpdates(
 				addDraftCorrection(result, correctInDraft, file, problem)
 			}
 		} else if version != pending.Result {
-			addDraftCorrection(result, correctInDraft, file, "Surla stopped while bringing the project folder's change into your draft, and the draft changed since: make sure it holds that change once.")
+			addDraftCorrection(result, correctInDraft, file, "Highbay stopped while bringing the project folder's change into your draft, and the draft changed since: make sure it holds that change once.")
 			skip[file] = true
 		}
 		updates = append(updates, update)
@@ -258,7 +258,7 @@ func (c *ControlPlane) mergeDraftFile(
 	before := updateFileVersion(draft, file)
 	text, kind, problem := outside, "taken", ""
 	if history.gained[file] && baseVersion == list.Taken[file].Version {
-		kind, problem = "correct", "The project's history gained design changes from another line after this file was taken. Surla took the live project file without merging; check that it holds your intended draft edits once."
+		kind, problem = "correct", "The project's history gained design changes from another line after this file was taken. Highbay took the live project file without merging; check that it holds your intended draft edits once."
 	} else if before == outsideVersion {
 		kind = "merged"
 	} else if before != baseVersion {
@@ -432,11 +432,11 @@ func readUpdateFolder(folder, dir string, root *os.Root) (map[string]string, err
 	case err == nil:
 		return files, nil
 	case folder == correctInProject:
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf(
 			"project folder %s: %w; ask the user to restore or correct it in the project folder, then call update_draft again", dir, err,
 		))
 	default:
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf(
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf(
 			"draft %s: %w; restore or correct it in the draft, then call update_draft again", dir, err,
 		))
 	}
@@ -454,11 +454,11 @@ func committedDesignRefusal(commit string, err error) error {
 	var source *committedDesignCanonicalError
 	switch {
 	case errors.As(err, &syntax) && errors.As(err, &source):
-		return gensurla.MakeUnprocessable(fmt.Errorf(
+		return genhighbay.MakeUnprocessable(fmt.Errorf(
 			"%s in the project's commit %s cannot be parsed as Go: %w; %s", source.file, commit, err, next,
 		))
 	case errors.Is(err, errCommittedDesignNotRegular):
-		return gensurla.MakeUnprocessable(fmt.Errorf("the project's commit %s: %w; %s", commit, err, next))
+		return genhighbay.MakeUnprocessable(fmt.Errorf("the project's commit %s: %w; %s", commit, err, next))
 	default:
 		return err
 	}
@@ -523,19 +523,19 @@ func cloneDraftRecord(saved madeFromRecord) madeFromRecord {
 // addDraftCorrection lists a file once even when recovery also found invalid
 // Go. folder is correctInDraft or correctInProject: the folder holding the
 // file whose text has the problem, which decides who corrects it.
-func addDraftCorrection(result *gensurla.DraftUpdateResult, folder, file, problem string) {
+func addDraftCorrection(result *genhighbay.DraftUpdateResult, folder, file, problem string) {
 	for _, correction := range result.ToCorrect {
 		if correction.Path == file {
 			return
 		}
 	}
-	result.ToCorrect = append(result.ToCorrect, &gensurla.DraftCorrection{Path: file, Folder: folder, Problem: problem})
+	result.ToCorrect = append(result.ToCorrect, &genhighbay.DraftCorrection{Path: file, Folder: folder, Problem: problem})
 }
 
-// compareDraftModules names exact requirement/replacement differences. Surla
+// compareDraftModules names exact requirement/replacement differences. Highbay
 // never merges or rewrites go.mod: the draft's is the guide's to correct, and
 // a project go.mod that cannot be parsed or declares no module is the user's.
-func compareDraftModules(project, draft string, result *gensurla.DraftUpdateResult) {
+func compareDraftModules(project, draft string, result *genhighbay.DraftUpdateResult) {
 	p, err := modfile.Parse("project go.mod", []byte(project), nil)
 	if err != nil {
 		addDraftCorrection(result, correctInProject, "go.mod", err.Error())

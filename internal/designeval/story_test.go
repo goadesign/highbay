@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
@@ -37,7 +37,7 @@ func TestEvaluateProgramSpecializesStoryLoading(t *testing.T) {
 	assert.Contains(t, withStory["main.go"], "hadGoaAPI := goaexpr.Root.API != nil || len(goaexpr.Root.Services) > 0")
 	assert.Contains(t, withStory["main.go"], "out.Stories = storySummaries()")
 	assert.Contains(t, withStory["main.go"], "if (hadGoaAPI || len(out.Stories) == 0) && api != nil")
-	assert.Contains(t, withStory["story.go"], `storyexpr "github.com/goadesign/surla/story/expr"`)
+	assert.Contains(t, withStory["story.go"], `storyexpr "github.com/goadesign/highbay/story/expr"`)
 	assert.True(t, strings.HasPrefix(withStory["story.go"], "package main\n"), "story_reader.go becomes the program's story.go")
 	assert.Contains(t, withStory["story.go"], "func storySummaries() []storySummary {")
 }
@@ -59,7 +59,7 @@ func TestEvaluateObservesStoryOnlyAndCombinedDesigns(t *testing.T) {
 			"design/z_refunds.go": string(refundSource),
 			"storyhelpers/actors.go": `package storyhelpers
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 const (
 	WarehouseWorker   = "warehouse-worker"
@@ -83,7 +83,7 @@ func DeclareReturnActors() {
 
 import (
 	"example.com/story-design/storyhelpers"
-	. "github.com/goadesign/surla/story/dsl"
+	. "github.com/goadesign/highbay/story/dsl"
 )
 
 var _ = Story("Warehouse Returns", func() {
@@ -324,7 +324,7 @@ var _ = Story("Carrier Settlements", func() {
 			"design/z_refunds.go": string(refundSource),
 			"design/story.go": `package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Order Lookup", func() {
 	Actor("customer-support", "Customer Support")
@@ -421,7 +421,7 @@ func TestEvaluateRejectsInvalidStoryDeclarations(t *testing.T) {
 			name: "undeclared_actor_in_step",
 			design: `package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Returns", func() {
 	Actor("warehouse-worker", "Warehouse Worker")
@@ -436,7 +436,7 @@ var _ = Story("Returns", func() {
 			name: "duplicate_step_key_in_flow",
 			design: `package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Returns", func() {
 	Actor("warehouse-worker", "Warehouse Worker")
@@ -452,7 +452,7 @@ var _ = Story("Returns", func() {
 			name: "multiple_starts_in_flow",
 			design: `package design
 
-import . "github.com/goadesign/surla/story/dsl"
+import . "github.com/goadesign/highbay/story/dsl"
 
 var _ = Story("Returns", func() {
 	Actor("warehouse-worker", "Warehouse Worker")
@@ -478,14 +478,14 @@ var _ = Story("Returns", func() {
 	}
 }
 
-// storySnapshot builds a tidy module snapshot requiring github.com/goadesign/surla/story
+// storySnapshot builds a tidy module snapshot requiring github.com/goadesign/highbay/story
 // and goa.design/goa/v3 at goaVersion without requiring goa-ai or model unless
 // the provided files import them.
 func storySnapshot(t *testing.T, goaVersion string, files map[string]string) map[string]string {
 	t.Helper()
 	out := maps.Clone(files)
 	out["go.mod"] = "module example.com/story-design\n\ngo 1.27.3\n\nrequire (\n" +
-		"\t" + harnessStoryModule + " " + testmodule.SurlaVersion(t, harnessStoryModule) + "\n" +
+		"\t" + harnessStoryModule + " " + testmodule.HighbayVersion(t, harnessStoryModule) + "\n" +
 		"\t" + harnessGoaModule + " " + goaVersion + "\n)\n"
 	return testmodule.Tidy(t, out)
 }

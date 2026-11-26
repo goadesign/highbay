@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -23,10 +23,10 @@ type (
 	// ends; a non-nil error means unexpected failure and permits a bounded retry.
 	Team interface {
 		BindAssignments(AssignmentReader)
-		ReadTeam(context.Context) (*gensurla.TeamSnapshot, error)
+		ReadTeam(context.Context) (*genhighbay.TeamSnapshot, error)
 		ShowPane(context.Context, string) error
-		StartAgents(context.Context, map[string]*gensurla.RoleAgentChoice) (*gensurla.ProjectTeam, error)
-		ListAgentOptions(context.Context) ([]*gensurla.InstalledAgentOption, error)
+		StartAgents(context.Context, map[string]*genhighbay.RoleAgentChoice) (*genhighbay.ProjectTeam, error)
+		ListAgentOptions(context.Context) ([]*genhighbay.InstalledAgentOption, error)
 		DismissNotice(context.Context, string) error
 		StopWorkers(context.Context, BuildIdentity) error
 		Close() error
@@ -62,7 +62,7 @@ type (
 	PolicyRefusalKind string
 	// TeamPolicyRefusal is the Team owner's bounded refusal to start non-Yolo
 	// workers when an explicit setting in a coding client's configuration
-	// blocks required Surla/Chorus MCP operations or folder trust. It omits raw
+	// blocks required Highbay/Chorus MCP operations or folder trust. It omits raw
 	// filesystem paths so StartTeamAgents and StartBuild's BuildStartStep
 	// (<= 512 characters) present the exact setting and retry step.
 	TeamPolicyRefusal struct {
@@ -70,7 +70,7 @@ type (
 		Kind PolicyRefusalKind
 		// Client names the coding-agent client ("codex", "claude", "gemini", "cursor").
 		Client string
-		// Server names the blocked MCP server ("surla" or "chorus") when applicable.
+		// Server names the blocked MCP server ("highbay" or "chorus") when applicable.
 		Server string
 		// List names the blocking permission or filter list ("deny", "ask", "excludeTools", "includeTools").
 		List string
@@ -159,7 +159,7 @@ func (a TeamAssignments) HasWork(role string) bool {
 }
 
 // GetTeam reads only the project owner's current snapshot and creates no team.
-func (c *ControlPlane) GetTeam(ctx context.Context) (*gensurla.TeamSnapshot, error) {
+func (c *ControlPlane) GetTeam(ctx context.Context) (*genhighbay.TeamSnapshot, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
@@ -168,7 +168,7 @@ func (c *ControlPlane) GetTeam(ctx context.Context) (*gensurla.TeamSnapshot, err
 }
 
 // ShowTeamPane delegates the user's role after purpose and resource authorization.
-func (c *ControlPlane) ShowTeamPane(ctx context.Context, p *gensurla.ShowTeamPanePayload) error {
+func (c *ControlPlane) ShowTeamPane(ctx context.Context, p *genhighbay.ShowTeamPanePayload) error {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return err
@@ -248,16 +248,16 @@ func (e *TeamPolicyRefusal) Step(retry string) string {
 		switch {
 		case clientName != "" && detail != "":
 			step = fmt.Sprintf(
-				"%s configuration file %s could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, %s",
+				"%s configuration file %s could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .highbay-build and .highbay-tests, %s",
 				clientName, detail, retry,
 			)
 		case clientName != "":
 			step = fmt.Sprintf(
-				"%s configuration could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, %s",
+				"%s configuration could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .highbay-build and .highbay-tests, %s",
 				clientName, retry,
 			)
 		default:
-			step = "A coding-agent configuration file could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .surla-build and .surla-tests, " + retry
+			step = "A coding-agent configuration file could not be read or safely used. Fix its syntax, permissions, or path/symlink outside .highbay-build and .highbay-tests, " + retry
 		}
 	default:
 		step = "A coding-agent permission setting prevented starting the workers; update that client setting, " + retry
@@ -292,7 +292,7 @@ func boundedPolicyText(s string, maxRunes int) string {
 
 // StartTeamAgents uses the project owner's existing repeatable team preparation
 // and maps its typed space and client-policy refusals to actionable user errors.
-func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTeamAgentsPayload) (*gensurla.ProjectTeam, error) {
+func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *genhighbay.StartTeamAgentsPayload) (*genhighbay.ProjectTeam, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
@@ -300,19 +300,19 @@ func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *gensurla.StartTea
 	result, err := team.StartAgents(ctx, p.Choices)
 	var conflict *TeamSpaceConflict
 	if errors.As(err, &conflict) {
-		return nil, gensurla.MakeAmbiguousSpace(fmt.Errorf(
+		return nil, genhighbay.MakeAmbiguousSpace(fmt.Errorf(
 			"%d Herdr spaces match this project. %s", conflict.Count, duplicateTeamSpacesStep(),
 		))
 	}
 	var policy *TeamPolicyRefusal
 	if errors.As(err, &policy) {
-		return nil, gensurla.MakeUnprocessable(errors.New(policy.Step("then choose Start workers again.")))
+		return nil, genhighbay.MakeUnprocessable(errors.New(policy.Step("then choose Start workers again.")))
 	}
 	return result, err
 }
 
 // ListTeamAgentOptions discovers installed options only on the user's explicit read.
-func (c *ControlPlane) ListTeamAgentOptions(ctx context.Context) (*gensurla.ListTeamAgentOptionsResult, error) {
+func (c *ControlPlane) ListTeamAgentOptions(ctx context.Context) (*genhighbay.ListTeamAgentOptionsResult, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
@@ -325,11 +325,11 @@ func (c *ControlPlane) ListTeamAgentOptions(ctx context.Context) (*gensurla.List
 	if !c.storedEvaluator() {
 		roles = append(roles, "test_writer")
 	}
-	return &gensurla.ListTeamAgentOptionsResult{Agents: agents, BuildRoles: roles}, nil
+	return &genhighbay.ListTeamAgentOptionsResult{Agents: agents, BuildRoles: roles}, nil
 }
 
 // DismissTeamNotice persists a project notice preference through its team owner.
-func (c *ControlPlane) DismissTeamNotice(ctx context.Context, p *gensurla.DismissTeamNoticePayload) error {
+func (c *ControlPlane) DismissTeamNotice(ctx context.Context, p *genhighbay.DismissTeamNoticePayload) error {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return err
@@ -348,7 +348,7 @@ func assignmentGeneration(identity any) (string, error) {
 }
 
 // duplicateTeamSpacesStep owns the recovery shared by user starts and saved builds.
-// Surla cannot select among matching spaces, so the duplicates must be closed first.
+// Highbay cannot select among matching spaces, so the duplicates must be closed first.
 func duplicateTeamSpacesStep() string {
 	return "Close the duplicate Herdr spaces, then start the agents."
 }
@@ -365,7 +365,7 @@ func (BuilderAndTestWriter) buildFolders() {}
 func (c *ControlPlane) ownedTeam(ctx context.Context) (Team, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok || principal.ID != c.team.Owner {
-		return nil, gensurla.MakeForbidden(errors.New("caller may not access this project team"))
+		return nil, genhighbay.MakeForbidden(errors.New("caller may not access this project team"))
 	}
 	return c.team.Service, nil
 }
@@ -385,7 +385,7 @@ func (c *ControlPlane) superviseTeam() {
 		if err == nil || c.serverCtx.Err() != nil {
 			return
 		}
-		_, span := c.tracer("surla/controlplane").Start(c.serverCtx, "surla.team.supervisor_failed")
+		_, span := c.tracer("highbay/controlplane").Start(c.serverCtx, "highbay.team.supervisor_failed")
 		// Dependency details never carry external output or private paths into spans.
 		span.RecordError(errors.New("team supervisor could not continue"))
 		span.SetStatus(codes.Error, "team supervisor ended")
@@ -506,7 +506,7 @@ func (c *ControlPlane) assignmentGenerations(ctx context.Context) (TeamAssignmen
 		if err != nil {
 			return TeamAssignments{}, err
 		}
-		result.Merged = state.Taking.Kind() == gensurla.BuildTakingKindMerged
+		result.Merged = state.Taking.Kind() == genhighbay.BuildTakingKindMerged
 		if result.Merged {
 			result.BuilderHasWork = false
 			result.TestWriterHasWork = false

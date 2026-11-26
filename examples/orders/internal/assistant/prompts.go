@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/goadesign/surla/examples/orders/internal/orders"
+	"github.com/goadesign/highbay/examples/orders/internal/orders"
 	"goa.design/goa-ai/runtime/agent/prompt"
 )
 

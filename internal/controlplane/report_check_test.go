@@ -28,12 +28,12 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	genclient "github.com/goadesign/surla/gen/http/surla/client"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 // standInCopy is a stand-in for the test writer's working copy that the
@@ -160,29 +160,29 @@ func TestAReportIsJudgedWithoutAnotherCall(t *testing.T) {
 	readBothAssignments(t, cp)
 
 	first := reportTests(t, cp, revision)
-	assert.Equal(t, gensurla.TestsKindReported, first.Progress.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindReported, first.Progress.Tests.Kind())
 	assert.Equal(t, 1, first.Progress.Report)
 	assert.Equal(t, 1, receive(t, checking), "the report woke the check, which is still running")
 	close(release)
-	build := waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	build := waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 	needs, _ := build.TestWriter.Tests.AsNeedsChanges()
 	assert.Equal(t, 1, needs.FindingCount)
 	assert.False(t, build.TestWriter.Read, "a verdict marks the test writer's assignment unread")
 	assert.True(t, build.Builder.Read, "findings leave the builder's assignment read")
-	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"RefundOverLimit is not implemented"}, assignment.Findings)
 
 	second := reportTests(t, cp, revision)
 	assert.Equal(t, 2, second.Progress.Report)
 	assert.Equal(t, 2, receive(t, checking))
-	build = waitForTests(t, cp, gensurla.TestsKindAccepted)
+	build = waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	accepted, _ := build.TestWriter.Tests.AsAccepted()
 	assert.Equal(t, standInCommit, accepted.Commit)
 	assert.Equal(t, testsNotJudged, accepted.NotJudged)
 	assert.False(t, build.TestWriter.Read)
 	assert.False(t, build.Builder.Read, "an acceptance marks the builder's assignment unread too")
-	assert.Equal(t, []string{"Add the tests Surla accepted for change chg, report 2"}, tests.recorded())
+	assert.Equal(t, []string{"Add the tests Highbay accepted for change chg, report 2"}, tests.recorded())
 	assert.Equal(t, []string{testwriter.TestsRole.Branch(1)}, tests.recordedBranches())
 }
 
@@ -211,11 +211,11 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 
 			basis := mustOpenBuildFile(t, cp)
 			report := func(explanation string) {
-				_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
+				_, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
 					ChangeID: "chg", RequestRevision: revision,
-					CoverageStatements: []*gensurla.TestCoverageStatement{{Scenario: "refund_case",
-						QuestionIds: []gensurla.TestCoverageReference{},
-						ExampleIds:  []gensurla.TestCoverageReference{gensurla.TestCoverageReference(basis.Examples[0].ID)},
+					CoverageStatements: []*genhighbay.TestCoverageStatement{{Scenario: "refund_case",
+						QuestionIds: []genhighbay.TestCoverageReference{},
+						ExampleIds:  []genhighbay.TestCoverageReference{genhighbay.TestCoverageReference(basis.Examples[0].ID)},
 						Explanation: explanation}},
 				})
 				require.NoError(t, err)
@@ -226,15 +226,15 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 			release <- struct{}{}
 			require.Equal(t, 2, receive(t, checking), "the second report is checked after the first")
 			build := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
-			assert.Equal(t, gensurla.TestsKindReported, build.TestWriter.Tests.Kind(), "nothing was saved for the first report")
+			assert.Equal(t, genhighbay.TestsKindReported, build.TestWriter.Tests.Kind(), "nothing was saved for the first report")
 			assert.Equal(t, 2, build.TestWriter.Report)
 			assert.Empty(t, tests.recorded(), "nothing was recorded for the first report")
 			assert.Empty(t, build.CoverageStatements, "pending statements are not accepted coverage")
 			release <- struct{}{}
 			if accept {
-				build = waitForTests(t, cp, gensurla.TestsKindAccepted)
+				build = waitForTests(t, cp, genhighbay.TestsKindAccepted)
 				assert.Equal(t, 2, build.TestWriter.Report)
-				assert.Equal(t, []string{"Add the tests Surla accepted for change chg, report 2"}, tests.recorded(),
+				assert.Equal(t, []string{"Add the tests Highbay accepted for change chg, report 2"}, tests.recorded(),
 					"only the second report's tests are recorded")
 				accepted, _ := build.TestWriter.Tests.AsAccepted()
 				assert.Equal(t, strings.Repeat("1", 40), accepted.Commit,
@@ -243,12 +243,12 @@ func TestASecondReportDuringACheckIsJudgedAfterIt(t *testing.T) {
 				assert.Equal(t, "Statement from report two", build.CoverageStatements[0].Explanation)
 				return
 			}
-			waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
-			findings, err := cp.GetTestFindings(asCaller("alice@example.com", CallerUser), &gensurla.GetTestFindingsPayload{ChangeID: "chg"})
+			waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
+			findings, err := cp.GetTestFindings(asCaller("alice@example.com", CallerUser), &genhighbay.GetTestFindingsPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			assert.Equal(t, 2, findings.Report)
 			assert.Equal(t, []string{"finding of check 2"}, findings.Findings)
-			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			require.Len(t, assignment.CoverageStatements, 1)
 			assert.Equal(t, "Statement from report two", assignment.CoverageStatements[0].Explanation)
@@ -273,10 +273,10 @@ func TestAReportDuringRecordWaitsAndKeepsItsNumber(t *testing.T) {
 
 	reportTests(t, cp, revision)
 	require.Equal(t, 1, receive(t, recording))
-	reported := make(chan *gensurla.TestWriterAssignmentItem, 1)
+	reported := make(chan *genhighbay.TestWriterAssignmentItem, 1)
 	go func() {
-		item, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-			ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+		item, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
+			ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 		assert.NoError(t, err)
 		reported <- item
 	}()
@@ -288,13 +288,13 @@ func TestAReportDuringRecordWaitsAndKeepsItsNumber(t *testing.T) {
 	close(release)
 	second := receive(t, reported)
 	assert.Equal(t, 2, second.Progress.Report, "the waiting report keeps its number")
-	assert.Equal(t, gensurla.TestsKindReported, second.Progress.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindReported, second.Progress.Tests.Kind())
 	require.Equal(t, 2, receive(t, recording), "report 2 is judged next")
-	build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+	build := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	assert.Equal(t, 2, build.TestWriter.Report)
 	assert.Equal(t, []string{
-		"Add the tests Surla accepted for change chg, report 1",
-		"Add the tests Surla accepted for change chg, report 2",
+		"Add the tests Highbay accepted for change chg, report 1",
+		"Add the tests Highbay accepted for change chg, report 2",
 	}, tests.recorded())
 }
 
@@ -320,11 +320,11 @@ func TestAVerdictThatCannotBeSavedIsJudgedAgain(t *testing.T) {
 	require.NoError(t, os.Mkdir(staging, 0o700))
 	release <- struct{}{}
 	require.Equal(t, 2, receive(t, checking), "the checker judges the build again by itself")
-	assert.Equal(t, gensurla.TestsKindReported, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind(),
+	assert.Equal(t, genhighbay.TestsKindReported, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind(),
 		"the first verdict was not saved")
 	require.NoError(t, os.Remove(staging))
 	release <- struct{}{}
-	build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+	build := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	assert.Equal(t, 1, build.TestWriter.Report, "no other report was needed")
 }
 
@@ -357,10 +357,10 @@ func TestRetriesAfterAFailedSaveAreBounded(t *testing.T) {
 	require.Eventually(t, func() bool { return tests.checked() == judgments }, 10*time.Second, 10*time.Millisecond)
 	time.Sleep(10 * cp.reports.retry)
 	assert.Equal(t, judgments, tests.checked(), "no judgment after the last retry")
-	assert.Equal(t, gensurla.TestsKindReported, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindReported, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg").TestWriter.Tests.Kind())
 	var failed int
 	for _, span := range exporter.GetSpans() {
-		if span.Name == "surla.controlplane.check_reported_tests" && span.Status.Code == codes.Error {
+		if span.Name == "highbay.controlplane.check_reported_tests" && span.Status.Code == codes.Error {
 			failed++
 		}
 	}
@@ -368,7 +368,7 @@ func TestRetriesAfterAFailedSaveAreBounded(t *testing.T) {
 
 	require.NoError(t, os.Remove(staging))
 	second := reportTests(t, cp, revision)
-	build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+	build := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	assert.Equal(t, second.Progress.Report, build.TestWriter.Report)
 }
 
@@ -409,12 +409,12 @@ func TestAReportedBuildThatCouldNotBeReadIsJudgedOnceItCanBe(t *testing.T) {
 				require.NoError(t, os.WriteFile(file, []byte("{"), 0o600))
 				<-cp.workingCopyTurn
 			}
-			failed := waitForSpan(t, exporter, "surla.controlplane.read_reported_tests")
+			failed := waitForSpan(t, exporter, "highbay.controlplane.read_reported_tests")
 			assert.Equal(t, codes.Error, failed.Status.Code, "the failed read is an error on its span")
 			assert.Zero(t, tests.checked(), "an unreadable build is not judged")
 
 			require.NoError(t, os.WriteFile(file, reported, 0o600))
-			build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+			build := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 			assert.Equal(t, 1, build.TestWriter.Report, "no other report was needed")
 		})
 	}
@@ -440,7 +440,7 @@ func TestRetriesAfterAFailedReadAreBounded(t *testing.T) {
 	failedReads := func() int {
 		var n int
 		for _, span := range exporter.GetSpans() {
-			if span.Name == "surla.controlplane.read_reported_tests" {
+			if span.Name == "highbay.controlplane.read_reported_tests" {
 				n++
 			}
 		}
@@ -457,7 +457,7 @@ func TestRetriesAfterAFailedReadAreBounded(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(file, reported, 0o600))
 	cp.reportWake <- struct{}{}
-	waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 	assert.Equal(t, 1, tests.checked())
 
 	// A round that read everything started the count again.
@@ -482,13 +482,13 @@ func TestABuildStartIsRefusedDuringACheck(t *testing.T) {
 	cp, revision := newReportFixture(t, Options{}, tests)
 	readBothAssignments(t, cp)
 	user := asCaller("alice@example.com", CallerUser)
-	start := &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: revision}
+	start := &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: revision}
 	reportTests(t, cp, revision)
 	receive(t, checking)
 	_, err := cp.StartBuild(user, start)
 	assertRefused(t, err, "working_copy_busy")
 	close(release)
-	waitForTests(t, cp, gensurla.TestsKindAccepted)
+	waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	_, err = startBuildAgain(t, cp, user, start.ChangeID, start.RequestRevision)
 	require.NoError(t, err, "the check released the turn")
 }
@@ -530,7 +530,7 @@ func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(opts.WorkspaceDir, "eval", "go.mod")))
 	opts.Team = &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}}
 	restarted := newControlPlane(t, opts)
-	build := waitForTests(t, restarted, gensurla.TestsKindCouldNotRun)
+	build := waitForTests(t, restarted, genhighbay.TestsKindCouldNotRun)
 	assert.Equal(t, 1, build.TestWriter.Report)
 	failed, _ := build.TestWriter.Tests.AsCouldNotRun()
 	assert.Contains(t, failed.Reason, "could not open the test writer's working copy")
@@ -544,7 +544,7 @@ func TestAStoppedServerSavesNothingAndARestartedOneJudges(t *testing.T) {
 // report, with the module's finding for the test writer to fix.
 func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 	eval := map[string]string{
-		"go.mod":           fmt.Sprintf("module example.com/shop/eval\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 %s\n", testmodule.SurlaVersion(t, "goa.design/goa/v3")),
+		"go.mod":           fmt.Sprintf("module example.com/shop/eval\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 %s\n", testmodule.HighbayVersion(t, "goa.design/goa/v3")),
 		"design/design.go": buildProbeDesign,
 	}
 	_, project := productionBuildProject(t, ".", eval)
@@ -552,21 +552,21 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 		WorkspaceDir: project, Team: &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{}},
 	})
 	card := buildableChange(t, cp, "chg")
-	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
-	require.Equal(t, gensurla.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
-	initial, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	require.Equal(t, genhighbay.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
+	initial, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
-	require.Equal(t, gensurla.TestsKindNeedsChanges, initial.Progress.Tests.Kind(), "the marking read found the module's problem")
+	require.Equal(t, genhighbay.TestsKindNeedsChanges, initial.Progress.Tests.Kind(), "the marking read found the module's problem")
 	assert.Equal(t, 0, initial.Progress.Report)
 
 	reported := reportTests(t, cp, card.RequestRevision)
 	assert.Equal(t, 1, reported.Progress.Report)
-	build := waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	build := waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 	assert.Equal(t, 1, build.TestWriter.Report, "the verdict answers the report")
-	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.Len(t, assignment.Findings, 1)
 	assert.Contains(t, assignment.Findings[0], "go.sum")
@@ -583,14 +583,14 @@ func TestAReportIsJudgedThroughTheProductionCopy(t *testing.T) {
 	runGitForTest(t, testsDir, "switch", "--quiet", "-c", "mine")
 	runGitForTest(t, testsDir, "commit", "--quiet", "--allow-empty", "-m", "side commit")
 	<-cp.workingCopyTurn
-	build = waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	build = waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 	assert.Equal(t, 2, build.TestWriter.Report)
 	runGitForTest(t, testsDir, "switch", "--quiet", testwriter.TestsRole.Branch(1))
-	assignment, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assignment, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	require.Len(t, assignment.Findings, 1)
-	assert.Contains(t, assignment.Findings[0], "Your working copy (.surla-tests) is on branch 'mine'.")
-	assert.Contains(t, assignment.Findings[0], "Put your test files on surla/tests-1, uncommitted (Surla commits what it accepts), and report again.")
+	assert.Contains(t, assignment.Findings[0], "Your working copy (.highbay-tests) is on branch 'mine'.")
+	assert.Contains(t, assignment.Findings[0], "Put your test files on highbay/tests-1, uncommitted (Highbay commits what it accepts), and report again.")
 	assert.Empty(t, productionBuildGit(t, testsDir, "status", "--porcelain", "--untracked-files=all"))
 }
 
@@ -611,17 +611,17 @@ func TestTheWholeCheckLimit(t *testing.T) {
 		name  string
 		limit time.Duration
 		check func(context.Context, int) (testwriter.Verdict, error)
-		want  gensurla.TestsKind
+		want  genhighbay.TestsKind
 	}{
-		{name: "below", limit: checkLimit, check: accepting, want: gensurla.TestsKindAccepted},
-		{name: "at", limit: limit, check: sleepThen(limit, testwriter.Verdict{}), want: gensurla.TestsKindCouldNotRun},
-		{name: "just above", limit: limit, check: sleepThen(limit+200*time.Millisecond, testwriter.Verdict{}), want: gensurla.TestsKindCouldNotRun},
+		{name: "below", limit: checkLimit, check: accepting, want: genhighbay.TestsKindAccepted},
+		{name: "at", limit: limit, check: sleepThen(limit, testwriter.Verdict{}), want: genhighbay.TestsKindCouldNotRun},
+		{name: "just above", limit: limit, check: sleepThen(limit+200*time.Millisecond, testwriter.Verdict{}), want: genhighbay.TestsKindCouldNotRun},
 		{name: "ended with its context", limit: limit, check: func(ctx context.Context, int2 int) (testwriter.Verdict, error) {
 			<-ctx.Done()
 			return testwriter.Verdict{}, ctx.Err()
-		}, want: gensurla.TestsKindCouldNotRun},
+		}, want: genhighbay.TestsKindCouldNotRun},
 		{name: "findings at the limit", limit: limit, check: sleepThen(limit, needsChanges("The suite command did not finish building within 10 minutes.")),
-			want: gensurla.TestsKindNeedsChanges},
+			want: genhighbay.TestsKindNeedsChanges},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -650,33 +650,33 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 		name       string
 		copyErr    error
 		tests      *standInCopy
-		wantKind   gensurla.TestsKind
+		wantKind   genhighbay.TestsKind
 		wantReason []string
 		wantStep   string
 	}{
-		{name: "the working copy cannot be opened", copyErr: errors.New("open /Users/someone/shop/.surla-tests: permission denied"),
-			tests: &standInCopy{check: accepting}, wantKind: gensurla.TestsKindCouldNotRun,
+		{name: "the working copy cannot be opened", copyErr: errors.New("open /Users/someone/shop/.highbay-tests: permission denied"),
+			tests: &standInCopy{check: accepting}, wantKind: genhighbay.TestsKindCouldNotRun,
 			wantReason: []string{"could not open the test writer's working copy", "open <absolute path>: permission denied"}, wantStep: stepOpenCopy},
 		{name: "the required tests cannot be written", tests: &standInCopy{prepareErr: fmt.Errorf(
-			"%w: create staging directory: mkdirat /Users/someone/shop/.surla-tests/eval/.surla-gen-abc: permission denied", testwriter.ErrWriteGenerated)},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"could not write the required tests", "permission denied"},
+			"%w: create staging directory: mkdirat /Users/someone/shop/.highbay-tests/eval/.highbay-gen-abc: permission denied", testwriter.ErrWriteGenerated)},
+			wantKind: genhighbay.TestsKindCouldNotRun, wantReason: []string{"could not write the required tests", "permission denied"},
 			wantStep: stepWriteCopy + ", then ask the test writer to report again."},
-		{name: "the dependencies cannot be downloaded where Surla runs", tests: &standInCopy{check: failing(fmt.Errorf(
+		{name: "the dependencies cannot be downloaded where Highbay runs", tests: &standInCopy{check: failing(fmt.Errorf(
 			"%w, and its go.mod and go.sum are those of the project's commit %s, so the cause is not in the test writer's changes",
 			testwriter.ErrDependencies, standInCommit))},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{
-				"check could not run", "dependencies could not be downloaded where Surla runs", "commit " + standInCommit},
+			wantKind: genhighbay.TestsKindCouldNotRun, wantReason: []string{
+				"check could not run", "dependencies could not be downloaded where Highbay runs", "commit " + standInCommit},
 			wantStep: stepDependencies + ", then ask the test writer to report again."},
 		{name: "git fails", tests: &standInCopy{check: failing(errors.New("git write-tree in /private/var/folders/x/check: exit status 128"))},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"check could not run", "git write-tree in <absolute path>: exit status 128"}, wantStep: stepFailure},
+			wantKind: genhighbay.TestsKindCouldNotRun, wantReason: []string{"check could not run", "git write-tree in <absolute path>: exit status 128"}, wantStep: stepFailure},
 		{name: "recording fails", tests: &standInCopy{check: accepting, record: func(context.Context, int, string) (string, error) {
 			return "", errors.New("git commit-tree: exit status 1")
-		}}, wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"could not record the accepted tests", "exit status 1"}, wantStep: stepFailure},
+		}}, wantKind: genhighbay.TestsKindCouldNotRun, wantReason: []string{"could not record the accepted tests", "exit status 1"}, wantStep: stepFailure},
 		{name: "a long failure", tests: &standInCopy{check: failing(errors.New(strings.Repeat("é", 2*maxCheckReason)))},
-			wantKind: gensurla.TestsKindCouldNotRun, wantReason: []string{"…"}, wantStep: stepFailure},
+			wantKind: genhighbay.TestsKindCouldNotRun, wantReason: []string{"…"}, wantStep: stepFailure},
 		{name: "the author's design does not compile", tests: &standInCopy{prepareErr: &testwriter.AuthorError{Finding: testwriter.Finding{
 			Kind: testwriter.FindingGeneration, Message: "Code generation failed while compiling the design.",
-		}}}, wantKind: gensurla.TestsKindNeedsChanges},
+		}}}, wantKind: genhighbay.TestsKindNeedsChanges},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -696,7 +696,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 			build := waitForTests(t, cp, tc.wantKind)
 			assert.False(t, build.TestWriter.Read)
 			assert.True(t, build.Builder.Read)
-			span := waitForSpan(t, exporter, "surla.controlplane.check_reported_tests")
+			span := waitForSpan(t, exporter, "highbay.controlplane.check_reported_tests")
 			failed, ok := build.TestWriter.Tests.AsCouldNotRun()
 			if !ok {
 				assert.Equal(t, codes.Unset, span.Status.Code, "findings are not a failure")
@@ -729,7 +729,7 @@ func TestACheckThatCannotRunNamesTheUsersStep(t *testing.T) {
 func TestStoredEvaluatorProjectsNeverJudge(t *testing.T) {
 	cp, revision := newReportFixture(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}}, &standInCopy{})
 	tests := asCaller("alice@example.com", CallerTestWriter)
-	report := &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*gensurla.TestCoverageStatement{}}
+	report := &genhighbay.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*genhighbay.TestCoverageStatement{}}
 	before := readBuildFile(t, cp, "chg")
 	_, err := cp.ReportTestsFinished(tests, report)
 	assertRefused(t, err, "not_found")
@@ -746,7 +746,7 @@ func TestStoredEvaluatorProjectsNeverJudge(t *testing.T) {
 	assert.Equal(t, before, readBuildFile(t, cp, "chg"), "a refused report changes nothing")
 	editBuildFile(t, cp, "chg", savedTestWriter(map[string]any{"state": testsReported}))
 	assert.Empty(t, cp.reports.reported(t.Context()), "no build is judged")
-	_, err = cp.GetTestFindings(asCaller("alice@example.com", CallerUser), &gensurla.GetTestFindingsPayload{ChangeID: "chg"})
+	_, err = cp.GetTestFindings(asCaller("alice@example.com", CallerUser), &genhighbay.GetTestFindingsPayload{ChangeID: "chg"})
 	assertRefused(t, err, "conflict")
 }
 
@@ -813,7 +813,7 @@ func TestAcceptedTestsCarryTheContractsSentence(t *testing.T) {
 		valid    bool
 	}{
 		{sentence: testsNotJudged, valid: true},
-		{sentence: "Surla judged everything.", valid: false},
+		{sentence: "Highbay judged everything.", valid: false},
 	} {
 		err := genclient.ValidateTestsAcceptedResponseBody(&genclient.TestsAcceptedResponseBody{Commit: &commit, CheckedAt: &at, NotJudged: &tc.sentence})
 		assert.Equal(t, tc.valid, err == nil, "%q: %v", tc.sentence, err)
@@ -841,7 +841,7 @@ func TestVerdictsGiveSupervisionNewGenerations(t *testing.T) {
 	assert.Empty(t, owed.Unread)
 
 	reportTests(t, cp, revision)
-	waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 	afterFindings, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	assert.True(t, afterFindings.BuilderHasWork)
@@ -852,7 +852,7 @@ func TestVerdictsGiveSupervisionNewGenerations(t *testing.T) {
 
 	readBothAssignments(t, cp)
 	reportTests(t, cp, revision)
-	waitForTests(t, cp, gensurla.TestsKindAccepted)
+	waitForTests(t, cp, genhighbay.TestsKindAccepted)
 	afterAcceptance, err := cp.assignmentGenerations(t.Context())
 	require.NoError(t, err)
 	assert.True(t, afterAcceptance.BuilderHasWork)
@@ -866,7 +866,7 @@ func TestVerdictsGiveSupervisionNewGenerations(t *testing.T) {
 // index.lock is planted while the report checker waits for workingCopyTurn:
 //   - if the lock is removed during Record's retries, Check ran once, Record
 //     succeeded on retry, and the build ends in accepted with one commit on
-//     surla/tests-1;
+//     highbay/tests-1;
 //   - if the lock stays across all retries, Check ran once, Record retried
 //     recordLockRetries times, the branch tip stays unmoved, and the build ends
 //     in could_not_run naming the lock file in Step;
@@ -876,7 +876,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		repo, project, cp, _ := reviewProject(t, Options{})
 		cp.reports.retry = 20 * time.Millisecond
 		c1 := buildableChange(t, cp, "chg")
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 			ChangeID: "chg", RequestRevision: c1.RequestRevision,
 		})
 		require.NoError(t, err)
@@ -891,7 +891,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		standIn = &standInCopy{}
 		readBothAssignments(t, cp)
 
-		tip := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
+		tip := productionBuildGit(t, repo, "rev-parse", "highbay/tests-1")
 		require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "accepted_test.go"), []byte("package eval\n"), 0o600))
 		runGitForTest(t, testsDir, "add", "eval/accepted_test.go")
 		tree := productionBuildGit(t, testsDir, "write-tree")
@@ -907,7 +907,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 					}
 					return "", &testwriter.IndexLockError{Path: lockFile, Err: err}
 				}
-				runGitForTest(t, testsDir, "update-ref", "refs/heads/surla/tests-1", commit, tip)
+				runGitForTest(t, testsDir, "update-ref", "refs/heads/highbay/tests-1", commit, tip)
 				return commit, nil
 			},
 		}
@@ -919,13 +919,13 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		require.NoError(t, os.WriteFile(lockFile, []byte("transient\n"), 0o600))
 		<-cp.workingCopyTurn
 
-		build := waitForTests(t, cp, gensurla.TestsKindAccepted)
+		build := waitForTests(t, cp, genhighbay.TestsKindAccepted)
 		assert.Equal(t, 1, standIn.checked(), "Check must not be rerun when Record retries on index.lock")
 		assert.Equal(t, 2, standIn.recordCalls(), "Record succeeded on the second attempt after the lock cleared")
 		assert.Equal(t, []string{tip, tip}, standIn.recordedParents(), "every retry stays bound to the same checked parent")
-		head := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
+		head := productionBuildGit(t, repo, "rev-parse", "highbay/tests-1")
 		assert.NotEqual(t, tip, head)
-		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", head+"^"), "exactly one commit recorded on surla/tests-1")
+		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", head+"^"), "exactly one commit recorded on highbay/tests-1")
 		accepted, ok := build.TestWriter.Tests.AsAccepted()
 		require.True(t, ok)
 		assert.Equal(t, head, accepted.Commit)
@@ -935,7 +935,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		repo, project, cp, _ := reviewProject(t, Options{})
 		cp.reports.retry = 20 * time.Millisecond
 		c1 := buildableChange(t, cp, "chg")
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 			ChangeID: "chg", RequestRevision: c1.RequestRevision,
 		})
 		require.NoError(t, err)
@@ -950,7 +950,7 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		standIn = &standInCopy{}
 		readBothAssignments(t, cp)
 
-		tip := productionBuildGit(t, repo, "rev-parse", "surla/tests-1")
+		tip := productionBuildGit(t, repo, "rev-parse", "highbay/tests-1")
 		require.NoError(t, os.WriteFile(filepath.Join(testsDir, "eval", "accepted_test.go"), []byte("package eval\n"), 0o600))
 		runGitForTest(t, testsDir, "add", "eval/accepted_test.go")
 		tree := productionBuildGit(t, testsDir, "write-tree")
@@ -971,14 +971,14 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		require.NoError(t, os.WriteFile(lockFile, []byte("stale\n"), 0o600))
 		<-cp.workingCopyTurn
 
-		build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+		build := waitForTests(t, cp, genhighbay.TestsKindCouldNotRun)
 		require.NoError(t, os.Remove(lockFile))
 		assert.Equal(t, 1, standIn.checked(), "Check ran once")
 		assert.Equal(t, 1+recordLockRetries, standIn.recordCalls(), "Record retried recordLockRetries times")
-		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", "surla/tests-1"), "branch tip stays unmoved")
+		assert.Equal(t, tip, productionBuildGit(t, repo, "rev-parse", "highbay/tests-1"), "branch tip stays unmoved")
 		failed, ok := build.TestWriter.Tests.AsCouldNotRun()
 		require.True(t, ok)
-		assert.Equal(t, "Surla could not record the accepted tests: Git's index is locked.", failed.Reason)
+		assert.Equal(t, "Highbay could not record the accepted tests: Git's index is locked.", failed.Reason)
 		assert.Equal(t,
 			fmt.Sprintf("If no Git command is running in the test writer's working copy, delete %s; then ask the test writer to report again.", lockFile),
 			failed.Step,
@@ -997,12 +997,12 @@ func TestARecordWithAnOnBranchLockRetriesOnlyRecord(t *testing.T) {
 		readBothAssignments(t, cp)
 		reportTests(t, cp, revision)
 
-		build := waitForTests(t, cp, gensurla.TestsKindCouldNotRun)
+		build := waitForTests(t, cp, genhighbay.TestsKindCouldNotRun)
 		assert.Equal(t, 1, tests.checked())
 		assert.Equal(t, 1, tests.recordCalls(), "non-lock Record failure must not be retried")
 		failed, ok := build.TestWriter.Tests.AsCouldNotRun()
 		require.True(t, ok)
-		assert.Contains(t, failed.Reason, "Surla could not record the accepted tests")
+		assert.Contains(t, failed.Reason, "Highbay could not record the accepted tests")
 		assert.Equal(t, stepFailure, failed.Step)
 	})
 
@@ -1041,7 +1041,7 @@ func newReportFixture(t *testing.T, opts Options, copy *standInCopy) (*ControlPl
 	t.Helper()
 	cp := newBuildControlPlane(t, opts)
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	saved := mustOpenBuildFile(t, cp)
 	// Keep the check/record stand-in, but let the pre-Record owner inspect a
@@ -1055,10 +1055,10 @@ func newReportFixture(t *testing.T, opts Options, copy *standInCopy) (*ControlPl
 
 // reportTests reports alice's change "chg" finished at revision as its test
 // writer.
-func reportTests(t *testing.T, cp *ControlPlane, revision string) *gensurla.TestWriterAssignmentItem {
+func reportTests(t *testing.T, cp *ControlPlane, revision string) *genhighbay.TestWriterAssignmentItem {
 	t.Helper()
-	item, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &gensurla.ReportTestsFinishedPayload{
-		ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+	item, err := cp.ReportTestsFinished(asCaller("alice@example.com", CallerTestWriter), &genhighbay.ReportTestsFinishedPayload{
+		ChangeID: "chg", RequestRevision: revision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 	require.NoError(t, err)
 	return item
 }
@@ -1068,22 +1068,22 @@ func reportTests(t *testing.T, cp *ControlPlane, revision string) *gensurla.Test
 func readBothAssignments(t *testing.T, cp *ControlPlane) {
 	t.Helper()
 	makeBuildFixtureBuilderCopy(t, cp)
-	_, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	_, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder), &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
-	_, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 }
 
 // waitForTests reads alice's build of "chg" until its tests are in state
 // want, for at most ten seconds, and returns it.
-func waitForTests(t *testing.T, cp *ControlPlane, want gensurla.TestsKind) *gensurla.StartedBuild {
+func waitForTests(t *testing.T, cp *ControlPlane, want genhighbay.TestsKind) *genhighbay.StartedBuild {
 	t.Helper()
 	return waitForNamedTests(t, cp, "chg", want)
 }
 
 // waitForNamedTests waits for the selected change without changing an
 // assignment read or assuming the old change still owns the open build.
-func waitForNamedTests(t *testing.T, cp *ControlPlane, changeID string, want gensurla.TestsKind) *gensurla.StartedBuild {
+func waitForNamedTests(t *testing.T, cp *ControlPlane, changeID string, want genhighbay.TestsKind) *genhighbay.StartedBuild {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {

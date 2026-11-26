@@ -9,19 +9,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
-// TestTheStoryTableIsSurlas plays a test writer who changes the Story table
-// Surla writes in its working copy. Prepare replaces a symbolic link at the
+// TestTheStoryTableIsHighbays plays a test writer who changes the Story table
+// Highbay writes in its working copy. Prepare replaces a symbolic link at the
 // table's path without touching its target. Check requires the Story's flows
 // whatever the author left at that path (nothing, a table requiring nothing,
-// a link) and records Surla's table; a sibling file that tries to empty the
+// a link) and records Highbay's table; a sibling file that tries to empty the
 // rows does not compile, and a folder at the path is the author's finding.
 // Prepare at the next report restores an edited table, and after Record the
 // copy has no change left. A later Story without a flow drops that flow's
 // requirement while its method stays and still builds.
-func TestTheStoryTableIsSurlas(t *testing.T) {
+func TestTheStoryTableIsHighbays(t *testing.T) {
 	skipInShortMode(t)
 	repo, markers := newProject(t, fixtureProject(t))
 	base := runGit(t, repo, "rev-parse", "HEAD")
@@ -40,7 +40,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "package outside\n", string(b), "the link's target is untouched")
 	}
-	assertSurlasTable := func(t *testing.T) {
+	assertHighbaysTable := func(t *testing.T) {
 		t.Helper()
 		info, err := os.Lstat(tablePath)
 		require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 		required, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		assert.Len(t, required, 2)
-		assertSurlasTable(t)
+		assertHighbaysTable(t)
 		assertOutsideUntouched(t)
 		suiteGo, err := os.ReadFile(filepath.Join(module, generatedSuite))
 		require.NoError(t, err)
@@ -117,7 +117,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 			commit, err := Record(t.Context(), v, branch, runGit(t, repo, "rev-parse", branch), "Add the accepted tests")
 			require.NoError(t, err)
 			assert.Equal(t, strings.TrimSpace(string(want)), runGit(t, repo, "show", commit+":eval/"+designeval.StoryTestsPath),
-				"the commit holds Surla's table, not the author's")
+				"the commit holds Highbay's table, not the author's")
 			assertOutsideUntouched(t)
 		})
 	}
@@ -126,7 +126,7 @@ func TestTheStoryTableIsSurlas(t *testing.T) {
 		require.NoError(t, os.WriteFile(tablePath, noRows, 0o600))
 		_, err := testChecker.Prepare(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
-		assertSurlasTable(t)
+		assertHighbaysTable(t)
 		v, err := testChecker.Check(t.Context(), wc, fixtureSuite, branch, base, refundStories)
 		require.NoError(t, err)
 		require.True(t, v.Accepted(), "%+v", v.Findings)

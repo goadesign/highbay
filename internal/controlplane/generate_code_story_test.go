@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 // storySuiteDesign is a test module's design with one service and one
@@ -73,7 +73,7 @@ func TestGenerateCodeKeepsTheStoryTablesTests(t *testing.T) {
 	eval := "eval"
 	res, err := cp.GenerateCode(
 		WithPrincipal(generationRequest(t), Principal{ID: "developer@example.com", CallerID: "developer@example.com", Kind: CallerBuilder}),
-		&gensurla.GenerateCodePayload{Target: &eval},
+		&genhighbay.GenerateCodePayload{Target: &eval},
 	)
 	require.NoError(t, err)
 	const suite = "gen/evals/orders_acceptance/suite.go"

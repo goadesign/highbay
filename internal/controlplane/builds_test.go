@@ -23,10 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 // TestStartBuildOnlyAtTheConfirmedRevisionInForce refuses an unknown change,
@@ -51,13 +51,13 @@ func TestStartBuildOnlyAtTheConfirmedRevisionInForce(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := cp.StartBuild(tc.ctx, &gensurla.StartBuildPayload{ChangeID: tc.changeID, RequestRevision: tc.revision})
+			_, err := cp.StartBuild(tc.ctx, &genhighbay.StartBuildPayload{ChangeID: tc.changeID, RequestRevision: tc.revision})
 			assertRefused(t, err, tc.refusal)
 			assertNoBuildSaved(t, cp, tc.changeID)
 		})
 	}
 
-	confirmed, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
@@ -74,25 +74,25 @@ func TestStartBuildOnlyAtTheConfirmedRevisionInForce(t *testing.T) {
 	}
 	for _, tc := range refused {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := cp.StartBuild(tc.ctx, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: tc.revision})
+			_, err := cp.StartBuild(tc.ctx, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: tc.revision})
 			assertRefused(t, err, tc.refusal)
 			assertNoBuildSaved(t, cp, "chg")
 		})
 	}
 
-	started, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: confirmed.RequestRevision})
+	started, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: confirmed.RequestRevision})
 	require.NoError(t, err)
 	assert.Equal(t, confirmed.RequestRevision, started.Build.RequestRevision)
 	assert.True(t, started.Build.InForce)
-	branch := "surla/build-1"
-	assert.Equal(t, &gensurla.BuilderProgress{Read: false, Branch: &branch}, started.Build.Builder,
+	branch := "highbay/build-1"
+	assert.Equal(t, &genhighbay.BuilderProgress{Read: false, Branch: &branch}, started.Build.Builder,
 		"a build that just started names its builder branch and has no branch commit or check yet")
-	assert.Equal(t, gensurla.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindAssigned, started.Build.TestWriter.Tests.Kind())
 	assert.False(t, started.Build.TestWriter.Read)
 	startedAt, err := time.Parse(time.RFC3339Nano, started.Build.StartedAt)
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now(), startedAt, time.Minute)
-	read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+	read, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	saved, ok := read.Build.AsStarted()
 	require.True(t, ok, "the build read reports the saved build")
@@ -111,7 +111,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	builder := asCaller("alice@example.com", CallerBuilder)
 	tests := asCaller("alice@example.com", CallerTestWriter)
 	first := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
 
 	makeBuildFixtureBuilderCopy(t, cp)
@@ -119,17 +119,17 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, listed.Assignments, 1)
 	assert.False(t, listed.Assignments[0].Read, "listing records no read")
-	full, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	full, err := cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
-	assert.Equal(t, &gensurla.BuilderAssignment{
+	assert.Equal(t, &genhighbay.BuilderAssignment{
 		ChangeID: "chg", RequestRevision: first.RequestRevision, InForce: true, Read: true,
-		WrittenTests:  gensurla.NewWrittenTestsNotYetAccepted(&gensurla.TestsNotYetAccepted{}),
+		WrittenTests:  genhighbay.NewWrittenTestsNotYetAccepted(&genhighbay.TestsNotYetAccepted{}),
 		WorkingFolder: filepath.Join(cp.activeWorkspaceDir, testwriter.BuilderRole.Folder), GoworkOff: true,
 	}, full)
 	build := mustStartedBuild(t, cp, user, "chg")
 	assert.True(t, build.Builder.Read, "reading in full records the builder's read")
 	assert.False(t, build.TestWriter.Read, "the builder's read is not the test writer's")
-	_, err = cp.GetTestWriterAssignment(tests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetTestWriterAssignment(tests, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	// The report wakes the report checker; its check waits until released,
 	// and a build start waits for no check (it is refused as busy).
@@ -139,17 +139,17 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 		return testwriter.Verdict{Findings: []testwriter.Finding{{Kind: testwriter.FindingBuild, Message: "RefundOverLimit is not implemented"}}}, nil
 	}}
 	cp.buildCopyFactory = func(context.Context, string, scaffold.Layout) (buildCopy, error) { return checked, nil }
-	_, err = cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+	_, err = cp.ReportTestsFinished(tests, &genhighbay.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 	require.NoError(t, err)
 	build = mustStartedBuild(t, cp, user, "chg")
 	assert.True(t, build.TestWriter.Read)
-	assert.Equal(t, gensurla.TestsKindReported, build.TestWriter.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindReported, build.TestWriter.Tests.Kind())
 	close(release)
-	waitForTests(t, cp, gensurla.TestsKindNeedsChanges)
+	waitForTests(t, cp, genhighbay.TestsKindNeedsChanges)
 
-	second, err := cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	second, err := cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: first.RequestRevision, Answers: map[string]string{},
-		Examples: append(first.Examples, &gensurla.ExampleItem{
+		Examples: append(first.Examples, &genhighbay.ExampleItem{
 			ID: "check_02", Scenario: "Refund over the limit", InputSummary: "Order total $50.01",
 			ExpectedOutcome: "Waits for a manager", VerificationKind: "deterministic",
 		}),
@@ -159,7 +159,7 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	build = mustStartedBuild(t, cp, user, "chg")
 	assert.Equal(t, first.RequestRevision, build.RequestRevision, "nothing changes the build automatically")
 	assert.False(t, build.InForce, "the build read says the build is for an earlier revision")
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	assertRefused(t, err, "conflict")
 
 	rebuilt, err := startBuildAgain(t, cp, user, "chg", second.RequestRevision)
@@ -168,13 +168,13 @@ func TestBuildingAgainReplacesTheBuildAndClearsReads(t *testing.T) {
 	assert.True(t, rebuilt.Build.InForce)
 	assert.False(t, rebuilt.Build.Builder.Read, "a new build clears the builder's read")
 	assert.False(t, rebuilt.Build.TestWriter.Read, "a new build clears the test writer's read")
-	assert.Equal(t, gensurla.TestsKindAssigned, rebuilt.Build.TestWriter.Tests.Kind(), "a new build assigns the tests again")
+	assert.Equal(t, genhighbay.TestsKindAssigned, rebuilt.Build.TestWriter.Tests.Kind(), "a new build assigns the tests again")
 	listed, err = cp.ListBuilderAssignments(builder)
 	require.NoError(t, err)
 	require.Len(t, listed.Assignments, 1, "the build was replaced, not added")
 	assert.Equal(t, second.RequestRevision, listed.Assignments[0].RequestRevision)
 
-	_, err = cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	again, err := startBuildAgain(t, cp, user, "chg", second.RequestRevision)
 	require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 	builder := asCaller("alice@example.com", CallerBuilder)
 	tests := asCaller("alice@example.com", CallerTestWriter)
 	first := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: first.RequestRevision})
 	require.NoError(t, err)
 	build := mustOpenBuildFile(t, cp)
 	_, err = testwriter.MakeCopy(t.Context(), cp.currentWorkspaceDir(), testwriter.TestsRole,
@@ -221,7 +221,7 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 			return list.Assignments[0].InForce, nil
 		}},
 		{name: "builder full read", read: func() (bool, error) {
-			full, err := cp.GetBuilderAssignment(builder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+			full, err := cp.GetBuilderAssignment(builder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			if err != nil {
 				return false, err
 			}
@@ -235,14 +235,14 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 			return list.Assignments[0].InForce, nil
 		}},
 		{name: "test writer full read", read: func() (bool, error) {
-			full, err := cp.GetTestWriterAssignment(tests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			full, err := cp.GetTestWriterAssignment(tests, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			if err != nil {
 				return false, err
 			}
 			return full.InForce, nil
 		}},
 		{name: "test writer report", read: func() (bool, error) {
-			item, err := cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+			item, err := cp.ReportTestsFinished(tests, &genhighbay.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: first.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 			if err != nil {
 				return false, err
 			}
@@ -264,9 +264,9 @@ func TestAssignmentsSayWhetherTheirBuildIsInForce(t *testing.T) {
 		}
 	}
 	check(true)
-	_, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	_, err = cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: first.RequestRevision, Answers: map[string]string{},
-		Examples: append(first.Examples, &gensurla.ExampleItem{
+		Examples: append(first.Examples, &genhighbay.ExampleItem{
 			ID: "check_02", Scenario: "Refund over the limit", InputSummary: "Order total $50.01",
 			ExpectedOutcome: "Waits for a manager", VerificationKind: "deterministic",
 		}),
@@ -295,7 +295,7 @@ func TestStartBuildChecksTheChangeAgainAfterPreparing(t *testing.T) {
 				saveBuildStoryCard(t, cp, "chg", tc.status, refundStory("Refund over the new limit"))
 				return copy, nil
 			}
-			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			assertRefused(t, err, "conflict")
 			assert.Empty(t, cp.team.Service.(*teamServiceFixture).calls, "a second-check refusal registers no role or window work")
 			assertNoBuildSaved(t, cp, "chg")
@@ -314,18 +314,18 @@ func TestTestAssignmentKeepsTheStoryAgreedAtTheBuiltRevision(t *testing.T) {
 	tests := asCaller("alice@example.com", CallerTestWriter)
 	agreed := refundStory("Refund over the limit")
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, agreed)
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 
 	revised := refundStory("Refund over the new limit")
 	revised[0].Flows = append(revised[0].Flows, designeval.StoryFlow{Key: "store-credit", Title: "Store credit", Complete: true})
 	saveBuildStoryCard(t, cp, "chg", StatusNeedsConfirmation, revised)
 
-	assignment, err := cp.GetTestWriterAssignment(tests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	assignment, err := cp.GetTestWriterAssignment(tests, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Equal(t, card.RequestRevision, assignment.RequestRevision)
 	assert.Equal(t, storySummaryItems(agreed), assignment.Stories, "the Story as agreed at the built revision")
-	assert.Equal(t, []*gensurla.RequiredTest{{
+	assert.Equal(t, []*genhighbay.RequiredTest{{
 		Story: "Refunds", FlowKey: "refund-over-limit", Scenario: "refund_over_limit", Hook: "RefundOverLimit",
 	}}, assignment.RequiredTests, "one test per finished flow, named by the generator's rule")
 	assert.NotEmpty(t, assignment.WorkingFolder, "the build has its own test-writer project folder")
@@ -343,7 +343,7 @@ func TestStartBuildRefusesAStoryWhoseTestsCannotBeNamed(t *testing.T) {
 	stories := refundStory("Refund over the limit")
 	stories[0].Flows = append(stories[0].Flows, designeval.StoryFlow{Key: "refund_over_limit", Title: "Same name", Complete: true})
 	card := saveBuildStoryCard(t, cp, "chg", StatusConfirmed, stories)
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	assertRefused(t, err, "unprocessable")
 	assert.ErrorContains(t, err, "refund_over_limit")
 	assertNoBuildSaved(t, cp, "chg")
@@ -358,9 +358,9 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 	tests := asCaller("alice@example.com", CallerTestWriter)
 	card := buildableChange(t, cp, "chg")
 	buildableChange(t, cp, "unbuilt")
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	_, err = cp.GetTestWriterAssignment(tests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+	_, err = cp.GetTestWriterAssignment(tests, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	before := readBuildFile(t, cp, "chg")
 	cases := []struct {
@@ -379,18 +379,18 @@ func TestReportForAnotherRevisionIsRefused(t *testing.T) {
 			if tc.refusal == "forbidden" {
 				ctx = asCaller("bob@example.com", CallerTestWriter)
 			}
-			_, err := cp.ReportTestsFinished(ctx, &gensurla.ReportTestsFinishedPayload{ChangeID: tc.changeID, RequestRevision: tc.revision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+			_, err := cp.ReportTestsFinished(ctx, &genhighbay.ReportTestsFinishedPayload{ChangeID: tc.changeID, RequestRevision: tc.revision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 			assertRefused(t, err, tc.refusal)
 			assert.Equal(t, before, readBuildFile(t, cp, "chg"), "a refused report changes nothing")
 		})
 	}
 	for report := 1; report <= 2; report++ {
-		reported, err := cp.ReportTestsFinished(tests, &gensurla.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*gensurla.TestCoverageStatement{}})
+		reported, err := cp.ReportTestsFinished(tests, &genhighbay.ReportTestsFinishedPayload{ChangeID: "chg", RequestRevision: card.RequestRevision, CoverageStatements: []*genhighbay.TestCoverageStatement{}})
 		require.NoError(t, err)
-		assert.Equal(t, gensurla.TestsKindReported, reported.Progress.Tests.Kind())
+		assert.Equal(t, genhighbay.TestsKindReported, reported.Progress.Tests.Kind())
 		assert.Equal(t, report, reported.Progress.Report, "every report is counted, even when already reported")
 		saved := mustStartedBuild(t, cp, user, "chg").TestWriter
-		assert.Equal(t, gensurla.TestsKindReported, saved.Tests.Kind(), "the report is saved")
+		assert.Equal(t, genhighbay.TestsKindReported, saved.Tests.Kind(), "the report is saved")
 		assert.Equal(t, report, saved.Report)
 	}
 }
@@ -402,10 +402,10 @@ func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	user := asCaller("alice@example.com", CallerUser)
 	older := buildableChange(t, cp, "older")
 	newer := buildableChange(t, cp, "newer")
-	_, err := cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "older", RequestRevision: older.RequestRevision})
+	_, err := cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "older", RequestRevision: older.RequestRevision})
 	require.NoError(t, err)
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: "newer", RequestRevision: newer.RequestRevision})
-	var refusal *gensurla.OpenBuildRefusal
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: "newer", RequestRevision: newer.RequestRevision})
+	var refusal *genhighbay.OpenBuildRefusal
 	require.ErrorAs(t, err, &refusal)
 	assert.Equal(t, "previous_change_open", refusal.Name)
 	assert.Equal(t, "older", refusal.ChangeID)
@@ -428,9 +428,9 @@ func TestAssignmentsListOnlyTheCallersOwnChanges(t *testing.T) {
 	noTests, err := cp.ListTestWriterAssignments(otherTests)
 	require.NoError(t, err)
 	assert.Empty(t, noTests.Assignments)
-	_, err = cp.GetBuilderAssignment(otherBuilder, &gensurla.GetBuilderAssignmentPayload{ChangeID: "older"})
+	_, err = cp.GetBuilderAssignment(otherBuilder, &genhighbay.GetBuilderAssignmentPayload{ChangeID: "older"})
 	assertRefused(t, err, "forbidden")
-	_, err = cp.GetTestWriterAssignment(otherTests, &gensurla.GetTestWriterAssignmentPayload{ChangeID: "older"})
+	_, err = cp.GetTestWriterAssignment(otherTests, &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "older"})
 	assertRefused(t, err, "forbidden")
 }
 
@@ -442,7 +442,7 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 	producer := newBuildControlPlane(t, Options{})
 	user := asCaller("alice@example.com", CallerUser)
 	card := buildableChange(t, producer, "chg")
-	_, err := producer.StartBuild(user, &gensurla.StartBuildPayload{
+	_, err := producer.StartBuild(user, &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -461,7 +461,7 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 		edit       func(map[string]any) map[string]any
 		trailer    string
 		refusal    string
-		tests      gensurla.TestsKind
+		tests      genhighbay.TestsKind
 		notStarted bool
 	}{
 		{name: "unknown field", edit: func(f map[string]any) map[string]any { f["extra"] = true; return f }, refusal: "unknown field"},
@@ -484,8 +484,8 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 		{name: "accepted without a commit", edit: testWriterState("accepted", nil, ""), refusal: "do not match its state"},
 		{name: "needs changes", edit: savedTestWriter(map[string]any{
 			"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"}, "checked_at": at,
-		}), tests: gensurla.TestsKindNeedsChanges},
-		{name: "accepted", edit: savedTestWriter(map[string]any{"state": "accepted", "commit": commit, "checked_at": at}), tests: gensurla.TestsKindAccepted},
+		}), tests: genhighbay.TestsKindNeedsChanges},
+		{name: "accepted", edit: savedTestWriter(map[string]any{"state": "accepted", "commit": commit, "checked_at": at}), tests: genhighbay.TestsKindAccepted},
 		{name: "not used is never saved", edit: savedTestWriter(map[string]any{"state": "not_used"}), refusal: "unknown test-writer state"},
 		{name: "needs changes with a commit", edit: savedTestWriter(map[string]any{
 			"state": "needs_changes", "findings": []string{"RefundOverLimit is not implemented"}, "commit": commit, "checked_at": at,
@@ -507,10 +507,10 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 		}), refusal: "do not match its state"},
 		{name: "could not run", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": "git could not write the tests branch", "step": "Free disk space, then report again.", "checked_at": at,
-		}), tests: gensurla.TestsKindCouldNotRun},
+		}), tests: genhighbay.TestsKindCouldNotRun},
 		{name: "could not run, reason at its limit", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": strings.Repeat("é", maxCheckReason), "step": strings.Repeat("s", maxCheckStep), "checked_at": at,
-		}), tests: gensurla.TestsKindCouldNotRun},
+		}), tests: genhighbay.TestsKindCouldNotRun},
 		{name: "could not run, reason over its limit", edit: savedTestWriter(map[string]any{
 			"state": "could_not_run", "reason": strings.Repeat("é", maxCheckReason+1), "step": "Report again.", "checked_at": at,
 		}), refusal: "do not match its state"},
@@ -538,12 +538,12 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 			tw := f["test_writer"].(map[string]any)
 			tw["state"], tw["findings"], tw["checked_at"] = "needs_changes", []string{"RefundOverLimit is not implemented"}, at
 			return f
-		}, tests: gensurla.TestsKindNeedsChanges},
+		}, tests: genhighbay.TestsKindNeedsChanges},
 		{name: "reported with counted reports", edit: func(f map[string]any) map[string]any {
 			f["test_writer"].(map[string]any)["state"] = "reported"
 			f["report_number"] = 3
 			return f
-		}, tests: gensurla.TestsKindReported},
+		}, tests: genhighbay.TestsKindReported},
 		{name: "negative report number", edit: func(f map[string]any) map[string]any { f["report_number"] = -1; return f }, refusal: "negative report number"},
 	}
 	for _, tc := range cases {
@@ -557,20 +557,20 @@ func TestBuildFileIsDecodedStrictly(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(filepath.Join(cp.cards.dir, openBuildRecordFile), append(raw, tc.trailer...), 0o600))
 
-			read, err := cp.GetBuild(user, &gensurla.GetBuildPayload{ChangeID: "chg"})
+			read, err := cp.GetBuild(user, &genhighbay.GetBuildPayload{ChangeID: "chg"})
 			if tc.refusal != "" {
 				assert.ErrorContains(t, err, tc.refusal)
 				return
 			}
 			require.NoError(t, err)
 			if tc.notStarted {
-				assert.Equal(t, gensurla.BuildKindNotStarted, read.Build.Kind())
+				assert.Equal(t, genhighbay.BuildKindNotStarted, read.Build.Kind())
 				return
 			}
 			build, ok := read.Build.AsStarted()
 			require.True(t, ok)
 			assert.Equal(t, tc.tests, build.TestWriter.Tests.Kind())
-			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+			assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			if needs, ok := assignment.Progress.Tests.AsNeedsChanges(); ok {
 				assert.Equal(t, 1, needs.FindingCount)
@@ -660,7 +660,7 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 				assert.Contains(t, string(result), `"chg"`, op.name)
 				if op.name == "get_build" {
 					for _, raw := range [][]byte{[]byte(body), result} {
-						read, err := gensurla.DecodeChangeBuild(raw)
+						read, err := genhighbay.DecodeChangeBuild(raw)
 						require.NoError(t, err)
 						started, ok := read.Build.AsStarted()
 						require.True(t, ok)
@@ -677,7 +677,7 @@ func TestBuildOperationsFollowTheRoleTable(t *testing.T) {
 	build := mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg")
 	assert.True(t, build.Builder.Read, "the builder read its assignment over both interfaces")
 	assert.True(t, build.TestWriter.Read)
-	assert.Equal(t, gensurla.TestsKindReported, build.TestWriter.Tests.Kind())
+	assert.Equal(t, genhighbay.TestsKindReported, build.TestWriter.Tests.Kind())
 }
 
 // asCaller returns a context for owner's caller of kind.
@@ -690,10 +690,10 @@ func asCaller(owner string, kind CallerKind) context.Context {
 // confirmedChange constructs an explicit legacy saved-card fixture without
 // evaluation metadata, then confirms it through the real owner. It does not
 // exercise the public proposal producer; workspace/API tests refresh explicitly.
-func confirmedChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.ChangeCardResult {
+func confirmedChange(t *testing.T, cp *ControlPlane, changeID string) *genhighbay.ChangeCardResult {
 	t.Helper()
 	proposed := saveProposedCardFixture(t, cp, "alice@example.com", changeID, "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
-	confirmed, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{
+	confirmed, err := cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &genhighbay.ConfirmIntentPayload{
 		ChangeID: changeID, RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
@@ -703,13 +703,13 @@ func confirmedChange(t *testing.T, cp *ControlPlane, changeID string) *gensurla.
 // saveStoryCard saves alice's card changeID with status and stories, as
 // propose_change, revise_change or confirm_intent would leave it, and returns
 // it.
-func saveStoryCard(t *testing.T, cp *ControlPlane, changeID, status string, stories []designeval.StorySummary) *gensurla.ChangeCardResult {
+func saveStoryCard(t *testing.T, cp *ControlPlane, changeID, status string, stories []designeval.StorySummary) *genhighbay.ChangeCardResult {
 	t.Helper()
-	card := &gensurla.ChangeCardResult{
+	card := &genhighbay.ChangeCardResult{
 		ChangeID: changeID, Status: status, Prompt: "Refunds up to $50 are instant.",
-		Summary: "Refunds up to $50 are instant.", Ambiguities: []*gensurla.AmbiguityQuestion{},
+		Summary: "Refunds up to $50 are instant.", Ambiguities: []*genhighbay.AmbiguityQuestion{},
 		Answers: map[string]string{}, PreservedBehaviors: []string{}, Stories: storySummaryItems(stories),
-		Examples: []*gensurla.ExampleItem{{
+		Examples: []*genhighbay.ExampleItem{{
 			ID: "check_01", Scenario: "Refund at the limit", InputSummary: "Order total $50.00",
 			ExpectedOutcome: "Instant store credit", VerificationKind: "deterministic",
 		}},
@@ -782,9 +782,9 @@ func reportedOnce(f map[string]any) map[string]any {
 
 // mustStartedBuild reads changeID's build as ctx and fails the test unless
 // one was started.
-func mustStartedBuild(t *testing.T, cp *ControlPlane, ctx context.Context, changeID string) *gensurla.StartedBuild {
+func mustStartedBuild(t *testing.T, cp *ControlPlane, ctx context.Context, changeID string) *genhighbay.StartedBuild {
 	t.Helper()
-	read, err := cp.GetBuild(ctx, &gensurla.GetBuildPayload{ChangeID: changeID})
+	read, err := cp.GetBuild(ctx, &genhighbay.GetBuildPayload{ChangeID: changeID})
 	require.NoError(t, err)
 	build, ok := read.Build.AsStarted()
 	require.True(t, ok, "change %q has a build", changeID)

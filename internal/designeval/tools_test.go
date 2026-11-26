@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testmodule"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,7 +90,7 @@ var _ = Service("reader", func() {
 			assert.NotContains(t, *card.InputBinding.TextOnlyArgsSchema, `"scope"`)
 			assert.NotContains(t, *card.InputBinding.TextOnlyArgsSchema, `"render"`)
 		}
-		encoded, err := gensurla.EncodeToolContractItem(card)
+		encoded, err := genhighbay.EncodeToolContractItem(card)
 		require.NoError(t, err)
 		assert.NotEmpty(t, encoded)
 	}

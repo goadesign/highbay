@@ -19,7 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -50,13 +50,13 @@ type (
 		// PrincipalHash ties the record to the principal present at span start.
 		PrincipalHash string `json:"principal_hash"`
 		// Span is the safe view, never the original OpenTelemetry span.
-		Span *gensurla.TraceSpan `json:"span"`
+		Span *genhighbay.TraceSpan `json:"span"`
 	}
 )
 
 const (
 	// SummaryAttribute contains a code-authored safe summary, never a raw error.
-	SummaryAttribute = "surla.public_summary"
+	SummaryAttribute = "highbay.public_summary"
 	// MaxRecordBytes bounds one encoded record, including its final newline.
 	MaxRecordBytes = 64 * 1024
 	// scanBytes bounds one List disk read; records leave at least 192 KiB of
@@ -94,7 +94,7 @@ func Open(cardsDir string) (*Store, error) {
 
 // SafeSpan derives a bounded caller view without changing the original span.
 // Authentication and ownership belong to the operation that records the view.
-func SafeSpan(span sdktrace.ReadOnlySpan) *gensurla.TraceSpan {
+func SafeSpan(span sdktrace.ReadOnlySpan) *genhighbay.TraceSpan {
 	attrs := span.Attributes()
 	summary := ""
 	values := make(map[string]string)
@@ -125,7 +125,7 @@ func SafeSpan(span sdktrace.ReadOnlySpan) *gensurla.TraceSpan {
 	if span.Parent().IsValid() {
 		parent = span.Parent().SpanID().String()
 	}
-	return &gensurla.TraceSpan{
+	return &genhighbay.TraceSpan{
 		TraceID:      span.SpanContext().TraceID().String(),
 		SpanID:       span.SpanContext().SpanID().String(),
 		ParentSpanID: parent,
@@ -159,8 +159,8 @@ func (s *Store) Record(principal, callerID, callerKind string, span sdktrace.Rea
 	}
 	view := SafeSpan(span)
 	if callerID != "" {
-		view.Attributes["surla.caller_id"] = callerID
-		view.Attributes["surla.caller_kind"] = callerKind
+		view.Attributes["highbay.caller_id"] = callerID
+		view.Attributes["highbay.caller_kind"] = callerKind
 	}
 	line, err := json.Marshal(savedSpan{PrincipalHash: principalHash(principal), Span: view})
 	if err != nil {
@@ -190,7 +190,7 @@ func (s *Store) List(
 	principal, status string,
 	limit int,
 	cursor *string,
-) (*gensurla.TraceList, error) {
+) (*genhighbay.TraceList, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -200,7 +200,7 @@ func (s *Store) List(
 		if cursor != nil {
 			return nil, ErrCursor
 		}
-		return &gensurla.TraceList{Spans: []*gensurla.TraceSpan{}}, nil
+		return &genhighbay.TraceList{Spans: []*genhighbay.TraceSpan{}}, nil
 	}
 	info, err := s.file.Stat()
 	if err != nil {
@@ -230,7 +230,7 @@ func (s *Store) List(
 		start += int64(firstEnd + 1)
 		buf = buf[firstEnd+1:]
 	}
-	result := &gensurla.TraceList{Spans: []*gensurla.TraceSpan{}}
+	result := &genhighbay.TraceList{Spans: []*genhighbay.TraceSpan{}}
 	owner := principalHash(principal)
 	for len(buf) > 0 {
 		if buf[len(buf)-1] != '\n' {
@@ -286,13 +286,13 @@ func openTraceFile(path string, flags int) (*os.File, error) {
 	f, err := os.OpenFile(path, flags|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0o600)
 	if err != nil {
 		if errors.Is(err, unix.ELOOP) {
-			err = fmt.Errorf("private diagnostic file %q must not be a symlink; stop Surla and restore the regular file before restarting: %w", path, err)
+			err = fmt.Errorf("private diagnostic file %q must not be a symlink; stop Highbay and restore the regular file before restarting: %w", path, err)
 		}
 		return nil, err
 	}
 	info, err := f.Stat()
 	if err == nil && (!info.Mode().IsRegular() || info.Mode().Perm() != 0o600) {
-		err = fmt.Errorf("private diagnostic file %q must be a regular file with permissions 0600; stop Surla and restore the regular file, or run chmod 600 %q if it is already regular, before restarting", path, path)
+		err = fmt.Errorf("private diagnostic file %q must be a regular file with permissions 0600; stop Highbay and restore the regular file, or run chmod 600 %q if it is already regular, before restarting", path, path)
 	}
 	if err == nil {
 		err = repairTail(f, info.Size())
@@ -384,9 +384,9 @@ func decodeSpan(line []byte) (savedSpan, error) {
 // diagnosticAttribute owns the closed set used by both writing and file loads.
 func diagnosticAttribute(key string) bool {
 	switch key {
-	case "surla.change_id", "surla.run_id", "surla.caller_id", "surla.caller_kind",
-		"surla.check.op_id",
-		"surla.check.passed", "surla.generation.target":
+	case "highbay.change_id", "highbay.run_id", "highbay.caller_id", "highbay.caller_kind",
+		"highbay.check.op_id",
+		"highbay.check.passed", "highbay.generation.target":
 		return true
 	default:
 		return false

@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 type (
@@ -36,7 +36,7 @@ type (
 		root string
 		// source is the only candidate source directory mounted in the engine.
 		source string
-		// id is the fixture's unique surla.check label.
+		// id is the fixture's unique highbay.check label.
 		id string
 		// next assigns a distinct name and log to each command.
 		next int
@@ -84,10 +84,10 @@ import (
 func TestBehavior(t *testing.T) {
  if Value() != 7 { t.Fatal("C compiler did not produce the expected value") }
  if err := os.WriteFile("test-artifact.txt", []byte("written inside copied source"), 0600); err != nil { t.Fatal(err) }
- if err := os.WriteFile("/tmp/surla-readonly-root", []byte("forbidden"), 0600); !errors.Is(err, syscall.EROFS) { t.Fatalf("root write returned %v, want EROFS", err) }
- if err := os.WriteFile("/gomodcache/surla-readonly-cache", []byte("forbidden"), 0600); !errors.Is(err, syscall.EROFS) { t.Fatalf("module cache write returned %v, want EROFS", err) }
- if _, err := os.ReadFile(os.Getenv("SURLA_E2E_PROTECTED_FILE")); err == nil { t.Fatal("read the unmounted operator file") }
- for _, name := range []string{"SURLA_E2E_HOST_SECRET", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "FTP_PROXY", "ftp_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"} {
+ if err := os.WriteFile("/tmp/highbay-readonly-root", []byte("forbidden"), 0600); !errors.Is(err, syscall.EROFS) { t.Fatalf("root write returned %v, want EROFS", err) }
+ if err := os.WriteFile("/gomodcache/highbay-readonly-cache", []byte("forbidden"), 0600); !errors.Is(err, syscall.EROFS) { t.Fatalf("module cache write returned %v, want EROFS", err) }
+ if _, err := os.ReadFile(os.Getenv("HIGHBAY_E2E_PROTECTED_FILE")); err == nil { t.Fatal("read the unmounted operator file") }
+ for _, name := range []string{"HIGHBAY_E2E_HOST_SECRET", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "FTP_PROXY", "ftp_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"} {
   if os.Getenv(name) != "" { t.Fatalf("unexpected inherited variable %s", name) }
  }
  interfaces, err := net.Interfaces(); if err != nil { t.Fatal(err) }
@@ -107,7 +107,7 @@ func TestHang(t *testing.T) { time.Sleep(2*time.Minute) }
 func TestContainerEngineEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Minute)
 	defer cancel()
-	t.Setenv("SURLA_E2E_HOST_SECRET", "must-not-reach-container")
+	t.Setenv("HIGHBAY_E2E_HOST_SECRET", "must-not-reach-container")
 	engine, err := NewContainerRunner().Open(ctx, containerTempDir(t))
 	require.NoError(t, err, "start a local Linux Docker engine before running the e2e tag")
 	t.Logf("resolved local engine %s; ensuring pinned Go image", engine.Host())
@@ -351,7 +351,7 @@ func (f *containerFixture) command(
 	t *testing.T, module, network string, readonly bool, args ...string,
 ) (ContainerSpec, *os.File) {
 	t.Helper()
-	name := "surla-check-" + f.id + "-" + strconv.Itoa(f.next)
+	name := "highbay-check-" + f.id + "-" + strconv.Itoa(f.next)
 	work := filepath.Join(f.root, "work-"+strconv.Itoa(f.next))
 	f.next++
 	require.NoError(t, os.MkdirAll(filepath.Join(work, "tmp"), 0o700))
@@ -374,7 +374,7 @@ func (f *containerFixture) command(
 			"HOME=/work", "TMPDIR=/work/tmp", "GOCACHE=/work/gocache", "GOPATH=/work/gopath",
 			"GOMODCACHE=/gomodcache", "GOTOOLCHAIN=" + f.toolchain, "GOTELEMETRY=off",
 			"PATH=/usr/local/go/bin:/usr/bin:/bin", "GOPROXY=" + proxy,
-			"SURLA_E2E_PROTECTED_FILE=" + filepath.Join(f.root, "operator-private.txt"),
+			"HIGHBAY_E2E_PROTECTED_FILE=" + filepath.Join(f.root, "operator-private.txt"),
 		},
 		Args: args,
 	}, log

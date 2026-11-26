@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	genrefund "github.com/goadesign/surla/examples/orders/gen/orders/agents/refund"
+	genrefund "github.com/goadesign/highbay/examples/orders/gen/orders/agents/refund"
 	"goa.design/goa-ai/runtime/agent/model"
 	"goa.design/goa-ai/runtime/agent/planner"
 	"goa.design/goa-ai/runtime/agent/prompt"

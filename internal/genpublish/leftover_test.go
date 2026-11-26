@@ -16,7 +16,7 @@ import (
 // names outside the module, and the module's other files, are byte-identical
 // afterwards.
 func TestRemoveLeftoverStagesRemovesWhatAnInterruptedPublishLeft(t *testing.T) {
-	const name = ".surla-gen-earlier"
+	const name = ".highbay-gen-earlier"
 	cases := []struct {
 		name string
 		// plant lays out the entry called name in the module dir; outside is
@@ -99,11 +99,11 @@ func TestRemoveLeftoverStagesRemovesEveryStage(t *testing.T) {
 	layout(t, dir, map[string]string{"gen/orders/service.go": "current\n"})
 	require.NoError(t, RemoveLeftoverStages(root))
 	layout(t, dir, map[string]string{
-		".surla-gen-one/gen/a.go": "a\n", ".surla-gen-two/gen/b/b.go": "b\n", ".surla-genuine/gen/c.go": "not a staging name\n",
+		".highbay-gen-one/gen/a.go": "a\n", ".highbay-gen-two/gen/b/b.go": "b\n", ".highbay-genuine/gen/c.go": "not a staging name\n",
 	})
 	require.NoError(t, RemoveLeftoverStages(root))
 	assert.Equal(t, map[string]string{
-		"gen/orders/service.go": "current\n", ".surla-genuine/gen/c.go": "not a staging name\n",
+		"gen/orders/service.go": "current\n", ".highbay-genuine/gen/c.go": "not a staging name\n",
 	}, files(t, dir, "."))
 	assert.Empty(t, leftoverStages(root))
 }
@@ -113,7 +113,7 @@ func TestRemoveLeftoverStagesRemovesEveryStage(t *testing.T) {
 // a folder that holds a gen: inside the module, which a directory handle
 // follows, and outside it, which it refuses. Neither folder loses a file.
 func TestALeftoverReplacedWhileItIsOpenedIsLeftAlone(t *testing.T) {
-	const name = ".surla-gen-earlier"
+	const name = ".highbay-gen-earlier"
 	for _, inside := range []bool{true, false} {
 		t.Run(map[bool]string{true: "a link inside the module", false: "a link outside the module"}[inside], func(t *testing.T) {
 			dir, root := moduleRoot(t)
@@ -145,7 +145,7 @@ func TestALeftoverReplacedWhileItIsOpenedIsLeftAlone(t *testing.T) {
 // removed. The removal empties only the directory it opened and never removes
 // by name: the replacement, and what a replacing link names, survive.
 func TestALeftoverRenamedDuringItsRemovalTakesNothingElseWithIt(t *testing.T) {
-	const name = ".surla-gen-earlier"
+	const name = ".highbay-gen-earlier"
 	cases := []struct {
 		name string
 		// replace puts something else at the staging name; outside is a

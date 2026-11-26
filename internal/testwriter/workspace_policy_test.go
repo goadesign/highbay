@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/verify/candidate"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

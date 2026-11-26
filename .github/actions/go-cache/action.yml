@@ -1,4 +1,4 @@
-name: Surla Go compiler inputs
+name: Highbay Go compiler inputs
 description: Restore compiler inputs with one native producer per platform.
 inputs:
   go-version:
@@ -35,7 +35,7 @@ runs:
       working-directory: ${{ github.workspace }}
       run: |
         exec </dev/null
-        build="$RUNNER_TEMP/surla-go-build"
+        build="$RUNNER_TEMP/highbay-go-build"
         mkdir -p "$build"
         chmod 700 "$build"
         echo "build=$build" >> "$GITHUB_OUTPUT"
@@ -50,19 +50,19 @@ runs:
           | shasum -a 256 | cut -d ' ' -f 1)
         echo "versions=$versions" >> "$GITHUB_OUTPUT"
         echo "GOCACHE=$build" >> "$GITHUB_ENV"
-        echo "SURLA_TEST_BUILD_CACHE=$build" >> "$GITHUB_ENV"
+        echo "HIGHBAY_TEST_BUILD_CACHE=$build" >> "$GITHUB_ENV"
     - name: Restore modules
       id: module-reader
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.modules }}
-        key: surla-go-v4-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
+        key: highbay-go-v4-modules-${{ runner.os }}-${{ runner.arch }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**') }}-${{ steps.paths.outputs.versions }}
     - name: Restore compiled packages
       id: build-reader
       uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
       with:
         path: ${{ steps.paths.outputs.build }}
-        key: surla-go-v4-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
+        key: highbay-go-v4-native-race-plain-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.image }}-${{ inputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'internal/scaffold/templates/**', '.github/race-packages.txt') }}-${{ steps.paths.outputs.versions }}
     - name: Report compiler cache state
       shell: bash
       working-directory: ${{ github.workspace }}

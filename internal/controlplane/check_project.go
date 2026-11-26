@@ -2,7 +2,7 @@
 // into a per-operation directory and run go test ./... for every builder-owned
 // workspace module in Linux containers (leaving out the starter test module
 // eval when the project's tests belong to the test writer), after downloading
-// dependencies against a read-only copy. surla serve binds the workspace and
+// dependencies against a read-only copy. hbay serve binds the workspace and
 // creates and locks the operation's directory; the check helper process
 // (check_helper.go) then owns that directory, its containers and its output
 // until it exits.
@@ -31,16 +31,16 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"golang.org/x/sys/unix"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/traceview"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/traceview"
+	"github.com/goadesign/highbay/verify/candidate"
 )
 
 type (
 	// checkOperation is one check_project or update_dependencies operation:
 	// its private directory, the live source it reads and writes, its engine
-	// and the containers it starts. surla serve fills the live-source fields
+	// and the containers it starts. hbay serve fills the live-source fields
 	// when it binds the workspace; the check helper owns the rest. Only one
 	// goroutine uses it.
 	checkOperation struct {
@@ -129,12 +129,12 @@ const (
 // finishes and cleans up the operation even if this server dies. It requires an
 // authenticated principal and a read assignment for the open build. The builder
 // turn remains reserved until the helper finishes its operation and cleanup.
-func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckProjectResult, retErr error) {
+func (c *ControlPlane) CheckProject(ctx context.Context) (res *genhighbay.CheckProjectResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	request := trace.SpanFromContext(ctx)
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_project")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.check_project")
 	if err := c.admitCheckOperation(); err != nil {
 		endCheckRequestSpan(span, err)
 		return nil, err
@@ -150,7 +150,7 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Bool("surla.check.passed", result.Check.Passed))
+	span.SetAttributes(attribute.Bool("highbay.check.passed", result.Check.Passed))
 	return result.Check, nil
 }
 
@@ -162,7 +162,7 @@ func (c *ControlPlane) CheckProject(ctx context.Context) (res *gensurla.CheckPro
 // not fail the builder's check: its own span records the failure, and the
 // build keeps the facts of the check before.
 func (c *ControlPlane) recordBuilderCheck(ctx context.Context, build time.Time, passed bool) {
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.record_builder_check")
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.record_builder_check")
 	defer span.End()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -186,12 +186,12 @@ func (c *ControlPlane) recordBuilderCheck(ctx context.Context, build time.Time, 
 // operations reserve the builder copy separately and refuse a busy copy.
 func (c *ControlPlane) admitCheckOperation() error {
 	if c.checker == nil || c.checkWorkDir == "" {
-		return gensurla.MakeNotImplemented(errors.New("check_project is not configured on this server"))
+		return genhighbay.MakeNotImplemented(errors.New("check_project is not configured on this server"))
 	}
 	c.workspaceMu.RLock()
 	defer c.workspaceMu.RUnlock()
 	if c.serverCtx.Err() != nil {
-		return gensurla.MakeUnavailable(errors.New("the server is shutting down; call again on a running server"))
+		return genhighbay.MakeUnavailable(errors.New("the server is shutting down; call again on a running server"))
 	}
 	c.checkOps.Add(1)
 	return nil
@@ -227,7 +227,7 @@ func (c *ControlPlane) recoverCheckOperations() (retErr error) {
 	if c.checker == nil || c.checkWorkDir == "" {
 		return nil
 	}
-	_, span := c.tracer("surla/controlplane").Start(context.Background(), "surla.controlplane.recover_check_operations")
+	_, span := c.tracer("highbay/controlplane").Start(context.Background(), "highbay.controlplane.recover_check_operations")
 	defer func() { endCheckSpan(span, retErr) }()
 	entries, err := os.ReadDir(c.checkWorkDir)
 	if err != nil {
@@ -257,14 +257,14 @@ func (c *ControlPlane) recoverCheckOperation(span trace.Span, id string) error {
 	defer unix.Close(fd)
 	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		if errors.Is(err, unix.EWOULDBLOCK) {
-			span.AddEvent("operation_in_progress_skipped", trace.WithAttributes(attribute.String("surla.check.op_id", id)))
+			span.AddEvent("operation_in_progress_skipped", trace.WithAttributes(attribute.String("highbay.check.op_id", id)))
 			return nil
 		}
 		return fmt.Errorf("lock operation directory %s: %w", dir, err)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, ownerFile))
 	if errors.Is(err, os.ErrNotExist) {
-		span.AddEvent("ownerless_scratch_removed", trace.WithAttributes(attribute.String("surla.check.op_id", id)))
+		span.AddEvent("ownerless_scratch_removed", trace.WithAttributes(attribute.String("highbay.check.op_id", id)))
 		return removeOperationScratch(dir)
 	}
 	if err != nil {
@@ -278,8 +278,8 @@ func (c *ControlPlane) recoverCheckOperation(span trace.Span, id string) error {
 	}
 	engine := c.checker.Reopen(owner.Docker, owner.Host, filepath.Join(dir, "docker-config"))
 	span.AddEvent("retained_containers_retried", trace.WithAttributes(
-		attribute.String("surla.check.op_id", id),
-		attribute.Int("surla.check.containers", len(owner.Containers)),
+		attribute.String("highbay.check.op_id", id),
+		attribute.Int("highbay.check.containers", len(owner.Containers)),
 	))
 	var errs []error
 	kept := []ownedContainer{}
@@ -290,9 +290,9 @@ func (c *ControlPlane) recoverCheckOperation(span trace.Span, id string) error {
 		}
 		kept = append(kept, c)
 		span.AddEvent("record_kept", trace.WithAttributes(
-			attribute.String("surla.check.container", c.Name),
-			attribute.String("surla.check.state", string(c.State)),
-			attribute.String("surla.check.reason", err.Error()),
+			attribute.String("highbay.check.container", c.Name),
+			attribute.String("highbay.check.state", string(c.State)),
+			attribute.String("highbay.check.reason", err.Error()),
 		))
 		// An entry no listing has shown is the expected state of a create
 		// that was never confirmed, not a failed recovery.
@@ -314,7 +314,7 @@ func (c *ControlPlane) recoverCheckOperation(span trace.Span, id string) error {
 // then go test ./... for every remaining module, and finishes the operation
 // directory. Errors are the caller-facing errors, already joined with the
 // output ID by finish.
-func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProjectResult, error) {
+func (op *checkOperation) checkProject(ctx context.Context) (*genhighbay.CheckProjectResult, error) {
 	if err := op.start(ctx); err != nil {
 		return nil, err
 	}
@@ -341,15 +341,15 @@ func (op *checkOperation) checkProject(ctx context.Context) (*gensurla.CheckProj
 	if err := op.finish(nil); err != nil {
 		return nil, err
 	}
-	trace.SpanFromContext(ctx).SetAttributes(attribute.Bool("surla.check.passed", len(failures) == 0))
-	return &gensurla.CheckProjectResult{
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Bool("highbay.check.passed", len(failures) == 0))
+	return &genhighbay.CheckProjectResult{
 		OpID:    op.id,
 		Passed:  len(failures) == 0,
 		Message: op.message(failures, leftOutTestModule),
 	}, nil
 }
 
-// start prepares the operation directory surla serve created and locked:
+// start prepares the operation directory hbay serve created and locked:
 // the copy, module cache and Docker configuration directories, the output
 // capture, the copy of the live grant, and the engine with its image. Errors
 // are the caller-facing errors; once the output exists they come from
@@ -384,9 +384,9 @@ func (op *checkOperation) start(ctx context.Context) error {
 		fmt.Fprintf(op.out, "note: %s is not a regular file, directory or symlink and was not copied\n", p)
 	}
 	fmt.Fprintf(op.out, "==> modules: %s\n", strings.Join(op.copy.modules, ", "))
-	trace.SpanFromContext(ctx).SetAttributes(attribute.Int("surla.check.modules", len(op.copy.modules)))
+	trace.SpanFromContext(ctx).SetAttributes(attribute.Int("highbay.check.modules", len(op.copy.modules)))
 	if len(op.copy.modules) == 0 {
-		return op.finish(gensurla.MakeUnprocessable(errors.New("the workspace contains no Go module (no go.mod)")))
+		return op.finish(genhighbay.MakeUnprocessable(errors.New("the workspace contains no Go module (no go.mod)")))
 	}
 	engine, err := op.checker.Open(ctx, op.path("docker-config"))
 	if err == nil {
@@ -396,7 +396,7 @@ func (op *checkOperation) start(ctx context.Context) error {
 	}
 	if err != nil {
 		if errors.Is(err, candidate.ErrEngineUnavailable) {
-			return op.finish(&engineUnavailableError{gensurla.MakeUnavailable(err)})
+			return op.finish(&engineUnavailableError{genhighbay.MakeUnavailable(err)})
 		}
 		return op.finish(err)
 	}
@@ -413,16 +413,16 @@ func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, 
 	if err := ctx.Err(); err != nil {
 		return moduleOutcome{}, false, fmt.Errorf("check exceeded check timeout (%s) or was canceled before %s of %s: %w", op.checkTimeout, step, mod, err)
 	}
-	name := fmt.Sprintf("surla-check-%s-%d", op.id, op.containers)
+	name := fmt.Sprintf("highbay-check-%s-%d", op.id, op.containers)
 	work := op.path(fmt.Sprintf("work-%d", op.containers))
 	op.containers++
 	if err := os.MkdirAll(filepath.Join(work, "tmp"), 0o700); err != nil {
 		return moduleOutcome{}, false, fmt.Errorf("create container work directory: %w", err)
 	}
-	ctx, span := checkTracer(ctx).Start(ctx, "surla.check.container", trace.WithAttributes(
-		attribute.String("surla.check.container", name),
-		attribute.String("surla.check.module", mod),
-		attribute.String("surla.check.step", step),
+	ctx, span := checkTracer(ctx).Start(ctx, "highbay.check.container", trace.WithAttributes(
+		attribute.String("highbay.check.container", name),
+		attribute.String("highbay.check.module", mod),
+		attribute.String("highbay.check.step", step),
 	))
 	op.owner.Containers = append(op.owner.Containers, ownedContainer{Name: name, State: stateCreationPending})
 	if err := op.writeOwner(); err != nil {
@@ -474,9 +474,9 @@ func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, 
 	}
 	fmt.Fprintf(op.out, "<== %s %s: exit %d\n", step, mod, code)
 	span.AddEvent("go_command_exited", trace.WithAttributes(
-		attribute.String("surla.check.module", mod),
-		attribute.String("surla.check.step", step),
-		attribute.Int("surla.check.exit_code", code),
+		attribute.String("highbay.check.module", mod),
+		attribute.String("highbay.check.step", step),
+		attribute.Int("highbay.check.exit_code", code),
 	))
 	span.End()
 	if code != 0 {
@@ -492,7 +492,7 @@ func (op *checkOperation) runGo(ctx context.Context, mod, step, network string, 
 // never sent for a container whose record could still say it never ran. An
 // error leaves the entry as last recorded.
 func (op *checkOperation) runContainer(ctx context.Context, spec candidate.ContainerSpec) (int, error) {
-	createCtx, span := checkTracer(ctx).Start(ctx, "surla.check.container.create")
+	createCtx, span := checkTracer(ctx).Start(ctx, "highbay.check.container.create")
 	err := op.engine.Create(createCtx, spec)
 	endCheckSpan(span, err)
 	if err != nil {
@@ -502,9 +502,9 @@ func (op *checkOperation) runContainer(ctx context.Context, spec candidate.Conta
 	if err := op.writeOwner(); err != nil {
 		return -1, err
 	}
-	runCtx, span := checkTracer(ctx).Start(ctx, "surla.check.container.run")
+	runCtx, span := checkTracer(ctx).Start(ctx, "highbay.check.container.run")
 	code, err := op.engine.Start(runCtx, spec.Name, op.out)
-	span.SetAttributes(attribute.Int("surla.check.exit_code", code))
+	span.SetAttributes(attribute.Int("highbay.check.exit_code", code))
 	endCheckSpan(span, err)
 	return code, err
 }
@@ -515,12 +515,12 @@ func (op *checkOperation) runContainer(ctx context.Context, spec candidate.Conta
 // *candidate.CleanupError returned.
 func (op *checkOperation) settle(ctx context.Context, name string) error {
 	c := op.owner.Containers[op.entry(name)]
-	_, span := checkTracer(ctx).Start(ctx, "surla.check.container.remove", trace.WithAttributes(
-		attribute.String("surla.check.container", name),
-		attribute.String("surla.check.state", string(c.State)),
+	_, span := checkTracer(ctx).Start(ctx, "highbay.check.container.remove", trace.WithAttributes(
+		attribute.String("highbay.check.container", name),
+		attribute.String("highbay.check.state", string(c.State)),
 	))
 	if err := confirmRemoved(op.engine, op.id, c); err != nil {
-		span.AddEvent("record_kept", trace.WithAttributes(attribute.String("surla.check.reason", err.Error())))
+		span.AddEvent("record_kept", trace.WithAttributes(attribute.String("highbay.check.reason", err.Error())))
 		endCheckSpan(span, err)
 		return err
 	}
@@ -715,7 +715,7 @@ func (op *checkOperation) openLive(wsRoot *os.Root, accepted []string) error {
 	}
 	rel, err := filepath.Rel(op.grantRoot, wsPath)
 	if err != nil || !filepath.IsLocal(rel) && rel != "." {
-		return gensurla.MakeUnprocessable(fmt.Errorf("workspace %s is outside %s, the source directory this server accepted at startup; if the workspace moved, move it back or stop and start Surla from it", wsPath, op.grantRoot))
+		return genhighbay.MakeUnprocessable(fmt.Errorf("workspace %s is outside %s, the source directory this server accepted at startup; if the workspace moved, move it back or stop and start Highbay from it", wsPath, op.grantRoot))
 	}
 	op.workspaceRel = filepath.ToSlash(rel)
 	return nil
@@ -792,7 +792,7 @@ func summarizeCheckFailure(request, span trace.Span, name string, operation cont
 	}
 	public := attribute.String(traceview.SummaryAttribute, summary)
 	span.SetAttributes(public)
-	if named, ok := request.(interface{ Name() string }); ok && named.Name() == "surla.request."+name {
+	if named, ok := request.(interface{ Name() string }); ok && named.Name() == "highbay.request."+name {
 		request.SetAttributes(public)
 	}
 }
@@ -838,10 +838,10 @@ func endCheckSpan(span trace.Span, err error) {
 }
 
 // checkTracer returns a tracer from the provider of the span in ctx, so a
-// check helper's spans join the trace surla serve passed it, and code run
+// check helper's spans join the trace hbay serve passed it, and code run
 // without a span records nothing.
 func checkTracer(ctx context.Context) trace.Tracer {
-	return trace.SpanFromContext(ctx).TracerProvider().Tracer("surla/controlplane")
+	return trace.SpanFromContext(ctx).TracerProvider().Tracer("highbay/controlplane")
 }
 
 // newOperationID returns a random 32-hex operation ID.

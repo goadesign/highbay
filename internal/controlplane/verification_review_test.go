@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +25,7 @@ import (
 // reviewFixture binds a real build/candidate and saved run to a promotion stub.
 type reviewFixture struct {
 	cp     *ControlPlane
-	card   *gensurla.ChangeCardResult
+	card   *genhighbay.ChangeCardResult
 	cfg    *VerificationConfig
 	req    verifyrun.Request
 	report verify.Report
@@ -79,28 +79,28 @@ func TestReviewVerificationObservesApprovalWithoutWriting(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		change func(*testing.T, reviewFixture)
-		want   gensurla.ApprovalKind
+		want   genhighbay.ApprovalKind
 	}{
-		{name: "passed and current", want: gensurla.ApprovalKindAvailable},
-		{name: "tests changed", want: gensurla.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
+		{name: "passed and current", want: genhighbay.ApprovalKindAvailable},
+		{name: "tests changed", want: genhighbay.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
 			f.cp.mu.Lock()
 			f.cp.verifier.(storedVerification).cfg.Plan.SuiteCommit = strings.Repeat("c", 40)
 			f.cp.mu.Unlock()
 		}},
-		{name: "agreement changed", want: gensurla.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
+		{name: "agreement changed", want: genhighbay.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
 			changeReviewAgreement(t, f)
 		}},
-		{name: "artifacts changed", want: gensurla.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
+		{name: "artifacts changed", want: genhighbay.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
 			f.target.artifacts = map[string]string{"orders": "other"}
 		}},
-		{name: "target report unreadable", want: gensurla.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
+		{name: "target report unreadable", want: genhighbay.ApprovalKindBlocked, change: func(t *testing.T, f reviewFixture) {
 			f.target.loadErr = errors.New("promotion report could not be read")
 		}},
-		{name: "approved", want: gensurla.ApprovalKindRecorded, change: func(t *testing.T, f reviewFixture) {
+		{name: "approved", want: genhighbay.ApprovalKindRecorded, change: func(t *testing.T, f reviewFixture) {
 			_, err := f.cp.ApproveMerge(asCaller("alice@example.com", CallerUser), reviewApprovalPayload(f))
 			require.NoError(t, err)
 		}},
-		{name: "saved approval unreadable artifacts", want: gensurla.ApprovalKindUnverified, change: func(t *testing.T, f reviewFixture) {
+		{name: "saved approval unreadable artifacts", want: genhighbay.ApprovalKindUnverified, change: func(t *testing.T, f reviewFixture) {
 			_, err := f.cp.ApproveMerge(asCaller("alice@example.com", CallerUser), reviewApprovalPayload(f))
 			require.NoError(t, err)
 			f.target.artifactsErr = errors.New("release binaries could not be read")
@@ -112,7 +112,7 @@ func TestReviewVerificationObservesApprovalWithoutWriting(t *testing.T) {
 				tc.change(t, f)
 			}
 			before := savedProjectFiles(t, f.cp.cards.dir, f.cp.currentWorkspaceDir())
-			got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+			got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: f.req.RunID})
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got.Review.Approval.Kind())
 			assert.Equal(t, before, savedProjectFiles(t, f.cp.cards.dir, f.cp.currentWorkspaceDir()), "review writes no workflow state")
@@ -138,10 +138,10 @@ func TestReviewVerificationRechecksAgreementDuringArtifacts(t *testing.T) {
 	releaseArtifacts := sync.OnceFunc(func() { close(release) })
 	defer releaseArtifacts()
 	f.target.artifactsReading, f.target.artifactsRelease = reading, release
-	result := make(chan *gensurla.VerificationReviewResult, 1)
+	result := make(chan *genhighbay.VerificationReviewResult, 1)
 	resultErrors := make(chan error, 1)
 	go func() {
-		got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+		got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: f.req.RunID})
 		result <- got
 		resultErrors <- err
 	}()
@@ -156,7 +156,7 @@ func TestReviewVerificationRechecksAgreementDuringArtifacts(t *testing.T) {
 	select {
 	case got := <-result:
 		require.NoError(t, <-resultErrors)
-		assert.Equal(t, gensurla.ApprovalKindBlocked, got.Review.Approval.Kind())
+		assert.Equal(t, genhighbay.ApprovalKindBlocked, got.Review.Approval.Kind())
 	case <-time.After(10 * time.Second):
 		t.Fatal("review did not finish after artifact read")
 	}
@@ -206,11 +206,11 @@ func TestReviewVerificationKeepsHistoricalStory(t *testing.T) {
 	// now uses a configured evaluator; current settings cannot supply its basis.
 	f.req.Plan.Tests = verify.TestsWritten
 	f.req.StoryContext.TestCoverage = &verifyrun.TestCoverageSnapshot{
-		Report: 1, Answers: []*gensurla.ConfirmedAnswer{}, Examples: f.card.Examples,
-		CoverageStatements: []*gensurla.TestCoverageStatement{{
-			Scenario:    gensurla.TestCoverageReference(f.report.Scenarios[0].ID),
-			QuestionIds: []gensurla.TestCoverageReference{},
-			ExampleIds:  []gensurla.TestCoverageReference{gensurla.TestCoverageReference(f.card.Examples[0].ID)},
+		Report: 1, Answers: []*genhighbay.ConfirmedAnswer{}, Examples: f.card.Examples,
+		CoverageStatements: []*genhighbay.TestCoverageStatement{{
+			Scenario:    genhighbay.TestCoverageReference(f.report.Scenarios[0].ID),
+			QuestionIds: []genhighbay.TestCoverageReference{},
+			ExampleIds:  []genhighbay.TestCoverageReference{genhighbay.TestCoverageReference(f.card.Examples[0].ID)},
 			Explanation: "Checks the original refund outcome.",
 		}},
 	}
@@ -224,7 +224,7 @@ func TestReviewVerificationKeepsHistoricalStory(t *testing.T) {
 		CardsDir: f.cp.cards.dir, WorkspaceDir: f.cp.currentWorkspaceDir(),
 		BuildCacheDir: f.cp.buildCacheDir, Verification: f.cfg,
 	})
-	got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+	got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: f.req.RunID})
 	require.NoError(t, err)
 	recorded, ok := got.Review.StoryContext.AsRecorded()
 	require.True(t, ok)
@@ -235,14 +235,14 @@ func TestReviewVerificationKeepsHistoricalStory(t *testing.T) {
 	assert.Equal(t, f.req.StoryContext.TestCoverage.CoverageStatements, coverage.CoverageStatements)
 	assert.Equal(t, 1, coverage.Report)
 	assert.Equal(t, f.req.Plan.RequestRevision, got.RequestRevision)
-	assert.Equal(t, gensurla.ApprovalKindBlocked, got.Review.Approval.Kind())
+	assert.Equal(t, genhighbay.ApprovalKindBlocked, got.Review.Approval.Kind())
 
 	// Older Story snapshots without this new field remain explicitly unknown.
 	f.req.StoryContext.TestCoverage = nil
 	oldCoverage, err := json.Marshal(f.req)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(requestFile, oldCoverage, 0o600))
-	got, err = f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+	got, err = f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: f.req.RunID})
 	require.NoError(t, err)
 	recorded, ok = got.Review.StoryContext.AsRecorded()
 	require.True(t, ok)
@@ -257,7 +257,7 @@ func TestReviewVerificationKeepsHistoricalStory(t *testing.T) {
 	raw, err = json.Marshal(old)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(requestFile, raw, 0o600))
-	got, err = f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+	got, err = f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: f.req.RunID})
 	require.NoError(t, err)
 	_, missing := got.Review.StoryContext.AsNotRecorded()
 	assert.True(t, missing)
@@ -275,7 +275,7 @@ func TestReviewVerificationUsesCurrentApprovalReportStore(t *testing.T) {
 		BuildCacheDir: f.cp.buildCacheDir, Verification: &current,
 	})
 	user := asCaller("alice@example.com", CallerUser)
-	get := &gensurla.GetVerificationPayload{RunID: f.req.RunID}
+	get := &genhighbay.GetVerificationPayload{RunID: f.req.RunID}
 	evidence, err := cp.GetVerification(user, get)
 	require.NoError(t, err, "the run's own saved report remains readable")
 	completed, ok := evidence.State.AsCompleted()
@@ -284,11 +284,11 @@ func TestReviewVerificationUsesCurrentApprovalReportStore(t *testing.T) {
 	reviewed, err := cp.ReviewVerification(user, get)
 	require.NoError(t, err)
 	assert.Equal(t, evidence.State, reviewed.State, "approval lookup must not replace historical evidence")
-	assert.Equal(t, gensurla.ApprovalKindBlocked, reviewed.Review.Approval.Kind())
+	assert.Equal(t, genhighbay.ApprovalKindBlocked, reviewed.Review.Approval.Kind())
 	_, err = cp.ApproveMerge(user, reviewApprovalPayload(f))
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 	assert.ErrorContains(t, err, "load verification report "+f.report.Digest)
-	card, err := cp.GetChange(user, &gensurla.GetChangePayload{ChangeID: f.card.ChangeID})
+	card, err := cp.GetChange(user, &genhighbay.GetChangePayload{ChangeID: f.card.ChangeID})
 	require.NoError(t, err)
 	assert.Nil(t, card.Approval)
 
@@ -299,7 +299,7 @@ func TestReviewVerificationUsesCurrentApprovalReportStore(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(current.Plan.ReportDir, f.report.Digest+".json"), raw, 0o600))
 	reviewed, err = cp.ReviewVerification(user, get)
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.ApprovalKindAvailable, reviewed.Review.Approval.Kind())
+	assert.Equal(t, genhighbay.ApprovalKindAvailable, reviewed.Review.Approval.Kind())
 	approved, err := cp.ApproveMerge(user, reviewApprovalPayload(f))
 	require.NoError(t, err)
 	require.NotNil(t, approved.Approval)
@@ -327,9 +327,9 @@ func TestReviewVerificationDoesNotOfferFailedOrIncompleteRuns(t *testing.T) {
 			raw, err := json.Marshal(result)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(filepath.Join(f.cfg.RunsDir, f.req.RunID, "result.json"), raw, 0o600))
-			got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &gensurla.GetVerificationPayload{RunID: f.req.RunID})
+			got, err := f.cp.ReviewVerification(asCaller("alice@example.com", CallerUser), &genhighbay.GetVerificationPayload{RunID: f.req.RunID})
 			require.NoError(t, err)
-			assert.Equal(t, gensurla.ApprovalKindBlocked, got.Review.Approval.Kind())
+			assert.Equal(t, genhighbay.ApprovalKindBlocked, got.Review.Approval.Kind())
 			if kind == "failed" {
 				completed, ok := got.State.AsCompleted()
 				require.True(t, ok)
@@ -387,8 +387,8 @@ func newReviewFixture(t *testing.T) reviewFixture {
 }
 
 // reviewApprovalPayload binds approval to the exact saved report in a fixture.
-func reviewApprovalPayload(f reviewFixture) *gensurla.ApproveMergePayload {
-	return &gensurla.ApproveMergePayload{ChangeID: f.req.ChangeID, RequestRevision: f.req.Plan.RequestRevision,
+func reviewApprovalPayload(f reviewFixture) *genhighbay.ApproveMergePayload {
+	return &genhighbay.ApproveMergePayload{ChangeID: f.req.ChangeID, RequestRevision: f.req.Plan.RequestRevision,
 		CandidateCommit: f.req.Plan.CandidateCommit, ReportDigest: f.report.Digest}
 }
 
@@ -397,9 +397,9 @@ func changeReviewAgreement(t *testing.T, f reviewFixture) {
 	t.Helper()
 	example := *f.card.Examples[0]
 	example.ExpectedOutcome = "Manager reviews the refund"
-	_, err := f.cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &gensurla.ConfirmIntentPayload{
+	_, err := f.cp.ConfirmIntent(asCaller("alice@example.com", CallerUser), &genhighbay.ConfirmIntentPayload{
 		ChangeID: f.card.ChangeID, RequestRevision: f.card.RequestRevision,
-		Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&example},
+		Answers: map[string]string{}, Examples: []*genhighbay.ExampleItem{&example},
 	})
 	require.NoError(t, err)
 }

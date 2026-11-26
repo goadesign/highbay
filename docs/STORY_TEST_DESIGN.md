@@ -1,10 +1,10 @@
 # Story flows and the tests a build requires
 
-This page is for contributors to Surla. It describes how a Story becomes the
-tests a build requires, where the builder and the test writer work, how Surla
+This page is for contributors to Highbay. It describes how a Story becomes the
+tests a build requires, where the builder and the test writer work, how Highbay
 judges what the test writer reports, how verification chooses the tests that
 judge the builder's commit, and what the user merges or drops afterwards.
-[How Surla works](HOW_IT_WORKS.md) tells the same journey from the user's
+[How Highbay works](HOW_IT_WORKS.md) tells the same journey from the user's
 side, and the reference gives the exact contract of
 [each tool](REFERENCE.md#mcp-tools) and of
 [builds and assignments](REFERENCE.md#builds-and-assignments).
@@ -19,22 +19,22 @@ side, and the reference gives the exact contract of
 | Change Card | The saved record of one requested change: the request, its open questions and the user's answers, its examples, its Story and its design source. |
 | `request_revision` | The identifier of one exact saved revision of a Change Card, including its Story. |
 | Agreed revision | The revision of a Change Card the user confirmed. A revision the guide proposes later waits beside it until the user adopts or declines it. |
-| The server | The project's Surla server, started by `surla` in the project folder. |
+| The server | The project's Highbay server, started by `hbay` in the project folder. |
 | The guide | The coding agent the user talks to. It writes the Story in its draft and proposes changes. |
-| The guide's draft | The folder `.surla-draft` in the project folder: the copy of the design that the guide edits. `refresh_story` returns its path as `draft_folder`. |
-| The builder | The coding agent that writes the application code in its own working copy, `.surla-build`, and asks the server to verify a commit. |
-| The test writer | The coding agent that writes one test per finished flow in its own working copy, `.surla-tests`. |
+| The guide's draft | The folder `.highbay-draft` in the project folder: the copy of the design that the guide edits. `refresh_story` returns its path as `draft_folder`. |
+| The builder | The coding agent that writes the application code in its own working copy, `.highbay-build`, and asks the server to verify a commit. |
+| The test writer | The coding agent that writes one test per finished flow in its own working copy, `.highbay-tests`. |
 | Open build | The project's one saved build: a change at one agreed revision, with a number `n` and a base. A project has one open build at a time. |
-| Base | The commit checked out in the project folder when Surla first saved the build numbered `n`. The build's two branches, `surla/build-<n>` for the builder and `surla/tests-<n>` for the test writer, start there. |
-| Required test | The evaluation scenario Surla generates for one finished flow, with the hook method the test writer implements for it. |
-| Holdout | The scenario tag that hides a scenario's details from the builder. Tests the builder can read are never hidden, so Surla refuses the tag in written tests. |
+| Base | The commit checked out in the project folder when Highbay first saved the build numbered `n`. The build's two branches, `highbay/build-<n>` for the builder and `highbay/tests-<n>` for the test writer, start there. |
+| Required test | The evaluation scenario Highbay generates for one finished flow, with the hook method the test writer implements for it. |
+| Holdout | The scenario tag that hides a scenario's details from the builder. Tests the builder can read are never hidden, so Highbay refuses the tag in written tests. |
 | Run directory | The folder in which one verification run keeps its request, its lock, its result and its logs. |
-| Stored verification settings | A settings file stored for the project with `surla verification set`. It names one evaluator suite at one commit, and every run uses that suite instead of written tests. |
-| Tests commit | The commit of the tests a run uses: the commit of the accepted tests on `surla/tests-<n>`, or the suite commit the stored verification settings name. |
+| Stored verification settings | A settings file stored for the project with `hbay verification set`. It names one evaluator suite at one commit, and every run uses that suite instead of written tests. |
+| Tests commit | The commit of the tests a run uses: the commit of the accepted tests on `highbay/tests-<n>`, or the suite commit the stored verification settings name. |
 
 ## What a Story is
 
-The Story language is the nested Go module `github.com/goadesign/surla/story`.
+The Story language is the nested Go module `github.com/goadesign/highbay/story`.
 It depends only on Goa and the standard library, so a Story can be written
 before any service, agent or architecture exists. Its
 [README](../story/README.md) lists every declaration. A short example:
@@ -62,15 +62,15 @@ error. Actor names are the user's business roles: `warehouse-worker` and
 `insurance-agent` are valid, and no keyword rule refuses one.
 
 A project's design imports the language, so the project's `go.mod` must
-require the Story module. A project made by `surla init` or `init_project`
-requires it at the version Surla itself requires. Its `design/story.go`
+require the Story module. A project made by `hbay init` or `init_project`
+requires it at the version Highbay itself requires. Its `design/story.go`
 imports the language and declares no Story, so its Story table requires no
-test. Surla's worked example (`surla init -example`) ships a first Story
+test. Highbay's worked example (`hbay init -example`) ships a first Story
 instead, with one finished flow, `prices-cookie`, and the hook method that
 flow requires, `PricesCookie` in `eval/acceptance`.
 
 The guide changes the Story by editing Go source in its draft, never in the
-project folder. The draft is the folder `.surla-draft` in the project folder,
+project folder. The draft is the folder `.highbay-draft` in the project folder,
 with its own `go.mod`, `go.sum` and `design/`; `refresh_story` and
 `update_draft` return its path as `draft_folder`. When the draft is missing,
 `refresh_story` makes it first, from a design a Change Card holds or from the
@@ -79,7 +79,7 @@ from the project folder; the reference describes this under
 [`refresh_story`](REFERENCE.md#refresh_story). Before drafting a change, and
 when told that a design file changed in the project folder, the guide calls
 [`update_draft`](REFERENCE.md#update_draft), which brings design changes made
-outside Surla into the draft and lists files to correct, each with the folder
+outside Highbay into the draft and lists files to correct, each with the folder
 that holds it. The guide corrects a file in its draft; for a file in the project
 folder, it tells the user what to correct and waits. It calls `update_draft`
 again until no file is listed, then asks the server to evaluate the draft:
@@ -96,8 +96,8 @@ again until no file is listed, then asks the server to evaluate the draft:
    is `none`. When a design file imports the Story language and the
    evaluated `go.mod` does not require its module, the diagnostic names the
    step: “`In the folder that holds that go.mod, run: go get
-   github.com/goadesign/surla/story@<version>, then try again.`” The version is
-   the one Surla's own `go.mod` requires. The guide runs the command in its
+   github.com/goadesign/highbay/story@<version>, then try again.`” The version is
+   the one Highbay's own `go.mod` requires. The guide runs the command in its
    draft, whose `go.mod` was evaluated.
 3. The guide passes a succeeded `op_id` as `story_refresh_op_id` to
    `propose_change` or `revise_change`. The server reads no file then: it
@@ -132,7 +132,7 @@ lists every flow of the saved Story and one required test per finished flow.
 The build also saves, from the same revision, each question with the answer
 the user confirmed, the confirmation examples and the preserved behaviors,
 and the assignment returns them: the test writer may not read the change,
-and its tests must hold the service to them as well as to the flows. Surla's
+and its tests must hold the service to them as well as to the flows. Highbay's
 check of a report confirms the required tests, not what the tests assert.
 
 One rule, `mapStoryFlows` in
@@ -155,7 +155,7 @@ scenario `starts_and_listens` that every new project's suite declares, and
 generating the required tests fails naming the duplicate.
 
 The required tests are declared in the project's test module, the `eval/`
-module that `surla init` creates in the project folder, by its Story table:
+module that `hbay init` creates in the project folder, by its Story table:
 `eval/design/story_tests.go`, a source file of the module's own design.
 `StoryTests`, in
 [`internal/designeval/story_table.go`](../internal/designeval/story_table.go),
@@ -182,19 +182,19 @@ exactly one suite. When a later revision drops or renames a flow, its method
 leaves `Hooks`, and an old hand-written method still compiles and is unused.
 
 Because the required tests are part of the module's design, every generation
-of the module keeps them, whoever runs it and with any tool: Surla's own
+of the module keeps them, whoever runs it and with any tool: Highbay's own
 writing of the required tests and its check of a report, `generate_code` with
-`target: "eval"`, `surla gen`, `surla init`, and `goa gen` run by hand. A
+`target: "eval"`, `hbay gen`, `hbay init`, and `goa gen` run by hand. A
 module without a Story table declares no Story scenario. The test writer
-leaves the table as it is: Surla generates the module with the table it
+leaves the table as it is: Highbay generates the module with the table it
 renders from the build's saved Story in place of whatever the test writer
-left at that path, so the test writer's version never counts. Surla does this
+left at that path, so the test writer's version never counts. Highbay does this
 when `get_test_writer_assignment` marks the assignment read while the tests
 are still `assigned`, which is the test writer's first read after a build
 start, and again at each report. A build start itself writes nothing into
 the test writer's working copy. The table is replaced by renaming a new file
 over it, so a symbolic link at its path is replaced, not followed.
-`surla init` writes the new project's table from its own Story: no row for
+`hbay init` writes the new project's table from its own Story: no row for
 the blank project, one for the worked example. A
 project whose operator stored verification settings for another suite keeps
 whatever table its test module last received: no test writer has work there
@@ -211,15 +211,15 @@ both:
 
 | Role | Folder | Branch for build `n` |
 | --- | --- | --- |
-| The builder | `.surla-build` | `surla/build-<n>` |
-| The test writer | `.surla-tests` | `surla/tests-<n>` |
+| The builder | `.highbay-build` | `highbay/build-<n>` |
+| The test writer | `.highbay-tests` | `highbay/tests-<n>` |
 
 Both branches start at the build's base. The builder commits its code on its
-branch. The test writer does not commit: Surla commits the tests it accepts
-on `surla/tests-<n>`. A project with stored verification settings uses no
-test writer, so a build there uses only `.surla-build`. Without stored
-settings a build needs Surla's test layout, the `eval/` test module that
-`surla init` makes; a project with neither is refused with `no_test_layout`.
+branch. The test writer does not commit: Highbay commits the tests it accepts
+on `highbay/tests-<n>`. A project with stored verification settings uses no
+test writer, so a build there uses only `.highbay-build`. Without stored
+settings a build needs Highbay's test layout, the `eval/` test module that
+`hbay init` makes; a project with neither is refused with `no_test_layout`.
 
 ### What a build start does
 
@@ -235,13 +235,13 @@ start:
    revision's Story, design source and `go.mod`, and the answers, examples
    and preserved behaviors the user confirmed. A new build is numbered one
    more than the largest number already used, by the open build or by any
-   `surla/build-<n>` or `surla/tests-<n>` branch in the repository, and its
+   `highbay/build-<n>` or `highbay/tests-<n>` branch in the repository, and its
    base is the commit checked out in the project folder. Building the open
    build's own change again, while that build is neither merged nor dropped,
    keeps its number and base and replaces its assignments.
-4. **Makes a missing working copy** on the build's branch: `.surla-build`,
-   and `.surla-tests` when a test writer is used. Making a copy first adds
-   `.surla-build/` and `.surla-tests/` to the repository's own `info/exclude`
+4. **Makes a missing working copy** on the build's branch: `.highbay-build`,
+   and `.highbay-tests` when a test writer is used. Making a copy first adds
+   `.highbay-build/` and `.highbay-tests/` to the repository's own `info/exclude`
    file, never to a tracked file, so the project's `git status` stays clean.
    It checks the branch out when the branch exists and creates it at the
    build's base otherwise. A copy that is already there stays on whatever
@@ -269,13 +269,13 @@ A refused start saves nothing. A start is refused when:
   verification and the request's `replaces` does not name it
   (`unfinished_build_open`);
 - a design file at the build's base is not a version the agreed revision was
-  made from, because it was changed outside Surla (`design_changed_outside`);
+  made from, because it was changed outside Highbay (`design_changed_outside`);
 - the project folder is in no Git repository (`not_repository`), the
   repository has no commit (`no_commit`), or Git has no name and address to
   commit with (`git_identity_missing`);
-- the project has neither stored verification settings nor Surla's test
+- the project has neither stored verification settings nor Highbay's test
   layout (`no_test_layout`);
-- `.surla-build` or `.surla-tests` exists and is not a linked working copy of
+- `.highbay-build` or `.highbay-tests` exists and is not a linked working copy of
   the project's repository (`copy_folder_in_use`), or a copy is missing and
   another folder has its branch checked out (`tests_branch_in_use`);
 - another operation holds a working copy's turn (`working_copy_busy`);
@@ -291,11 +291,11 @@ Each copy joins the build's branch when its worker first reads its assignment
 for that build, with `get_builder_assignment` or
 `get_test_writer_assignment`:
 
-- When the build's branch does not exist yet, Surla creates it at the build's
+- When the build's branch does not exist yet, Highbay creates it at the build's
   base and switches the copy to it. A copy with nothing uncommitted joins
   from any branch. A copy with uncommitted work on an earlier build branch of
-  its role (`surla/build-<k>` or `surla/tests-<k>`, and for the test writer
-  also `surla/tests`, the one branch earlier versions of Surla used) first
+  its role (`highbay/build-<k>` or `highbay/tests-<k>`, and for the test writer
+  also `highbay/tests`, the one branch earlier versions of Highbay used) first
   gets that work committed there, with the message
   `Left uncommitted when change <change_id> started`. A copy with uncommitted
   work on any other branch, or with a Git operation in progress, is refused
@@ -310,14 +310,14 @@ uncommitted paths, and the goal; the worker puts its work right with git and
 reads again. When the copy's folder is missing, the read is refused with
 `working_folder_missing`, and the user builds the change again, which makes
 the folder again on the build's branch. Accepted tests are commits on
-`surla/tests-<n>`, so a deleted copy loses only uncommitted work.
+`highbay/tests-<n>`, so a deleted copy loses only uncommitted work.
 
 ### Writing the required tests
 
 The read of `get_test_writer_assignment` that marks the assignment read while
 the tests are still `assigned` then writes the required tests into the copy,
 within five minutes. It generates the module with the Story table, then
-writes the table and, after removing any `.surla-gen-*` staging folder that a
+writes the table and, after removing any `.highbay-gen-*` staging folder that a
 write cut short by a server's death left in the test module, the generated
 folder. A generation that fails writes neither, so the copy stays as it was;
 only a symbolic link at the table's path is replaced by the table first. A
@@ -344,7 +344,7 @@ the builder's tools or a check of a report holds one. The builder's tools
 while their copy's turn is held. Only the check of a report waits for the
 test writer's turn.
 
-## How Surla judges a report
+## How Highbay judges a report
 
 The test writer calls `report_tests_finished` with the change, the
 build's revision and `coverage_statements`: its stated links from declared
@@ -355,7 +355,7 @@ scenario references against the listing it already produced. These statements
 do not prove what the tests assert or add a semantic acceptance requirement.
 A report is refused when the user dropped the build
 (`no_build`), when the test writer has not read the build's assignment
-(`assignment_unread`), when its copy is missing, is not on `surla/tests-<n>`
+(`assignment_unread`), when its copy is missing, is not on `highbay/tests-<n>`
 or has a Git operation in progress (`working_folder_missing`,
 `copy_off_branch`), when it names another revision (`conflict`), and when
 the project has stored verification settings: `conflict` for a build started
@@ -367,15 +367,15 @@ clears any earlier verdict, and returns at once. One report checker per
 project then judges it, without trusting the copy's author:
 
 1. It waits for the turn of the test writer's working copy.
-2. It checks that the copy is on `surla/tests-<n>` with no Git operation in
+2. It checks that the copy is on `highbay/tests-<n>` with no Git operation in
    progress, then writes the required tests into the copy again from the
    build's saved Story, after removing, as the test writer's first read does,
-   any `.surla-gen-*` staging folder left in the test module. Only a folder
+   any `.highbay-gen-*` staging folder left in the test module. Only a folder
    that holds nothing but a generated `gen` folder is removed; a link, a file
    or any other folder with such a name is the author's and stays.
 3. It copies the copy's files, as a commit would hold them, into a private
    folder, and compares them with the build's base, so the test writer's own
-   commits on `surla/tests-<n>` count as changes too.
+   commits on `highbay/tests-<n>` count as changes too.
 4. It generates the test module again in that private copy, with the Story
    table rendered from the saved Story in place of whatever the author left
    at that path, and writes the table and the generated folder there, so the
@@ -386,7 +386,7 @@ project then judges it, without trusting the copy's author:
 6. It compares those scenarios with the required tests by the generator's own
    names.
 7. Before it records an acceptance, it checks again that the copy is on
-   `surla/tests-<n>`, and that the branch's tip descends from the build's
+   `highbay/tests-<n>`, and that the branch's tip descends from the build's
    base and holds no commit of another build's branch that the base lacks.
 
 The whole judgment has a 15-minute limit. Within it, building the test
@@ -410,12 +410,12 @@ in-place downgrade after those writes is unsupported. Preserve the evidence
 and roll forward to a correction rather than removing fields or resetting state.
 
 The download in step 5 runs with the user's proxy
-settings, so its output is withheld, and Surla decides whose failure it is
+settings, so its output is withheld, and Highbay decides whose failure it is
 from what it can compare. A download reads only the module's `go.mod` and
 `go.sum`. When they are those of the build's base, the author changed nothing
-that explains the failure. When the author changed them, Surla downloads the
+that explains the failure. When the author changed them, Highbay downloads the
 base's own lists, read from the base commit: if those fail too,
-downloading does not work where Surla runs. Both cases make the check
+downloading does not work where Highbay runs. Both cases make the check
 `could_not_run`, with a step that has the user run the download where its
 output can be read. When the base's lists download and the author's do not,
 the failure is the author's finding. The author cannot hide a defect of its
@@ -438,7 +438,7 @@ the causes and are not shown:
 
 | Finding | Cause |
 | --- | --- |
-| `working_copy` | The copy is not on `surla/tests-<n>` or has a Git operation in progress, or the branch's tip does not descend from the build's base or holds another build's work. The finding states where the copy is and the goal: the test files on the build's branch, uncommitted. |
+| `working_copy` | The copy is not on `highbay/tests-<n>` or has a Git operation in progress, or the branch's tip does not descend from the build's base or holds another build's work. The finding states where the copy is and the goal: the test files on the build's branch, uncommitted. |
 | `outside_module` | A file outside the test module differs from the build's base. At most 20 are named, and one more finding counts the rest. Each names the base commit, and each named file's finding says what the copy must hold: the file's version at that commit, or no such file. |
 | `generation` | The required tests could not be generated, for example because the module's design does not compile or declares no suite or several. |
 | `dependencies` | `go mod download` failed for the author's changed `go.mod` or `go.sum` while the base's own lists download, or no comparison could be made. |
@@ -447,14 +447,14 @@ the causes and are not shown:
 | `hidden_tag` | A declared scenario is tagged `holdout`. |
 | `missing_scenario` | The program does not declare a required test. The finding names the scenario, its flow and its hook. |
 
-An accepted copy is committed on `surla/tests-<n>`, on the tip Surla checked,
+An accepted copy is committed on `highbay/tests-<n>`, on the tip Highbay checked,
 with the user's own Git identity, hooks disabled and no signature. Its
-message is `Add the tests Surla accepted for change <change_id>, report <r>`,
+message is `Add the tests Highbay accepted for change <change_id>, report <r>`,
 where `<r>` is the report's number. Only the
 files that were built and listed are committed; an edit made after the check
 stays in the copy as a change. When the branch already holds those files,
 its commit is reused. Every read of an accepted verdict adds one fixed
-sentence: "Surla checked that these tests build into the generated test
+sentence: "Highbay checked that these tests build into the generated test
 program and declare every required scenario; it did not judge what they
 assert."
 
@@ -475,11 +475,11 @@ in a row; then the build waits for the next report or server start.
 This is a separation of duties, not isolation. Every agent runs as the user
 on one machine, so another program of the user's can move a branch or read
 a file. The check makes sure the tests the builder is judged by are the
-tests Surla checked and recorded.
+tests Highbay checked and recorded.
 
 ## How verification chooses its tests
 
-The builder commits its code in `.surla-build`, on `surla/build-<n>`, and
+The builder commits its code in `.highbay-build`, on `highbay/build-<n>`, and
 calls `verify_change` with the change, its agreed revision and its candidate
 commit: the commit of the builder's code to verify. It never names the tests.
 
@@ -492,9 +492,9 @@ build and the candidate, and refuses when one of these does not hold:
 | No other operation is using the builder's working copy. | `conflict` |
 | The change's build is the project's open build, not dropped, and of that revision. | `no_build` |
 | The builder has read its assignment since the build started. | `assignment_unread` |
-| The builder's copy exists and is on `surla/build-<n>` with no Git operation in progress. | `working_folder_missing`, `copy_off_branch` |
+| The builder's copy exists and is on `highbay/build-<n>` with no Git operation in progress. | `working_folder_missing`, `copy_off_branch` |
 | The repository holds the candidate commit. | `conflict` |
-| The candidate is on `surla/build-<n>`, descends from the build's base without being that base, and holds no commit of another build's branch that the base lacks. | `build_branch_mismatch` |
+| The candidate is on `highbay/build-<n>`, descends from the build's base without being that base, and holds no commit of another build's branch that the base lacks. | `build_branch_mismatch` |
 | The candidate's `design/` files are the build's saved design source, and the candidate shares history with the project's commit. | `conflict` |
 | Every design file at the candidate's merge base with the project's commit is a version the revision was made from. | `design_changed_outside` |
 
@@ -508,17 +508,17 @@ chooses the tests, for a run and for its [approval](#approval) alike, and
 - Otherwise the build's tests must be accepted. The run builds the
   candidate's programs from the candidate commit and runs the test program
   generated at the tests commit: the commit of the accepted tests on
-  `surla/tests-<n>`.
+  `highbay/tests-<n>`.
 
 Without stored verification settings, the choice and the plan refuse too:
 
 | Refusal | Cause | Next step |
 | --- | --- | --- |
-| `tests_not_accepted` | The build's tests are `assigned`, `reported`, `needs_changes` or `could_not_run`. | The message names the state and who acts: the test writer reports or fixes its findings, Surla is still checking a report, or the user takes the check's step. It ends with the builder's step: keep its Chorus watcher running, and read its assignment and verify again once Surla messages it that the tests are accepted. |
-| `no_test_layout` | A commit lacks the layout `surla init` makes, the tests commit is not in the repository, or the project folder is in no Git repository. | The message names who acts: the builder commits the layout, the test writer reports again so Surla records its tests anew, or the user builds again or makes the folder a repository. |
-| `conflict` | The candidate changes hand-written files of the test module or shares no history with the tests commit, or the project folder was replaced. | The builder restores the test module's files and commits; for no shared history, the user builds the change again; for a replaced folder, the user stops and starts Surla in the project folder. |
+| `tests_not_accepted` | The build's tests are `assigned`, `reported`, `needs_changes` or `could_not_run`. | The message names the state and who acts: the test writer reports or fixes its findings, Highbay is still checking a report, or the user takes the check's step. It ends with the builder's step: keep its Chorus watcher running, and read its assignment and verify again once Highbay messages it that the tests are accepted. |
+| `no_test_layout` | A commit lacks the layout `hbay init` makes, the tests commit is not in the repository, or the project folder is in no Git repository. | The message names who acts: the builder commits the layout, the test writer reports again so Highbay records its tests anew, or the user builds again or makes the folder a repository. |
+| `conflict` | The candidate changes hand-written files of the test module or shares no history with the tests commit, or the project folder was replaced. | The builder restores the test module's files and commits; for no shared history, the user builds the change again; for a replaced folder, the user stops and starts Highbay in the project folder. |
 
-Each refusal says what Surla found and who acts. The reference lists every
+Each refusal says what Highbay found and who acts. The reference lists every
 refusal of [`verify_change`](REFERENCE.md#verify_change) with its step.
 
 The server starts the run in its own run directory and returns at once. Each
@@ -556,12 +556,12 @@ revision, and takes its tests commit from the same choice as verification:
 the stored settings' suite commit, or the commit of the tests accepted for
 the revision. A run of other tests is refused, and the builder verifies
 again. Approval also checks again, with git, that the run's candidate is on
-`surla/build-<n>`, descends from the build's base and holds no other build's
+`highbay/build-<n>`, descends from the build's base and holds no other build's
 work; otherwise it is refused with `build_branch_mismatch`, and the builder
 verifies again. A saved approval holds only while those same tests stay
 accepted for its revision: a new report or a new build hides it until that
 commit is accepted again. The approval names the builder's commit and the
-tests commit. Surla merges nothing: the next section says what the user
+tests commit. Highbay merges nothing: the next section says what the user
 merges. Approval needs no promotion settings; when a project stores them,
 approval also checks the release binaries, as
 [`approve_merge`](REFERENCE.md#approve_merge) describes.
@@ -581,14 +581,14 @@ branch checked out in the project folder, as `taking.state`:
 A run counts for the build when it passed for the build's revision and the
 server accepted it at or after the build's start.
 
-**Merging.** The builder commits in `.surla-build`, so its commit is not on
+**Merging.** The builder commits in `.highbay-build`, so its commit is not on
 the branch checked out in the project folder until the user merges it. While
 the build is `passed`, the page shows the commands under "To take this
 change, run in the project folder:": first `git merge <candidate_commit>`,
-the builder's commit, verified on `surla/build-<n>`, then, for the test
-writer's tests, `git merge <tests commit>`, verified on `surla/tests-<n>`.
+the builder's commit, verified on `highbay/build-<n>`, then, for the test
+writer's tests, `git merge <tests commit>`, verified on `highbay/tests-<n>`.
 With stored verification settings the tests are the evaluator's and are not
-merged, so the page shows only the first command. Surla merges and deploys
+merged, so the page shows only the first command. Highbay merges and deploys
 nothing. The build reads `merged` once the branch holds the builder's commit
 and, for the test writer's tests, the same run's tests commit: each as an
 ancestor, or through a commit, such as a squash, that holds every file the
@@ -603,7 +603,7 @@ then **Drop change**), which calls `drop_build` with the build the page
 showed. Drop writes one record and changes no working copy, branch, draft or
 file of the user's: the build's commits stay on its branches, and
 `kept_branches` lists the branches that hold a commit made after the build's
-base. From then on Surla builds nothing on that build, no role has work for
+base. From then on Highbay builds nothing on that build, no role has work for
 it, and the builder's and the test writer's tools are refused with
 `no_build`. The guide's next `refresh_story` makes the draft again from the
 project folder, so edits the guide has not proposed are lost. A revision
@@ -636,7 +636,7 @@ the build needs that role, and an empty list otherwise:
 | Neither | Once the user dropped the build. |
 
 `get_team` reports `assignment` as `no_work` for a role the open build needs
-nothing from, and Surla's reminder to read an assignment goes only to a role
+nothing from, and Highbay's reminder to read an assignment goes only to a role
 that has work and an unread assignment.
 
 ## Where the code lives

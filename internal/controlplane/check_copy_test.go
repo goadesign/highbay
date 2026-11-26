@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 // realTempDir returns a symlink-free temporary directory.
@@ -98,8 +98,8 @@ func TestCopyGrantCopiesLiveTree(t *testing.T) {
 		"eval/acceptance/a_test.go":   "package acceptance\n",
 		"_tools/go.mod":               "module example.com/tools\n",
 		".git/HEAD":                   "ref: refs/heads/main\n",
-		".surla/cards/card.json":      "{}\n",
-		".surla-gen-123/gen.go":       "package gen\n",
+		".highbay/cards/card.json":    "{}\n",
+		".highbay-gen-123/gen.go":     "package gen\n",
 		"reports/public-fixture.json": "{}\n",
 	})
 	require.NoError(t, os.Symlink("/etc/hosts", filepath.Join(grant, "hosts-link")))
@@ -156,15 +156,15 @@ func TestCopyGrantExcludesProtectedDirectoryAliases(t *testing.T) {
 		wantPresent []string
 	}{
 		{
-			name:        "upper-case .SURLA is the private store on a case-insensitive volume",
+			name:        "upper-case .HIGHBAY is the private store on a case-insensitive volume",
 			insensitive: true,
 			files: map[string]string{
-				".SURLA/runs/r1/work/suite/main.go": "package main\n",
-				".SURLA/runs/r1/log.txt":            "suite log\n",
-				"surla-notes/fixture.txt":           "adjacent fixture\n",
+				".HIGHBAY/runs/r1/work/suite/main.go": "package main\n",
+				".HIGHBAY/runs/r1/log.txt":            "suite log\n",
+				"highbay-notes/fixture.txt":           "adjacent fixture\n",
 			},
-			wantAbsent:  []string{".SURLA/runs/r1/work/suite/main.go", ".SURLA/runs/r1/log.txt"},
-			wantPresent: []string{"surla-notes/fixture.txt"},
+			wantAbsent:  []string{".HIGHBAY/runs/r1/work/suite/main.go", ".HIGHBAY/runs/r1/log.txt"},
+			wantPresent: []string{"highbay-notes/fixture.txt"},
 		},
 		{
 			name:        "mixed-case .Git is the repository on a case-insensitive volume",
@@ -177,13 +177,13 @@ func TestCopyGrantExcludesProtectedDirectoryAliases(t *testing.T) {
 			wantPresent: []string{"gitdocs/notes.txt"},
 		},
 		{
-			name: "distinct .SURLA beside .surla is a fixture on a case-sensitive volume",
+			name: "distinct .HIGHBAY beside .highbay is a fixture on a case-sensitive volume",
 			files: map[string]string{
-				".surla/cards/card.json": "{}\n",
-				".SURLA/fixture.txt":     "fixture\n",
+				".highbay/cards/card.json": "{}\n",
+				".HIGHBAY/fixture.txt":     "fixture\n",
 			},
-			wantAbsent:  []string{".surla/cards/card.json"},
-			wantPresent: []string{".SURLA/fixture.txt"},
+			wantAbsent:  []string{".highbay/cards/card.json"},
+			wantPresent: []string{".HIGHBAY/fixture.txt"},
 		},
 	}
 	for _, tc := range cases {
@@ -238,26 +238,26 @@ func (r *endlessReader) Read(p []byte) (int, error) {
 }
 
 func TestCopyEntryDecidesProtectedAliasWhenItOpensTheEntry(t *testing.T) {
-	// The directory was listed with .SURLA in it; .SURLA is then replaced by
+	// The directory was listed with .HIGHBAY in it; .HIGHBAY is then replaced by
 	// a new directory before its entry is decided. The decision uses the
 	// current kernel resolution, so the replacement is still excluded.
 	grant := realTempDir(t)
 	if !caseInsensitive(t, grant) {
 		t.Skip("needs a case-insensitive volume")
 	}
-	writeTree(t, grant, map[string]string{".SURLA/runs/old.txt": "old\n"})
+	writeTree(t, grant, map[string]string{".HIGHBAY/runs/old.txt": "old\n"})
 	fd, err := syscall.Open(grant, openDirFlags, 0)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, syscall.Close(fd)) }()
 	names, err := readDirNames(fd)
 	require.NoError(t, err)
-	require.Contains(t, names, ".SURLA")
-	require.NoError(t, os.RemoveAll(filepath.Join(grant, ".SURLA")))
-	writeTree(t, grant, map[string]string{".SURLA/runs/work/suite/main.go": "package main\n"})
+	require.Contains(t, names, ".HIGHBAY")
+	require.NoError(t, os.RemoveAll(filepath.Join(grant, ".HIGHBAY")))
+	writeTree(t, grant, map[string]string{".HIGHBAY/runs/work/suite/main.go": "package main\n"})
 
 	dst := realTempDir(t)
 	c := &grantCopier{ctx: context.Background(), workspaceRel: ".", out: grantCopy{manifests: map[string][]byte{}}}
-	require.NoError(t, c.copyEntry(fd, ".SURLA", ".SURLA", dst))
+	require.NoError(t, c.copyEntry(fd, ".HIGHBAY", ".HIGHBAY", dst))
 	assert.Empty(t, copiedFiles(t, dst))
 }
 
@@ -378,7 +378,7 @@ func TestOpenEntryHandlesRegularFileDirectorySymlinkAndFIFO(t *testing.T) {
 
 // TestCopyGrantWithoutProc verifies that when /proc is not mounted on Linux,
 // openEntry does not report ENOENT (which isProtectedEntry would treat as a
-// missing .git/.surla directory) and copyGrant does not report errSourceChanged.
+// missing .git/.highbay directory) and copyGrant does not report errSourceChanged.
 func TestCopyGrantWithoutProc(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux-only /proc check")

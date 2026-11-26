@@ -97,10 +97,10 @@ type (
 const (
 	// browserEnv names the environment variable that selects the browser's
 	// executable explicitly.
-	browserEnv = "SURLA_TEST_BROWSER"
+	browserEnv = "HIGHBAY_TEST_BROWSER"
 	// helperProfileEnv names the environment variable that makes
 	// TestRealBrowserHelper start a browser on the profile it names.
-	helperProfileEnv = "SURLA_TEST_BROWSER_HELPER_PROFILE"
+	helperProfileEnv = "HIGHBAY_TEST_BROWSER_HELPER_PROFILE"
 	// helperReady starts the line TestRealBrowserHelper prints with its
 	// browser's process ID once the browser listens.
 	helperReady = "BROWSER-READY "

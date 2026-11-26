@@ -32,7 +32,7 @@ var BuildTeamUnavailable = Type("BuildTeamUnavailable", func() {
 // StartBuildResult separates the saved build from this start's team outcome.
 var StartBuildResult = Type("StartBuildResult", func() {
 	Description("The saved build and this start's team outcome. A team warning never means the build was refused; get_build returns the build without it. A start moves no working copy: each copy joins the build's own branch when its worker first reads the assignment.")
-	Attribute("build", StartedBuild, "The build saved before Surla made any missing working copy and admitted the team.")
+	Attribute("build", StartedBuild, "The build saved before Highbay made any missing working copy and admitted the team.")
 	OneOf("team", "The team's immediate outcome after the build was saved.", func() {
 		Meta("oneof:json:flatten")
 		Meta("oneof:type:field", "state")
@@ -66,15 +66,15 @@ var OpenBuildRefusal = Type("OpenBuildRefusal", func() {
 func buildStartRefusals() {
 	Error("not_repository", ErrorResult, "The project folder is not in a Git repository, which every build's working copies need; nothing was saved. The message ends with the step to create or select a repository.")
 	Error("no_commit", ErrorResult, "The project repository has no commit for the build's working copies to start from; nothing was saved. The message ends with the step to make its first commit.")
-	Error("no_test_layout", ErrorResult, "This project has neither stored verification settings nor Surla's test layout; nothing was saved. Store verification settings, then build again.")
-	Error("git_identity_missing", ErrorResult, "Git has no configured name and address, which Surla uses to commit what a working copy left when it joins a new build and to record accepted tests; nothing was saved. Configure Git's name and address, then build again.")
-	Error("copy_folder_in_use", ErrorResult, "A working copy's folder in the project folder, .surla-build or .surla-tests, is a file or a folder that is not a linked working copy of the project's repository; nothing was saved. The message names the folder and ends with the step to move it out of the project.")
-	Error("tests_branch_in_use", ErrorResult, "The branch Surla checks out in a missing working copy, surla/build-<n> or surla/tests-<n>, is checked out in another folder; nothing was saved. The message names that folder, quoted, and ends with the step that frees the branch.")
+	Error("no_test_layout", ErrorResult, "This project has neither stored verification settings nor Highbay's test layout; nothing was saved. Store verification settings, then build again.")
+	Error("git_identity_missing", ErrorResult, "Git has no configured name and address, which Highbay uses to commit what a working copy left when it joins a new build and to record accepted tests; nothing was saved. Configure Git's name and address, then build again.")
+	Error("copy_folder_in_use", ErrorResult, "A working copy's folder in the project folder, .highbay-build or .highbay-tests, is a file or a folder that is not a linked working copy of the project's repository; nothing was saved. The message names the folder and ends with the step to move it out of the project.")
+	Error("tests_branch_in_use", ErrorResult, "The branch Highbay checks out in a missing working copy, highbay/build-<n> or highbay/tests-<n>, is checked out in another folder; nothing was saved. The message names that folder, quoted, and ends with the step that frees the branch.")
 	Error("working_copy_busy", ErrorResult, "Another build is starting, a worker is reading its assignment into its working copy, or a test check holds the test writer's working copy; nothing was saved. Start the build again when that has ended.")
 	Error("previous_change_open", OpenBuildRefusal, "Another change's build is open, and the user has neither merged a passed run of it into the branch checked out in the project folder nor dropped it; nothing was saved. The body names that build, with the commits to merge once a run passed, so the page offers the merge commands and Drop.")
 	Error("unfinished_build_open", OpenBuildRefusal, "Building this change again replaces its open build, which no verification has passed, and replaces does not name that build; nothing was saved. The page asks the user first, then sends replaces naming the build it showed.")
 	Error("drafted_before_drop", ErrorResult, "The agreed revision was drafted before the user dropped another change, so its design can hold that change's design; nothing was saved. The guide revises the change from its draft; the user adopts the revision, then builds.")
-	Error("design_changed_outside", ErrorResult, "A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Surla; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.")
+	Error("design_changed_outside", ErrorResult, "A design file at the build's base commit is not a version the agreed revision was made from: it was changed outside Highbay; nothing was saved. The message names the file and the commit. When the change is uncommitted, commit the design change in the project folder first; then the guide calls update_draft, refresh_story and revise_change, and the user adopts the revision and builds.")
 }
 
 // buildStartRefusalResponses maps each project-state refusal to a conflict.

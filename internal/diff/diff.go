@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 	"golang.org/x/mod/modfile"
 )
 

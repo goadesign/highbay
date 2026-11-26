@@ -18,10 +18,10 @@ import (
 // agents, the only file generation writes outside gen/.
 const quickstartPath = "AGENTS_QUICKSTART.md"
 
-// surlaQuickstart is the "surla-quickstart" Goa plugin that runs after
+// highbayQuickstart is the "highbay-quickstart" Goa plugin that runs after
 // Goa-AI's generators. It replaces the sections of AGENTS_QUICKSTART.md that
 // tell a reader which commands to run (header, liftoff and golden-rules) with
-// quickstartSections' text, which names Surla's tools. It also replaces
+// quickstartSections' text, which names Highbay's tools. It also replaces
 // evaluations when the design declares no evaluation suite, because that
 // section then only explains how to add one with goa gen and goa example;
 // when suites exist, Goa-AI's section describing them stays. Every other
@@ -29,9 +29,9 @@ const quickstartPath = "AGENTS_QUICKSTART.md"
 //
 // A guide without the agents-quickstart-header section comes from a Goa-AI
 // release that renders the guide as one section, and is left as Goa-AI wrote
-// it. A guide that has that section but lacks another one Surla replaces is
+// it. A guide that has that section but lacks another one Highbay replaces is
 // an error, because Goa-AI's section contract changed.
-func surlaQuickstart(_ string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
+func highbayQuickstart(_ string, roots []eval.Root, files []*codegen.File) ([]*codegen.File, error) {
 	for _, f := range files {
 		if f.Path != quickstartPath || len(f.Section("agents-quickstart-header")) == 0 {
 			continue

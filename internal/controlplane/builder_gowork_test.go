@@ -11,12 +11,12 @@ import (
 	"runtime"
 	"testing"
 
-	gensurlaclient "github.com/goadesign/surla/gen/http/surla/client"
-	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
-	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/shquote"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhighbayclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	genmcpclient "github.com/goadesign/highbay/gen/jsonrpc/mcp_highbay/client"
+	genmcphighbay "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/shquote"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -44,7 +44,7 @@ func TestBuilderGoWorkDependencyCommands(t *testing.T) {
 					want = filepath.Join(copyRoot, "go.work")
 				}
 				read, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-					&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+					&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 				require.NoError(t, err)
 				assert.Equal(t, !internal, read.GoworkOff)
 				cp.builderCopyTurn <- struct{}{}
@@ -61,10 +61,10 @@ func TestBuilderGoWorkDependencyCommands(t *testing.T) {
 				origin, err := url.Parse(srv.URL)
 				require.NoError(t, err)
 				doer := generationDoer{client: srv.Client()}
-				httpTransport := gensurlaclient.NewClient(origin.Scheme, origin.Host,
+				httpTransport := genhighbayclient.NewClient(origin.Scheme, origin.Host,
 					doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-				client := &gensurla.Client{GenerateCodeEndpoint: httpTransport.GenerateCode()}
-				_, err = client.GenerateCode(t.Context(), &gensurla.GenerateCodePayload{})
+				client := &genhighbay.Client{GenerateCodeEndpoint: httpTransport.GenerateCode()}
+				_, err = client.GenerateCode(t.Context(), &genhighbay.GenerateCodePayload{})
 				assertServiceError(t, err, "missing_modules")
 				prefix := "GOWORK=off "
 				if internal {
@@ -74,8 +74,8 @@ func TestBuilderGoWorkDependencyCommands(t *testing.T) {
 				assert.Contains(t, err.Error(), prefix+"go mod tidy")
 				mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host,
 					doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-				mcpClient := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
-				call, err := mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
+				mcpClient := &genmcphighbay.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
+				call, err := mcpClient.ToolsCall(t.Context(), &genmcphighbay.ToolsCallPayload{
 					Name: "generate_code", Arguments: []byte(`{}`),
 				})
 				require.NoError(t, err)
@@ -129,16 +129,16 @@ func TestBuilderGoWorkRefusesOutsideModule(t *testing.T) {
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	doer := generationDoer{client: srv.Client()}
-	httpTransport := gensurlaclient.NewClient(origin.Scheme, origin.Host,
+	httpTransport := genhighbayclient.NewClient(origin.Scheme, origin.Host,
 		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	client := &gensurla.Client{GenerateCodeEndpoint: httpTransport.GenerateCode()}
-	_, err = client.GenerateCode(t.Context(), &gensurla.GenerateCodePayload{})
+	client := &genhighbay.Client{GenerateCodeEndpoint: httpTransport.GenerateCode()}
+	_, err = client.GenerateCode(t.Context(), &genhighbay.GenerateCodePayload{})
 	assertServiceError(t, err, "unprocessable")
 	assert.ErrorContains(t, err, "outside source directory")
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host,
 		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	mcp := &genmcpsurla.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
-	call, err := mcp.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
+	mcp := &genmcphighbay.Client{ToolsCallEndpoint: mcpTransport.ToolsCall()}
+	call, err := mcp.ToolsCall(t.Context(), &genmcphighbay.ToolsCallPayload{
 		Name: "generate_code", Arguments: []byte(`{}`),
 	})
 	require.NoError(t, err)

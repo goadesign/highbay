@@ -13,14 +13,14 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	goa "goa.design/goa/v3/pkg"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
 	"github.com/stretchr/testify/assert"
 )
 
 // TestOperationPolicyCoversEveryTool proves every invocation permission, including denial before mutation.
 func TestOperationPolicyCoversEveryTool(t *testing.T) {
-	published := append(slices.Clone(gensurla.MethodNames[:]), genproject.MethodNames[:]...)
+	published := append(slices.Clone(genhighbay.MethodNames[:]), genproject.MethodNames[:]...)
 	// The browser exchange authenticates its one-use token at its own public
 	// boundary; it has no credential purpose and never enters this role policy.
 	published = slices.DeleteFunc(published, func(name string) bool { return name == "exchange_browser_link" })
@@ -47,8 +47,8 @@ func TestOperationPolicyCoversEveryTool(t *testing.T) {
 		"wait_for_builder_assignment": {CallerBuilder}, "wait_for_test_writer_assignment": {CallerTestWriter},
 		"report_tests_finished": {CallerTestWriter},
 	}
-	assert.Len(t, expected, len(gensurla.MethodNames))
-	for _, name := range gensurla.MethodNames {
+	assert.Len(t, expected, len(genhighbay.MethodNames))
+	for _, name := range genhighbay.MethodNames {
 		for _, role := range roles {
 			t.Run(name+"/"+string(role), func(t *testing.T) {
 				permitted := false
@@ -62,7 +62,7 @@ func TestOperationPolicyCoversEveryTool(t *testing.T) {
 				mutated := false
 				marker := errors.New("called domain operation")
 				// Fill every generated field with a unique sentinel, then apply the real wrapper set.
-				endpoints := &gensurla.Endpoints{}
+				endpoints := &genhighbay.Endpoints{}
 				value := reflect.ValueOf(endpoints).Elem()
 				for index := 0; index < value.NumField(); index++ {
 					if value.Field(index).Type() == reflect.TypeOf(goa.Endpoint(nil)) {
@@ -79,7 +79,7 @@ func TestOperationPolicyCoversEveryTool(t *testing.T) {
 				assert.Equal(t, permitted, mutated)
 				spans := exporter.GetSpans()
 				if assert.Len(t, spans, 1) {
-					assert.Equal(t, "surla.request."+name, spans[0].Name)
+					assert.Equal(t, "highbay.request."+name, spans[0].Name)
 				}
 				if permitted {
 					assert.ErrorIs(t, err, marker)

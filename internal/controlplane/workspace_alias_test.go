@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 // TestNewRejectsAliasedWorkspaceStorage checks each operator-owned store before

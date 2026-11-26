@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,21 +41,21 @@ func TestViewsPageWarnsBeforeChangingABuiltRevision(t *testing.T) {
 			cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 			card := buildableChange(t, cp, "chg-warning")
 			if tc.build {
-				_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &gensurla.StartBuildPayload{
+				_, err := cp.StartBuild(asCaller(pageOwner, CallerUser), &genhighbay.StartBuildPayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 				})
 				require.NoError(t, err)
 			}
 			if tc.adopt {
 				example := card.Examples[0]
-				_, err := cp.ReviseChange(asCaller(pageOwner, CallerGuide), &gensurla.ReviseChangePayload{
+				_, err := cp.ReviseChange(asCaller(pageOwner, CallerGuide), &genhighbay.ReviseChangePayload{
 					ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 					Prompt:       "Review the revised refund decision.",
 					RevisionNote: "Revise the change.",
-					Analysis: &gensurla.CP1RevisionAnalysis{
+					Analysis: &genhighbay.CP1RevisionAnalysis{
 						Summary:     "The revised refund decision.",
-						Ambiguities: []*gensurla.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
-						Examples: []*gensurla.CP1RevisionAnalysisExample{{
+						Ambiguities: []*genhighbay.CP1AnalysisAmbiguity{}, RemovedExampleIds: []string{},
+						Examples: []*genhighbay.CP1RevisionAnalysisExample{{
 							PriorID: &example.ID, Scenario: example.Scenario, InputSummary: example.InputSummary,
 							ExpectedOutcome: "A manager reviews the revised decision", VerificationKind: "deterministic",
 						}},
@@ -74,29 +74,29 @@ if (input.read === "held") await control(origin, "hold", { key: "GET " + buildPa
 if (input.read === "failed") await control(origin, "reply", { key: "GET " + buildPath, status: 503,
   body: { name: "unavailable", id: "warning-read", message: "Build read unavailable.", fault: false, temporary: true, timeout: false } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-cp1-editor")?.dataset.changeId === "chg-warning", "the agreed card did not open");
-if (input.read === "held") await until(() => page.$("#surla-build-loading"), "the build read was not held");
-else if (input.read === "failed") await until(() => page.$("#surla-build-error"), "the build read did not fail");
-else await until(() => page.$("#surla-build-section")?.dataset.state === (input.build ? "started" : "not_started") && !page.$("#surla-build-loading"), "the saved build read did not settle");
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-warning", "the agreed card did not open");
+if (input.read === "held") await until(() => page.$("#highbay-build-loading"), "the build read was not held");
+else if (input.read === "failed") await until(() => page.$("#highbay-build-error"), "the build read did not fail");
+else await until(() => page.$("#highbay-build-section")?.dataset.state === (input.build ? "started" : "not_started") && !page.$("#highbay-build-loading"), "the saved build read did not settle");
 
 let previousSaves = 0;
-let warningId = "surla-proposal-build-consequence";
-let actionId = "surla-proposal-adopt";
+let warningId = "highbay-proposal-build-consequence";
+let actionId = "highbay-proposal-adopt";
 if (!input.adopt) {
-  expect(!page.$("#surla-confirm-build-consequence"), "an unchanged confirmation falsely warns of invalidation");
+  expect(!page.$("#highbay-confirm-build-consequence"), "an unchanged confirmation falsely warns of invalidation");
   if (!input.read) {
-    await until(() => page.$("#surla-confirm-submit") && !page.$("#surla-confirm-submit").disabled, "no-op confirmation was not available");
-    page.$("#surla-confirm-submit").click();
-    await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === 200) && !page.$("#surla-confirm-submit").disabled, "no-op confirmation did not return");
-    expect(page.$("#surla-cp1-editor").dataset.requestRevision === input.revision, "no-op confirmation changed the revision");
+    await until(() => page.$("#highbay-confirm-submit") && !page.$("#highbay-confirm-submit").disabled, "no-op confirmation was not available");
+    page.$("#highbay-confirm-submit").click();
+    await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === 200) && !page.$("#highbay-confirm-submit").disabled, "no-op confirmation did not return");
+    expect(page.$("#highbay-cp1-editor").dataset.requestRevision === input.revision, "no-op confirmation changed the revision");
     previousSaves = page.sent("POST", "/changes/confirm").length;
   }
   const field = page.$('textarea[data-example-id="check_01"][data-field="expected_outcome"]');
   field.focus();
   page.type(field, "A manager reviews the revised decision");
   expect(page.doc.activeElement === field && field.value.includes("revised decision"), "the warning replaced or unfocused the draft");
-  warningId = "surla-confirm-build-consequence";
-  actionId = "surla-confirm-submit";
+  warningId = "highbay-confirm-build-consequence";
+  actionId = "highbay-confirm-submit";
 }
 const warning = page.$("#" + warningId);
 const action = page.$("#" + actionId);
@@ -114,10 +114,10 @@ if (input.build) {
 expect(page.sent("POST", "/changes/confirm").length === previousSaves && page.sent("POST", buildPath).length === 0, "showing a consequence caused an effect");
 await until(() => page.$("#" + actionId) && !page.$("#" + actionId).disabled, "the warned action was not available");
 page.$("#" + actionId).click();
-await until(() => page.$("#surla-cp1-editor")?.dataset.requestRevision !== input.revision, "the explicit revision action did not save");
+await until(() => page.$("#highbay-cp1-editor")?.dataset.requestRevision !== input.revision, "the explicit revision action did not save");
 expect(page.sent("POST", "/changes/confirm").length === previousSaves + 1 && page.sent("POST", buildPath).length === 0, "the action was repeated or rebuilt automatically");
 if (input.read === "held") await control(origin, "release", { key: "GET " + buildPath });
-if (input.build) await until(() => page.text(".surla-build-badges").includes("Earlier built agreement " + input.revision.slice(0, 12)),
+if (input.build) await until(() => page.text(".highbay-build-badges").includes("Earlier built agreement " + input.revision.slice(0, 12)),
   "the earlier build did not identify the agreement it built");
 page.close();
 `)

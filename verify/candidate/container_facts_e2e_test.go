@@ -1,7 +1,7 @@
 //go:build e2e && docker
 
 // This file checks, against the local Docker engine, the engine behavior the
-// check helper's cleanup relies on: a listing filtered by the surla.check
+// check helper's cleanup relies on: a listing filtered by the highbay.check
 // label shows a created and an exited container until they are removed, a
 // container created with createArgs has restart policy "no", and
 // rm --force exits 0 for a container that does not exist, so its exit
@@ -38,7 +38,7 @@ type (
 		ctx context.Context
 		// engine is the default local engine resolved by Open.
 		engine *Engine
-		// id is the run's random 32-hex surla.check label value.
+		// id is the run's random 32-hex highbay.check label value.
 		id string
 		// names are the only container names this run creates or removes.
 		names []string
@@ -121,7 +121,7 @@ func newFactsProbe(t *testing.T, ctx context.Context) *factsProbe {
 	id := hex.EncodeToString(raw[:])
 	p := &factsProbe{t: t, ctx: ctx, engine: engine, id: id}
 	for n := range 2 {
-		p.names = append(p.names, fmt.Sprintf("surla-check-%s-%d", id, n))
+		p.names = append(p.names, fmt.Sprintf("highbay-check-%s-%d", id, n))
 	}
 	t.Logf("endpoint %s; label %s=%s; names %v", engine.Host(), checkLabel, id, p.names)
 	t.Cleanup(p.cleanup)

@@ -1,4 +1,4 @@
-// This file tests merging a design change made outside Surla into the draft's
+// This file tests merging a design change made outside Highbay into the draft's
 // text of one design file.
 package designversion
 
@@ -24,7 +24,7 @@ import (
 // conflict, the project's change applied twice. Each merge runs where the
 // user's global configuration and a repository around the temporary folder,
 // which an inherited GIT_DIR also names, ask for zdiff3 markers; it checks
-// git's plain markers with Surla's labels, and that the temporary folder is
+// git's plain markers with Highbay's labels, and that the temporary folder is
 // gone.
 func TestMergeFileIsOneThreeWayMerge(t *testing.T) {
 	const before = "package design\n\nvar A = 1\n\nvar B = 2\n\nvar C = 3\n\nvar D = 4\n\nvar E = 5\n"

@@ -3,7 +3,7 @@
 // orders tool provider
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package orders
 
@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 
-	orders "github.com/goadesign/surla/examples/orders/gen/orders"
+	orders "github.com/goadesign/highbay/examples/orders/gen/orders"
 	"goa.design/goa-ai/runtime/agent"
 	planner "goa.design/goa-ai/runtime/agent/planner"
 	run "goa.design/goa-ai/runtime/agent/run"

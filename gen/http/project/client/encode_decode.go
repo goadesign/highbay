@@ -3,7 +3,7 @@
 // project HTTP client encoders and decoders
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/design
+// $ goa gen github.com/goadesign/highbay/design
 
 package client
 
@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"net/url"
 
-	project "github.com/goadesign/surla/gen/project"
+	project "github.com/goadesign/highbay/gen/project"
 	goahttp "goa.design/goa/v3/http"
 )
 

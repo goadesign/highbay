@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testwriter"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 type (
@@ -127,22 +127,22 @@ const (
 		"and the disk has free space, then ask the test writer to report again."
 
 	// stepDependencies is what the user does when the test module's
-	// dependencies could not be downloaded where Surla runs for a cause
-	// outside the test writer's changes. Surla withholds the download's
+	// dependencies could not be downloaded where Highbay runs for a cause
+	// outside the test writer's changes. Highbay withholds the download's
 	// output, which may hold proxy settings, so the step has the user run
-	// the same download, with the settings Surla's go commands use, where
+	// the same download, with the settings Highbay's go commands use, where
 	// its output can be read. A check and a build start each end it with
 	// their own way to run again.
-	stepDependencies = "In the terminal surla was started from, run " +
+	stepDependencies = "In the terminal hbay was started from, run " +
 		"GOTOOLCHAIN=local GOWORK=off GOFLAGS= go mod download in the project's " + scaffold.SuiteDir +
 		" folder and fix what it reports, such as no network, proxy or private-module settings " +
 		"missing there, or a Go older than the module requires"
 
-	// stepWriteCopy is what the user does when Surla could not write the
+	// stepWriteCopy is what the user does when Highbay could not write the
 	// required tests into the test writer's working copy. A check and a
 	// build start each end it with their own way to run again.
 	stepWriteCopy = "Make sure the test module in the test writer's working copy " +
-		"(the .surla-tests folder of the project) can be written and the disk has free space"
+		"(the .highbay-tests folder of the project) can be written and the disk has free space"
 
 	// replacedEvent is the span event of a judgment whose report a newer
 	// report or build replaced before its verdict was saved.
@@ -274,10 +274,10 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 		return
 	}
 	id := reportIdentityOf(saved)
-	ctx, span := r.cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane.check_reported_tests", trace.WithAttributes(
-		attribute.String("surla.change_id", id.changeID),
-		attribute.String("surla.request_revision", id.revision),
-		attribute.Int("surla.report_number", id.report),
+	ctx, span := r.cp.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.check_reported_tests", trace.WithAttributes(
+		attribute.String("highbay.change_id", id.changeID),
+		attribute.String("highbay.request_revision", id.revision),
+		attribute.Int("highbay.report_number", id.report),
 	))
 	defer span.End()
 
@@ -309,11 +309,11 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 		switch {
 		case tipErr != nil:
 			failure = tipErr
-			verdict = r.couldNotRun(tipErr, deadline, "Surla could not read the tests branch before recording")
+			verdict = r.couldNotRun(tipErr, deadline, "Highbay could not read the tests branch before recording")
 		case !tipVerdict.Accepted():
 			verdict = r.verdictOf(tipVerdict, nil, deadline)
 		default:
-			message := fmt.Sprintf("Add the tests Surla accepted for change %s, report %d", id.changeID, id.report)
+			message := fmt.Sprintf("Add the tests Highbay accepted for change %s, report %d", id.changeID, id.report)
 			commit, current, confirmErr, recordErr := r.recordAccepted(checkCtx, id, copy, v, branch, checkedTip, message)
 			if confirmErr != nil {
 				recordJudgeFailure(span, confirmErr, "confirm build")
@@ -335,13 +335,13 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 					// deadline elapsed before its index could be published.
 					verdict = testWriterAssignment{State: testsCouldNotRun,
 						Reason: boundReason(testwriter.WithoutAbsolutePaths(fmt.Sprintf(
-							"Tests were recorded as commit %s, but Surla could not finish recording: %v", commit, recordErr))),
+							"Tests were recorded as commit %s, but Highbay could not finish recording: %v", commit, recordErr))),
 						Step: stepFailure,
 					}
 				} else if errors.As(recordErr, &author) {
 					verdict = r.verdictOf(testwriter.Verdict{}, recordErr, deadline)
 				} else {
-					verdict = r.couldNotRun(recordErr, deadline, "Surla could not record the accepted tests")
+					verdict = r.couldNotRun(recordErr, deadline, "Highbay could not record the accepted tests")
 				}
 			default:
 				verdict.Commit = commit
@@ -359,7 +359,7 @@ func (r *reportChecker) judge(ctx context.Context, changeID string) {
 		span.AddEvent(replacedEvent)
 		return
 	}
-	span.SetAttributes(attribute.String("surla.tests_state", saved.TestWriter.State))
+	span.SetAttributes(attribute.String("highbay.tests_state", saved.TestWriter.State))
 	if saved.TestWriter.State == testsCouldNotRun {
 		if failure == nil {
 			failure = errors.New(saved.TestWriter.Reason)
@@ -389,7 +389,7 @@ func (r *reportChecker) check(
 }
 
 // openReportCopy opens the test writer's working copy of the bound project
-// as a build start does: the project must still have Surla's test layout,
+// as a build start does: the project must still have Highbay's test layout,
 // whose suite module and generated program the check uses.
 func (c *ControlPlane) openReportCopy(ctx context.Context) (buildCopy, error) {
 	source, layout, workspace, err := c.projectTestLayout(ctx)
@@ -397,7 +397,7 @@ func (c *ControlPlane) openReportCopy(ctx context.Context) (buildCopy, error) {
 		return nil, err
 	}
 	if source != testSourceStarterLayout || workspace == "" {
-		return nil, errors.New("the project no longer has Surla's test layout")
+		return nil, errors.New("the project no longer has Highbay's test layout")
 	}
 	return c.openBuildCopy(ctx, workspace, layout)
 }
@@ -451,7 +451,7 @@ func (r *reportChecker) checkReportedTestsTip(
 	}
 	reasons = append(reasons, foreignBuildWorkReasons(check.Foreign)...)
 	if len(reasons) > 0 {
-		message := fmt.Sprintf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own tests again on %s from base %s, uncommitted (Surla commits what it accepts), then report again.", strings.Join(reasons, "; "), branch, branch, saved.Base)
+		message := fmt.Sprintf("%s. Make %s and your working copy hold neither the other builds' commits nor their changes to the named files. Make your own tests again on %s from base %s, uncommitted (Highbay commits what it accepts), then report again.", strings.Join(reasons, "; "), branch, branch, saved.Base)
 		return "", testwriter.Verdict{Findings: []testwriter.Finding{{
 			Kind: testwriter.FindingWorkingCopy, Message: testwriter.WithoutAbsolutePaths(message),
 		}}}, nil
@@ -567,7 +567,7 @@ func (r *reportChecker) retryReads(ctx context.Context) {
 	}
 	r.readFailures++
 	if r.readFailures > maxRetriesAfterFailure {
-		_, span := r.cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane.retry_reported_tests")
+		_, span := r.cp.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.retry_reported_tests")
 		defer span.End()
 		span.AddEvent("reading failed too often in a row; reported builds wait for the next report or server start")
 		return
@@ -591,7 +591,7 @@ func (r *reportChecker) wakeLater() {
 // read (retryReads).
 func (r *reportChecker) recordReadFailure(ctx context.Context, err error) {
 	r.readFailed = true
-	_, span := r.cp.tracer("surla/controlplane").Start(ctx, "surla.controlplane.read_reported_tests")
+	_, span := r.cp.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.read_reported_tests")
 	defer span.End()
 	recordJudgeFailure(span, err, "read builds")
 }
@@ -625,7 +625,7 @@ func (r *reportChecker) verdictOf(v testwriter.Verdict, err error, deadline time
 		return testWriterAssignment{State: testsNeedChanges, Findings: findings}
 	}
 	if err != nil || !time.Now().Before(deadline) {
-		return r.couldNotRun(err, deadline, "Surla's check could not run")
+		return r.couldNotRun(err, deadline, "Highbay's check could not run")
 	}
 	return testWriterAssignment{State: testsAccepted}
 }
@@ -644,9 +644,9 @@ func (r *reportChecker) couldNotRun(err error, deadline time.Time, failed string
 		reason, step = fmt.Sprintf("Checking the tests did not finish within %s, "+
 			"though building the test program and listing its tests each have their own shorter limit.", limitWords(r.limit)), stepLimit
 	case errors.As(err, &open):
-		reason, step = "Surla could not open the test writer's working copy: "+err.Error(), stepOpenCopy
+		reason, step = "Highbay could not open the test writer's working copy: "+err.Error(), stepOpenCopy
 	case errors.Is(err, testwriter.ErrWriteGenerated):
-		reason = "Surla could not write the required tests into the test writer's working copy or its snapshot: " + err.Error()
+		reason = "Highbay could not write the required tests into the test writer's working copy or its snapshot: " + err.Error()
 		step = stepWriteCopy + ", then ask the test writer to report again."
 	case errors.Is(err, testwriter.ErrDependencies):
 		reason, step = failed+": "+err.Error(), stepDependencies+", then ask the test writer to report again."

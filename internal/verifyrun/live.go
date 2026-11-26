@@ -20,19 +20,19 @@ import (
 
 	"goa.design/goa-ai/runtime/agent/model"
 
-	"github.com/goadesign/surla/internal/abspath"
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/procgroup"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/internal/abspath"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/procgroup"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // A live target is a candidate commit an evaluator suite runs for interactive
 // CP3 prompt drafts. It lives no longer than the process that started it.
 //
-// LaunchLive, called by `surla serve`, creates a directory under the live root
-// and starts `surla verify-run live <dir> <build-cache-dir>` as the leader of a new process
+// LaunchLive, called by `hbay serve`, creates a directory under the live root
+// and starts `hbay verify-run live <dir> <build-cache-dir>` as the leader of a new process
 // group, with the read end of a control pipe on its descriptor 3 and TMPDIR
 // set inside the directory. The executor (Live) watches that pipe before it
 // does anything else, then runs verify.Prepare and the suite's --live mode in
@@ -123,7 +123,7 @@ const (
 	// summaryLiveSuite describes a suite that did not report a ready target
 	// and what the operator can check.
 	summaryLiveSuite = "The evaluator suite did not start a live target. Check that its suite.Command sets Live " +
-		"and that a model is configured in Surla."
+		"and that a model is configured in Highbay."
 	// maxLiveDetail bounds the executor log excerpt kept in a
 	// LiveStartError after its directory is removed.
 	maxLiveDetail = 8 << 10
@@ -282,7 +282,7 @@ func LaunchLive(
 	return p, nil
 }
 
-// Live runs as `surla verify-run live <dir> <build-cache-dir>`, the target's process-group
+// Live runs as `hbay verify-run live <dir> <build-cache-dir>`, the target's process-group
 // leader. It starts watching its parent's control pipe before reading stdin,
 // then removes provider families so preparation receives no held setting.
 // Written tests receive a gateway: after preparation the executor applies
@@ -304,7 +304,7 @@ func Live(
 
 	input, err := readLiveSettings(os.Stdin)
 	if err != nil {
-		return reportLive(out, errLog, "The live target's model settings could not be read; restart Surla.", err)
+		return reportLive(out, errLog, "The live target's model settings could not be read; restart Highbay.", err)
 	}
 	providers, err := takeProviderFamilies()
 	if err != nil {

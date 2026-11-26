@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // TestFactsReadsBranchOperationsAndUncommitted verifies WorkingCopy.Facts and
-// ShownName across Surla build branches, agent-chosen branches, detached HEAD,
+// ShownName across Highbay build branches, agent-chosen branches, detached HEAD,
 // every Git operation in the administrative folder (including bisect as
 // "none"), and uncommitted/untracked paths (including more than five paths and
 // unprintable names).
@@ -28,18 +28,18 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 	wc, err := MakeCopy(t.Context(), repo, BuilderRole, BuilderRole.Branch(1), base)
 	require.NoError(t, err)
 
-	// Clean Surla build branch.
+	// Clean Highbay build branch.
 	facts, err := wc.Facts(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, CopyFacts{
-		Branch:           "surla/build-1",
+		Branch:           "highbay/build-1",
 		Detached:         false,
 		Operation:        "none",
 		Uncommitted:      []string{},
 		UncommittedCount: 0,
 	}, facts)
 
-	// Agent-chosen branches (including surla/build-2-backup and surla/build-007)
+	// Agent-chosen branches (including highbay/build-2-backup and highbay/build-007)
 	// are plain in CopyFacts.Branch and shell-quoted in ShownBranch; unprintable
 	// names are withheld.
 	for _, tc := range []struct {
@@ -47,8 +47,8 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 		wantShown string
 	}{
 		{branch: "feature/work", wantShown: "'feature/work'"},
-		{branch: "surla/build-2-backup", wantShown: "'surla/build-2-backup'"},
-		{branch: "surla/build-007", wantShown: "'surla/build-007'"},
+		{branch: "highbay/build-2-backup", wantShown: "'highbay/build-2-backup'"},
+		{branch: "highbay/build-007", wantShown: "'highbay/build-007'"},
 	} {
 		runGit(t, wc.Dir(), "switch", "--quiet", "-c", tc.branch, base)
 		facts, err = wc.Facts(t.Context())
@@ -57,7 +57,7 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 		assert.Equal(t, tc.wantShown, ShownBranch(facts.Branch))
 		assert.False(t, facts.Detached)
 	}
-	assert.Equal(t, "surla/build-1", ShownBranch("surla/build-1"))
+	assert.Equal(t, "highbay/build-1", ShownBranch("highbay/build-1"))
 	assert.Equal(t, "a name that is not shown", CleanName("bad\nbranch"))
 	assert.Equal(t, "a name that is not shown", ShownName("bad\nbranch"))
 	assert.Equal(t, "a name that is not shown", ShownName("bad\x07path.go"))
@@ -71,8 +71,8 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 	assert.True(t, facts.Detached)
 	assert.Empty(t, facts.Branch)
 
-	// Return to surla/build-1 and verify every operation marker in wc.gitDir.
-	runGit(t, wc.Dir(), "switch", "--quiet", "surla/build-1")
+	// Return to highbay/build-1 and verify every operation marker in wc.gitDir.
+	runGit(t, wc.Dir(), "switch", "--quiet", "highbay/build-1")
 	opCases := []struct {
 		name  string
 		files map[string]string
@@ -134,12 +134,12 @@ func TestFactsReadsBranchOperationsAndUncommitted(t *testing.T) {
 // TestJoinCommitsLeftoversAndReplacesIgnoredFile (S1, S4, N1, N2) verifies:
 //   - S1: uncommitted edits and untracked files on an earlier build branch are
 //     committed there with "Left uncommitted when change <id> started", the
-//     copy switches to surla/build-<n> at the new base, and an ignored file in
+//     copy switches to highbay/build-<n> at the new base, and an ignored file in
 //     the copy at a path the new base tracks is replaced by the base's file;
-//   - S4: joining again when already on surla/build-<n> returns AlreadyJoined,
+//   - S4: joining again when already on highbay/build-<n> returns AlreadyJoined,
 //     and joining a next build with nothing uncommitted makes no leftover
 //     commit;
-//   - N1 & N2: build numbers skip missing builds cleanly and legacy surla/tests
+//   - N1 & N2: build numbers skip missing builds cleanly and legacy highbay/tests
 //     (k == 0) is treated as an earlier build branch of TestsRole.
 func TestJoinCommitsLeftoversAndReplacesIgnoredFile(t *testing.T) {
 	t.Parallel()
@@ -173,7 +173,7 @@ func TestJoinCommitsLeftoversAndReplacesIgnoredFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
 	assert.Equal(t, CopyFacts{
-		Branch:           "surla/build-2",
+		Branch:           "highbay/build-2",
 		Detached:         false,
 		Operation:        "none",
 		Uncommitted:      []string{},
@@ -184,34 +184,34 @@ func TestJoinCommitsLeftoversAndReplacesIgnoredFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "tracked\n", string(tool), "ignored file at a path the new base tracks is replaced")
 	assert.Equal(t, "Left uncommitted when change exports started\nC1\nStart the project",
-		runGit(t, repo, "log", "--format=%s", "surla/build-1"))
-	assert.Equal(t, "wip", runGit(t, repo, "show", "surla/build-1:svc/wip.txt"))
-	assert.Equal(t, "package svc // edit", runGit(t, repo, "show", "surla/build-1:svc/a.go"))
+		runGit(t, repo, "log", "--format=%s", "highbay/build-1"))
+	assert.Equal(t, "wip", runGit(t, repo, "show", "highbay/build-1:svc/wip.txt"))
+	assert.Equal(t, "package svc // edit", runGit(t, repo, "show", "highbay/build-1:svc/a.go"))
 
 	// S4: calling Join again for build 2 returns AlreadyJoined and commits nothing.
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 	require.NoError(t, err)
 	assert.Equal(t, AlreadyJoined, outcome)
-	assert.Equal(t, "surla/build-2", facts.Branch)
+	assert.Equal(t, "highbay/build-2", facts.Branch)
 
-	// S4 + N1: joining build 4 with nothing uncommitted on surla/build-2 makes
-	// no leftover commit on surla/build-2.
+	// S4 + N1: joining build 4 with nothing uncommitted on highbay/build-2 makes
+	// no leftover commit on highbay/build-2.
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 4, b2, "invoices")
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
-	assert.Equal(t, "surla/build-4", facts.Branch)
-	assert.Equal(t, b2, runGit(t, repo, "rev-parse", "surla/build-2"), "clean earlier branch gets no leftover commit")
+	assert.Equal(t, "highbay/build-4", facts.Branch)
+	assert.Equal(t, b2, runGit(t, repo, "rev-parse", "highbay/build-2"), "clean earlier branch gets no leftover commit")
 
-	// N2: legacy surla/tests (k == 0) is an earlier build branch of TestsRole.
+	// N2: legacy highbay/tests (k == 0) is an earlier build branch of TestsRole.
 	tw, err := MakeCopy(t.Context(), repo, TestsRole, Branch, b1)
 	require.NoError(t, err)
 	writeFiles(t, tw.Dir(), map[string]string{"eval/acceptance/wip_test.go": "package acceptance\n"})
 	outcome, facts, err = tw.Join(t.Context(), TestsRole, 1, b2, "exports")
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
-	assert.Equal(t, "surla/tests-1", facts.Branch)
+	assert.Equal(t, "highbay/tests-1", facts.Branch)
 	assert.Equal(t, "Left uncommitted when change exports started\nStart the project",
-		runGit(t, repo, "log", "--format=%s", "surla/tests"))
+		runGit(t, repo, "log", "--format=%s", "highbay/tests"))
 	assert.Empty(t, ranHooks(t, markers))
 }
 
@@ -249,22 +249,22 @@ func TestJoinRestoresAndCleansGeneratedPathsInTestsCopy(t *testing.T) {
 	outcome, facts, err := tw.Join(t.Context(), TestsRole, 2, b1, "refunds")
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
-	assert.Equal(t, "surla/tests-2", facts.Branch)
+	assert.Equal(t, "highbay/tests-2", facts.Branch)
 	assert.Zero(t, facts.UncommittedCount)
 
-	// The leftover commit on surla/tests-1 holds the hand-written edit and
+	// The leftover commit on highbay/tests-1 holds the hand-written edit and
 	// none of the generated edits or untracked generated files.
 	assert.Equal(t, "Left uncommitted when change refunds started\nStart the project",
-		runGit(t, repo, "log", "--format=%s", "surla/tests-1"))
+		runGit(t, repo, "log", "--format=%s", "highbay/tests-1"))
 	assert.Equal(t, "package acceptance // hand-written edit",
-		runGit(t, repo, "show", "surla/tests-1:eval/acceptance/acceptance.go"))
+		runGit(t, repo, "show", "highbay/tests-1:eval/acceptance/acceptance.go"))
 	assert.Equal(t, "package evals // committed",
-		runGit(t, repo, "show", "surla/tests-1:eval/gen/evals/suite.go"))
+		runGit(t, repo, "show", "highbay/tests-1:eval/gen/evals/suite.go"))
 	assert.Equal(t, "committed guide",
-		runGit(t, repo, "show", "surla/tests-1:eval/AGENTS_QUICKSTART.md"))
-	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", "surla/tests-1"),
+		runGit(t, repo, "show", "highbay/tests-1:eval/AGENTS_QUICKSTART.md"))
+	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", "highbay/tests-1"),
 		designeval.StoryTestsPath)
-	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", "surla/tests-1"),
+	assert.NotContains(t, runGit(t, repo, "ls-tree", "-r", "--name-only", "highbay/tests-1"),
 		"eval/gen/evals/extra.go")
 
 	// A symbolic link at eval, eval/design, or eval/gen pointing to a folder
@@ -333,15 +333,15 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 			_, _, err = wc.join(t.Context(), BuilderRole, 2, b1, "exports", hooks)
 			require.ErrorIs(t, err, stopErr)
 
-			// The next Join succeeds and commits the leftover work once on surla/build-1.
+			// The next Join succeeds and commits the leftover work once on highbay/build-1.
 			outcome, facts, err := wc.Join(t.Context(), BuilderRole, 2, b1, "exports")
 			require.NoError(t, err)
 			assert.Equal(t, Joined, outcome)
-			assert.Equal(t, "surla/build-2", facts.Branch)
+			assert.Equal(t, "highbay/build-2", facts.Branch)
 			assert.Equal(t, "Left uncommitted when change exports started\nStart the project",
-				runGit(t, repo, "log", "--format=%s", "surla/build-1"))
+				runGit(t, repo, "log", "--format=%s", "highbay/build-1"))
 			assert.Equal(t, "package svc // leftover",
-				runGit(t, repo, "show", "surla/build-1:svc/wip.go"))
+				runGit(t, repo, "show", "highbay/build-1:svc/wip.go"))
 		})
 	}
 
@@ -352,25 +352,25 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		wc, err := MakeCopy(t.Context(), repo, BuilderRole, BuilderRole.Branch(1), base)
 		require.NoError(t, err)
 
-		// Commit C1 on surla/build-1 so surla/build-1's tree differs from base.
+		// Commit C1 on highbay/build-1 so highbay/build-1's tree differs from base.
 		writeFiles(t, wc.Dir(), map[string]string{"svc/a.go": "package svc // C1\n"})
 		runGit(t, wc.Dir(), "add", "-A")
 		runGit(t, wc.Dir(), "commit", "--quiet", "-m", "C1")
 		c1 := runGit(t, wc.Dir(), "rev-parse", "HEAD")
 
-		// Simulate a stop inside git switch -c surla/build-2 <base>: Git has
+		// Simulate a stop inside git switch -c highbay/build-2 <base>: Git has
 		// unpacked base's tree into the copy's index and working tree, but has
-		// not yet created surla/build-2 or moved HEAD off surla/build-1.
+		// not yet created highbay/build-2 or moved HEAD off highbay/build-1.
 		runGit(t, wc.Dir(), "read-tree", "-u", "--reset", base)
-		require.Equal(t, "refs/heads/surla/build-1", runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
+		require.Equal(t, "refs/heads/highbay/build-1", runGit(t, wc.Dir(), "symbolic-ref", "HEAD"))
 
 		outcome, facts, err := wc.Join(t.Context(), BuilderRole, 2, base, "exports")
 		require.NoError(t, err)
 		assert.Equal(t, Joined, outcome)
-		assert.Equal(t, "surla/build-2", facts.Branch)
+		assert.Equal(t, "highbay/build-2", facts.Branch)
 		assert.Equal(t, base, runGit(t, wc.Dir(), "rev-parse", "HEAD"))
-		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "surla/build-1"),
-			"no misleading leftover commit reverts surla/build-1 to base's tree")
+		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "highbay/build-1"),
+			"no misleading leftover commit reverts highbay/build-1 to base's tree")
 	})
 
 	t.Run("stop_inside_git_switch_c_tests_copy_with_differing_generated_files", func(t *testing.T) {
@@ -410,10 +410,10 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		outcome, facts, err = tw.Join(t.Context(), TestsRole, 2, b2, "exports")
 		require.NoError(t, err)
 		assert.Equal(t, Joined, outcome)
-		assert.Equal(t, "surla/tests-2", facts.Branch)
-		assert.Equal(t, t1, runGit(t, repo, "rev-parse", "surla/tests-1"),
-			"no misleading leftover commit on surla/tests-1; got:\n%s",
-			runGit(t, repo, "log", "--stat", "--format=%s", t1+"..surla/tests-1"))
+		assert.Equal(t, "highbay/tests-2", facts.Branch)
+		assert.Equal(t, t1, runGit(t, repo, "rev-parse", "highbay/tests-1"),
+			"no misleading leftover commit on highbay/tests-1; got:\n%s",
+			runGit(t, repo, "log", "--stat", "--format=%s", t1+"..highbay/tests-1"))
 	})
 
 	t.Run("cancelled_and_partial_switch_c", func(t *testing.T) {
@@ -440,7 +440,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		// 1. Simulate a partial unpack of B2: 15 of B2's 200 files written
 		// with B2's contents plus one 0-byte file (big/f015.txt) interrupted
 		// between open and write while HEAD and index are still at C1 on
-		// surla/build-1.
+		// highbay/build-1.
 		for i := range 15 {
 			writeFiles(t, wc.Dir(), map[string]string{
 				fmt.Sprintf("big/f%03d.txt", i): fmt.Sprintf("content %d\n", i),
@@ -448,7 +448,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		}
 		writeFiles(t, wc.Dir(), map[string]string{"big/f015.txt": ""})
 
-		// 2. A copy already on its own branch (surla/build-1 for build 1)
+		// 2. A copy already on its own branch (highbay/build-1 for build 1)
 		// writes nothing and returns AlreadyJoined even when index.lock is
 		// held by another process (such as a prompt's or editor's git status).
 		lockPath := filepath.Join(wc.gitDir, "index.lock")
@@ -456,7 +456,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		outcome, facts, err := wc.Join(t.Context(), BuilderRole, 1, b1, "refunds")
 		require.NoError(t, err)
 		assert.Equal(t, AlreadyJoined, outcome)
-		assert.Equal(t, "surla/build-1", facts.Branch)
+		assert.Equal(t, "highbay/build-1", facts.Branch)
 		assert.Empty(t, facts.Step)
 		assert.FileExists(t, lockPath)
 
@@ -466,7 +466,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 		require.NoError(t, err)
 		assert.Equal(t, Refused, outcome)
-		assert.Equal(t, "surla/build-1", facts.Branch)
+		assert.Equal(t, "highbay/build-1", facts.Branch)
 		assert.Equal(t, "none", facts.Operation)
 		assert.Equal(t, lockPath, facts.IndexLock)
 		assert.Contains(t, facts.Step,
@@ -492,7 +492,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		assert.FileExists(t, lockPath)
 
 		// 5. After a timeout-killed write, a leftover index.lock stays on disk
-		// (Surla never deletes index.lock) and the next Join refuses with the
+		// (Highbay never deletes index.lock) and the next Join refuses with the
 		// lock's recovery step.
 		require.NoError(t, os.Remove(lockPath))
 		_, _, err = wc.join(t.Context(), BuilderRole, 2, b2, "exports", joinHooks{
@@ -504,7 +504,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 			},
 		})
 		require.Error(t, err)
-		assert.FileExists(t, lockPath, "Surla never deletes index.lock after a timeout")
+		assert.FileExists(t, lockPath, "Highbay never deletes index.lock after a timeout")
 
 		outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 		require.NoError(t, err)
@@ -518,7 +518,7 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		// step 4's recoverStoppedSwitch completed, and cancel the caller
 		// context right as beforeSwitch returns to verify the copy-changing
 		// commands finish under writeCtx without leaving index.lock or making
-		// a partial commit on surla/build-1.
+		// a partial commit on highbay/build-1.
 		runGit(t, wc.Dir(), "read-tree", "-u", "--reset", c1)
 		for i := range 15 {
 			writeFiles(t, wc.Dir(), map[string]string{
@@ -535,20 +535,20 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Equal(t, Joined, outcome)
-		assert.Equal(t, "surla/build-2", facts.Branch)
+		assert.Equal(t, "highbay/build-2", facts.Branch)
 		assert.Empty(t, facts.IndexLock)
 		assert.Empty(t, facts.Step)
 		assert.NoFileExists(t, lockPath)
-		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "surla/build-1"),
-			"partial B2 unpack (including one empty blob) must not be committed as leftovers on surla/build-1")
+		assert.Equal(t, c1, runGit(t, repo, "rev-parse", "highbay/build-1"),
+			"partial B2 unpack (including one empty blob) must not be committed as leftovers on highbay/build-1")
 		assert.Equal(t, b2, runGit(t, wc.Dir(), "rev-parse", "HEAD"))
 
 		// 5. Counterexample for isStoppedSwitch: when B3 changes both svc/a.go
-		// and svc/b.go, and the copy on surla/build-2 has one path equal to
+		// and svc/b.go, and the copy on highbay/build-2 has one path equal to
 		// B3's (svc/a.go) alongside a non-empty agent edit to another path B3
 		// changes (svc/b.go), Join must NOT treat the working tree as a
 		// stopped switch; it must commit both files as leftovers on
-		// surla/build-2 before switching to surla/build-3.
+		// highbay/build-2 before switching to highbay/build-3.
 		writeFiles(t, repo, map[string]string{
 			"svc/a.go": "package svc // b3 a\n",
 			"svc/b.go": "package svc // b3 b\n",
@@ -564,28 +564,28 @@ func TestJoinRecoversFromInterruptedSteps(t *testing.T) {
 		outcome, facts, err = wc.Join(t.Context(), BuilderRole, 3, b3, "invoices")
 		require.NoError(t, err)
 		assert.Equal(t, Joined, outcome)
-		assert.Equal(t, "surla/build-3", facts.Branch)
+		assert.Equal(t, "highbay/build-3", facts.Branch)
 		assert.Equal(t, "Left uncommitted when change invoices started",
-			runGit(t, repo, "log", "-1", "--format=%s", "surla/build-2"))
+			runGit(t, repo, "log", "-1", "--format=%s", "highbay/build-2"))
 		assert.Equal(t, "package svc // agent non-empty edit",
-			runGit(t, repo, "show", "surla/build-2:svc/b.go"))
+			runGit(t, repo, "show", "highbay/build-2:svc/b.go"))
 		assert.Equal(t, "package svc // b3 a",
-			runGit(t, repo, "show", "surla/build-2:svc/a.go"))
+			runGit(t, repo, "show", "highbay/build-2:svc/a.go"))
 	})
 }
 
 // TestJoinRefusesAndHandlesConcurrentEdit (J6, J9, J11, R1) verifies:
-//   - J6: when surla/build-2 already exists and the copy was switched back to
-//     surla/build-1 or detached, Join returns Refused without moving it;
+//   - J6: when highbay/build-2 already exists and the copy was switched back to
+//     highbay/build-1 or detached, Join returns Refused without moving it;
 //   - J9: a clean copy on an agent-chosen side branch or detached HEAD joins
-//     surla/build-2 and leaves the side branch untouched; a copy on a side
+//     highbay/build-2 and leaves the side branch untouched; a copy on a side
 //     branch or detached HEAD with uncommitted work is refused;
 //   - J11: a copy with an operation in progress (even on its own branch) is
 //     refused;
 //   - R1: if a file changes in the copy after the leftover commit and before
 //     git switch -c runs, Join returns ChangedDuringJoin without creating
-//     surla/build-2, and the next Join commits that edit on surla/build-1 and
-//     switches to surla/build-2.
+//     highbay/build-2, and the next Join commits that edit on highbay/build-1 and
+//     switches to highbay/build-2.
 func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	t.Parallel()
 	repo, _ := newProject(t, map[string]string{"svc/a.go": "package svc\n"})
@@ -608,36 +608,36 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	outcome, facts, err := wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
-	assert.Equal(t, "surla/build-2", facts.Branch)
+	assert.Equal(t, "highbay/build-2", facts.Branch)
 	assert.Equal(t, b2, runGit(t, wc.Dir(), "rev-parse", "HEAD"))
 	assert.Equal(t, sideTip, runGit(t, repo, "rev-parse", "side"), "side branch is untouched")
 
-	// J6: switch back to surla/build-1 after surla/build-2 exists -> Refused.
-	runGit(t, wc.Dir(), "switch", "--quiet", "surla/build-1")
+	// J6: switch back to highbay/build-1 after highbay/build-2 exists -> Refused.
+	runGit(t, wc.Dir(), "switch", "--quiet", "highbay/build-1")
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 	require.NoError(t, err)
 	assert.Equal(t, Refused, outcome)
-	assert.Equal(t, "surla/build-1", facts.Branch)
+	assert.Equal(t, "highbay/build-1", facts.Branch)
 
 	// J9 clean detached HEAD joins build 3.
 	runGit(t, wc.Dir(), "switch", "--quiet", "--detach", b1)
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 3, b2, "invoices")
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
-	assert.Equal(t, "surla/build-3", facts.Branch)
+	assert.Equal(t, "highbay/build-3", facts.Branch)
 
 	// J9 dirty side branch, dirty later build branch (k > n), and dirty
 	// detached HEAD are refused.
-	runGit(t, wc.Dir(), "switch", "--quiet", "surla/build-3")
+	runGit(t, wc.Dir(), "switch", "--quiet", "highbay/build-3")
 	writeFiles(t, wc.Dir(), map[string]string{"svc/dirty.go": "package svc\n"})
-	build3Tip := runGit(t, repo, "rev-parse", "surla/build-3")
-	runGit(t, repo, "branch", "-D", "surla/build-2")
+	build3Tip := runGit(t, repo, "rev-parse", "highbay/build-3")
+	runGit(t, repo, "branch", "-D", "highbay/build-2")
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 2, b2, "exports")
 	require.NoError(t, err)
 	assert.Equal(t, Refused, outcome, "uncommitted work on a later build branch (k=3 > n=2) must be refused")
-	assert.Equal(t, "surla/build-3", facts.Branch)
+	assert.Equal(t, "highbay/build-3", facts.Branch)
 	assert.Equal(t, []string{"svc/dirty.go"}, facts.Uncommitted)
-	assert.Equal(t, build3Tip, runGit(t, repo, "rev-parse", "surla/build-3"),
+	assert.Equal(t, build3Tip, runGit(t, repo, "rev-parse", "highbay/build-3"),
 		"later build branch must not receive a leftover commit for an earlier build")
 
 	runGit(t, wc.Dir(), "switch", "--quiet", "side")
@@ -657,7 +657,7 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 
 	// J11: an operation in progress refuses Join both before and after the
 	// build branch exists.
-	runGit(t, wc.Dir(), "switch", "--quiet", "surla/build-3")
+	runGit(t, wc.Dir(), "switch", "--quiet", "highbay/build-3")
 	writeFiles(t, wc.gitDir, map[string]string{"MERGE_HEAD": b1 + "\n"})
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 3, b2, "invoices")
 	require.NoError(t, err)
@@ -679,20 +679,20 @@ func TestJoinRefusesAndHandlesConcurrentEdit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, ChangedDuringJoin, outcome)
-	assert.Equal(t, "surla/build-3", facts.Branch)
+	assert.Equal(t, "highbay/build-3", facts.Branch)
 	assert.Equal(t, []string{"svc/b.go"}, facts.Uncommitted)
-	_, exists, err := lookupCommit(t.Context(), repo, "refs/heads/surla/build-4")
+	_, exists, err := lookupCommit(t.Context(), repo, "refs/heads/highbay/build-4")
 	require.NoError(t, err)
-	assert.False(t, exists, "surla/build-4 was not created when git switch -c refused")
+	assert.False(t, exists, "highbay/build-4 was not created when git switch -c refused")
 
-	// Calling Join again commits the late edit onto surla/build-3 and switches
-	// to surla/build-4.
+	// Calling Join again commits the late edit onto highbay/build-3 and switches
+	// to highbay/build-4.
 	outcome, facts, err = wc.Join(t.Context(), BuilderRole, 4, b2, "billing")
 	require.NoError(t, err)
 	assert.Equal(t, Joined, outcome)
-	assert.Equal(t, "surla/build-4", facts.Branch)
+	assert.Equal(t, "highbay/build-4", facts.Branch)
 	assert.Equal(t, "package svc // late edit during join",
-		runGit(t, repo, "show", "surla/build-3:svc/b.go"))
+		runGit(t, repo, "show", "highbay/build-3:svc/b.go"))
 }
 
 // TestGitIgnoresRepositoryGrafts verifies that both readGit and gitEnv set
@@ -719,7 +719,7 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 	runGit(t, wc1.Dir(), "commit", "--quiet", "-m", "C2")
 	c2 := runGit(t, wc1.Dir(), "rev-parse", "HEAD")
 
-	// Merge C1 into surla/build-2 at X.
+	// Merge C1 into highbay/build-2 at X.
 	runGit(t, wc1.Dir(), "merge", "--quiet", "--no-ff", "-m", "merge C1", c1)
 	x := runGit(t, wc1.Dir(), "rev-parse", "HEAD")
 
@@ -751,9 +751,9 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 		t.Context(),
 		repo,
 		x,
-		"surla/build-2",
+		"highbay/build-2",
 		b0,
-		[2]string{"surla/build-2", "surla/tests-2"},
+		[2]string{"highbay/build-2", "highbay/tests-2"},
 		nil,
 	)
 	require.NoError(t, err)
@@ -763,7 +763,7 @@ func TestGitIgnoresRepositoryGrafts(t *testing.T) {
 		IsBase:   false,
 		Foreign: []ForeignWork{{
 			MergeBase: c1,
-			Branch:    "surla/build-1",
+			Branch:    "highbay/build-1",
 			Files:     []string{"svc/refund.go"},
 			FileCount: 1,
 		}},

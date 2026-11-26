@@ -24,15 +24,15 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
 )
 
 // refusalAnthropic and refusalOpenAI are configure_model's refusals of a
 // provider whose request settings the server does not hold.
 const (
-	refusalAnthropic = "provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway."
-	refusalOpenAI    = "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Surla tool call hands the settings over, or in a shell where you run surla; the project server keeps running. Or choose a model gateway."
+	refusalAnthropic = "provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway."
+	refusalOpenAI    = "provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway."
 )
 
 // TestConfigureModelValidationTelemetryAndLiveEnv verifies ConfigureModel's
@@ -59,32 +59,32 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		sr.Reset()
 		cp := newControlPlane(t, Options{})
 		gw := "127.0.0.1:9090"
-		_, err := cp.ConfigureModel(context.Background(), &gensurla.ConfigureModelPayload{GatewayAddr: &gw})
+		_, err := cp.ConfigureModel(context.Background(), &genhighbay.ConfigureModelPayload{GatewayAddr: &gw})
 		require.EqualError(t, err, "authenticated principal is required")
-		assert.Empty(t, endedSpansByName(sr, "surla.controlplane.configure_model"))
+		assert.Empty(t, endedSpansByName(sr, "highbay.controlplane.configure_model"))
 	})
 
 	t.Run("payload and missing settings refusals across Go HTTP MCP and exported spans", func(t *testing.T) {
 		cp := newControlPlane(t, Options{})
-		handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey}})
+		handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey}})
 		handler := NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 			"alice-token": {ID: "alice@example.com"},
 		}))
-		mcpAdapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+		mcpAdapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 
 		strPtr := func(s string) *string { return &s }
 		invalidCases := []struct {
 			name    string
-			payload *gensurla.ConfigureModelPayload
+			payload *genhighbay.ConfigureModelPayload
 			wantErr string
 		}{
 			{name: "nil payload", payload: nil, wantErr: "specify both provider and model_name, or specify gateway_addr"},
-			{name: "all empty", payload: &gensurla.ConfigureModelPayload{Provider: strPtr("  "), ModelName: strPtr("\t")}, wantErr: "specify both provider and model_name, or specify gateway_addr"},
-			{name: "gateway combined with provider", payload: &gensurla.ConfigureModelPayload{GatewayAddr: strPtr("127.0.0.1:9090"), Provider: strPtr("anthropic")}, wantErr: "gateway_addr cannot be combined with provider or model_name"},
-			{name: "gateway combined with model_name", payload: &gensurla.ConfigureModelPayload{GatewayAddr: strPtr("127.0.0.1:9090"), ModelName: strPtr("claude-sonnet-4-6")}, wantErr: "gateway_addr cannot be combined with provider or model_name"},
-			{name: "provider without model_name", payload: &gensurla.ConfigureModelPayload{Provider: strPtr("anthropic")}, wantErr: "provider and model_name must be set together"},
-			{name: "model_name without provider", payload: &gensurla.ConfigureModelPayload{ModelName: strPtr("claude-sonnet-4-6")}, wantErr: "provider and model_name must be set together"},
-			{name: "unsupported provider", payload: &gensurla.ConfigureModelPayload{Provider: strPtr("Anthropic"), ModelName: strPtr("claude-sonnet-4-6")}, wantErr: `unsupported provider "Anthropic"`},
+			{name: "all empty", payload: &genhighbay.ConfigureModelPayload{Provider: strPtr("  "), ModelName: strPtr("\t")}, wantErr: "specify both provider and model_name, or specify gateway_addr"},
+			{name: "gateway combined with provider", payload: &genhighbay.ConfigureModelPayload{GatewayAddr: strPtr("127.0.0.1:9090"), Provider: strPtr("anthropic")}, wantErr: "gateway_addr cannot be combined with provider or model_name"},
+			{name: "gateway combined with model_name", payload: &genhighbay.ConfigureModelPayload{GatewayAddr: strPtr("127.0.0.1:9090"), ModelName: strPtr("claude-sonnet-4-6")}, wantErr: "gateway_addr cannot be combined with provider or model_name"},
+			{name: "provider without model_name", payload: &genhighbay.ConfigureModelPayload{Provider: strPtr("anthropic")}, wantErr: "provider and model_name must be set together"},
+			{name: "model_name without provider", payload: &genhighbay.ConfigureModelPayload{ModelName: strPtr("claude-sonnet-4-6")}, wantErr: "provider and model_name must be set together"},
+			{name: "unsupported provider", payload: &genhighbay.ConfigureModelPayload{Provider: strPtr("Anthropic"), ModelName: strPtr("claude-sonnet-4-6")}, wantErr: `unsupported provider "Anthropic"`},
 		}
 		for _, tc := range invalidCases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -93,12 +93,12 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 				assertServiceError(t, err, "unprocessable")
 				assert.ErrorContains(t, err, tc.wantErr)
 
-				spans := endedSpansByName(sr, "surla.controlplane.configure_model")
+				spans := endedSpansByName(sr, "highbay.controlplane.configure_model")
 				require.Len(t, spans, 1)
 				assert.Equal(t, codes.Unset, spans[0].Status().Code)
 				assert.Empty(t, exceptionMessages(spans[0]))
 				assert.Equal(t, map[string]map[string]string{
-					"model_configuration_refused": {"surla.model.refusal_reason": "invalid_payload"},
+					"model_configuration_refused": {"highbay.model.refusal_reason": "invalid_payload"},
 				}, nonExceptionEvents(spans[0]))
 			})
 		}
@@ -106,12 +106,12 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		// openai's settings are not held: an expected 422 refusal, the same
 		// text over Go, HTTP and MCP, with a refusal event and no error status.
 		missingKeyEvents := map[string]map[string]string{
-			"model_configuration_refused": {"surla.model.refusal_reason": "missing_api_key"},
+			"model_configuration_refused": {"highbay.model.refusal_reason": "missing_api_key"},
 		}
 		reqBodyJSON, err := json.Marshal(map[string]any{"provider": "openai", "model_name": "gpt-5.4-mini"})
 		require.NoError(t, err)
 		sr.Reset()
-		_, goErr := cp.ConfigureModel(alice, &gensurla.ConfigureModelPayload{Provider: strPtr("openai"), ModelName: strPtr("gpt-5.4-mini")})
+		_, goErr := cp.ConfigureModel(alice, &genhighbay.ConfigureModelPayload{Provider: strPtr("openai"), ModelName: strPtr("gpt-5.4-mini")})
 		assertServiceError(t, goErr, "unprocessable")
 		assert.EqualError(t, goErr, refusalOpenAI)
 		assertConfigureSpan(t, sr, codes.Unset, nil, missingKeyEvents)
@@ -155,13 +155,13 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 
 	t.Run("successful provider and gateway transitions record bounded telemetry and preserve long accepted names", func(t *testing.T) {
 		cp := newControlPlane(t, Options{})
-		handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Openai: map[string]string{"OPENAI_API_KEY": sentinelKey}})
+		handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Openai: map[string]string{"OPENAI_API_KEY": sentinelKey}})
 
 		// 1. Switch to a long openai model_name; surrounding whitespace is trimmed.
 		sr.Reset()
 		longModelName := "gpt-5.4-mini-custom-" + strings.Repeat("m", 4096)
 		prov, paddedModelName := "  openai ", " "+longModelName+"  "
-		res, err := cp.ConfigureModel(alice, &gensurla.ConfigureModelPayload{
+		res, err := cp.ConfigureModel(alice, &genhighbay.ConfigureModelPayload{
 			Provider:  &prov,
 			ModelName: &paddedModelName,
 		})
@@ -173,22 +173,22 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		assert.Nil(t, res.GatewayAddr)
 		env, settings, err := cp.liveLaunch(false)
 		require.NoError(t, err)
-		assert.Equal(t, []string{"SURLA_LIVE_MODEL_PROVIDER=openai", "SURLA_LIVE_MODEL_NAME=" + longModelName}, env)
+		assert.Equal(t, []string{"HIGHBAY_LIVE_MODEL_PROVIDER=openai", "HIGHBAY_LIVE_MODEL_NAME=" + longModelName}, env)
 		require.Len(t, settings, 1)
 		assert.Equal(t, []string{"OPENAI_API_KEY=" + sentinelKey}, settings[0].Environ())
 		read, err := cp.GetModelConnection(alice)
 		require.NoError(t, err)
 		assert.Equal(t, directModel("openai", longModelName), read.Connection, "the read reports the accepted choice")
 
-		cfgSpans := endedSpansByName(sr, "surla.controlplane.configure_model")
+		cfgSpans := endedSpansByName(sr, "highbay.controlplane.configure_model")
 		require.Len(t, cfgSpans, 1)
 		assert.Equal(t, codes.Unset, cfgSpans[0].Status().Code)
 		assert.Empty(t, exceptionMessages(cfgSpans[0]))
 		assert.Empty(t, cfgSpans[0].Attributes())
 		assert.Equal(t, map[string]map[string]string{
 			"model_configured": {
-				"surla.model.connection_kind": "provider",
-				"surla.model.provider":        "openai",
+				"highbay.model.connection_kind": "provider",
+				"highbay.model.provider":        "openai",
 			},
 		}, nonExceptionEvents(cfgSpans[0]))
 		assertSpanNeverContainsValue(t, cfgSpans[0], longModelName)
@@ -197,7 +197,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		// 2. Switch via MCP tools/call to a long gateway_addr.
 		sr.Reset()
 		longGatewayAddr := strings.Repeat("g", 63) + "." + strings.Repeat("h", 63) + "." + strings.Repeat("i", 63) + ":9090"
-		adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+		adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 		argsJSON, err := json.Marshal(map[string]any{"gateway_addr": longGatewayAddr})
 		require.NoError(t, err)
 		mcpRes, err := adapter.ToolsCall(alice, &genmcpadapter.ToolsCallPayload{Name: "configure_model", Arguments: argsJSON})
@@ -207,19 +207,19 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		assert.False(t, complete.IsError != nil && *complete.IsError)
 		env, settings, err = cp.liveLaunch(false)
 		require.NoError(t, err)
-		assert.Equal(t, []string{"SURLA_LIVE_MODEL_GATEWAY=" + longGatewayAddr}, env)
+		assert.Equal(t, []string{"HIGHBAY_LIVE_MODEL_GATEWAY=" + longGatewayAddr}, env)
 		assert.Empty(t, settings, "a gateway gets no provider settings")
 		read, err = cp.GetModelConnection(alice)
 		require.NoError(t, err)
-		assert.Equal(t, gensurla.NewConnectionGateway(&gensurla.ModelGateway{GatewayAddr: longGatewayAddr}), read.Connection)
+		assert.Equal(t, genhighbay.NewConnectionGateway(&genhighbay.ModelGateway{GatewayAddr: longGatewayAddr}), read.Connection)
 
-		cfgSpans = endedSpansByName(sr, "surla.controlplane.configure_model")
+		cfgSpans = endedSpansByName(sr, "highbay.controlplane.configure_model")
 		require.Len(t, cfgSpans, 1)
 		assert.Equal(t, codes.Unset, cfgSpans[0].Status().Code)
 		assert.Empty(t, cfgSpans[0].Attributes())
 		assert.Equal(t, map[string]map[string]string{
 			"model_configured": {
-				"surla.model.connection_kind": "gateway",
+				"highbay.model.connection_kind": "gateway",
 			},
 		}, nonExceptionEvents(cfgSpans[0]))
 		assertSpanNeverContainsValue(t, cfgSpans[0], longGatewayAddr)
@@ -242,7 +242,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 					"/bin/sh",
 					"-c",
 					`printf 'PROVIDER=%s\nNAME=%s\nGATEWAY=%s\nANTHROPIC_KEY=%s\nANTHROPIC_HANDED=%s\nANTHROPIC_BASE=%s\nANTHROPIC_ADMIN=%s\nOPENAI_KEY=%s\n' ` +
-						`"$SURLA_LIVE_MODEL_PROVIDER" "$SURLA_LIVE_MODEL_NAME" "$SURLA_LIVE_MODEL_GATEWAY" "${ANTHROPIC_API_KEY:+set}" ` +
+						`"$HIGHBAY_LIVE_MODEL_PROVIDER" "$HIGHBAY_LIVE_MODEL_NAME" "$HIGHBAY_LIVE_MODEL_GATEWAY" "${ANTHROPIC_API_KEY:+set}" ` +
 						`"$([ "$ANTHROPIC_API_KEY" = handed-key-sentinel ] && echo yes)" "${ANTHROPIC_BASE_URL:+set}" "${ANTHROPIC_ADMIN_KEY:+set}" "${OPENAI_API_KEY:+set}" > "$1" && exec "$0" "$2" "$3" "$4" "$5"`,
 					self,
 					envFile,
@@ -250,8 +250,8 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 				Env: append(
 					os.Environ(),
 					liveTargetModeEnv+"=serve",
-					"SURLA_LIVE_MODEL_PROVIDER=stale",
-					"SURLA_LIVE_MODEL_NAME=stale",
+					"HIGHBAY_LIVE_MODEL_PROVIDER=stale",
+					"HIGHBAY_LIVE_MODEL_NAME=stale",
 				),
 			},
 		}))
@@ -261,7 +261,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		commit := strings.Repeat("a", 40)
 		start := func() string {
 			t.Helper()
-			_, err := cp.StartLiveTarget(alice, &gensurla.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
+			_, err := cp.StartLiveTarget(alice, &genhighbay.StartLiveTargetPayload{ChangeID: liveTestChangeID, CandidateCommit: commit})
 			require.NoError(t, err)
 			got, err := os.ReadFile(envFile)
 			require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 		assert.Equal(t, "PROVIDER=\nNAME=\nGATEWAY=\nANTHROPIC_KEY=\nANTHROPIC_HANDED=\nANTHROPIC_BASE=\nANTHROPIC_ADMIN=\nOPENAI_KEY=\n", start(),
 			"before a hand-over no model is chosen and no inherited setting reaches the target")
 
-		handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{
+		handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{
 			Anthropic: map[string]string{"ANTHROPIC_API_KEY": "handed-key-sentinel", "ANTHROPIC_BASE_URL": "https://gateway.invalid"},
 			Openai:    map[string]string{"OPENAI_API_KEY": sentinelKey},
 		})
@@ -278,12 +278,12 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 			"the default chosen on arrival gets only its provider's handed-over settings")
 
 		prov, modelName := "openai", "gpt-5.4-mini"
-		_, err = cp.ConfigureModel(alice, &gensurla.ConfigureModelPayload{Provider: &prov, ModelName: &modelName})
+		_, err = cp.ConfigureModel(alice, &genhighbay.ConfigureModelPayload{Provider: &prov, ModelName: &modelName})
 		require.NoError(t, err)
 		assert.Equal(t, "PROVIDER=openai\nNAME=gpt-5.4-mini\nGATEWAY=\nANTHROPIC_KEY=\nANTHROPIC_HANDED=\nANTHROPIC_BASE=\nANTHROPIC_ADMIN=\nOPENAI_KEY=set\n", start())
 
 		gw := "127.0.0.1:9090"
-		_, err = cp.ConfigureModel(alice, &gensurla.ConfigureModelPayload{GatewayAddr: &gw})
+		_, err = cp.ConfigureModel(alice, &genhighbay.ConfigureModelPayload{GatewayAddr: &gw})
 		require.NoError(t, err)
 		assert.Equal(t, "PROVIDER=\nNAME=\nGATEWAY=127.0.0.1:9090\nANTHROPIC_KEY=\nANTHROPIC_HANDED=\nANTHROPIC_BASE=\nANTHROPIC_ADMIN=\nOPENAI_KEY=\n", start())
 	})
@@ -293,14 +293,14 @@ func TestConfigureModelValidationTelemetryAndLiveEnv(t *testing.T) {
 // from a base that inherited provider families and stale model variables:
 // both are dropped, and only the choice's variables are added.
 func TestLiveTargetEnvKeepsOnlyTheChoice(t *testing.T) {
-	base := []string{"PATH=/bin", "ANTHROPIC_API_KEY=k", "OPENAI_BASE_URL=u", "ANTHROPIC_ADMIN_KEY=a", "SURLA_LIVE_MODEL_GATEWAY=stale:1", "SURLA_LIVE_MODEL_NAME=stale"}
+	base := []string{"PATH=/bin", "ANTHROPIC_API_KEY=k", "OPENAI_BASE_URL=u", "ANTHROPIC_ADMIN_KEY=a", "HIGHBAY_LIVE_MODEL_GATEWAY=stale:1", "HIGHBAY_LIVE_MODEL_NAME=stale"}
 	for _, tc := range []struct {
 		name   string
-		choice gensurla.Connection
+		choice genhighbay.Connection
 		want   []string
 	}{
-		{name: "direct", choice: directModel("anthropic", "claude-x"), want: []string{"PATH=/bin", "SURLA_LIVE_MODEL_PROVIDER=anthropic", "SURLA_LIVE_MODEL_NAME=claude-x"}},
-		{name: "gateway", choice: gensurla.NewConnectionGateway(&gensurla.ModelGateway{GatewayAddr: "127.0.0.1:9090"}), want: []string{"PATH=/bin", "SURLA_LIVE_MODEL_GATEWAY=127.0.0.1:9090"}},
+		{name: "direct", choice: directModel("anthropic", "claude-x"), want: []string{"PATH=/bin", "HIGHBAY_LIVE_MODEL_PROVIDER=anthropic", "HIGHBAY_LIVE_MODEL_NAME=claude-x"}},
+		{name: "gateway", choice: genhighbay.NewConnectionGateway(&genhighbay.ModelGateway{GatewayAddr: "127.0.0.1:9090"}), want: []string{"PATH=/bin", "HIGHBAY_LIVE_MODEL_GATEWAY=127.0.0.1:9090"}},
 		{name: "none", choice: noModel(), want: []string{"PATH=/bin"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -324,7 +324,7 @@ func TestModelConnectionReportsTheChoiceNeverTheSettings(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, noModel(), read.Connection, "an inherited key chooses no model")
 
-	handOverSettings(t, cp, &gensurla.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL}})
+	handOverSettings(t, cp, &genhighbay.HandOverModelSettingsPayload{Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL}})
 	read, err = cp.GetModelConnection(alice)
 	require.NoError(t, err)
 	assert.Equal(t, directModel("anthropic", "claude-sonnet-4-6"), read.Connection, "the hand-over's default is reported")
@@ -343,7 +343,7 @@ func TestModelConnectionReportsTheChoiceNeverTheSettings(t *testing.T) {
 	assert.JSONEq(t, `{"connection":{"kind":"direct","provider":"anthropic","model_name":"claude-sonnet-4-6"}}`, string(body))
 	assertHoldsNoSentinel(t, string(body))
 	spans := exporter.GetSpans().Snapshots()
-	require.NotEmpty(t, endedSpans(spans, "surla.request.get_model_connection"), "the read records its request span")
+	require.NotEmpty(t, endedSpans(spans, "highbay.request.get_model_connection"), "the read records its request span")
 	for _, span := range spans {
 		assertSpanHoldsNoSentinel(t, span)
 	}
@@ -352,7 +352,7 @@ func TestModelConnectionReportsTheChoiceNeverTheSettings(t *testing.T) {
 // assertConfigureSpan checks the one configure_model span sr recorded.
 func assertConfigureSpan(t *testing.T, sr *tracetest.SpanRecorder, wantCode codes.Code, wantExceptions []string, wantEvents map[string]map[string]string) {
 	t.Helper()
-	spans := endedSpansByName(sr, "surla.controlplane.configure_model")
+	spans := endedSpansByName(sr, "highbay.controlplane.configure_model")
 	require.Len(t, spans, 1)
 	assert.Equal(t, wantCode, spans[0].Status().Code)
 	assert.Equal(t, wantExceptions, exceptionMessages(spans[0]))
@@ -427,13 +427,13 @@ func assertSpanNeverContainsValue(t *testing.T, s sdktrace.ReadOnlySpan, forbidd
 }
 
 // noModel returns the declared choice of no model.
-func noModel() gensurla.Connection {
-	return gensurla.NewConnectionNone(&gensurla.ModelNone{})
+func noModel() genhighbay.Connection {
+	return genhighbay.NewConnectionNone(&genhighbay.ModelNone{})
 }
 
 // directModel returns the declared choice of a direct provider and model.
-func directModel(provider, name string) gensurla.Connection {
-	return gensurla.NewConnectionDirect(&gensurla.ModelDirect{Provider: provider, ModelName: name})
+func directModel(provider, name string) genhighbay.Connection {
+	return genhighbay.NewConnectionDirect(&genhighbay.ModelDirect{Provider: provider, ModelName: name})
 }
 
 // endedSpans returns the spans named name.

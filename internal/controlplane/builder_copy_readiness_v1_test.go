@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -58,7 +58,7 @@ func TestBuilderCopyV1OutsideModuleReadiness(t *testing.T) {
 			require.NoError(t, os.Rename(parent, saved))
 			require.NoError(t, os.Symlink(filepath.Dir(workspace), parent))
 			before := readBuildFile(t, cp, card.ChangeID)
-			payload := &gensurla.VerifyChangePayload{
+			payload := &genhighbay.VerifyChangePayload{
 				ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
 			}
 			result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), payload)
@@ -74,7 +74,7 @@ func TestBuilderCopyV1OutsideModuleReadiness(t *testing.T) {
 			assert.Equal(t, `"conflict"`, jsonAt(t, []byte(body), "name"))
 			assert.Contains(t, body, "outside source directory")
 			assert.Contains(t, body, recovery)
-			arguments, err := gensurla.EncodeVerifyChangePayload(payload)
+			arguments, err := genhighbay.EncodeVerifyChangePayload(payload)
 			require.NoError(t, err)
 			message, _ := mcpToolCall(t, server.URL, "builder", "verify_change", string(arguments))
 			assert.Contains(t, message, "outside source directory")
@@ -85,7 +85,7 @@ func TestBuilderCopyV1OutsideModuleReadiness(t *testing.T) {
 			assert.Equal(t, before, readBuildFile(t, cp, card.ChangeID))
 			refusals := 0
 			for _, span := range exporter.GetSpans() {
-				if span.Name != "surla.controlplane.start_verification" {
+				if span.Name != "highbay.controlplane.start_verification" {
 					continue
 				}
 				refusals++

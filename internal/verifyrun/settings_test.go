@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/verify"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/verify"
 )
 
 // reportedSettings are the provider variables writeSettingsReport reports.

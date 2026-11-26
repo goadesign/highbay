@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
@@ -65,7 +65,7 @@ func TestTeamReadKeepsAGuideWithoutAPaneUnknown(t *testing.T) {
 			selection, _ := s.teamState()
 			observed := map[string]roleObservation{}
 			for _, role := range selection.Roles {
-				public := gensurla.TeamRoleState{Role: role.Role, Handle: role.Handle, State: "waiting", Attention: "none", Watcher: "unknown", Assignment: "nothing_owed"}
+				public := genhighbay.TeamRoleState{Role: role.Role, Handle: role.Handle, State: "waiting", Attention: "none", Watcher: "unknown", Assignment: "nothing_owed"}
 				if role.Role == "guide" {
 					public.State = "not_started"
 				}
@@ -97,7 +97,7 @@ func TestTeamShowPaneOverlayAndOwnership(t *testing.T) {
 			role := "builder"
 			switch scenario {
 			case "companion":
-				host.overlays = []string{"surla"}
+				host.overlays = []string{"highbay"}
 			case "launcher":
 				host.overlays = []string{"chorus-launcher"}
 			case "other overlay":
@@ -186,24 +186,24 @@ func TestUserTeamErrorBoundary(t *testing.T) {
 
 // TestUserTeamStepNamesARealRetry gives every team failure cause, and an
 // unknown one, a step whose retry the user can take from the page, a coding
-// agent or the Herdr companion. None tells the user to type surla: since
-// agents attach through surla stdio, surla neither prints a team step nor
+// agent or the Herdr companion. None tells the user to type hbay: since
+// agents attach through hbay stdio, hbay neither prints a team step nor
 // starts agents.
 func TestUserTeamStepNamesARealRetry(t *testing.T) {
 	for _, tc := range []struct{ cause, want string }{
-		{"stopping", "ask your coding agent to open Surla views, or choose Start Surla in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"},
+		{"stopping", "ask your coding agent to open Highbay views, or choose Start Highbay in the Herdr companion, which starts it again and opens a fresh page, then use Team → Start workers there"},
 		{"chorus", "Run chorus up (or chorus status to see the error), then try again."},
 		{"herdr", "open the Herdr app, then try again"},
 		{"saved_space", "Close this project's obsolete Herdr space, then start the agents again."},
 		{"roster_folder", "then start the agents again"},
-		{"project_state", "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Surla state from a backup"},
+		{"project_state", "this project's private state could not be read or written; try again, and if it keeps failing, restore this project's Highbay state from a backup"},
 		{"role_folder", "then start the agents again"},
 		{"", "project team could not be prepared; try again"},
 	} {
 		t.Run(tc.cause, func(t *testing.T) {
 			step := userTeamStep(tc.cause)
 			assert.Contains(t, step, tc.want)
-			assert.NotContains(t, strings.ToLower(step), "run surla")
+			assert.NotContains(t, strings.ToLower(step), "run hbay")
 		})
 	}
 }

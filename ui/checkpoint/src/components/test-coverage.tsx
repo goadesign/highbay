@@ -27,9 +27,9 @@ export function TestCoverage({ id, heading, answers, examples, statements, repor
       </li>;
     })}</ul>;
   }
-  return <section id={id} className="surla-test-coverage" aria-labelledby={id + "-title"}>
+  return <section id={id} className="highbay-test-coverage" aria-labelledby={id + "-title"}>
     <Heading id={id + "-title"}>Test writer's stated coverage</Heading>
-    <p>These statements come from the test writer. Surla did not judge them.</p>
+    <p>These statements come from the test writer. Highbay did not judge them.</p>
     {examples.length > 0 ? <p>Example check types describe the check needed, not a recorded outcome.</p> : null}
     {answers.length + examples.length === 0 ? <p>This agreement has no confirmed answers or examples.</p> : <dl>
       {answers.map((answer) => <React.Fragment key={"question-" + answer.id}>

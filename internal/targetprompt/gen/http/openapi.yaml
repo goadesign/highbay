@@ -1,7 +1,7 @@
 swagger: "2.0"
 info:
     title: CP3 live target prompt operation
-    description: The operation a CP3 live target serves so Surla can replace a registered prompt's text while it runs.
+    description: The operation a CP3 live target serves so Highbay can replace a registered prompt's text while it runs.
     version: 1.0.0
 host: localhost:80
 consumes:
@@ -193,6 +193,6 @@ definitions:
 securityDefinitions:
     live_key_header_X-Live-Target-Key:
         type: apiKey
-        description: Key Surla minted for this live target and passed to it at start.
+        description: Key Highbay minted for this live target and passed to it at start.
         name: X-Live-Target-Key
         in: header

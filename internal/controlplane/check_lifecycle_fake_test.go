@@ -23,11 +23,11 @@ import (
 	"testing"
 	"time"
 
-	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
-	genmcpclient "github.com/goadesign/surla/gen/jsonrpc/mcp_surla/client"
-	genmcpsurla "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhttpclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	genmcpclient "github.com/goadesign/highbay/gen/jsonrpc/mcp_highbay/client"
+	genmcphighbay "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -109,9 +109,9 @@ type (
 		// workingFolder is the real numbered assignment whose files the tools use.
 		workingFolder string
 		// httpClient calls the generated Goa HTTP endpoints with bearer auth.
-		httpClient *gensurla.Client
+		httpClient *genhighbay.Client
 		// mcpClient calls the generated MCP JSON-RPC endpoints with bearer auth.
-		mcpClient *genmcpsurla.Client
+		mcpClient *genmcphighbay.Client
 	}
 )
 
@@ -289,7 +289,7 @@ func parseCreateContainer(args []string, dockerConfig string) (*recordedContaine
 }
 
 // testCheckHelper starts this test binary in TestMain's check-run role, the
-// check helper surla serve would start as `surla check-run`.
+// check helper hbay serve would start as `hbay check-run`.
 func testCheckHelper(t testing.TB) CheckHelper {
 	t.Helper()
 	self, err := os.Executable()
@@ -315,12 +315,12 @@ func newCheckTestServer(t *testing.T, opts Options) checkClients {
 	doer := generationDoer{client: srv.Client()}
 	httpT := genhttpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	mcpT := genmcpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	httpC := &gensurla.Client{
+	httpC := &genhighbay.Client{
 		CheckProjectEndpoint:       httpT.CheckProject(),
 		UpdateDependenciesEndpoint: httpT.UpdateDependencies(),
 		ReadCheckOutputEndpoint:    httpT.ReadCheckOutput(),
 	}
-	mcpC := &genmcpsurla.Client{ToolsCallEndpoint: mcpT.ToolsCall(), ToolsListEndpoint: mcpT.ToolsList()}
+	mcpC := &genmcphighbay.Client{ToolsCallEndpoint: mcpT.ToolsCall(), ToolsListEndpoint: mcpT.ToolsList()}
 	return checkClients{cp: cp, workingFolder: working, httpClient: httpC, mcpClient: mcpC}
 }
 
@@ -333,12 +333,12 @@ func readCheckBuilderFixture(t *testing.T, cp *ControlPlane) string {
 	workspace := cp.currentWorkspaceDir()
 	prepareCheckProjectFixture(t, workspace)
 	card := buildableChange(t, cp, "check-builder")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
 	assignment, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-		&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+		&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	return assignment.WorkingFolder
 }
@@ -375,7 +375,7 @@ func prepareCheckProjectFixture(t *testing.T, workspace string) {
 			return nil
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" || strings.HasPrefix(entry.Name(), ".surla") {
+			if entry.Name() == ".git" || strings.HasPrefix(entry.Name(), ".highbay") {
 				return filepath.SkipDir
 			}
 			return nil
@@ -434,10 +434,10 @@ func newShopModule(t *testing.T, extra map[string]string) string {
 
 // callMCPTool invokes name over MCP JSON-RPC and decodes its structured result.
 func callMCPTool[T any](
-	t *testing.T, mcpClient *genmcpsurla.Client, name, args string, decode func([]byte) (T, error),
+	t *testing.T, mcpClient *genmcphighbay.Client, name, args string, decode func([]byte) (T, error),
 ) T {
 	t.Helper()
-	call, err := mcpClient.ToolsCall(t.Context(), &genmcpsurla.ToolsCallPayload{
+	call, err := mcpClient.ToolsCall(t.Context(), &genmcphighbay.ToolsCallPayload{
 		Name:      name,
 		Arguments: json.RawMessage(args),
 	})

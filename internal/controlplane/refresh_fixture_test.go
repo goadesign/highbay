@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,11 +17,11 @@ import (
 // It neither seeds an operation nor bypasses evaluation or its failures.
 func mustProposeFromRefresh(
 	t *testing.T, cp *ControlPlane, caller context.Context,
-	changeID, prompt string, analysis *gensurla.CP1Analysis,
-) *gensurla.ChangeCardResult {
+	changeID, prompt string, analysis *genhighbay.CP1Analysis,
+) *genhighbay.ChangeCardResult {
 	t.Helper()
 	refreshed := mustRefreshStory(t, cp, caller)
-	card, err := cp.ProposeChange(caller, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(caller, &genhighbay.ProposeChangePayload{
 		ChangeID: changeID, Prompt: prompt, Analysis: analysis, StoryRefreshOpID: refreshed.OpID,
 	})
 	require.NoError(t, err)
@@ -32,12 +32,12 @@ func mustProposeFromRefresh(
 // terminal state and retaining its diagnostic when evaluation cannot succeed.
 func mustRefreshStory(
 	t *testing.T, cp *ControlPlane, caller context.Context,
-) *gensurla.StoryRefreshResult {
+) *genhighbay.StoryRefreshResult {
 	t.Helper()
 	started, err := cp.RefreshStory(caller)
 	require.NoError(t, err)
 	require.NotNil(t, started.OpID)
-	var result *gensurla.StoryRefreshResult
+	var result *genhighbay.StoryRefreshResult
 	var readErr error
 	var diagnostic string
 	// Observe the owner's five-minute evaluation deadline and bounded cleanup.

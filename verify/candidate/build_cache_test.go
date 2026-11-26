@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/goadesign/surla/internal/procgroup"
+	"github.com/goadesign/highbay/internal/procgroup"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -162,7 +162,7 @@ func TestBuildCanceledCompilerLeavesSharedCacheUsable(t *testing.T) {
 			return err
 		}
 		assert.False(t, strings.HasPrefix(entry.Name(), "go-build"), path)
-		assert.False(t, strings.HasPrefix(entry.Name(), ".surla-stage-"), path)
+		assert.False(t, strings.HasPrefix(entry.Name(), ".highbay-stage-"), path)
 		return nil
 	}))
 }

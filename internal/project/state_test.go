@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 // TestOpenServesOnlyTheNamedProjectState opens an initialized state folder exactly as
-// Discover found it under a physical root, as the `surla` command's operator root is,
+// Discover found it under a physical root, as the `hbay` command's operator root is,
 // and refuses every folder that is not that project's private state.
 func TestOpenServesOnlyTheNamedProjectState(t *testing.T) {
 	root := physicalTempDir(t)
@@ -44,7 +44,7 @@ func TestOpenServesOnlyTheNamedProjectState(t *testing.T) {
 	inside := projectDirectory(insideRoot, state.Record.Directory)
 	writeStateCopy(t, inside, record)
 
-	// The same folder reached through a linked root is not the physical path surla passes.
+	// The same folder reached through a linked root is not the physical path hbay passes.
 	alias := filepath.Join(physicalTempDir(t), "alias")
 	require.NoError(t, os.Symlink(root, alias))
 
@@ -82,12 +82,12 @@ func TestOpenServesOnlyTheNamedProjectState(t *testing.T) {
 	for _, tc := range []struct {
 		name, dir, want string
 	}{
-		{name: "relative path", dir: relative, want: "is not an absolute path; start the project with surla"},
+		{name: "relative path", dir: relative, want: "is not an absolute path; start the project with hbay"},
 		{name: "missing folder", dir: filepath.Join(root, "absent"), want: "no such file or directory"},
 		{name: "folder other accounts can read", dir: shared, want: "must be private and owned by this account"},
 		{name: "symbolic link to the state", dir: linked, want: "must be private and owned by this account"},
 		{name: "folder reached through a linked root", dir: filepath.Join(alias, filepath.Base(state.Dir)), want: "is not its physical path " + state.Dir},
-		{name: "folder never initialized", dir: uninitialized.Dir, want: "holds no project; start the project with surla"},
+		{name: "folder never initialized", dir: uninitialized.Dir, want: "holds no project; start the project with hbay"},
 		{name: "record of another project", dir: foreign, want: "does not belong to the project folder " + state.Record.Directory},
 		{name: "invalid record", dir: corrupt, want: "invalid project record"},
 		{name: "not the exact folder path", dir: state.Dir + string(filepath.Separator), want: "is not its physical path " + state.Dir},
@@ -114,7 +114,7 @@ func physicalTempDir(t *testing.T) string {
 }
 
 // TestAgentCredentialReadsOnlyAPrivateCredential reads a registered agent's
-// credential for `surla stdio` and refuses missing, public or malformed files
+// credential for `hbay stdio` and refuses missing, public or malformed files
 // without returning their bytes.
 func TestAgentCredentialReadsOnlyAPrivateCredential(t *testing.T) {
 	state := initializedState(t, physicalTempDir(t), t.TempDir())
@@ -139,7 +139,7 @@ func TestAgentCredentialReadsOnlyAPrivateCredential(t *testing.T) {
 	assert.ErrorIs(t, err, errNotPrivateFile)
 }
 
-// initializedState creates the project for directory under root as `surla` does.
+// initializedState creates the project for directory under root as `hbay` does.
 func initializedState(t *testing.T, root, directory string) *State {
 	t.Helper()
 	state, err := Discover(root, directory)
@@ -205,7 +205,7 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 			name:   "record others can read",
 			damage: func(t *testing.T, state *State) { require.NoError(t, os.Chmod(record(state), 0o644)) },
 			want: func(state *State) []string {
-				return []string{"Surla project in " + state.Record.Directory, "chmod 600 " + record(state)}
+				return []string{"Highbay project in " + state.Record.Directory, "chmod 600 " + record(state)}
 			},
 		},
 		{
@@ -215,9 +215,9 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 			},
 			want: func(state *State) []string {
 				return []string{
-					"Surla project in " + state.Record.Directory, record(state),
+					"Highbay project in " + state.Record.Directory, record(state),
 					"restore it from a backup and try again",
-					"move the folder " + state.Dir, "start Surla in " + state.Record.Directory + " again",
+					"move the folder " + state.Dir, "start Highbay in " + state.Record.Directory + " again",
 				}
 			},
 		},
@@ -229,7 +229,7 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 				require.NoError(t, os.WriteFile(record(state), append(raw, []byte("{}")...), 0o600))
 			},
 			want: func(state *State) []string {
-				return []string{"Surla project in " + state.Record.Directory, record(state), "restore it from a backup"}
+				return []string{"Highbay project in " + state.Record.Directory, record(state), "restore it from a backup"}
 			},
 		},
 		{
@@ -238,7 +238,7 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 				require.NoError(t, os.WriteFile(record(state), []byte(`{"id":"short","directory":"/","owner":"","port":0,"agents":{}}`), 0o600))
 			},
 			want: func(state *State) []string {
-				return []string{"Surla project in " + state.Record.Directory, record(state), "restore it from a backup"}
+				return []string{"Highbay project in " + state.Record.Directory, record(state), "restore it from a backup"}
 			},
 		},
 		{
@@ -250,13 +250,13 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 			name:   "folder this account cannot open",
 			damage: func(t *testing.T, state *State) { closeFolder(t, state.Dir, 0o000) },
 			want:   func(state *State) []string { return []string{state.Dir, "chmod 700 " + state.Dir} },
-			absent: []string{"chmod 600", "record of the Surla project"},
+			absent: []string{"chmod 600", "record of the Highbay project"},
 		},
 		{
 			name:   "folder this account cannot search",
 			damage: func(t *testing.T, state *State) { closeFolder(t, state.Dir, 0o600) },
 			want:   func(state *State) []string { return []string{state.Dir, "chmod 700 " + state.Dir} },
-			absent: []string{"chmod 600", "record of the Surla project"},
+			absent: []string{"chmod 600", "record of the Highbay project"},
 		},
 		{
 			name:   "operator folder this account cannot open",
@@ -264,7 +264,7 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 			want: func(state *State) []string {
 				return []string{"chmod 700 " + filepath.Dir(state.Dir)}
 			},
-			absent: []string{"chmod 600", "Surla project in"},
+			absent: []string{"chmod 600", "Highbay project in"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -313,7 +313,7 @@ func TestInitializeNamesClosedStateFolder(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "chmod 700 "+tc.folder(state))
 			assert.NotContains(t, err.Error(), "chmod 600")
-			assert.NotContains(t, err.Error(), "record of the Surla project")
+			assert.NotContains(t, err.Error(), "record of the Highbay project")
 		})
 	}
 }

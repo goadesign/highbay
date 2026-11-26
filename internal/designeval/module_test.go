@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/modfile"
 
-	"github.com/goadesign/surla"
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay"
+	"github.com/goadesign/highbay/internal/testmodule"
 )
 
 func TestEvaluateTreatsArchiveLookingTextAsPlainGo(t *testing.T) {
@@ -52,8 +52,8 @@ func TestEvaluateKeepsTheTargetsOwnCoreVersions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
-	// A target pinned at an older goa than Surla's own is evaluated with
-	// its own version, not upgraded to Surla's and then rejected.
+	// A target pinned at an older goa than Highbay's own is evaluated with
+	// its own version, not upgraded to Highbay's and then rejected.
 	for _, goa := range []string{preCompleteSourcesGoa, ""} {
 		res, err := testEvaluator.Evaluate(t.Context(), testmodule.Snapshot(t, goa, minimalDesign))
 		require.NoError(t, err, "goa %q", goa)
@@ -101,7 +101,7 @@ func TestEvaluateUsesTheBuildToolchainToResolveModules(t *testing.T) {
 }
 
 // TestEvaluatorGoModIgnoresTheWorkingDirectory checks that the generator
-// versions come from the go.mod compiled into Surla even when surla runs
+// versions come from the go.mod compiled into Highbay even when hbay runs
 // inside another module, such as a user's application that does not require
 // goa.design/model.
 func TestEvaluatorGoModIgnoresTheWorkingDirectory(t *testing.T) {
@@ -116,11 +116,11 @@ func TestEvaluatorGoModIgnoresTheWorkingDirectory(t *testing.T) {
 
 	mod, err := evaluatorGoMod()
 	require.NoError(t, err)
-	assert.Equal(t, string(onDisk), surla.GoMod(), "the compiled-in go.mod is Surla's own")
-	assert.Equal(t, "github.com/goadesign/surla", mod.Module.Mod.Path)
+	assert.Equal(t, string(onDisk), highbay.GoMod(), "the compiled-in go.mod is Highbay's own")
+	assert.Equal(t, "github.com/goadesign/highbay", mod.Module.Mod.Path)
 	for _, core := range []string{harnessGoaModule, harnessGoaAIModule, harnessModelModule} {
 		version, ok := requiredVersion(mod, core)
-		assert.True(t, ok, "Surla's go.mod requires %s", core)
+		assert.True(t, ok, "Highbay's go.mod requires %s", core)
 		assert.NotEmpty(t, version)
 	}
 }
@@ -128,18 +128,18 @@ func TestEvaluatorGoModIgnoresTheWorkingDirectory(t *testing.T) {
 // TestALoadFailureNamesTheStoryRequirementStepOnlyWhenItIsMissing checks
 // which failures to load a design's dependencies name the step that requires
 // the Story module, from the snapshot alone, and that the step names the
-// version Surla's own go.mod requires.
+// version Highbay's own go.mod requires.
 func TestALoadFailureNamesTheStoryRequirementStepOnlyWhenItIsMissing(t *testing.T) {
 	evalMod, err := evaluatorGoMod()
 	require.NoError(t, err)
-	surlaStory, ok := requiredVersion(evalMod, harnessStoryModule)
-	require.True(t, ok, "Surla's go.mod requires the Story module")
+	highbayStory, ok := requiredVersion(evalMod, harnessStoryModule)
+	require.True(t, ok, "Highbay's go.mod requires the Story module")
 	step := "\nThe design imports the Story language, but its module's go.mod does not require it. " +
-		"In the folder that holds that go.mod, run: go get github.com/goadesign/surla/story@" + surlaStory +
+		"In the folder that holds that go.mod, run: go get github.com/goadesign/highbay/story@" + highbayStory +
 		", then try again."
 	const (
 		plainMod   = "module example.com/orders\n\ngo 1.24\n"
-		storyFile  = "package design\n\nimport . \"github.com/goadesign/surla/story/dsl\"\n\nvar _ = Story(\"Orders\", func() {})\n"
+		storyFile  = "package design\n\nimport . \"github.com/goadesign/highbay/story/dsl\"\n\nvar _ = Story(\"Orders\", func() {})\n"
 		plainFile  = "package design\n\nimport . \"goa.design/goa/v3/dsl\"\n\nvar _ = API(\"orders\", func() {})\n"
 		olderStory = "v0.0.0-20261110000000-000000000000"
 	)
@@ -163,7 +163,7 @@ func TestALoadFailureNamesTheStoryRequirementStepOnlyWhenItIsMissing(t *testing.
 		{
 			name: "the design imports the language and go.mod requires it",
 			files: map[string]string{
-				"go.mod":          plainMod + "\nrequire github.com/goadesign/surla/story " + surlaStory + "\n",
+				"go.mod":          plainMod + "\nrequire github.com/goadesign/highbay/story " + highbayStory + "\n",
 				"design/story.go": storyFile,
 			},
 		},
@@ -184,7 +184,7 @@ func TestALoadFailureNamesTheStoryRequirementStepOnlyWhenItIsMissing(t *testing.
 			// whose diagnostic carries the compiler's output.
 			name: "the design imports the language and go.mod requires another version",
 			files: map[string]string{
-				"go.mod":          plainMod + "\nrequire github.com/goadesign/surla/story " + olderStory + "\n",
+				"go.mod":          plainMod + "\nrequire github.com/goadesign/highbay/story " + olderStory + "\n",
 				"design/story.go": storyFile,
 			},
 		},

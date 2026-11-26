@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	genpromptsserver "github.com/goadesign/surla/examples/orders/gen/http/prompts/server"
-	genprompts "github.com/goadesign/surla/examples/orders/gen/prompts"
+	genpromptsserver "github.com/goadesign/highbay/examples/orders/gen/http/prompts/server"
+	genprompts "github.com/goadesign/highbay/examples/orders/gen/prompts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -28,7 +28,7 @@ type fakePrompts struct {
 const liveKey = "live-key-for-tests"
 
 // TestOverridePromptFollowsTheLiveTargetContract verifies the HTTP contract
-// Surla's draft_override relies on: PUT /prompts/{prompt_id} with the
+// Highbay's draft_override relies on: PUT /prompts/{prompt_id} with the
 // template in the body and the key in X-Live-Target-Key. A missing or wrong
 // key, or any key when the process has none, answers 401 with a plain-text
 // unauthorized error; an unregistered prompt answers 404 unknown_prompt and an
@@ -80,7 +80,7 @@ func TestOverridePromptFollowsTheLiveTargetContract(t *testing.T) {
 				assert.Equal(t, "version-of-New text.", got.Version)
 			case http.StatusUnauthorized:
 				var text string
-				assert.NoError(t, json.Unmarshal(raw, &text), "unauthorized is a JSON string, the shape Surla's client decodes: %s", raw)
+				assert.NoError(t, json.Unmarshal(raw, &text), "unauthorized is a JSON string, the shape Highbay's client decodes: %s", raw)
 			}
 		})
 	}

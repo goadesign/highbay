@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	genproject "github.com/goadesign/surla/gen/project"
+	genproject "github.com/goadesign/highbay/gen/project"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -68,7 +68,7 @@ func TestBuilderCopyV1CandidateDesign(t *testing.T) {
 				if scenario != "merged" {
 					candidate = commitAllForLayoutTest(t, builder)
 				}
-				payload := &gensurla.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
+				payload := &genhighbay.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
 				result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), payload)
 				if want == "" {
 					require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestBuilderCopyV1CandidateBase(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, found)
 				assert.NoError(t, checkDesignBase(t.Context(), workspace, project, &madeFromSnapshot{Start: list.Start, Entries: list.Entries}), "the live draft has taken this project version")
-				payload := &gensurla.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
+				payload := &genhighbay.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
 				result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), payload)
 				assert.Nil(t, result)
 				assertRefusalSays(t, err, "design_changed_outside", file+" in commit "+project)
@@ -146,7 +146,7 @@ func TestBuilderCopyV1UnrelatedProjectHistory(t *testing.T) {
 			productionBuildGit(t, workspace, "checkout", "--orphan", "replacement-project")
 			productionBuildGit(t, workspace, "commit", "-q", "--allow-empty", "-m", "Replace project history")
 			project := productionBuildGit(t, workspace, "rev-parse", "HEAD")
-			payload := &gensurla.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
+			payload := &genhighbay.VerifyChangePayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate}
 			result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), payload)
 			assert.Nil(t, result)
 			assertRefusalSays(t, err, "conflict", "shares no history with the project's current commit "+project)
@@ -170,18 +170,18 @@ func TestBuilderCopyV1DesignReadFailure(t *testing.T) {
 	require.NoError(t, err)
 	bin := t.TempDir()
 	script := "#!/bin/sh\nfor arg do\n" +
-		"if [ \"$arg\" = \"$SURLA_DESIGN_FAULT_BLOB\" ]; then printf 'private_design_read_fault\\n' >&2; exit 1; fi\ndone\n" +
-		"exec \"$SURLA_DESIGN_REAL_GIT\" \"$@\"\n"
+		"if [ \"$arg\" = \"$HIGHBAY_DESIGN_FAULT_BLOB\" ]; then printf 'private_design_read_fault\\n' >&2; exit 1; fi\ndone\n" +
+		"exec \"$HIGHBAY_DESIGN_REAL_GIT\" \"$@\"\n"
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700))
-	t.Setenv("SURLA_DESIGN_FAULT_BLOB", candidate+":design/build_fixture.go")
-	t.Setenv("SURLA_DESIGN_REAL_GIT", realGit)
+	t.Setenv("HIGHBAY_DESIGN_FAULT_BLOB", candidate+":design/build_fixture.go")
+	t.Setenv("HIGHBAY_DESIGN_REAL_GIT", realGit)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &gensurla.VerifyChangePayload{
+	result, err := cp.VerifyChange(asCaller("alice@example.com", CallerBuilder), &genhighbay.VerifyChangePayload{
 		ChangeID: card.ChangeID, RequestRevision: card.RequestRevision, CandidateCommit: candidate,
 	})
 	assert.Nil(t, result)
 	assert.EqualError(t, err, `start verification for "chg": saved verification inputs could not be read`)
-	spans := recorder.matching("surla.controlplane.start_verification")
+	spans := recorder.matching("highbay.controlplane.start_verification")
 	require.Len(t, spans, 1)
 	assert.Equal(t, codes.Error, spans[0].statusCode)
 	require.Len(t, spans[0].errors, 1)
@@ -196,7 +196,7 @@ func TestBuilderCopyV1DesignReadFailure(t *testing.T) {
 // replace the newer listed version, even though both texts occur in history.
 func builderDesignBaseFixture(
 	t *testing.T, stored bool,
-) (*ControlPlane, *gensurla.ChangeCardResult, buildFile, string) {
+) (*ControlPlane, *genhighbay.ChangeCardResult, buildFile, string) {
 	t.Helper()
 	cfg := verificationConfig(t)
 	cp := newBuildControlPlane(t, verificationSourceOptions(cfg, stored))
@@ -212,16 +212,16 @@ func builderDesignBaseFixture(
 	require.NoError(t, err)
 	writeWorkspaceFiles(t, filepath.Join(workspace, draftFolderName), map[string]string{updateDesignFile: "package design\nvar A = 2\n"})
 	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	card, err := cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Keep refunds bounded", Analysis: refundAnalysis("Keep refunds bounded"), StoryRefreshOpID: &opID,
 	})
 	require.NoError(t, err)
 	user := asCaller("alice@example.com", CallerUser)
 	card = mustConfirmNoop(t, cp, user, card)
-	_, err = cp.StartBuild(user, &gensurla.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
+	_, err = cp.StartBuild(user, &genhighbay.StartBuildPayload{ChangeID: card.ChangeID, RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	assignment, build := readBuilderFixture(t, cp, card)
-	productionBuildGit(t, workspace, "branch", "surla/tests-1", build.Base)
+	productionBuildGit(t, workspace, "branch", "highbay/tests-1", build.Base)
 	if !stored {
 		acceptTests(t, cp, card.ChangeID, build.Base)
 	}
@@ -231,11 +231,11 @@ func builderDesignBaseFixture(
 // assertVerifyDesignTransportRefusal checks the declared HTTP/MCP refusal and
 // proves all three entry calls left the run store and open build untouched.
 func assertVerifyDesignTransportRefusal(
-	t *testing.T, cp *ControlPlane, payload *gensurla.VerifyChangePayload, name, file, recovery string,
+	t *testing.T, cp *ControlPlane, payload *genhighbay.VerifyChangePayload, name, file, recovery string,
 ) {
 	t.Helper()
 	before := readBuildFile(t, cp, payload.ChangeID)
-	raw, err := gensurla.EncodeVerifyChangePayload(payload)
+	raw, err := genhighbay.EncodeVerifyChangePayload(payload)
 	require.NoError(t, err)
 	server := roleServer(t, cp)
 	bodyInput := fmt.Sprintf(`{"request_revision":%q,"candidate_commit":%q}`, payload.RequestRevision, payload.CandidateCommit)

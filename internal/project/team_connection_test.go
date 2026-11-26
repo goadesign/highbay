@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	"github.com/goadesign/surla/internal/controlplane"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

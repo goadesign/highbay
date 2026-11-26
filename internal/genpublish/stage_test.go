@@ -179,7 +179,7 @@ func TestAcquireRefusesAStagingDirectoryReplacedBeforeItWasOpened(t *testing.T) 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir, root := moduleRoot(t)
-			const name = ".surla-gen-test"
+			const name = ".highbay-gen-test"
 			require.NoError(t, root.Mkdir(name, 0o755))
 			tc.replace(t, dir, name)
 

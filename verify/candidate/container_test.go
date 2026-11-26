@@ -64,7 +64,7 @@ func TestEngineCreateReportsOnlyAnAnsweredCreate(t *testing.T) {
 		wantErr string
 	}{
 		{name: "created"},
-		{name: "engine refuses", stderr: "Error response from daemon: Conflict", err: errors.New("exit status 1"), wantErr: "create container surla-check-op1-0"},
+		{name: "engine refuses", stderr: "Error response from daemon: Conflict", err: errors.New("exit status 1"), wantErr: "create container highbay-check-op1-0"},
 		{name: "connection lost", stderr: "error during connect: EOF", err: errors.New("exit status 1"), wantErr: "error during connect: EOF"},
 	}
 	for _, tc := range cases {
@@ -72,7 +72,7 @@ func TestEngineCreateReportsOnlyAnAnsweredCreate(t *testing.T) {
 			e, s := newScriptedEngine(func([]string) (string, string, error) {
 				return "", tc.stderr, tc.err
 			})
-			err := e.Create(context.Background(), ContainerSpec{Name: "surla-check-op1-0", Operation: "op1", Network: "none", User: "501:20", WorkDir: "/w"})
+			err := e.Create(context.Background(), ContainerSpec{Name: "highbay-check-op1-0", Operation: "op1", Network: "none", User: "501:20", WorkDir: "/w"})
 			if tc.wantErr == "" {
 				require.NoError(t, err)
 			} else {
@@ -100,7 +100,7 @@ func TestEngineCreateIsNotAbandonedWhenItsContextEnds(t *testing.T) {
 		return nil
 	}}
 	e := r.Reopen("/usr/local/bin/docker", "unix:///var/run/docker.sock", "/ops/check-work/op1/docker-config")
-	require.NoError(t, e.Create(ctx, ContainerSpec{Name: "surla-check-op1-0", Operation: "op1", Network: "none", User: "501:20", WorkDir: "/w"}))
+	require.NoError(t, e.Create(ctx, ContainerSpec{Name: "highbay-check-op1-0", Operation: "op1", Network: "none", User: "501:20", WorkDir: "/w"}))
 	assert.NoError(t, during, "the create kept its context after the operation's ended")
 }
 
@@ -147,7 +147,7 @@ func TestEngineStartReportsTheContainersExit(t *testing.T) {
 		{name: "test failure exit code comes from wait", startErr: exitError(t, 1), waitCode: 1, wantCode: 1, wantCalls: []string{"start", "wait"}},
 		{name: "wait fails", waitErr: errors.New("exit status 1"), wantCode: -1, wantErr: "wait for container", wantCalls: []string{"start", "wait"}},
 		{name: "canceled during start", startErr: errors.New("signal: killed"), cancel: true, wantCode: -1, wantErr: "context canceled", wantCalls: []string{"start"}},
-		{name: "stream breaks and the container exited 0", startErr: errors.New("unexpected EOF"), wantCode: -1, wantErr: "stream the output of container surla-check-op1-0, which exited 0", wantCalls: []string{"start", "wait"}},
+		{name: "stream breaks and the container exited 0", startErr: errors.New("unexpected EOF"), wantCode: -1, wantErr: "stream the output of container highbay-check-op1-0, which exited 0", wantCalls: []string{"start", "wait"}},
 		{name: "start fails differently from the container's exit", startErr: exitError(t, 1), waitCode: 2, wantCode: -1, wantErr: "which exited 2", wantCalls: []string{"start", "wait"}},
 	}
 	for _, tc := range cases {
@@ -167,7 +167,7 @@ func TestEngineStartReportsTheContainersExit(t *testing.T) {
 				return "", "", nil
 			})
 			var out bytes.Buffer
-			code, err := e.Start(ctx, "surla-check-op1-0", &out)
+			code, err := e.Start(ctx, "highbay-check-op1-0", &out)
 			assert.Equal(t, tc.wantCode, code)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
@@ -229,11 +229,11 @@ func TestEngineRemoveReportsUnconfirmedCleanup(t *testing.T) {
 	e, _ := newScriptedEngine(func([]string) (string, string, error) {
 		return "", "Cannot connect to the Docker daemon", errors.New("exit status 1")
 	})
-	err := e.Remove("surla-check-op1-0")
+	err := e.Remove("highbay-check-op1-0")
 	var cleanup *CleanupError
 	require.ErrorAs(t, err, &cleanup)
-	assert.Equal(t, "surla-check-op1-0", cleanup.Name)
-	assert.Contains(t, err.Error(), "docker rm -f surla-check-op1-0")
+	assert.Equal(t, "highbay-check-op1-0", cleanup.Name)
+	assert.Contains(t, err.Error(), "docker rm -f highbay-check-op1-0")
 }
 
 // TestEngineRemoveNeverReadsItsOutput checks that Remove's result depends on
@@ -249,21 +249,21 @@ func TestEngineRemoveNeverReadsItsOutput(t *testing.T) {
 		// docker rm --force can exit 0 for a container that does not
 		// exist: exit 0 only says the command ran.
 		{name: "exit 0", wantErr: false},
-		{name: "a failure whose text looks like absence is still a failure", stderr: "Error response from daemon: No such container: surla-check-op1-0", err: errors.New("exit status 1"), wantErr: true},
+		{name: "a failure whose text looks like absence is still a failure", stderr: "Error response from daemon: No such container: highbay-check-op1-0", err: errors.New("exit status 1"), wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e, s := newScriptedEngine(func([]string) (string, string, error) {
 				return "", tc.stderr, tc.err
 			})
-			err := e.Remove("surla-check-op1-0")
+			err := e.Remove("highbay-check-op1-0")
 			if tc.wantErr {
 				var cleanup *CleanupError
 				require.ErrorAs(t, err, &cleanup)
 			} else {
 				require.NoError(t, err)
 			}
-			assert.Equal(t, []string{"--host", "unix:///var/run/docker.sock", "rm", "--force", "surla-check-op1-0"}, s.calls[0])
+			assert.Equal(t, []string{"--host", "unix:///var/run/docker.sock", "rm", "--force", "highbay-check-op1-0"}, s.calls[0])
 		})
 	}
 }
@@ -280,8 +280,8 @@ func TestEngineListReturnsTheLabelledNames(t *testing.T) {
 		wantErr   string
 	}{
 		{name: "none", wantNames: []string{}},
-		{name: "created and exited", stdout: "surla-check-op1-0\nsurla-check-op1-1\n", wantNames: []string{"surla-check-op1-0", "surla-check-op1-1"}},
-		{name: "several names of one container", stdout: "surla-check-op1-0,alias\n", wantNames: []string{"surla-check-op1-0", "alias"}},
+		{name: "created and exited", stdout: "highbay-check-op1-0\nhighbay-check-op1-1\n", wantNames: []string{"highbay-check-op1-0", "highbay-check-op1-1"}},
+		{name: "several names of one container", stdout: "highbay-check-op1-0,alias\n", wantNames: []string{"highbay-check-op1-0", "alias"}},
 		{name: "failed listing proves nothing", err: errors.New("exit status 1"), wantErr: "list the containers of operation op1"},
 	}
 	for _, tc := range cases {
@@ -298,7 +298,7 @@ func TestEngineListReturnsTheLabelledNames(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tc.wantNames, names)
 			}
-			assert.Equal(t, []string{"--host", "unix:///var/run/docker.sock", "container", "ls", "--all", "--filter", "label=surla.check=op1", "--format", "{{.Names}}"}, s.calls[0])
+			assert.Equal(t, []string{"--host", "unix:///var/run/docker.sock", "container", "ls", "--all", "--filter", "label=highbay.check=op1", "--format", "{{.Names}}"}, s.calls[0])
 		})
 	}
 }
@@ -308,7 +308,7 @@ func TestEngineCreateArgsAndPrivateConfig(t *testing.T) {
 		return "", "", nil
 	})
 	spec := ContainerSpec{
-		Name: "surla-check-op1-0", Operation: "op1", Network: "none", User: "501:20",
+		Name: "highbay-check-op1-0", Operation: "op1", Network: "none", User: "501:20",
 		WorkDir: "/Users/dev/repo/shop",
 		Mounts: []Mount{
 			{Source: "/ops/check-work/op1/src", Target: "/Users/dev/repo"},
@@ -321,8 +321,8 @@ func TestEngineCreateArgsAndPrivateConfig(t *testing.T) {
 	assert.Equal(t, []string{
 		"--host", "unix:///var/run/docker.sock",
 		"create",
-		"--name", "surla-check-op1-0",
-		"--label", "surla.check=op1",
+		"--name", "highbay-check-op1-0",
+		"--label", "highbay.check=op1",
 		"--read-only",
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges",

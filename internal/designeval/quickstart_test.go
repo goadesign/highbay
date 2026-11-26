@@ -22,11 +22,11 @@ var quickstartNames = []string{
 	"toolbox", "exports", "evaluations", "advanced", "golden-rules", "faq",
 }
 
-// TestSurlaQuickstartReplacesOnlyWorkflowSections checks which sections the
+// TestHighbayQuickstartReplacesOnlyWorkflowSections checks which sections the
 // plugin replaces for a design with and without evaluation suites, that
 // Goa-AI's other sections and other files keep their source, and that a
 // guide from a Goa-AI release without named sections is left alone.
-func TestSurlaQuickstartReplacesOnlyWorkflowSections(t *testing.T) {
+func TestHighbayQuickstartReplacesOnlyWorkflowSections(t *testing.T) {
 	withSuite := []eval.Root{&evalexpr.RootExpr{Suites: []*evalexpr.SuiteExpr{{Name: "quality"}}}}
 	cases := []struct {
 		name     string
@@ -41,7 +41,7 @@ func TestSurlaQuickstartReplacesOnlyWorkflowSections(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			guide := namedGuide(quickstartNames)
 			other := &codegen.File{Path: "gen/svc/service.go", SectionTemplates: []*codegen.SectionTemplate{{Name: "agents-quickstart-header", Source: "keep"}}}
-			out, err := surlaQuickstart("gen", tc.roots, []*codegen.File{guide, other})
+			out, err := highbayQuickstart("gen", tc.roots, []*codegen.File{guide, other})
 			require.NoError(t, err)
 			require.Len(t, out, 2)
 			for _, s := range guide.SectionTemplates {
@@ -58,14 +58,14 @@ func TestSurlaQuickstartReplacesOnlyWorkflowSections(t *testing.T) {
 
 	t.Run("single-section guide", func(t *testing.T) {
 		legacy := &codegen.File{Path: quickstartPath, SectionTemplates: []*codegen.SectionTemplate{{Name: "agents-quickstart", Source: "goa-ai guide"}}}
-		_, err := surlaQuickstart("gen", nil, []*codegen.File{legacy})
+		_, err := highbayQuickstart("gen", nil, []*codegen.File{legacy})
 		require.NoError(t, err)
 		assert.Equal(t, "goa-ai guide", legacy.SectionTemplates[0].Source)
 	})
 
 	t.Run("missing replaced section", func(t *testing.T) {
 		guide := namedGuide([]string{"header", "liftoff", "evaluations"})
-		_, err := surlaQuickstart("gen", nil, []*codegen.File{guide})
+		_, err := highbayQuickstart("gen", nil, []*codegen.File{guide})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "0 agents-quickstart-golden-rules sections")
 	})
@@ -73,7 +73,7 @@ func TestSurlaQuickstartReplacesOnlyWorkflowSections(t *testing.T) {
 
 // TestQuickstartSectionsKeepGoaAIsLayout checks that every replacement text
 // keeps the heading and separator layout of the section it replaces, names
-// Surla's tools instead of host commands, and ends with the blank line that
+// Highbay's tools instead of host commands, and ends with the blank line that
 // precedes the next section.
 func TestQuickstartSectionsKeepGoaAIsLayout(t *testing.T) {
 	headings := map[string]string{
@@ -106,13 +106,13 @@ func TestQuickstartSectionsKeepGoaAIsLayout(t *testing.T) {
 func TestGenerateProgramCompilesThePluginAsMain(t *testing.T) {
 	program := generateProgram(true)
 	require.Len(t, program, 5)
-	quickstart := `codegen.RegisterPluginLast("surla-quickstart", "gen", nil, surlaQuickstart)`
-	suiteCommand := `codegen.RegisterPluginLast("surla-suite-command", "gen", nil, surlaSuiteCommand(true))`
-	assert.Contains(t, generateProgram(false)["main.go"], "surlaSuiteCommand(false)", "the program is told the module has no acceptance package")
+	quickstart := `codegen.RegisterPluginLast("highbay-quickstart", "gen", nil, highbayQuickstart)`
+	suiteCommand := `codegen.RegisterPluginLast("highbay-suite-command", "gen", nil, highbaySuiteCommand(true))`
+	assert.Contains(t, generateProgram(false)["main.go"], "highbaySuiteCommand(false)", "the program is told the module has no acceptance package")
 	assert.Contains(t, program["main.go"], quickstart)
 	assert.Contains(t, program["main.go"], suiteCommand)
 	assert.Less(t, strings.Index(program["main.go"], quickstart), strings.Index(program["main.go"], suiteCommand),
-		"the suite command's section is added after Surla's quickstart sections are replaced")
+		"the suite command's section is added after Highbay's quickstart sections are replaced")
 
 	fset := token.NewFileSet()
 	for _, name := range []string{"quickstart.go", "suite_command.go", "test_layout.go"} {

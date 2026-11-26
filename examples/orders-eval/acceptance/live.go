@@ -5,17 +5,17 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/goadesign/surla/examples/orders-eval/harness"
-	"github.com/goadesign/surla/examples/orders-eval/sim"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/examples/orders-eval/harness"
+	"github.com/goadesign/highbay/examples/orders-eval/sim"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
-// Live starts the pinned orders platform as the live copy Surla's
+// Live starts the pinned orders platform as the live copy Highbay's
 // start_live_target runs, the way a scenario starts it: its own simulator
 // loaded with the scenarios' fixtures, a Temporal dev server, the refund
 // worker, and the orders API planning with the evaluator's scripted model
-// through the harness's model gateway. key is the live key Surla minted; it
-// reaches only the orders API, through its environment, so Surla's
+// through the harness's model gateway. key is the live key Highbay minted; it
+// reaches only the orders API, through its environment, so Highbay's
 // draft_override can change the refund agent's prompts in this copy alone.
 // The copy stops when ctx ends or when a candidate process exits, and Done
 // then reports the cleanup.

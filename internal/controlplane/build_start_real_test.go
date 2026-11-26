@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +42,7 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 	for _, subdir := range []string{".", "services/shop"} {
 		t.Run(subdir, func(t *testing.T) {
 			eval := map[string]string{
-				"go.mod":           fmt.Sprintf("module example.com/shop/eval\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 %s\n", testmodule.SurlaVersion(t, "goa.design/goa/v3")),
+				"go.mod":           fmt.Sprintf("module example.com/shop/eval\n\ngo 1.27.3\n\nrequire goa.design/goa/v3 %s\n", testmodule.HighbayVersion(t, "goa.design/goa/v3")),
 				"design/design.go": buildProbeDesign,
 			}
 			repo, project := productionBuildProject(t, subdir, eval)
@@ -67,7 +67,7 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 				}
 				result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
 				require.NoError(t, err)
-				assert.Equal(t, gensurla.TestsKindAssigned, result.Build.TestWriter.Tests.Kind(), "StartBuild leaves preparation for the marking read")
+				assert.Equal(t, genhighbay.TestsKindAssigned, result.Build.TestWriter.Tests.Kind(), "StartBuild leaves preparation for the marking read")
 				head := productionBuildGit(t, repo, "rev-parse", "HEAD")
 				assert.Equal(t, head, productionBuildGit(t, builderFolder, "rev-parse", "HEAD"))
 				assert.Equal(t, testwriter.BuilderRole.Branch(1),
@@ -75,7 +75,7 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 				assert.Equal(t, head, productionBuildGit(t, folder, "rev-parse", "HEAD"))
 				assert.Equal(t, testwriter.TestsRole.Branch(1),
 					productionBuildGit(t, folder, "symbolic-ref", "--short", "HEAD"))
-				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{ChangeID: "chg"})
+				assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{ChangeID: "chg"})
 				require.NoError(t, err)
 				finding, ok := assignment.Progress.Tests.AsNeedsChanges()
 				require.True(t, ok, "the real module failure is saved on the marking read")
@@ -96,7 +96,7 @@ func TestStartBuildUsesTheProductionCopy(t *testing.T) {
 }
 
 // TestStartBuildPreSaveInspectRefusals verifies that InspectCopy refuses
-// folder-in-use and branch-in-use for both .surla-build and .surla-tests
+// folder-in-use and branch-in-use for both .highbay-build and .highbay-tests
 // before saving the build or registering any team roles.
 func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 	cases := []struct {
@@ -114,7 +114,7 @@ func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(repo, testwriter.BuilderRole.Folder), []byte("file"), 0o600))
 			},
 			wantError:     "copy_folder_in_use",
-			wantWords:     "the project's .surla-build entry is not Surla's working copy",
+			wantWords:     "the project's .highbay-build entry is not Highbay's working copy",
 			wantWorktrees: 1,
 		},
 		{
@@ -123,7 +123,7 @@ func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(repo, testwriter.TestsRole.Folder), []byte("file"), 0o600))
 			},
 			wantError:     "copy_folder_in_use",
-			wantWords:     "the project's .surla-tests entry is not Surla's working copy",
+			wantWords:     "the project's .highbay-tests entry is not Highbay's working copy",
 			wantWorktrees: 1,
 		},
 		{
@@ -134,7 +134,7 @@ func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 				runGitForTest(t, repo, "switch", "--quiet", testwriter.BuilderRole.Branch(1))
 			},
 			wantError:      "tests_branch_in_use",
-			wantWords:      "branch surla/build-1, which Surla reserves for the builder's working copy, is held by another working copy",
+			wantWords:      "branch highbay/build-1, which Highbay reserves for the builder's working copy, is held by another working copy",
 			wantWorktrees:  2,
 			wantRegistered: 2,
 		},
@@ -146,7 +146,7 @@ func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 				runGitForTest(t, repo, "switch", "--quiet", testwriter.TestsRole.Branch(1))
 			},
 			wantError:      "tests_branch_in_use",
-			wantWords:      "branch surla/tests-1, which Surla reserves for the test writer's working copy, is held by another working copy",
+			wantWords:      "branch highbay/tests-1, which Highbay reserves for the test writer's working copy, is held by another working copy",
 			wantWorktrees:  2,
 			wantRegistered: 2,
 		},
@@ -165,7 +165,7 @@ func TestStartBuildPreSaveInspectRefusals(t *testing.T) {
 			card := buildableChange(t, cp, "chg")
 			var firstStartedAt string
 			if tc.startFirst {
-				first, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+				first, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 					ChangeID: "chg", RequestRevision: card.RequestRevision,
 				})
 				require.NoError(t, err)
@@ -215,11 +215,11 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 		return context.WithTimeout(ctx, time.Second)
 	}
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
-	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &gensurla.GetTestWriterAssignmentPayload{
+	assignment, err := cp.GetTestWriterAssignment(asCaller("alice@example.com", CallerTestWriter), &genhighbay.GetTestWriterAssignmentPayload{
 		ChangeID: "chg",
 	})
 	require.NoError(t, err, "the limit is reached during the marking read")
@@ -230,18 +230,18 @@ func init() { time.Sleep(30 * time.Second) }`, 1)
 }
 
 // TestStoredEvaluatorMakesTheBuilderCopy verifies that a stored-evaluator build
-// makes .surla-build on surla/build-1 through the production path, creates no
-// .surla-tests copy, and registers BuilderOnly.
+// makes .highbay-build on highbay/build-1 through the production path, creates no
+// .highbay-tests copy, and registers BuilderOnly.
 func TestStoredEvaluatorMakesTheBuilderCopy(t *testing.T) {
 	repo, project, cp, registered := reviewProject(t, Options{BuildCacheDir: t.TempDir(), Verification: &VerificationConfig{RunsDir: t.TempDir()}})
 	card := buildableChange(t, cp, "chg")
-	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, gensurla.TeamKindReady, result.Team.Kind())
+	assert.Equal(t, genhighbay.TeamKindReady, result.Team.Kind())
 	builder := filepath.Join(project, testwriter.BuilderRole.Folder)
-	assert.Equal(t, "surla/build-1", productionBuildGit(t, builder, "symbolic-ref", "--short", "HEAD"))
+	assert.Equal(t, "highbay/build-1", productionBuildGit(t, builder, "symbolic-ref", "--short", "HEAD"))
 	assert.NoDirExists(t, filepath.Join(project, testwriter.TestsRole.Folder))
 	assert.Equal(t, []BuildFolders{BuilderOnly{BuilderFolder: builder}}, *registered)
 	assert.Empty(t, productionBuildGit(t, repo, "status", "--porcelain", "--untracked-files=all"))
@@ -253,7 +253,7 @@ func TestStoredEvaluatorMakesTheBuilderCopy(t *testing.T) {
 func TestBuildAgainMakesMissingCopiesAtTheSavedBase(t *testing.T) {
 	repo, project, cp, _ := reviewProject(t, Options{})
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -280,7 +280,7 @@ func TestBuildAgainMakesMissingCopiesAtTheSavedBase(t *testing.T) {
 func TestBuildNeverMovesAnExistingCopy(t *testing.T) {
 	_, project, cp, registered := reviewProject(t, Options{})
 	card := buildableChange(t, cp, "chg")
-	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 		ChangeID: "chg", RequestRevision: card.RequestRevision,
 	})
 	require.NoError(t, err)
@@ -310,7 +310,7 @@ func TestMakeCopyFailsAfterTheSave(t *testing.T) {
 	t.Run("builder MakeCopy fails", func(t *testing.T) {
 		repo, project, cp, registered := reviewProject(t, Options{})
 		card := buildableChange(t, cp, "chg")
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 			ChangeID: "chg", RequestRevision: card.RequestRevision,
 		})
 		require.NoError(t, err)
@@ -321,17 +321,17 @@ func TestMakeCopyFailsAfterTheSave(t *testing.T) {
 
 		result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
 		require.NoError(t, err)
-		assert.Equal(t, gensurla.TeamKindUnavailable, result.Team.Kind())
+		assert.Equal(t, genhighbay.TeamKindUnavailable, result.Team.Kind())
 		u, ok := result.Team.AsUnavailable()
 		require.True(t, ok)
-		assert.Equal(t, gensurla.BuildStartStep("Build this change again on the views page."), u.Step)
-		assert.Empty(t, *registered, "nothing is registered when .surla-build does not exist")
+		assert.Equal(t, genhighbay.BuildStartStep("Build this change again on the views page."), u.Step)
+		assert.Empty(t, *registered, "nothing is registered when .highbay-build does not exist")
 	})
 
 	t.Run("tests MakeCopy fails", func(t *testing.T) {
 		repo, project, cp, registered := reviewProject(t, Options{})
 		card := buildableChange(t, cp, "chg")
-		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &gensurla.StartBuildPayload{
+		_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{
 			ChangeID: "chg", RequestRevision: card.RequestRevision,
 		})
 		require.NoError(t, err)
@@ -343,12 +343,12 @@ func TestMakeCopyFailsAfterTheSave(t *testing.T) {
 
 		result, err := startBuildAgain(t, cp, asCaller("alice@example.com", CallerUser), "chg", card.RequestRevision)
 		require.NoError(t, err)
-		assert.Equal(t, gensurla.TeamKindUnavailable, result.Team.Kind())
+		assert.Equal(t, genhighbay.TeamKindUnavailable, result.Team.Kind())
 		u, ok := result.Team.AsUnavailable()
 		require.True(t, ok)
-		assert.Equal(t, gensurla.BuildStartStep("Build this change again on the views page."), u.Step)
+		assert.Equal(t, genhighbay.BuildStartStep("Build this change again on the views page."), u.Step)
 		assert.Equal(t, []BuildFolders{BuilderOnly{BuilderFolder: builder}}, *registered,
-			"only the existing builder copy is registered when .surla-tests is missing")
+			"only the existing builder copy is registered when .highbay-tests is missing")
 	})
 }
 

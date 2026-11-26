@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/shquote"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/shquote"
 )
 
 type (
-	// CopyFacts describes a working copy's state as Surla shows it in a join
+	// CopyFacts describes a working copy's state as Highbay shows it in a join
 	// refusal or a worker tool refusal: its branch or detached HEAD, any Git
 	// operation in progress in its administrative folder, and the uncommitted
 	// or untracked paths in its working tree.
@@ -106,7 +106,7 @@ const (
 	emptyBlobOID = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
 )
 
-// testsGeneratedPaths are the paths inside the test module (eval/) that Surla
+// testsGeneratedPaths are the paths inside the test module (eval/) that Highbay
 // writes during test preparation and checking. Join restores and cleans them in
 // the test writer's copy before committing uncommitted leftovers on an earlier
 // build branch.
@@ -137,7 +137,7 @@ func ShownName(name string) string {
 }
 
 // ShownBranch formats a checked-out branch name for prose in a refusal message
-// or finding: raw when it is a Surla build branch, "a name that is not shown"
+// or finding: raw when it is a Highbay build branch, "a name that is not shown"
 // when unprintable, and shell-quoted via shquote.Quote when it was chosen by an
 // agent.
 func ShownBranch(branch string) string {
@@ -182,8 +182,8 @@ func (w WorkingCopy) Facts(ctx context.Context) (CopyFacts, error) {
 //     otherwise it returns Refused with the copy's current facts.
 //   - When role.Branch(n) does not yet exist: if a Git operation is in
 //     progress, Join returns Refused. If the copy is on an earlier build
-//     branch of the same role (k < n, including legacy surla/tests for
-//     TestsRole), Join first restores and cleans Surla's generated paths in
+//     branch of the same role (k < n, including legacy highbay/tests for
+//     TestsRole), Join first restores and cleans Highbay's generated paths in
 //     the tests copy, snapshots any remaining uncommitted or untracked work in
 //     a private index, commits that tree on the earlier build branch with the
 //     message "Left uncommitted when change <changeID> started" (updating the
@@ -309,7 +309,7 @@ func indexLockStep(role Role, lockPath string) string {
 // handleJoinWriteError handles an error from a copy-changing git command in
 // join: if writeCtx did not time out and index.lock is present (held by
 // another process that acquired the lock during join), it returns Refused with
-// the lock's recovery step. Surla never deletes index.lock; if a timeout kills
+// the lock's recovery step. Highbay never deletes index.lock; if a timeout kills
 // a copy-changing git command while it holds index.lock, the next Join refuses
 // with the lock's recovery step.
 func (w WorkingCopy) handleJoinWriteError(writeCtx context.Context, role Role,
@@ -568,7 +568,7 @@ func parseDiffTreeTargets(out string) (map[string]treeEntry, error) {
 	return targets, nil
 }
 
-// restoreTestsGenerated restores and cleans Surla's generated paths in the
+// restoreTestsGenerated restores and cleans Highbay's generated paths in the
 // test writer's working copy (eval/gen, eval/AGENTS_QUICKSTART.md, and
 // eval/design/story_tests.go) so generated files and unmerged entries on them
 // never enter a leftover commit. It never follows a symbolic link in a leading
@@ -675,7 +675,7 @@ func (w WorkingCopy) commitLeftoversOnEarlier(ctx context.Context,
 // stage it) in a temporary private index inside w.gitDir and returns the
 // resulting tree object ID.
 func (w WorkingCopy) snapshotTree(ctx context.Context, afterPrivateIndex func() error) (tree string, err error) {
-	tmp, err := os.MkdirTemp(w.gitDir, "surla-join-*")
+	tmp, err := os.MkdirTemp(w.gitDir, "highbay-join-*")
 	if err != nil {
 		return "", fmt.Errorf("create a temporary folder for the join snapshot: %w", err)
 	}

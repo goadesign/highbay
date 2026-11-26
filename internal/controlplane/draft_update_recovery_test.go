@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/goadesign/surla/internal/shquote"
+	"github.com/goadesign/highbay/internal/shquote"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"

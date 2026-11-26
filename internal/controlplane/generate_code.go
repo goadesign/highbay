@@ -1,5 +1,5 @@
 // This file regenerates the application or public local eval/ module through
-// the server's held workspace and the same publisher used by surla gen.
+// the server's held workspace and the same publisher used by hbay gen.
 package controlplane
 
 import (
@@ -16,11 +16,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/designversion"
-	"github.com/goadesign/surla/internal/genpublish"
-	"github.com/goadesign/surla/internal/shquote"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/designversion"
+	"github.com/goadesign/highbay/internal/genpublish"
+	"github.com/goadesign/highbay/internal/shquote"
 )
 
 // GenerateCode writes the open build's agreed design in the builder's copy,
@@ -31,18 +31,18 @@ import (
 // are warnings in the successful result. It never builds application code or
 // runs the module's tests.
 func (c *ControlPlane) GenerateCode(
-	ctx context.Context, p *gensurla.GenerateCodePayload,
-) (res *gensurla.GenerateCodeResult, retErr error) {
+	ctx context.Context, p *genhighbay.GenerateCodePayload,
+) (res *genhighbay.GenerateCodeResult, retErr error) {
 	if _, ok := PrincipalFromContext(ctx); !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.generate_code")
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.generate_code")
 	defer span.End()
 	target := "candidate"
 	if p.Target != nil {
 		target = *p.Target
 	}
-	span.SetAttributes(attribute.String("surla.generation.target", target))
+	span.SetAttributes(attribute.String("highbay.generation.target", target))
 
 	c.workspaceMu.Lock()
 	defer c.workspaceMu.Unlock()
@@ -60,7 +60,7 @@ func (c *ControlPlane) GenerateCode(
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return nil, gensurla.MakeWorkingCopyBusy(errors.New("The builder's working copy is in use; call generate_code again when the current operation finishes."))
+		return nil, genhighbay.MakeWorkingCopyBusy(errors.New("The builder's working copy is in use; call generate_code again when the current operation finishes."))
 	}
 	defer func() { <-c.builderCopyTurn }()
 	_, project, err := openModuleRootWithIdentity(
@@ -90,11 +90,11 @@ func (c *ControlPlane) GenerateCode(
 		return nil, recordBuildError(span, err, "read builder working copy")
 	}
 	if !ready.build.inForce {
-		return nil, gensurla.MakeConflict(errors.New("The open build is for an earlier agreed revision; ask the user to build the current agreed revision on the views page."))
+		return nil, genhighbay.MakeConflict(errors.New("The open build is for an earlier agreed revision; ask the user to build the current agreed revision on the views page."))
 	}
 	moduleDir, workspace, err := openBuildGenerationRoot(project, ready.folder)
 	if err != nil {
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf("open the builder's module: %w", err))
 	}
 	roots = append(roots, workspace)
 	module := workspace
@@ -103,7 +103,7 @@ func (c *ControlPlane) GenerateCode(
 		module, err = openGenerationEvalModule(workspace)
 		if err != nil {
 			span.AddEvent("generation_refused", trace.WithAttributes(attribute.String("reason", "invalid_eval_module")))
-			return nil, gensurla.MakeUnprocessable(err)
+			return nil, genhighbay.MakeUnprocessable(err)
 		}
 		roots = append(roots, module)
 		moduleDir = filepath.Join(moduleDir, "eval")
@@ -113,7 +113,7 @@ func (c *ControlPlane) GenerateCode(
 			return nil, failGenerateFault(span, "the build's saved design could not be read", err)
 		}
 		if err := writeBuildDesign(genCtx, module, agreed); err != nil {
-			return nil, gensurla.MakeUnprocessable(fmt.Errorf("write the agreed design in your working folder: %w", err))
+			return nil, genhighbay.MakeUnprocessable(fmt.Errorf("write the agreed design in your working folder: %w", err))
 		}
 	}
 	if err := reportProgress(genCtx, 0, 3, "Reading the local "+target+" module"); err != nil {
@@ -123,10 +123,10 @@ func (c *ControlPlane) GenerateCode(
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "read local generation module")
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("could not read the local %s module: %w", target, err))
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf("could not read the local %s module: %w", target, err))
 	}
 	if _, ok := files["go.mod"]; !ok {
-		return nil, gensurla.MakeUnprocessable(fmt.Errorf("the local %s module has no go.mod; create or restore it before generating code", target))
+		return nil, genhighbay.MakeUnprocessable(fmt.Errorf("the local %s module has no go.mod; create or restore it before generating code", target))
 	}
 	if target != "eval" {
 		if err := buildGenerationModules(agreed, ready.build.file.GoMod, files["go.mod"], ready.folder, ready.goWork); err != nil {
@@ -151,7 +151,7 @@ func (c *ControlPlane) GenerateCode(
 	if err != nil {
 		return nil, failGenerateFault(span, "generated files could not be published; inspect the server trace for details", err)
 	}
-	res = &gensurla.GenerateCodeResult{
+	res = &genhighbay.GenerateCodeResult{
 		Target: target, FilesWritten: published.WrittenFiles, Warnings: published.Warnings,
 	}
 	// The service requires both lists even when publication returned no entries.
@@ -245,7 +245,7 @@ func buildGenerationModules(
 	}
 	builder, err := designversion.Requirements(builderText)
 	if err != nil {
-		return gensurla.MakeUnprocessable(fmt.Errorf("correct go.mod in your working folder: %w", err))
+		return genhighbay.MakeUnprocessable(fmt.Errorf("correct go.mod in your working folder: %w", err))
 	}
 	missing, replacements, err := designversion.MissingModules(design, saved, builder)
 	if err != nil {
@@ -263,7 +263,7 @@ func buildGenerationModules(
 		steps = append(steps, prefix+"go get "+shquote.Quote(required.String()))
 	}
 	steps = append(steps, prefix+"go mod tidy")
-	return gensurla.MakeMissingModules(fmt.Errorf("The agreed design was written in %s; gen/ was not changed. Correct the dependencies in that working folder, then call generate_code again:\n%s",
+	return genhighbay.MakeMissingModules(fmt.Errorf("The agreed design was written in %s; gen/ was not changed. Correct the dependencies in that working folder, then call generate_code again:\n%s",
 		shquote.Quote(folder), strings.Join(steps, "\n")))
 }
 

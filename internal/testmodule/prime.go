@@ -6,7 +6,7 @@
 // scaffold.RunCommand on internal/scaffold/templates/{blank,example}) is
 // intentionally out of scope: those paths exercise a user's real networked
 // first run and belong to the non-PR Full / starter (-tags=scaffold
-// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/surla) jobs in
+// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/hbay) jobs in
 // .github/workflows/integration.yml, while ordinary-partition tests in
 // internal/scaffold and internal/controlplane substitute fake runners and
 // generators.
@@ -66,7 +66,7 @@ func PrimeCache() (err error) {
 	if err != nil {
 		return err
 	}
-	tmpRoot, err := os.MkdirTemp("", "surla-testmodule-prime-*")
+	tmpRoot, err := os.MkdirTemp("", "highbay-testmodule-prime-*")
 	if err != nil {
 		return fmt.Errorf("create module-primer temp dir: %w", err)
 	}
@@ -93,19 +93,19 @@ func PrimeCache() (err error) {
 // PrimeProfiles returns the synthetic module definitions covering every
 // pinned test module version and package import closure used across the suite.
 func PrimeProfiles() ([]PrimeProfile, error) {
-	goaVer, err := surlaVersion("goa.design/goa/v3")
+	goaVer, err := highbayVersion("goa.design/goa/v3")
 	if err != nil {
 		return nil, err
 	}
-	goaAIVer, err := surlaVersion("goa.design/goa-ai")
+	goaAIVer, err := highbayVersion("goa.design/goa-ai")
 	if err != nil {
 		return nil, err
 	}
-	modelVer, err := surlaVersion("goa.design/model")
+	modelVer, err := highbayVersion("goa.design/model")
 	if err != nil {
 		return nil, err
 	}
-	storyVer, err := surlaVersion("github.com/goadesign/surla/story")
+	storyVer, err := highbayVersion("github.com/goadesign/highbay/story")
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +115,14 @@ func PrimeProfiles() ([]PrimeProfile, error) {
 			Name: "current-core-and-starter",
 			Files: map[string]string{
 				"go.mod": "module example.com/design\n\ngo 1.24\n\nrequire (\n" +
-					"\tgithub.com/goadesign/surla/story " + storyVer + "\n" +
+					"\tgithub.com/goadesign/highbay/story " + storyVer + "\n" +
 					"\tgoa.design/goa/v3 " + goaVer + "\n" +
 					"\tgoa.design/goa-ai " + goaAIVer + "\n" +
 					"\tgoa.design/model " + modelVer + "\n" +
 					"\tgithub.com/kr/text " + KRTextVersion + "\n)\n",
 				"design/design.go": blankImports(
-					"github.com/goadesign/surla/story/dsl",
-					"github.com/goadesign/surla/story/expr",
+					"github.com/goadesign/highbay/story/dsl",
+					"github.com/goadesign/highbay/story/expr",
 					"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
 					"go.opentelemetry.io/otel/codes",
 					"go.opentelemetry.io/otel/trace",
@@ -160,19 +160,19 @@ func PrimeProfiles() ([]PrimeProfile, error) {
 			},
 		},
 		{
-			Name: "published-surla-suite",
+			Name: "published-highbay-suite",
 			Files: map[string]string{
 				"go.mod": "module example.com/shop/eval\n\ngo 1.24\n\nrequire (\n" +
-					"\tgithub.com/goadesign/surla " + PublishedSurlaVersion + "\n" +
-					"\tgithub.com/goadesign/surla/story " + storyVer + "\n" +
+					"\tgithub.com/goadesign/highbay " + PublishedHighbayVersion + "\n" +
+					"\tgithub.com/goadesign/highbay/story " + storyVer + "\n" +
 					"\tgoa.design/goa/v3 " + goaVer + "\n" +
 					"\tgoa.design/goa-ai " + goaAIVer + "\n" +
 					"\tgoa.design/model " + modelVer + "\n" +
 					"\tgithub.com/kr/text " + KRTextVersion + "\n)\n",
 				"design/design.go": blankImports(
-					"github.com/goadesign/surla/story/dsl",
-					"github.com/goadesign/surla/verify/candidate",
-					"github.com/goadesign/surla/verify/suite",
+					"github.com/goadesign/highbay/story/dsl",
+					"github.com/goadesign/highbay/verify/candidate",
+					"github.com/goadesign/highbay/verify/suite",
 					"goa.design/goa-ai/dsl",
 					"goa.design/goa-ai/eval",
 					"goa.design/goa-ai/eval/dsl",
@@ -186,7 +186,7 @@ func PrimeProfiles() ([]PrimeProfile, error) {
 				),
 			},
 			ExtraCommands: [][]string{
-				{"get", "github.com/goadesign/surla@" + PublishedSurlaVersion},
+				{"get", "github.com/goadesign/highbay@" + PublishedHighbayVersion},
 				{"mod", "tidy"},
 			},
 		},
@@ -218,11 +218,11 @@ func PrimeProfiles() ([]PrimeProfile, error) {
 				Name: "story-and-goa-" + historicalGoa.label,
 				Files: map[string]string{
 					"go.mod": "module example.com/story-design\n\ngo 1.24\n\nrequire (\n" +
-						"\tgithub.com/goadesign/surla/story " + storyVer + "\n" +
+						"\tgithub.com/goadesign/highbay/story " + storyVer + "\n" +
 						"\tgoa.design/goa/v3 " + historicalGoa.version + "\n)\n",
 					"design/design.go": blankImports(
-						"github.com/goadesign/surla/story/dsl",
-						"github.com/goadesign/surla/story/expr",
+						"github.com/goadesign/highbay/story/dsl",
+						"github.com/goadesign/highbay/story/expr",
 						"goa.design/goa/v3/codegen",
 						"goa.design/goa/v3/dsl",
 						"goa.design/goa/v3/eval",

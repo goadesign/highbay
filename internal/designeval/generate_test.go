@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 // starterEvalFixture holds prepared values only; no caller retains its temporary
@@ -29,7 +29,7 @@ type starterEvalFixture struct {
 
 // preCompleteSourcesGoa is goa-ai's minimum Goa version, which lacks
 // generator.CompleteSources. Tests use it to verify generation rejection and
-// evaluation with a target version older than Surla's own.
+// evaluation with a target version older than Highbay's own.
 const preCompleteSourcesGoa = testmodule.MinimumGoaAIGoaVersion
 
 var (
@@ -50,7 +50,7 @@ func TestGenerateReturnsWhatGoaGenWrites(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "gen/orders/service.go")
 	assert.Contains(t, string(out["gen/goa.json"]), "goa_version", "the gen command's version file is included")
-	assert.Contains(t, string(out["gen/orders/service.go"]), "$ surla gen", "headers name the command that generated them")
+	assert.Contains(t, string(out["gen/orders/service.go"]), "$ hbay gen", "headers name the command that generated them")
 	for p := range out {
 		assert.True(t, strings.HasPrefix(p, "gen/") || p == "AGENTS_QUICKSTART.md", p)
 	}
@@ -144,13 +144,13 @@ func withGoaReplace(t *testing.T, required, replaced string) map[string]string {
 	return testmodule.Tidy(t, files)
 }
 
-// TestGenerateWritesSurlasQuickstartSections runs the generation
+// TestGenerateWritesHighbaysQuickstartSections runs the generation
 // program on designs with an agent, without and with an evaluation suite.
-// AGENTS_QUICKSTART.md carries Surla's header, liftoff and golden-rules
-// sections, and Surla's evaluations section only when no suite is declared;
+// AGENTS_QUICKSTART.md carries Highbay's header, liftoff and golden-rules
+// sections, and Highbay's evaluations section only when no suite is declared;
 // Goa-AI's description of the design, its suites and the generated example
 // code stays.
-func TestGenerateWritesSurlasQuickstartSections(t *testing.T) {
+func TestGenerateWritesHighbaysQuickstartSections(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the Go toolchain; the full suite (go test without -short) covers it")
 	}
@@ -193,7 +193,7 @@ var _ = Service("helpdesk", func() {
 			guide := string(out[quickstartPath])
 			require.NotEmpty(t, guide)
 			for _, name := range tc.replaced {
-				assert.Contains(t, guide, quickstartSections[name], "Surla's %s section", name)
+				assert.Contains(t, guide, quickstartSections[name], "Highbay's %s section", name)
 			}
 			assert.Contains(t, guide, "helpdesk.triage", "Goa-AI's design overview stays")
 			assert.Contains(t, guide, "### Understanding the Generated Code", "Goa-AI's liftoff-guide stays")
@@ -713,7 +713,7 @@ func TestEvaluateAndGeneratePreserveGoaOnlyTargetWithGoModOnlyGoaAIChecksum(t *t
 	// checksum line from go.sum while keeping its /go.mod checksum line and a
 	// design that imports only Goa.
 	withGoaAI := testmodule.Snapshot(t, "", strings.Replace(minimalDesign, "package design\n", "package design\nimport _ \"goa.design/goa-ai/dsl\"\n", 1))
-	goaAIVer := testmodule.SurlaVersion(t, harnessGoaAIModule)
+	goaAIVer := testmodule.HighbayVersion(t, harnessGoaAIModule)
 	zipPrefix := harnessGoaAIModule + " " + goaAIVer + " h1:"
 	goModPrefix := harnessGoaAIModule + " " + goaAIVer + "/go.mod h1:"
 
@@ -802,9 +802,9 @@ func starterEvalModule(t *testing.T) (map[string]string, map[string]string, map[
 
 // prepareStarterEvalModule renders the starter evaluator templates from
 // internal/scaffold/templates/example/eval for module example.com/shop/eval, tidies
-// the module against Surla's own dependency versions, and returns both the
+// the module against Highbay's own dependency versions, and returns both the
 // generator input snapshot (go.mod, go.sum, design/design.go and the
-// acceptance package, as surla init generates with it) and the complete
+// acceptance package, as hbay init generates with it) and the complete
 // hand-written module tree (acceptance/ and scripted/), plus the initial
 // generation. The module's program,
 // gen/cmd/shop-evals, comes from the generator.
@@ -837,11 +837,11 @@ func prepareStarterEvalModule(
 
 	fullTree = map[string]string{
 		"go.mod": "module example.com/shop/eval\n\ngo 1.24\n\nrequire (\n" +
-			"\tgithub.com/goadesign/surla v0.0.0\n" +
-			"\tgoa.design/goa/v3 " + testmodule.SurlaVersion(t, "goa.design/goa/v3") + "\n" +
-			"\tgoa.design/goa-ai " + testmodule.SurlaVersion(t, "goa.design/goa-ai") + "\n" +
+			"\tgithub.com/goadesign/highbay v0.0.0\n" +
+			"\tgoa.design/goa/v3 " + testmodule.HighbayVersion(t, "goa.design/goa/v3") + "\n" +
+			"\tgoa.design/goa-ai " + testmodule.HighbayVersion(t, "goa.design/goa-ai") + "\n" +
 			"\tgithub.com/kr/text " + testmodule.KRTextVersion + "\n)\n\n" +
-			"replace github.com/goadesign/surla => " + repoRoot + "\n",
+			"replace github.com/goadesign/highbay => " + repoRoot + "\n",
 		"design/design.go":         designSrc,
 		"acceptance/acceptance.go": readRendered("acceptance/acceptance.go.tmpl"),
 		"scripted/scripted.go":     readRendered("scripted/scripted.go.tmpl"),

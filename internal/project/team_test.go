@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	genproject "github.com/goadesign/surla/gen/project"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/controlplane"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genproject "github.com/goadesign/highbay/gen/project"
+	"github.com/goadesign/highbay/internal/controlplane"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ type teamFixture struct {
 	calls     []string
 	creates   int
 	focused   TeamSpace
-	choices   []map[string]*gensurla.RoleAgentChoice
+	choices   []map[string]*genhighbay.RoleAgentChoice
 	closed    []string
 	closeErr  error
 }
@@ -94,7 +94,7 @@ func (f *teamFixture) OpenCompanion(context.Context) error {
 	return nil
 }
 
-func (f *teamFixture) LaunchWorkers(_ context.Context, _ string, choices map[string]*gensurla.RoleAgentChoice) error {
+func (f *teamFixture) LaunchWorkers(_ context.Context, _ string, choices map[string]*genhighbay.RoleAgentChoice) error {
 	f.calls = append(f.calls, "launch")
 	f.choices = append(f.choices, choices)
 	return nil
@@ -113,8 +113,8 @@ func fixtureTeamDependencies(state *State) TeamDependencies {
 		Connect: func(context.Context) (TeamConnection, error) {
 			return TeamConnection{Endpoint: "http://chorus.test"}, nil
 		},
-		DiscoverAgents: func(context.Context) ([]*gensurla.InstalledAgentOption, error) {
-			return []*gensurla.InstalledAgentOption{
+		DiscoverAgents: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
+			return []*genhighbay.InstalledAgentOption{
 				{Client: "claude", Program: "claude", ModelSupported: true, HeadlessSupported: true},
 				{Client: "codex", Program: "codex", ModelSupported: true, HeadlessSupported: true},
 			}, nil

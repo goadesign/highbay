@@ -1,5 +1,5 @@
 // This file answers where a project's tests come from: the evaluator stored
-// with the project, Surla's own test layout, or neither.
+// with the project, Highbay's own test layout, or neither.
 package controlplane
 
 import (
@@ -9,8 +9,8 @@ import (
 	"io/fs"
 	"path"
 
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
 )
 
 // testSource is where a project's tests come from.
@@ -18,19 +18,19 @@ type testSource string
 
 const (
 	// testSourceStoredEvaluator means the project verifies with the
-	// evaluator the operator stored with `surla verification set`, so no
+	// evaluator the operator stored with `hbay verification set`, so no
 	// test writer is used.
 	testSourceStoredEvaluator testSource = "stored_evaluator"
 	// testSourceStarterLayout means the bound workspace has the test layout
-	// `surla init` makes: a test module in eval/ beside the service module.
+	// `hbay init` makes: a test module in eval/ beside the service module.
 	testSourceStarterLayout testSource = "starter_layout"
-	// testSourceNone means neither: no stored evaluator and no layout Surla
+	// testSourceNone means neither: no stored evaluator and no layout Highbay
 	// knows.
 	testSourceNone testSource = "none"
 	// maxLayoutFileBytes bounds each go.mod projectTestSource reads, so an
 	// agent's file cannot make the server read without limit. A starter's
 	// go.mod files hold a few kilobytes; any go.mod past this bound is not
-	// one Surla wrote.
+	// one Highbay wrote.
 	maxLayoutFileBytes = 1 << 20
 )
 
@@ -38,7 +38,7 @@ const (
 // the control plane holds today, in this order:
 //
 //  1. A stored evaluator when storedEvaluator reports one.
-//  2. Surla's own test layout when the bound workspace, opened through
+//  2. Highbay's own test layout when the bound workspace, opened through
 //     openModuleRootWithIdentity (the identity-checked root the design and
 //     Story reads use), holds go.mod and eval/go.mod in its working tree as
 //     regular files of at most maxLayoutFileBytes each, and
@@ -101,7 +101,7 @@ func (c *ControlPlane) projectTestLayout(
 
 // storedEvaluator reports projectTestSource's first answer without reading
 // any file: this control plane verifies every change with the evaluator the
-// operator stored with `surla verification set` (Options.Verification). The
+// operator stored with `hbay verification set` (Options.Verification). The
 // project server binds that exactly when the project has stored verification
 // settings. Reads of a build use it to show that no test writer is used.
 func (c *ControlPlane) storedEvaluator() bool {

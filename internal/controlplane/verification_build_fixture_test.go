@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +16,7 @@ import (
 // control plane and commits authored work on that build's branch. It neither
 // starts a build nor changes test acceptance or historical report records.
 func commitBuilderCandidateFixture(
-	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
+	t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult,
 ) string {
 	t.Helper()
 	assignment, build := readBuilderFixture(t, cp, card)
@@ -31,7 +31,7 @@ func commitBuilderCandidateFixture(
 // its numbered build branch after the real assignment read. Its caller starts
 // the build at the intended project base; no saved build facts are rewritten.
 func readBuilderCandidateFixture(
-	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult, candidate string,
+	t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult, candidate string,
 ) string {
 	t.Helper()
 	assignment, _ := readBuilderFixture(t, cp, card)
@@ -52,8 +52,8 @@ func writeBuilderDesignFixture(t *testing.T, folder, source string) {
 // readBuilderFixture opens the build's real builder copy and reads its
 // assignment through the owner, without changing tests or making a candidate.
 func readBuilderFixture(
-	t *testing.T, cp *ControlPlane, card *gensurla.ChangeCardResult,
-) (*gensurla.BuilderAssignment, buildFile) {
+	t *testing.T, cp *ControlPlane, card *genhighbay.ChangeCardResult,
+) (*genhighbay.BuilderAssignment, buildFile) {
 	t.Helper()
 	cp.mu.RLock()
 	build, found, err := cp.cards.loadOpenBuild()
@@ -68,7 +68,7 @@ func readBuilderFixture(
 	require.NoError(t, err)
 	record := loadMetadataRecord(t, cp, card.ChangeID)
 	assignment, err := cp.GetBuilderAssignment(asCaller(record.owner, CallerBuilder),
-		&gensurla.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
+		&genhighbay.GetBuilderAssignmentPayload{ChangeID: card.ChangeID})
 	require.NoError(t, err)
 	require.True(t, assignment.Read)
 	require.Equal(t, copy.Project(), assignment.WorkingFolder)

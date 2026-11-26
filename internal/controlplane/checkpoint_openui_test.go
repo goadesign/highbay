@@ -48,12 +48,12 @@ func TestCheckpointUIBuildIsCurrentAndInjectsNoHTML(t *testing.T) {
 // TestCheckpointUIOpenUIDecisionStudio verifies through the page's real
 // requests that:
 //  1. A Change Card carrying a valid ui_composition renders the OpenUI
-//     Renderer inside #surla-openui-workspace over the single CP1 draft.
+//     Renderer inside #highbay-openui-workspace over the single CP1 draft.
 //  2. Choosing an option in PolicySimulatorTable updates the canonical answer
 //     and highlights its column, and confirm_intent saves that answer.
-//  3. Editing an example surfaces #surla-openui-local-edit-notice.
+//  3. Editing an example surfaces #highbay-openui-local-edit-notice.
 //  4. Malformed, incomplete, out-of-range, mismatched, revision-skewed or
-//     forged compositions render #surla-openui-error while the canonical
+//     forged compositions render #highbay-openui-error while the canonical
 //     editor keeps working, and an answer with undeclared fields is refused
 //     at the page's response boundary.
 func TestCheckpointUIOpenUIDecisionStudio(t *testing.T) {
@@ -108,22 +108,22 @@ for (const tc of badCases) {
   await propose(tc.id, tc.program);
 }
 const page = await openPage(origin, { link: input.link });
-const editorRegion = () => page.$("#surla-cp1-editor");
+const editorRegion = () => page.$("#highbay-cp1-editor");
 const open = async (changeId) => {
-  if (!page.$("#surla-change-list")) {
-    page.$("#surla-nav-changes").click();
+  if (!page.$("#highbay-change-list")) {
+    page.$("#highbay-nav-changes").click();
   }
-  await until(() => page.$("#surla-open-change-" + changeId) && !page.$("#surla-open-change-" + changeId).disabled, "the list does not offer " + changeId);
-  page.$("#surla-open-change-" + changeId).click();
+  await until(() => page.$("#highbay-open-change-" + changeId) && !page.$("#highbay-open-change-" + changeId).disabled, "the list does not offer " + changeId);
+  page.$("#highbay-open-change-" + changeId).click();
   await until(() => editorRegion().dataset.changeId === changeId, changeId + " did not open");
 };
-await until(() => page.$$("#surla-change-list li").length === 14, "the page did not list every change");
+await until(() => page.$$("#highbay-change-list li").length === 14, "the page did not list every change");
 
 // 1. A valid composition renders inside the editor.
 await open("chg-openui");
 const card = await (async () => (await api(origin, "GET", "/changes/chg-openui", undefined, input.guide)).body)();
-const workspace = page.$("#surla-openui-workspace");
-expect(workspace && workspace.getAttribute("data-composed-for-revision") === card.request_revision && !page.$("#surla-openui-error"), "expected #surla-openui-workspace to render valid OpenUI composition");
+const workspace = page.$("#highbay-openui-workspace");
+expect(workspace && workspace.getAttribute("data-composed-for-revision") === card.request_revision && !page.$("#highbay-openui-error"), "expected #highbay-openui-workspace to render valid OpenUI composition");
 for (const want of ["Refund Threshold Decision Studio", "Tax Inclusion Matrix", "Borderline $48 order + $4 tax", "Auto-approved (< $50 subtotal)", "Subtotal keeps tax fluctuations out of approval routing.", "Refund Execution Flow", "Tenant Isolation Invariant"]) {
   expect(workspace.textContent.includes(want), "OpenUI workspace missing expected content " + JSON.stringify(want));
 }
@@ -138,49 +138,49 @@ const draftMismatch = workspace.querySelector('[data-openui-option="total_with_t
 expect(draftMatch.textContent.includes("Matches current draft") && !draftMismatch.textContent.includes("Matches current draft"),
        "the OpenUI choice did not mark the exact answer that the saved draft implements");
 draftMismatch.click();
-const confirm = page.$("#surla-confirm-submit");
+const confirm = page.$("#highbay-confirm-submit");
 expect(confirm.disabled && draftMismatch.getAttribute("aria-pressed") === "true" &&
-       page.text(".surla-frame-attention dd").includes("coding agent to revise"), "a requested revision was not retained and identified");
+       page.text(".highbay-frame-attention dd").includes("coding agent to revise"), "a requested revision was not retained and identified");
 confirm.click();
 expect(page.sent("POST", "/changes/confirm").length === 0, "Confirm submitted an answer the draft does not implement");
-page.$("#surla-review-revision-request").click();
-expect(page.doc.activeElement === page.$("#surla-confirm-revision-needed"), "Next did not focus the revision request");
+page.$("#highbay-review-revision-request").click();
+expect(page.doc.activeElement === page.$("#highbay-confirm-revision-needed"), "Next did not focus the revision request");
 let copied;
 Object.defineProperty(page.win.navigator, "clipboard", { value: { writeText: async (text) => { copied = text; } } });
-page.$("#surla-confirm-revision-needed button").click();
-await until(() => page.text("#surla-confirm-revision-needed").includes("Prompt copied."), "the request copy did not announce success");
+page.$("#highbay-confirm-revision-needed button").click();
+await until(() => page.text("#highbay-confirm-revision-needed").includes("Prompt copied."), "the request copy did not announce success");
 expect(copied.includes("chg-openui") && copied.includes("Does the $50 limit include tax?\ntotal_with_tax") &&
        !copied.includes("\nsubtotal_only"), "the revision request omitted or changed the selected option");
 draftMatch.click();
-expect(!confirm.disabled && !page.$("#surla-confirm-revision-needed"), "the supported answer did not restore confirmation");
+expect(!confirm.disabled && !page.$("#highbay-confirm-revision-needed"), "the supported answer did not restore confirmation");
 const canonicalPill = editorRegion().querySelector('[data-ambiguity-id="chg-openui-ambiguity-01"][data-option="subtotal_only"]');
 const activeCells = workspace.querySelectorAll(".shadcn-cell-active");
 expect(canonicalPill && canonicalPill.getAttribute("aria-pressed") === "true" && activeCells.length === 3 &&
        editorRegion().querySelectorAll('[data-ambiguity-id="chg-openui-ambiguity-01"]').length === 2 &&
-       !page.$("#surla-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") &&
+       !page.$("#highbay-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") &&
        !editorRegion().textContent.includes("[Selected draft answer:"), "OpenUI click did not update the single choice group and active column");
 expect(workspace.querySelectorAll("details").length === 0, "decision instruments exposed repeated technical disclosures");
 
 // 3. A local example edit qualifies the illustration.
-expect(!page.$("#surla-openui-local-edit-notice"), "unexpected local-edit notice before editing examples");
+expect(!page.$("#highbay-openui-local-edit-notice"), "unexpected local-edit notice before editing examples");
 page.type(editorRegion().querySelector('textarea[data-example-id="check_01"][data-field="expected_outcome"]'), "Auto-approved with audit log");
-expect(page.$("#surla-openui-local-edit-notice"), "expected #surla-openui-local-edit-notice after editing example locally");
+expect(page.$("#highbay-openui-local-edit-notice"), "expected #highbay-openui-local-edit-notice after editing example locally");
 
 // The page's confirmation saves the OpenUI answer and the edited example.
-page.$("#surla-confirm-submit").click();
-await until(() => !page.$("#surla-openui-workspace") && page.text("#surla-confirmed-decisions").includes("subtotal_only"), "expected #surla-openui-workspace to unmount and the saved agreement to show the confirmed answer after confirm_intent");
+page.$("#highbay-confirm-submit").click();
+await until(() => !page.$("#highbay-openui-workspace") && page.text("#highbay-confirmed-decisions").includes("subtotal_only"), "expected #highbay-openui-workspace to unmount and the saved agreement to show the confirmed answer after confirm_intent");
 const sent = page.sent("POST", "/changes/confirm")[0].body;
 expect(sent.answers["chg-openui-ambiguity-01"] === "subtotal_only" && sent.examples[0].expected_outcome === "Auto-approved with audit log", "confirm_intent did not send the OpenUI answer: " + JSON.stringify(sent));
 const confirmed = (await api(origin, "GET", "/changes/chg-openui", undefined, input.guide)).body;
 expect(confirmed.status === "confirmed" && confirmed.answers["chg-openui-ambiguity-01"] === "subtotal_only" && !confirmed.ui_composition, "unexpected saved card after OpenUI selection: " + JSON.stringify(confirmed));
-const decisions = page.$("#surla-confirmed-decisions");
-expect(decisions && decisions.textContent.includes("Confirmed Decisions:") && decisions.textContent.includes("Does the $50 limit include tax?") && decisions.textContent.includes("subtotal_only") && editorRegion().textContent.includes("Initial Proposal Summary: "), "expected #surla-confirmed-decisions and Initial Proposal Summary heading on confirmed card with ambiguities");
+const decisions = page.$("#highbay-confirmed-decisions");
+expect(decisions && decisions.textContent.includes("Confirmed Decisions:") && decisions.textContent.includes("Does the $50 limit include tax?") && decisions.textContent.includes("subtotal_only") && editorRegion().textContent.includes("Initial Proposal Summary: "), "expected #highbay-confirmed-decisions and Initial Proposal Summary heading on confirmed card with ambiguities");
 
 // A confirmed card without questions keeps the plain Summary heading.
 await open("chg-zero-amb");
-page.$("#surla-confirm-submit").click();
-await until(() => page.$("#surla-agreement-details"), "the zero-question card did not confirm");
-expect(!page.$("#surla-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") && !editorRegion().textContent.includes("Initial Proposal Summary: "), "expected zero-ambiguity confirmed card to omit #surla-confirmed-decisions and keep Summary heading");
+page.$("#highbay-confirm-submit").click();
+await until(() => page.$("#highbay-agreement-details"), "the zero-question card did not confirm");
+expect(!page.$("#highbay-confirmed-decisions") && editorRegion().textContent.includes("Summary: ") && !editorRegion().textContent.includes("Initial Proposal Summary: "), "expected zero-ambiguity confirmed card to omit #highbay-confirmed-decisions and keep Summary heading");
 
 // 4. Every invalid composition falls back to the canonical editor.
 const skewed = (await api(origin, "GET", "/changes/chg-bad-3", undefined, input.guide)).body;
@@ -188,9 +188,9 @@ skewed.ui_composition.composed_for_revision = "rev-stale-mismatch";
 await control(origin, "reply", { key: "GET /changes/chg-bad-3", status: 200, body: skewed });
 for (const tc of badCases) {
   await open(tc.id);
-  const errEl = page.$("#surla-openui-error");
-  const errDetails = errEl && errEl.querySelector("details.surla-details");
-  expect(errEl && errEl.textContent.includes("Interactive decision preview unavailable:") && errDetails && errDetails.textContent.includes(tc.wantErr) && !page.$("#surla-openui-workspace"), "case " + tc.id + " did not render expected #surla-openui-error with Details disclosure (" + tc.wantErr + "), got: " + (errEl && errEl.textContent));
+  const errEl = page.$("#highbay-openui-error");
+  const errDetails = errEl && errEl.querySelector("details.highbay-details");
+  expect(errEl && errEl.textContent.includes("Interactive decision preview unavailable:") && errDetails && errDetails.textContent.includes(tc.wantErr) && !page.$("#highbay-openui-workspace"), "case " + tc.id + " did not render expected #highbay-openui-error with Details disclosure (" + tc.wantErr + "), got: " + (errEl && errEl.textContent));
   expect(editorRegion().querySelector('[data-ambiguity-id="' + tc.id + '-ambiguity-01"][data-option="total_with_tax"]'), "case " + tc.id + " broke canonical CP1 inspector fallback");
 }
 
@@ -198,17 +198,17 @@ for (const tc of badCases) {
 const extra = (await api(origin, "GET", "/changes/chg-extra-field", undefined, input.guide)).body;
 extra.unexpected_wire_field = "must be rejected by generated schema";
 await control(origin, "reply", { key: "GET /changes/chg-extra-field", status: 200, body: extra });
-page.$("#surla-nav-changes").click();
-page.$("#surla-open-change-chg-extra-field").click();
-await until(() => page.$("#surla-change-open-error"), "an answer with an undeclared field was accepted");
-expect(page.text("#surla-change-open-error").includes("did not match its declared result") && editorRegion().dataset.changeId !== "chg-extra-field", "the refused answer was shown as a card");
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-extra-field").click();
+await until(() => page.$("#highbay-change-open-error"), "an answer with an undeclared field was accepted");
+expect(page.text("#highbay-change-open-error").includes("did not match its declared result") && editorRegion().dataset.changeId !== "chg-extra-field", "the refused answer was shown as a card");
 
 // A timeline and callout composition still marks itself as an illustration.
 await open("chg-timeline-only");
-const timeline = page.$("#surla-openui-workspace");
+const timeline = page.$("#highbay-openui-workspace");
 expect(timeline && timeline.textContent.includes("Model-Proposed Illustration"), "expected workspace-level Model-Proposed Illustration badge on timeline/callout workspace");
 page.type(editorRegion().querySelector('textarea[data-example-id="check_01"][data-field="expected_outcome"]'), "Locally edited outcome on timeline workspace");
-expect(page.$("#surla-openui-local-edit-notice"), "expected workspace-level #surla-openui-local-edit-notice on timeline/callout workspace after example edit");
+expect(page.$("#highbay-openui-local-edit-notice"), "expected workspace-level #highbay-openui-local-edit-notice on timeline/callout workspace after example edit");
 page.close();
 `)
 }

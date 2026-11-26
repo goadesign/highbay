@@ -4,8 +4,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/goadesign/surla/examples/orders-eval/harness"
-	"github.com/goadesign/surla/examples/orders-eval/scriptedmodel"
+	"github.com/goadesign/highbay/examples/orders-eval/harness"
+	"github.com/goadesign/highbay/examples/orders-eval/scriptedmodel"
 	"goa.design/goa-ai/eval"
 )
 

@@ -8,9 +8,9 @@ var TestCoverageReference = Type("TestCoverageReference", String, func() {
 	MinLength(1)
 })
 
-// TestCoverageStatement is the writer's account, never Surla's assertion judgment.
+// TestCoverageStatement is the writer's account, never Highbay's assertion judgment.
 var TestCoverageStatement = Type("TestCoverageStatement", func() {
-	Description("The test writer's statement that one declared scenario exercises particular agreed answers or examples. Surla validates references, not whether the tests assert the stated behavior.")
+	Description("The test writer's statement that one declared scenario exercises particular agreed answers or examples. Highbay validates references, not whether the tests assert the stated behavior.")
 	Attribute("scenario", TestCoverageReference, "Exact declared scenario identifier.")
 	Attribute("question_ids", ArrayOfRequired(TestCoverageReference), "Question IDs from the assignment's answers[].id; empty when this statement names only examples.")
 	Attribute("example_ids", ArrayOfRequired(TestCoverageReference), "Example IDs from the assignment's examples[].id; empty when this statement names only answers.")

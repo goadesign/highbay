@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/goadesign/surla/internal/abspath"
+	"github.com/goadesign/highbay/internal/abspath"
 )
 
 type (
@@ -181,7 +181,7 @@ func readGitBlob(ctx context.Context, repoRoot, commit, treePath string) (conten
 	}
 	content, err = runGitRead(ctx, repoRoot, "cat-file", "blob", commit+":"+treePath)
 	if err != nil {
-		return nil, false, fmt.Errorf("read committed %s at %s: %w (Surla never downloads objects; if this is a partial clone,"+
+		return nil, false, fmt.Errorf("read committed %s at %s: %w (Highbay never downloads objects; if this is a partial clone,"+
 			" check out that commit there first so git fetches them)", treePath, commit, err)
 	}
 	return content, true, nil
@@ -225,7 +225,7 @@ func runGitRead(ctx context.Context, dir string, args ...string) ([]byte, error)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := cmd.Run()
 	if strings.Contains(stderr.buf.String(), "unknown option: --no-lazy-fetch") {
-		return nil, errors.New("Surla needs Git 2.45 or newer (for --no-lazy-fetch, so its reads never download objects)")
+		return nil, errors.New("Highbay needs Git 2.45 or newer (for --no-lazy-fetch, so its reads never download objects)")
 	}
 	if stdout.overflow || stderr.overflow {
 		return nil, fmt.Errorf("git %s printed more output than a layout read allows", args[0])

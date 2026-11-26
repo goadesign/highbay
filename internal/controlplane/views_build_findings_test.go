@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/scaffold"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/scaffold"
+	"github.com/goadesign/highbay/internal/testwriter"
 )
 
 // pageGenerationFindings creates actual saved generation verdicts with distinct
 // text for each start, using only the existing simulated-copy boundary.
-func pageGenerationFindings(t *testing.T) (*pageServer, *gensurla.ChangeCardResult) {
+func pageGenerationFindings(t *testing.T) (*pageServer, *genhighbay.ChangeCardResult) {
 	t.Helper()
 	snapshot := pageTeamSnapshot("working")
 	snapshot.Roles[1].Attention = "none"
@@ -52,38 +52,38 @@ func TestViewsPageTestsReturnedShowsRequirementsAndNext(t *testing.T) {
 	ps, _ := pageGenerationFindings(t)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Build was not ready");
-page.$("#surla-build-start").click();
-await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "Build did not finish");
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "Build was not ready");
+page.$("#highbay-build-start").click();
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "Build did not finish");
 const firstRead = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
 expect(firstRead.status === 200, "the writer could not prepare its assigned tests");
-await until(() => page.text("#surla-build-findings").includes("Finding from build 1."), "the owner's findings did not appear");
-page.$("#surla-nav-build").click();
-await until(() => page.text("#surla-frame-next").includes("The test writer corrects the tests and reports again."), "Next did not name the writer's next step");
-const required = page.$("#surla-build-required-tests");
+await until(() => page.text("#highbay-build-findings").includes("Finding from build 1."), "the owner's findings did not appear");
+page.$("#highbay-nav-build").click();
+await until(() => page.text("#highbay-frame-next").includes("The test writer corrects the tests and reports again."), "Next did not name the writer's next step");
+const required = page.$("#highbay-build-required-tests");
 expect(required && required.children.length === 1, "the saved build's single finished flow was not shown");
 expect(required.textContent.includes("Refunds") && required.textContent.includes("refund-over-limit") && required.textContent.includes("refund_over_limit"), "required test identity was not preserved");
-expect(!required.textContent.includes("RefundOverLimit") && page.text("#surla-build-details").includes("RefundOverLimit"), "the hook was not kept in build details");
-expect(page.text(".surla-frame-attention dd") === "Nothing now.", "a returned verdict alone requested user attention");
-expect(page.text("#surla-build-findings").split("1 finding").length === 2, "the finding count is repeated");
+expect(!required.textContent.includes("RefundOverLimit") && page.text("#highbay-build-details").includes("RefundOverLimit"), "the hook was not kept in build details");
+expect(page.text(".highbay-frame-attention dd") === "Nothing now.", "a returned verdict alone requested user attention");
+expect(page.text("#highbay-build-findings").split("1 finding").length === 2, "the finding count is repeated");
 expect(!required.textContent.includes("disputed-chargeback"), "an unfinished flow became a required test");
-expect(!page.$("#surla-frame-next button"), "the writer's correction became a user control");
-expect(page.$("#surla-build-findings .surla-build-finding-text").getAttribute("tabindex") === "0", "long findings are not keyboard reachable");
-expect(page.$("#surla-build-view-team"), "the existing Team destination was lost");
+expect(!page.$("#highbay-frame-next button"), "the writer's correction became a user control");
+expect(page.$("#highbay-build-findings .highbay-build-finding-text").getAttribute("tabindex") === "0", "long findings are not keyboard reachable");
+expect(page.$("#highbay-build-view-team"), "the existing Team destination was lost");
 const reads = page.sent("GET", "/changes/chg/build/findings").length;
 const assignment = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
 expect(assignment.status === 200, "the test writer could not read its own assignment");
-await until(() => page.text("#surla-build-test-writer").includes("assignment read; findings to address"), "the read observation did not update");
+await until(() => page.text("#highbay-build-test-writer").includes("assignment read; findings to address"), "the read observation did not update");
 expect(page.sent("GET", "/changes/chg/build/findings").length === reads, "an assignment read refetched an unchanged verdict");
-expect(!page.$("#surla-frame-next button"), "assignment read invented a user decision");
+expect(!page.$("#highbay-frame-next button"), "assignment read invented a user decision");
 await control(origin, "act", { key: "team-needs" });
-await until(() => page.text(".surla-frame-attention dd").includes("Builder needs you") && page.text(".surla-frame-attention dd").includes("Test writer needs you"), "the owner's two Team requests were not both shown");
-expect(!page.$("#surla-frame-next button"), "Team attention invented a verdict control");
+await until(() => page.text(".highbay-frame-attention dd").includes("Builder needs you") && page.text(".highbay-frame-attention dd").includes("Test writer needs you"), "the owner's two Team requests were not both shown");
+expect(!page.$("#highbay-frame-next button"), "Team attention invented a verdict control");
 const draft = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 expect(draft, "the agreement example editor was lost");
 page.type(draft, "Unsaved requirement while reviewing tests");
-page.$("#surla-nav-cp4").click();
-await until(() => page.$("#surla-frame-next button"), "Check navigation retained Build instructions");
+page.$("#highbay-nav-cp4").click();
+await until(() => page.$("#highbay-frame-next button"), "Check navigation retained Build instructions");
 expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "Unsaved requirement while reviewing tests", "Check navigation discarded unsaved agreement edits");
 page.close();
 `)
@@ -99,31 +99,31 @@ const buildPath = "/changes/chg/build";
 const findingsPath = buildPath + "/findings";
 await control(origin, "answer-later", { key: "GET " + findingsPath });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "first Build was not ready");
-page.$("#surla-build-start").click();
-await until(() => page.sent("POST", buildPath).length === 1 && page.sent("POST", buildPath)[0].status === 200 && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "first Build did not finish");
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "first Build was not ready");
+page.$("#highbay-build-start").click();
+await until(() => page.sent("POST", buildPath).length === 1 && page.sent("POST", buildPath)[0].status === 200 && page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "first Build did not finish");
 const firstWriter = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
 expect(firstWriter.status === 200, "the test writer could not read its first assignment");
-await until(() => page.$("#surla-build-again") && !page.$("#surla-build-again").disabled && page.sent("GET", findingsPath).length === 1, "the first finding read was not held");
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled && page.sent("GET", findingsPath).length === 1, "the first finding read was not held");
 expect(!("replaces" in page.sent("POST", buildPath)[0].body), "the first Build sent a replacement identity");
 const previousStart = JSON.parse(page.sent("POST", buildPath)[0].answer).build.started_at;
-expect(!page.text("#surla-build-findings").includes("Finding from build 1."), "held finding text appeared before its answer");
+expect(!page.text("#highbay-build-findings").includes("Finding from build 1."), "held finding text appeared before its answer");
 const leaked = [];
 const observer = new page.win.MutationObserver(() => {
-  if (page.text("#surla-build-section").includes("Finding from build 1.")) leaked.push("old finding shown");
+  if (page.text("#highbay-build-section").includes("Finding from build 1.")) leaked.push("old finding shown");
 });
-observer.observe(page.$("#surla-build-section"), { subtree: true, childList: true, characterData: true });
-page.$("#surla-build-again").click();
-await until(() => page.$("#surla-build-confirm") && !page.$("#surla-build-confirm").disabled, "rebuild did not offer an enabled confirmation");
+observer.observe(page.$("#highbay-build-section"), { subtree: true, childList: true, characterData: true });
+page.$("#highbay-build-again").click();
+await until(() => page.$("#highbay-build-confirm") && !page.$("#highbay-build-confirm").disabled, "rebuild did not offer an enabled confirmation");
 expect(page.sent("POST", buildPath).length === 1, "opening the question sent a replacement");
-page.$("#surla-build-confirm").click();
-await until(() => page.sent("POST", buildPath).length === 2 && page.sent("POST", buildPath)[1].status === 200 && page.$("#surla-build-again") && !page.$("#surla-build-again").disabled, "second Build did not finish");
+page.$("#highbay-build-confirm").click();
+await until(() => page.sent("POST", buildPath).length === 2 && page.sent("POST", buildPath)[1].status === 200 && page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "second Build did not finish");
 const replacement = page.sent("POST", buildPath)[1].body.replaces;
 expect(replacement?.change_id === "chg" && replacement.started_at === previousStart && Object.keys(replacement).length === 2, "the restarted findings build did not name exactly its observed predecessor");
 const secondWriter = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
 expect(secondWriter.status === 200, "the test writer could not read its second assignment");
 await control(origin, "release", { key: "GET " + findingsPath });
-await until(() => page.text("#surla-build-findings").includes("Finding from build 2."), "the second verdict's user text did not appear");
+await until(() => page.text("#highbay-build-findings").includes("Finding from build 2."), "the second verdict's user text did not appear");
 observer.disconnect();
 expect(leaked.length === 0, "the previous build's late finding flashed in the current view");
 const answers = page.sent("GET", findingsPath);
@@ -133,7 +133,7 @@ expect(JSON.parse(answers[1].answer).started_at === current.started_at, "the sho
 await control(origin, "act", { key: "make-builder-copy" });
 const read = await api(origin, "GET", "/assignments/builder/chg", undefined, input.builder);
 expect(read.status === 200, "the builder could not read its assignment");
-await until(() => page.text("#surla-build-builder").includes("assignment read"), "the assignment read did not refresh Build");
+await until(() => page.text("#highbay-build-builder").includes("assignment read"), "the assignment read did not refresh Build");
 expect(page.sent("GET", findingsPath).length === 2, "an unchanged verdict was read again after an assignment change");
 page.close();
 `)
@@ -151,8 +151,8 @@ const buildPath = "/changes/chg/build";
 const findingsPath = buildPath + "/findings";
 await control(origin, "hold", { key: "GET " + findingsPath });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "Build was not ready");
-page.$("#surla-build-start").click();
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "Build was not ready");
+page.$("#highbay-build-start").click();
 await until(() => page.sent("POST", buildPath).length === 1 && page.sent("POST", buildPath)[0].status === 200, "Build did not finish");
 const writer = await api(origin, "GET", "/assignments/test-writer/chg", undefined, input.testWriter);
 expect(writer.status === 200, "the test writer could not read its assignment");
@@ -171,12 +171,12 @@ await control(origin, "reply", input.field === "read_failure"
   ? { key: "GET " + findingsPath, status: 503, body: { name: "unavailable", id: "finding-read", message: "Finding owner unavailable.", fault: false, temporary: true, timeout: false } }
   : { key: "GET " + findingsPath, status: 200, body: result });
 await control(origin, "release", { key: "GET " + findingsPath });
-await until(() => page.$("#surla-build-findings-error") && page.$("#surla-build-findings-retry") && !page.$("#surla-build-findings-retry").disabled, "a mismatched or failed findings read did not offer recovery");
-expect(page.$("#surla-build-section").dataset.state === "started" && !page.text("#surla-build-section").includes("Wrong correlated text"), "a failed findings read replaced the build or rendered unbound text");
-expect(page.text("#surla-build-findings-error").includes(input.field === "read_failure" ? "Finding owner unavailable." : "no longer match this build"), "the current error does not explain the findings failure");
+await until(() => page.$("#highbay-build-findings-error") && page.$("#highbay-build-findings-retry") && !page.$("#highbay-build-findings-retry").disabled, "a mismatched or failed findings read did not offer recovery");
+expect(page.$("#highbay-build-section").dataset.state === "started" && !page.text("#highbay-build-section").includes("Wrong correlated text"), "a failed findings read replaced the build or rendered unbound text");
+expect(page.text("#highbay-build-findings-error").includes(input.field === "read_failure" ? "Finding owner unavailable." : "no longer match this build"), "the current error does not explain the findings failure");
 expect(page.sent("GET", findingsPath).length === 1, "a failed findings read was retried automatically");
-page.$("#surla-build-findings-retry").click();
-await until(() => page.text("#surla-build-findings").includes("Finding from build 1.") && !page.$("#surla-build-findings-error"), "an explicit retry did not read the owner text");
+page.$("#highbay-build-findings-retry").click();
+await until(() => page.text("#highbay-build-findings").includes("Finding from build 1.") && !page.$("#highbay-build-findings-error"), "an explicit retry did not read the owner text");
 expect(page.sent("GET", findingsPath).length === 2 && page.sent("POST", buildPath).length === 1, "findings recovery repeated an effect or read");
 page.close();
 `)

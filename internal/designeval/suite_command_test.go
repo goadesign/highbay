@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/goadesign/surla/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	evalexpr "goa.design/goa-ai/eval/expr"
@@ -17,10 +17,10 @@ import (
 	"goa.design/goa/v3/eval"
 )
 
-// TestTestModuleServiceRecognizesSurlasLayout checks the one rule that names
-// a Surla test module and the program written for it, below, at and beside
+// TestTestModuleServiceRecognizesHighbaysLayout checks the one rule that names
+// a Highbay test module and the program written for it, below, at and beside
 // its boundaries.
-func TestTestModuleServiceRecognizesSurlasLayout(t *testing.T) {
+func TestTestModuleServiceRecognizesHighbaysLayout(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		module, service string
@@ -48,14 +48,14 @@ func TestTestModuleServiceRecognizesSurlasLayout(t *testing.T) {
 	assert.Equal(t, "./gen/cmd/shop-evals", SuiteCommandPackage("shop"))
 }
 
-// TestSurlaSuiteCommandWritesTheProgramOfASurlaTestModule calls the plugin as
-// Goa does. A Surla test module, with exactly one suite and an acceptance
+// TestHighbaySuiteCommandWritesTheProgramOfAHighbayTestModule calls the plugin as
+// Goa does. A Highbay test module, with exactly one suite and an acceptance
 // package, gets the program at its package and the quickstart section, added
 // to Goa-AI's guide or as the guide's only section; any other module is left
 // as it is, including one at the layout's path without an acceptance
 // package; a suite whose package Goa-AI did not plan is an error naming the
 // file.
-func TestSurlaSuiteCommandWritesTheProgramOfASurlaTestModule(t *testing.T) {
+func TestHighbaySuiteCommandWritesTheProgramOfAHighbayTestModule(t *testing.T) {
 	t.Parallel()
 	suiteFile := func(name string) *codegen.File { return &codegen.File{Path: "gen/evals/" + name + "/suite.go"} }
 	roots := func(names ...string) []eval.Root {
@@ -65,9 +65,9 @@ func TestSurlaSuiteCommandWritesTheProgramOfASurlaTestModule(t *testing.T) {
 		}
 		return []eval.Root{root}
 	}
-	t.Run("a Surla test module with one suite", func(t *testing.T) {
+	t.Run("a Highbay test module with one suite", func(t *testing.T) {
 		guide := namedGuide([]string{"header", "faq"})
-		files, err := surlaSuiteCommand(true)("example.com/shop/eval/gen", roots("shop_acceptance"), []*codegen.File{suiteFile("shop_acceptance"), guide})
+		files, err := highbaySuiteCommand(true)("example.com/shop/eval/gen", roots("shop_acceptance"), []*codegen.File{suiteFile("shop_acceptance"), guide})
 		require.NoError(t, err)
 		require.Len(t, files, 3)
 		program := files[2]
@@ -81,32 +81,32 @@ func TestSurlaSuiteCommandWritesTheProgramOfASurlaTestModule(t *testing.T) {
 		}
 		assert.Contains(t, paths, "example.com/shop/eval/acceptance")
 		assert.Equal(t, "genevals", paths["example.com/shop/eval/gen/evals/shop_acceptance"])
-		assert.Contains(t, paths, "github.com/goadesign/surla/verify/suite")
+		assert.Contains(t, paths, "github.com/goadesign/highbay/verify/suite")
 		body := program.SectionTemplates[1]
 		for _, call := range []string{"acceptance.Name", "&acceptance.Hooks{}", "acceptance.New(", "acceptance.Live(", "acceptance.LiveThroughGateway("} {
 			assert.Contains(t, body.Source, call)
 		}
 		assert.Equal(t, suiteCommandData{Service: "shop", Suite: "shop_acceptance", Command: "./gen/cmd/shop-evals", Environment: "scripted-model"}, body.Data)
 		last := guide.SectionTemplates[len(guide.SectionTemplates)-1]
-		assert.Equal(t, "surla-test-program", last.Name, "the section is added to Goa-AI's guide")
+		assert.Equal(t, "highbay-test-program", last.Name, "the section is added to Goa-AI's guide")
 		assert.Equal(t, testProgramSection, last.Source)
 	})
-	t.Run("a Surla test module with a Story table", func(t *testing.T) {
+	t.Run("a Highbay test module with a Story table", func(t *testing.T) {
 		withTable := append(roots("shop_acceptance"), &storyScenarioRoot{})
-		files, err := surlaSuiteCommand(true)("example.com/shop/eval/gen", withTable, []*codegen.File{suiteFile("shop_acceptance")})
+		files, err := highbaySuiteCommand(true)("example.com/shop/eval/gen", withTable, []*codegen.File{suiteFile("shop_acceptance")})
 		require.NoError(t, err)
 		require.Len(t, files, 3)
 		want := suiteCommandData{Service: "shop", Suite: "shop_acceptance", Command: "./gen/cmd/shop-evals", Environment: "scripted-model", StoryTests: true}
 		assert.Equal(t, want, files[1].SectionTemplates[1].Data, "the program is the same")
 		assert.Equal(t, want, files[2].SectionTemplates[0].Data, "the section says what the table declares")
 	})
-	t.Run("a Surla test module without Goa-AI's guide", func(t *testing.T) {
-		files, err := surlaSuiteCommand(true)("example.com/shop/eval/gen", roots("shop_acceptance"), []*codegen.File{suiteFile("shop_acceptance")})
+	t.Run("a Highbay test module without Goa-AI's guide", func(t *testing.T) {
+		files, err := highbaySuiteCommand(true)("example.com/shop/eval/gen", roots("shop_acceptance"), []*codegen.File{suiteFile("shop_acceptance")})
 		require.NoError(t, err)
 		require.Len(t, files, 3)
 		assert.Equal(t, quickstartPath, files[2].Path)
 		require.Len(t, files[2].SectionTemplates, 1)
-		assert.Equal(t, "surla-test-program", files[2].SectionTemplates[0].Name)
+		assert.Equal(t, "highbay-test-program", files[2].SectionTemplates[0].Name)
 	})
 	for _, tc := range []struct {
 		name, genpkg string
@@ -116,18 +116,18 @@ func TestSurlaSuiteCommandWritesTheProgramOfASurlaTestModule(t *testing.T) {
 		{name: "no suite", genpkg: "example.com/shop/eval/gen", roots: roots(), acceptance: true},
 		{name: "two suites", genpkg: "example.com/shop/eval/gen", roots: roots("a", "b"), acceptance: true},
 		{name: "no eval root", genpkg: "example.com/shop/eval/gen", acceptance: true},
-		{name: "a module outside Surla's layout", genpkg: "example.com/shop/gen", roots: roots("shop_acceptance"), acceptance: true},
+		{name: "a module outside Highbay's layout", genpkg: "example.com/shop/gen", roots: roots("shop_acceptance"), acceptance: true},
 		{name: "a module at the layout's path without an acceptance package", genpkg: "example.com/shop/eval/gen", roots: roots("shop_acceptance")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := []*codegen.File{suiteFile("a"), suiteFile("shop_acceptance")}
-			files, err := surlaSuiteCommand(tc.acceptance)(tc.genpkg, tc.roots, in)
+			files, err := highbaySuiteCommand(tc.acceptance)(tc.genpkg, tc.roots, in)
 			require.NoError(t, err)
 			assert.Equal(t, in, files, "nothing is written")
 		})
 	}
 	t.Run("a suite Goa-AI planned elsewhere", func(t *testing.T) {
-		_, err := surlaSuiteCommand(true)("example.com/shop/eval/gen", roots("shop_acceptance"), nil)
+		_, err := highbaySuiteCommand(true)("example.com/shop/eval/gen", roots("shop_acceptance"), nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "gen/evals/shop_acceptance/suite.go")
 	})
@@ -179,11 +179,11 @@ func TestGeneratedProgramRunsTheStarterSuite(t *testing.T) {
 	require.NoError(t, err)
 	program := string(gen.Files["gen/cmd/shop-evals/main.go"])
 	require.NotEmpty(t, program, "the program is generated at "+SuiteCommandPackage("shop"))
-	assert.Contains(t, program, "$ surla gen")
+	assert.Contains(t, program, "$ hbay gen")
 	assert.Contains(t, program, `genevals "example.com/shop/eval/gen/evals/shop_acceptance"`)
 	assert.Contains(t, program, `const environment = "scripted-model"`)
 	guide := string(gen.Files[quickstartPath])
-	assert.Contains(t, guide, "## The test program Surla builds")
+	assert.Contains(t, guide, "## The test program Highbay builds")
 	assert.Contains(t, guide, "`./gen/cmd/shop-evals`")
 	assert.NotContains(t, guide, "{{", "the section is rendered")
 
@@ -211,17 +211,17 @@ func (h *Hooks) RefundOverLimit(ctx context.Context) (eval.Result, error) {
 		wantErr string
 	}{
 		{name: "none", wantErr: "no model for the live shop"},
-		{name: "gateway and provider", env: []string{"SURLA_LIVE_MODEL_GATEWAY=127.0.0.1:9090", "SURLA_LIVE_MODEL_PROVIDER=anthropic"},
+		{name: "gateway and provider", env: []string{"HIGHBAY_LIVE_MODEL_GATEWAY=127.0.0.1:9090", "HIGHBAY_LIVE_MODEL_PROVIDER=anthropic"},
 			wantErr: "both a model gateway and a model provider"},
-		{name: "gateway and name", env: []string{"SURLA_LIVE_MODEL_GATEWAY=127.0.0.1:9090", "SURLA_LIVE_MODEL_NAME=m"},
+		{name: "gateway and name", env: []string{"HIGHBAY_LIVE_MODEL_GATEWAY=127.0.0.1:9090", "HIGHBAY_LIVE_MODEL_NAME=m"},
 			wantErr: "both a model gateway and a model provider"},
-		{name: "provider without name", env: []string{"SURLA_LIVE_MODEL_PROVIDER=anthropic"}, wantErr: "needs both a model provider and a model name"},
-		{name: "name without provider", env: []string{"SURLA_LIVE_MODEL_NAME=m"}, wantErr: "needs both a model provider and a model name"},
-		{name: "unknown provider", env: []string{"SURLA_LIVE_MODEL_PROVIDER=other", "SURLA_LIVE_MODEL_NAME=m"}, wantErr: `unsupported model provider "other"`},
+		{name: "provider without name", env: []string{"HIGHBAY_LIVE_MODEL_PROVIDER=anthropic"}, wantErr: "needs both a model provider and a model name"},
+		{name: "name without provider", env: []string{"HIGHBAY_LIVE_MODEL_NAME=m"}, wantErr: "needs both a model provider and a model name"},
+		{name: "unknown provider", env: []string{"HIGHBAY_LIVE_MODEL_PROVIDER=other", "HIGHBAY_LIVE_MODEL_NAME=m"}, wantErr: `unsupported model provider "other"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := exec.CommandContext(t.Context(), bin, "--live", "--artifact", "shop="+artifact)
-			cmd.Env = append([]string{"TMPDIR=" + t.TempDir(), "SURLA_LIVE_TARGET_KEY=k", "PATH=" + os.Getenv("PATH")}, tc.env...)
+			cmd.Env = append([]string{"TMPDIR=" + t.TempDir(), "HIGHBAY_LIVE_TARGET_KEY=k", "PATH=" + os.Getenv("PATH")}, tc.env...)
 			out, err := cmd.CombinedOutput()
 			require.Error(t, err)
 			assert.Contains(t, string(out), tc.wantErr)
@@ -231,9 +231,9 @@ func (h *Hooks) RefundOverLimit(ctx context.Context) (eval.Result, error) {
 
 // TestAModuleOnlyAtTheLayoutsPathGetsNoProgram generates the starter's test
 // module without its acceptance package: a module at <service module>/eval
-// whose design declares one suite, but not a Surla test module. It gets no
+// whose design declares one suite, but not a Highbay test module. It gets no
 // program and no test-program section, and the module with what was
-// generated still builds. With the package, as surla init generates it, the
+// generated still builds. With the package, as hbay init generates it, the
 // same module gets its program (TestGeneratedProgramRunsTheStarterSuite).
 func TestAModuleOnlyAtTheLayoutsPathGetsNoProgram(t *testing.T) {
 	if testing.Short() {
@@ -250,7 +250,7 @@ func TestAModuleOnlyAtTheLayoutsPathGetsNoProgram(t *testing.T) {
 	gen, err := testEvaluator.Generate(t.Context(), without)
 	require.NoError(t, err)
 	assert.NotContains(t, gen, "gen/cmd/shop-evals/main.go", "no program is written")
-	assert.NotContains(t, string(gen[quickstartPath]), "The test program Surla builds", "no test-program section is written")
+	assert.NotContains(t, string(gen[quickstartPath]), "The test program Highbay builds", "no test-program section is written")
 
 	module := maps.Clone(without)
 	for p, b := range gen {

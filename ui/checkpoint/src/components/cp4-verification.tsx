@@ -141,23 +141,23 @@ export function VerificationView({
     if (loadingList) {
       return (
         <Card
-          id="surla-cp4-verification"
-          aria-labelledby="surla-cp4-title"
+          id="highbay-cp4-verification"
+          aria-labelledby="highbay-cp4-title"
           aria-busy="true"
         >
-          <h2 id="surla-cp4-title" tabIndex={-1}>Loading saved verifications</h2>
+          <h2 id="highbay-cp4-title" tabIndex={-1}>Loading saved verifications</h2>
           <p>Reading saved verification runs for this Change Card...</p>
-          <div className="surla-field-row">
-            <Button id="surla-load-verifications" disabled={true} onClick={onLoadVerifications}>
+          <div className="highbay-field-row">
+            <Button id="highbay-load-verifications" disabled={true} onClick={onLoadVerifications}>
               Loading saved verifications...
             </Button>
             {sameCardLoaded ? (
-              <Button id="surla-return-change-card" onClick={onReturnToChangeCard}>
+              <Button id="highbay-return-change-card" onClick={onReturnToChangeCard}>
                 Return to Decisions &amp; Approval
               </Button>
             ) : (
               <Button
-                id="surla-open-change-card"
+                id="highbay-open-change-card"
                 disabled={loadingCard}
                 onClick={onOpenChangeCard}
               >
@@ -165,9 +165,9 @@ export function VerificationView({
               </Button>
             )}
           </div>
-          <details className="surla-details" id="surla-cp4-details">
+          <details className="highbay-details" id="highbay-cp4-details">
             <summary>Candidate and run details</summary>
-            <dl className="surla-verification-details">
+            <dl className="highbay-verification-details">
               <dt>Change Card</dt><dd><code>{effectiveChangeId}</code></dd>
             </dl>
           </details>
@@ -178,34 +178,34 @@ export function VerificationView({
     if (listError !== null) {
       return (
         <Card
-          id="surla-cp4-verification"
-          aria-labelledby="surla-cp4-title"
+          id="highbay-cp4-verification"
+          aria-labelledby="highbay-cp4-title"
         >
-          <h2 id="surla-cp4-title" tabIndex={-1}>Could not load saved verifications</h2>
-          <Alert id="surla-cp4-list-error" variant="destructive" role="alert">
+          <h2 id="highbay-cp4-title" tabIndex={-1}>Could not load saved verifications</h2>
+          <Alert id="highbay-cp4-list-error" variant="destructive" role="alert">
             <strong>Could not load saved verifications. </strong>
             {listError}
           </Alert>
           {cardLoadError !== null && !sameCardLoaded ? (
-            <Alert id="surla-cp4-card-error" variant="destructive" role="alert">
+            <Alert id="highbay-cp4-card-error" variant="destructive" role="alert">
               {cardLoadError}
             </Alert>
           ) : null}
-          <div className="surla-field-row">
+          <div className="highbay-field-row">
             <Button
-              id="surla-load-verifications"
+              id="highbay-load-verifications"
               disabled={loadingList}
               onClick={onLoadVerifications}
             >
               Retry loading verifications
             </Button>
             {sameCardLoaded ? (
-              <Button id="surla-return-change-card" onClick={onReturnToChangeCard}>
+              <Button id="highbay-return-change-card" onClick={onReturnToChangeCard}>
                 Return to Decisions &amp; Approval
               </Button>
             ) : (
               <Button
-                id="surla-open-change-card"
+                id="highbay-open-change-card"
                 disabled={loadingCard}
                 onClick={onOpenChangeCard}
               >
@@ -213,9 +213,9 @@ export function VerificationView({
               </Button>
             )}
           </div>
-          <details className="surla-details" id="surla-cp4-details">
+          <details className="highbay-details" id="highbay-cp4-details">
             <summary>Candidate and run details</summary>
-            <dl className="surla-verification-details">
+            <dl className="highbay-verification-details">
               <dt>Change Card</dt><dd><code>{effectiveChangeId}</code></dd>
             </dl>
           </details>
@@ -225,34 +225,34 @@ export function VerificationView({
 
     return (
       <Card
-        id="surla-cp4-verification"
-        aria-labelledby="surla-cp4-title"
+        id="highbay-cp4-verification"
+        aria-labelledby="highbay-cp4-title"
       >
-        <h2 id="surla-cp4-title" tabIndex={-1}>No saved verifications</h2>
-        <p id="surla-cp4-empty">
+        <h2 id="highbay-cp4-title" tabIndex={-1}>No saved verifications</h2>
+        <p id="highbay-cp4-empty">
           No checks are saved for this change yet. Once the tests are accepted,
-          the builder finishes the code and asks Surla to check it. The result appears here.
+          the builder finishes the code and asks Highbay to check it. The result appears here.
         </p>
         {cardLoadError !== null && !sameCardLoaded ? (
-          <Alert id="surla-cp4-card-error" variant="destructive" role="alert">
+          <Alert id="highbay-cp4-card-error" variant="destructive" role="alert">
             {cardLoadError}
           </Alert>
         ) : null}
-        <div className="surla-field-row">
+        <div className="highbay-field-row">
           <Button
-            id="surla-load-verifications"
+            id="highbay-load-verifications"
             disabled={loadingList}
             onClick={onLoadVerifications}
           >
             Load saved verifications
           </Button>
           {sameCardLoaded ? (
-            <Button id="surla-return-change-card" onClick={onReturnToChangeCard}>
+            <Button id="highbay-return-change-card" onClick={onReturnToChangeCard}>
               Return to Decisions &amp; Approval
             </Button>
           ) : (
             <Button
-              id="surla-open-change-card"
+              id="highbay-open-change-card"
               disabled={loadingCard}
               onClick={onOpenChangeCard}
             >
@@ -260,9 +260,9 @@ export function VerificationView({
             </Button>
           )}
         </div>
-        <details className="surla-details" id="surla-cp4-details">
+        <details className="highbay-details" id="highbay-cp4-details">
           <summary>Candidate and run details</summary>
-          <dl className="surla-verification-details">
+          <dl className="highbay-verification-details">
             <dt>Change Card</dt><dd><code>{effectiveChangeId}</code></dd>
           </dl>
         </details>
@@ -278,27 +278,27 @@ export function VerificationView({
 
   return (
     <Card
-      id="surla-cp4-verification"
-      aria-labelledby="surla-cp4-title"
+      id="highbay-cp4-verification"
+      aria-labelledby="highbay-cp4-title"
       aria-busy={checking || loadingList ? "true" : undefined}
     >
-      <h2 id="surla-cp4-title" tabIndex={-1}>{title}</h2>
+      <h2 id="highbay-cp4-title" tabIndex={-1}>{title}</h2>
       {testSource.source === "written_tests" ? (
-        <p id="surla-cp4-test-source">
+        <p id="highbay-cp4-test-source">
           {testSource.notice}
         </p>
       ) : null}
-      <p id="surla-cp4-started">
+      <p id="highbay-cp4-started">
         Check started <time dateTime={run.accepted_at}>{localStartTime(run.accepted_at)}</time>.
       </p>
-      <p id="surla-cp4-test-binding"><RunTestBinding run={run} review={review} /></p>
+      <p id="highbay-cp4-test-binding"><RunTestBinding run={run} review={review} /></p>
       {run.candidate_binaries_dir !== undefined ? (
-        <p id="surla-cp4-binaries-dir">
+        <p id="highbay-cp4-binaries-dir">
           <strong>Binaries built by this run: </strong>
           <code>{run.candidate_binaries_dir}</code>
         </p>
       ) : null}
-      <p id="surla-cp4-inputs" role="status">
+      <p id="highbay-cp4-inputs" role="status">
         {!inputsKnown
           ? "Whether this saved result matches the current agreement and selected tests is not known. Check status to read it again."
           : run.inputs_current
@@ -308,13 +308,13 @@ export function VerificationView({
       {inputsKnown && !run.inputs_current ? <InputDifference run={run} review={review}
         currentAgreementRevision={currentAgreementRevision} build={build} /> : null}
       {displayedCardRevision !== null && displayedCardRevision !== run.request_revision ? (
-        <Alert variant="warning" role="status" id="surla-cp4-different-revision">
+        <Alert variant="warning" role="status" id="highbay-cp4-different-revision">
           This result applies to a different saved Change Card revision
           than the one shown here.
         </Alert>
       ) : null}
       {differentChangeLoaded ? (
-        <Alert variant="warning" role="status" id="surla-cp4-different-change">
+        <Alert variant="warning" role="status" id="highbay-cp4-different-change">
           {"This verification run belongs to Change Card " +
             run.change_id +
             " (currently loaded: " +
@@ -323,19 +323,19 @@ export function VerificationView({
         </Alert>
       ) : null}
       {unlistedInLastLoadedList ? (
-        <p id="surla-cp4-unlisted-run" role="status">
+        <p id="highbay-cp4-unlisted-run" role="status">
           Not included in the last loaded list; reload to check.
         </p>
       ) : null}
       {listedRuns !== null && listedRuns.length > 1 ? (
-        <div id="surla-cp4-run-list" role="group" aria-label="Saved verification runs">
+        <div id="highbay-cp4-run-list" role="group" aria-label="Saved verification runs">
           {listedRuns.map((r) => {
             const revShort = r.request_revision.slice(0, 15);
             const revLabel = "Saved card revision " + revShort;
             return (
               <Button
                 key={r.run_id}
-                id={"surla-cp4-run-" + r.run_id}
+                id={"highbay-cp4-run-" + r.run_id}
                 variant="pill"
                 data-run-id={r.run_id}
                 aria-pressed={r.run_id === run.run_id ? "true" : "false"}
@@ -378,25 +378,25 @@ export function VerificationView({
         </Alert>
       ) : null}
       {listError !== null ? (
-        <Alert id="surla-cp4-list-error" variant="destructive" role="alert">
+        <Alert id="highbay-cp4-list-error" variant="destructive" role="alert">
           <strong>Could not load saved verifications. </strong>
           {listError}
         </Alert>
       ) : null}
       {cardLoadError !== null ? (
-        <Alert id="surla-cp4-card-error" variant="destructive" role="alert">
+        <Alert id="highbay-cp4-card-error" variant="destructive" role="alert">
           {cardLoadError}
-          <div className="surla-field-row">
-            <Button id="surla-cp4-retry-card" disabled={loadingCard} onClick={onOpenChangeCard}>
+          <div className="highbay-field-row">
+            <Button id="highbay-cp4-retry-card" disabled={loadingCard} onClick={onOpenChangeCard}>
               {loadingCard ? "Reading agreement…" : "Retry agreement read"}
             </Button>
           </div>
         </Alert>
       ) : null}
-      <div className="surla-field-row">
+      <div className="highbay-field-row">
         {state.type === "running" || requestError !== null || !inputsKnown ? (
           <Button
-            id="surla-cp4-check-status"
+            id="highbay-cp4-check-status"
             variant="primary"
             disabled={checking}
             onClick={onCheckStatus}
@@ -405,7 +405,7 @@ export function VerificationView({
           </Button>
         ) : null}
         <Button
-          id="surla-load-verifications"
+          id="highbay-load-verifications"
           disabled={loadingList}
           onClick={onLoadVerifications}
         >
@@ -417,7 +417,7 @@ export function VerificationView({
         </Button>
         {!sameCardLoaded ? (
           <Button
-            id="surla-open-change-card"
+            id="highbay-open-change-card"
             disabled={loadingCard}
             onClick={onOpenChangeCard}
           >
@@ -426,21 +426,21 @@ export function VerificationView({
         ) : null}
       </div>
 
-      <RunEvidenceLimits id="surla-cp4-evidence-limits" run={run} review={review} />
+      <RunEvidenceLimits id="highbay-cp4-evidence-limits" run={run} review={review} />
       {review?.story_context.state === "recorded" && review.story_context.test_coverage.state === "recorded" ? (
-        <TestCoverage id="surla-cp4-coverage" heading="h3"
+        <TestCoverage id="highbay-cp4-coverage" heading="h3"
           answers={review.story_context.test_coverage.answers} examples={review.story_context.test_coverage.examples}
           statements={review.story_context.test_coverage.coverage_statements}
           report={state.type === "completed" ? state.value.report : null} />
       ) : null}
-      <details className="surla-details" id="surla-cp4-details">
+      <details className="highbay-details" id="highbay-cp4-details">
         <summary>Candidate and run details</summary>
         {state.type === "completed" && state.value.report.passed ? <SavedResultCommits
           candidateCommit={run.candidate_commit}
           testsCommit={testSource.source === "written_tests" ? run.suite_commit : null}
           build={inputsKnown ? build : null}
         /> : null}
-        <dl className="surla-verification-details">
+        <dl className="highbay-verification-details">
           <dt>Candidate commit</dt><dd><code>{run.candidate_commit}</code></dd>
           <dt>Change Card revision</dt><dd><code>{run.request_revision}</code></dd>
           <dt>{testSource.source === "written_tests" ? "Accepted tests commit" : "Evaluator commit"}</dt>
@@ -477,7 +477,7 @@ function InputDifference({ run, review, currentAgreementRevision, build }: {
   build: StartedBuild | null;
 }) {
   if (currentAgreementRevision !== null && currentAgreementRevision !== run.request_revision) {
-    return <p id="surla-cp4-input-difference">This run used agreement <code>{run.request_revision.slice(0, 12)}</code>;
+    return <p id="highbay-cp4-input-difference">This run used agreement <code>{run.request_revision.slice(0, 12)}</code>;
       {" "}the current confirmed agreement is <code>{currentAgreementRevision.slice(0, 12)}</code>.</p>;
   }
   const tests = build?.test_writer.tests;
@@ -485,7 +485,7 @@ function InputDifference({ run, review, currentAgreementRevision, build }: {
       build === null || !build.in_force || build.taking.state === "dropped" ||
       build.request_revision !== currentAgreementRevision || tests?.state !== "accepted" ||
       tests.commit === run.suite_commit) return null;
-  return <p id="surla-cp4-input-difference">This run used <RunTestBinding run={run} review={review} />;
+  return <p id="highbay-cp4-input-difference">This run used <RunTestBinding run={run} review={review} />;
     {" "}the current accepted tests are report {build.test_writer.report}, commit <code>{tests.commit.slice(0, 12)}</code>.</p>;
 }
 
@@ -502,14 +502,14 @@ function CompletedReport({ report }: { report: BuilderVerificationReport }) {
         </Alert>
       ) : null}
       {counts.failed > 0 || counts.not_run > 0 || counts.harness_error > 0 || report.suite_failed ? (
-        <dl className="surla-verification-counts" aria-label="Scenario outcome counts">
+        <dl className="highbay-verification-counts" aria-label="Scenario outcome counts">
           <div><dt>Failed</dt><dd>{counts.failed}</dd></div>
           <div><dt>Not run</dt><dd>{counts.not_run}</dd></div>
           <div><dt>Could not evaluate</dt><dd>{counts.harness_error}</dd></div>
         </dl>
       ) : null}
       <h3>Declared scenarios</h3>
-      <ul className="surla-verification-scenarios">
+      <ul className="highbay-verification-scenarios">
         {report.scenarios.map((scenario) => (
           <li key={scenario.id}>
             {scenario.checks?.length || scenario.error ? (

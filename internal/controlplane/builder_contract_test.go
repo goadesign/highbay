@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	genclient "github.com/goadesign/surla/gen/http/surla/client"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -28,28 +28,28 @@ import (
 // refusalContractService supplies declared failures through real generated
 // transports without pretending the later build/drop implementation exists.
 type refusalContractService struct {
-	gensurla.Service
+	genhighbay.Service
 	refusal error
 }
 
 // StartBuild returns the test's named refusal without changing a build.
 func (s refusalContractService) StartBuild(
-	context.Context, *gensurla.StartBuildPayload,
-) (*gensurla.StartBuildResult, error) {
+	context.Context, *genhighbay.StartBuildPayload,
+) (*genhighbay.StartBuildResult, error) {
 	return nil, s.refusal
 }
 
 // DropBuild returns the test's stale-page refusal without changing a build.
 func (s refusalContractService) DropBuild(
-	context.Context, *gensurla.DropBuildPayload,
-) (*gensurla.ChangeBuild, error) {
+	context.Context, *genhighbay.DropBuildPayload,
+) (*genhighbay.ChangeBuild, error) {
 	return nil, s.refusal
 }
 
 // GetBuilderAssignment returns the test's working-copy refusal without marking a read.
 func (s refusalContractService) GetBuilderAssignment(
-	context.Context, *gensurla.GetBuilderAssignmentPayload,
-) (*gensurla.BuilderAssignment, error) {
+	context.Context, *genhighbay.GetBuilderAssignmentPayload,
+) (*genhighbay.BuilderAssignment, error) {
 	return nil, s.refusal
 }
 
@@ -59,9 +59,9 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{})
 	card := buildableChange(t, cp, "chg")
 	started, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
-		&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+		&genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
-	branch, own := "'work'", "surla/build-2"
+	branch, own := "'work'", "highbay/build-2"
 	cases := []struct {
 		name, operation string
 		role            CallerKind
@@ -71,12 +71,12 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 		{name: "unfinished_build_open", operation: "start", role: CallerUser},
 		{name: "build_changed", operation: "drop", role: CallerUser},
 		{name: "drafted_before_drop", operation: "start", role: CallerUser,
-			refusal: gensurla.MakeDraftedBeforeDrop(errors.New("A build was dropped; refresh the draft."))},
+			refusal: genhighbay.MakeDraftedBeforeDrop(errors.New("A build was dropped; refresh the draft."))},
 		{name: "design_changed_outside", operation: "start", role: CallerUser,
-			refusal: gensurla.MakeDesignChangedOutside(errors.New("Ask the user to commit, then refresh."))},
+			refusal: genhighbay.MakeDesignChangedOutside(errors.New("Ask the user to commit, then refresh."))},
 		{name: "copy_off_branch", operation: "read", role: CallerBuilder,
-			refusal: &gensurla.CopyOffBranch{
-				Name: "copy_off_branch", Message: "Your copy is on 'work'; put your work on surla/build-2 and read again.",
+			refusal: &genhighbay.CopyOffBranch{
+				Name: "copy_off_branch", Message: "Your copy is on 'work'; put your work on highbay/build-2 and read again.",
 				Branch: &branch, BuildBranch: &own, Operation: "none",
 				Uncommitted: []string{"'service.go'"}, UncommittedCount: 1,
 			}},
@@ -85,7 +85,7 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			refusal := tc.refusal
 			if refusal == nil {
-				refusal = &gensurla.OpenBuildRefusal{
+				refusal = &genhighbay.OpenBuildRefusal{
 					Name: tc.name, Message: "The shown build changed; read its facts before dropping it.",
 					ChangeID: "chg", Build: started.Build,
 				}
@@ -100,25 +100,25 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 				server.Client(), goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 			switch tc.operation {
 			case "start":
-				_, err = client.StartBuild()(t.Context(), &gensurla.StartBuildPayload{
+				_, err = client.StartBuild()(t.Context(), &genhighbay.StartBuildPayload{
 					ChangeID: "chg", RequestRevision: card.RequestRevision,
 				})
 			case "drop":
-				_, err = client.DropBuild()(t.Context(), &gensurla.DropBuildPayload{
+				_, err = client.DropBuild()(t.Context(), &genhighbay.DropBuildPayload{
 					ChangeID: "chg", StartedAt: started.Build.StartedAt,
 				})
 			case "read":
 				_, err = client.GetBuilderAssignment()(t.Context(),
-					&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+					&genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			}
 			require.Error(t, err)
 			switch wanted := refusal.(type) {
-			case *gensurla.OpenBuildRefusal:
-				var actual *gensurla.OpenBuildRefusal
+			case *genhighbay.OpenBuildRefusal:
+				var actual *genhighbay.OpenBuildRefusal
 				require.ErrorAs(t, err, &actual)
 				assert.Equal(t, wanted, actual)
-			case *gensurla.CopyOffBranch:
-				var actual *gensurla.CopyOffBranch
+			case *genhighbay.CopyOffBranch:
+				var actual *genhighbay.CopyOffBranch
 				require.ErrorAs(t, err, &actual)
 				assert.Equal(t, wanted, actual)
 			case *goa.ServiceError:
@@ -140,8 +140,8 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 // TestTypedRequestRefusalsRemainExpected keeps ordinary typed conflicts out
 // of failure telemetry while preserving real faults, including joined faults.
 func TestTypedRequestRefusalsRemainExpected(t *testing.T) {
-	copyRefusal := &gensurla.CopyOffBranch{Name: "copy_off_branch", Message: "Read again."}
-	openRefusal := &gensurla.OpenBuildRefusal{Name: "previous_change_open", Message: "Merge or drop."}
+	copyRefusal := &genhighbay.CopyOffBranch{Name: "copy_off_branch", Message: "Read again."}
+	openRefusal := &genhighbay.OpenBuildRefusal{Name: "previous_change_open", Message: "Merge or drop."}
 	cases := []struct {
 		name  string
 		err   error
@@ -152,14 +152,14 @@ func TestTypedRequestRefusalsRemainExpected(t *testing.T) {
 		{name: "single joined copy refusal", err: errors.Join(copyRefusal)},
 		{name: "open build refusal", err: openRefusal},
 		{name: "wrapped open build refusal", err: fmt.Errorf("start build: %w", openRefusal)},
-		{name: "standard refusal", err: gensurla.MakeConflict(errors.New("Read again."))},
+		{name: "standard refusal", err: genhighbay.MakeConflict(errors.New("Read again."))},
 		{name: "wrapped standard refusal", err: fmt.Errorf("read assignment: %w",
-			gensurla.MakeConflict(errors.New("Read again.")))},
+			genhighbay.MakeConflict(errors.New("Read again.")))},
 		{name: "joined storage failure", err: errors.Join(copyRefusal, errors.New("storage failed")), fault: true},
 		{name: "joined cleanup failure", err: fmt.Errorf("read assignment: %w",
 			errors.Join(openRefusal, errors.New("cleanup failed"))), fault: true},
 		{name: "joined standard refusal and storage failure", err: errors.Join(
-			gensurla.MakeConflict(errors.New("Read again.")), errors.New("storage failed")), fault: true},
+			genhighbay.MakeConflict(errors.New("Read again.")), errors.New("storage failed")), fault: true},
 		{name: "unexpected failure", err: errors.New("storage failed"), fault: true},
 		{name: "service fault", err: &goa.ServiceError{Name: "fault", Message: "storage failed", Fault: true}, fault: true},
 		{name: "joined fault", err: errors.Join(copyRefusal,
@@ -192,7 +192,7 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 			copyFolder := filepath.Join(folder, testwriter.BuilderRole.Folder)
 			card := buildableChange(t, cp, "chg")
 			_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
-				&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+				&genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
 			makeBuildFixtureBuilderCopy(t, cp)
 			if hasWorkspace {
@@ -206,7 +206,7 @@ func TestBuilderAssignmentNamesItsCurrentFolder(t *testing.T) {
 			assert.Equal(t, !hasWorkspace, listed.Assignments[0].GoworkOff)
 			assert.False(t, listed.Assignments[0].Read)
 			read, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-				&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+				&genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			require.NoError(t, err)
 			assert.Equal(t, copyFolder, read.WorkingFolder)
 			assert.Equal(t, !hasWorkspace, read.GoworkOff)
@@ -254,7 +254,7 @@ func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 	cp := newBuildControlPlane(t, Options{WorkspaceDir: workspace})
 	card := buildableChange(t, cp, "chg")
 	_, err := cp.StartBuild(asCaller("alice@example.com", CallerUser),
-		&gensurla.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
+		&genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
 	before := readBuildFile(t, cp, "chg")
 	makeBuildFixtureBuilderCopy(t, cp)
@@ -277,7 +277,7 @@ func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := cp.GetBuilderAssignment(tc.caller,
-				&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+				&genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 			if tc.refusal == "forbidden" {
 				assertRefused(t, err, tc.refusal)
 			} else {
@@ -294,7 +294,7 @@ func TestBuilderAssignmentChecksOwnershipBeforeFolderFacts(t *testing.T) {
 	require.NoError(t, os.Remove(parent))
 	require.NoError(t, os.Rename(saved, parent))
 	read, err := cp.GetBuilderAssignment(asCaller("alice@example.com", CallerBuilder),
-		&gensurla.GetBuilderAssignmentPayload{ChangeID: "chg"})
+		&genhighbay.GetBuilderAssignmentPayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.True(t, read.Read, "the same assignment can be read after the filesystem is repaired")
 }

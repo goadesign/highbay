@@ -24,10 +24,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // TestListChangesOrdersOwnersCardsBySavedTime lists only the owner's cards,
@@ -64,7 +64,7 @@ func TestListChangesOrdersOwnersCardsBySavedTime(t *testing.T) {
 	assert.NotEqual(t, empty.Version, list.Version)
 
 	user := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "user-1", Kind: CallerUser})
-	_, err = cp.ConfirmIntent(user, &gensurla.ConfirmIntentPayload{
+	_, err = cp.ConfirmIntent(user, &genhighbay.ConfirmIntentPayload{
 		ChangeID: first.ChangeID, RequestRevision: first.RequestRevision,
 		Answers: map[string]string{}, Examples: first.Examples,
 	})
@@ -99,7 +99,7 @@ func TestListChangesRecordsWhyARunCouldNotBeRead(t *testing.T) {
 	assert.Equal(t, "list changes: saved verification records could not be read", err.Error())
 	var listed []sdktrace.ReadOnlySpan
 	for _, span := range exporter.GetSpans().Snapshots() {
-		if span.Name() == "surla.controlplane.list_changes" {
+		if span.Name() == "highbay.controlplane.list_changes" {
 			listed = append(listed, span)
 		}
 	}
@@ -229,7 +229,7 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	cp.changesPoll = 10 * time.Millisecond
 	user := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "user-1", Kind: CallerUser})
 	guide := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "guide", Kind: CallerGuide})
-	readList := func() *gensurla.ChangeList {
+	readList := func() *genhighbay.ChangeList {
 		list, err := cp.ListChanges(user)
 		require.NoError(t, err)
 		return list
@@ -256,7 +256,7 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	require.NotNil(t, runningList.DraftState)
 	assert.Equal(t, "evaluating_story", *runningList.DraftState)
 	assert.NotEqual(t, afterDraft.Version, running, "an evaluation that starts moves the version")
-	waited, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: afterDraft.Version})
+	waited, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: afterDraft.Version})
 	require.NoError(t, err)
 	assert.Equal(t, running, waited.Version, "a waiting read ends on the evaluation's start")
 
@@ -289,12 +289,12 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 	assert.Equal(t, "story_failed", *failedList.DraftState)
 	seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateFailed, nil, "failed")
 	assert.NotEqual(t, failed, version(), "a replacement with the same snapshot and state moves the version")
-	unchanged, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: version()})
+	unchanged, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: version()})
 	require.NoError(t, err)
 	assert.Equal(t, version(), unchanged.Version, "a waiting read with nothing changed returns the same version")
 
 	opID := seedStoryRefreshForTest(t, cp, "alice@example.com", storyRefreshStateSucceeded, nil, "")
-	_, err = cp.ProposeChange(guide, &gensurla.ProposeChangePayload{
+	_, err = cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
 		ChangeID:         "chg-after-draft",
 		Prompt:           "Refunds up to $50 are instant.",
 		StoryRefreshOpID: &opID,
@@ -309,7 +309,7 @@ func TestWaitForChangesReturnsWhenTheStoryEvaluationChanges(t *testing.T) {
 // as the project owner's, never as the calling agent's own.
 func TestStoryEvaluationIsDescribedAsTheOwners(t *testing.T) {
 	cp := newControlPlane(t, Options{})
-	tools, err := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil).ToolsList(t.Context(), &genmcpadapter.ToolsListPayload{})
+	tools, err := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil).ToolsList(t.Context(), &genmcpadapter.ToolsListPayload{})
 	require.NoError(t, err)
 	seen := 0
 	for _, tool := range tools.Tools {
@@ -356,7 +356,7 @@ func TestSavedTimeIsOutsideTheRevision(t *testing.T) {
 	stripped, err := json.Marshal(file)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(cp.cards.path("chg"), stripped, 0o600))
-	_, err = cp.GetChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com"}), &gensurla.GetChangePayload{ChangeID: "chg"})
+	_, err = cp.GetChange(WithPrincipal(context.Background(), Principal{ID: "alice@example.com"}), &genhighbay.GetChangePayload{ChangeID: "chg"})
 	assert.ErrorContains(t, err, "has no saved time")
 }
 
@@ -371,12 +371,12 @@ func TestWaitForChangesReturnsOnChangeOrAfterItsBound(t *testing.T) {
 	list, err := cp.ListChanges(alice)
 	require.NoError(t, err)
 
-	stale, err := cp.WaitForChanges(alice, &gensurla.WaitForChangesPayload{Since: "older"})
+	stale, err := cp.WaitForChanges(alice, &genhighbay.WaitForChangesPayload{Since: "older"})
 	require.NoError(t, err)
 	assert.Equal(t, list.Version, stale.Version, "an old version answers at once with the current one")
 
 	start := time.Now()
-	unchanged, err := cp.WaitForChanges(alice, &gensurla.WaitForChangesPayload{Since: list.Version})
+	unchanged, err := cp.WaitForChanges(alice, &genhighbay.WaitForChangesPayload{Since: list.Version})
 	require.NoError(t, err)
 	assert.Equal(t, list.Version, unchanged.Version)
 	assert.GreaterOrEqual(t, time.Since(start), 300*time.Millisecond, "nothing changed, so the wait ran to its bound")
@@ -389,7 +389,7 @@ func TestWaitForChangesReturnsOnChangeOrAfterItsBound(t *testing.T) {
 		mustPropose(t, cp, alice, "chg-new", "Refunds up to $50 are instant.", refundAnalysis("Refunds up to $50 are instant."))
 	}()
 	start = time.Now()
-	changed, err := cp.WaitForChanges(alice, &gensurla.WaitForChangesPayload{Since: list.Version})
+	changed, err := cp.WaitForChanges(alice, &genhighbay.WaitForChangesPayload{Since: list.Version})
 	require.NoError(t, err)
 	<-saved
 	assert.NotEqual(t, list.Version, changed.Version)
@@ -400,7 +400,7 @@ func TestWaitForChangesReturnsOnChangeOrAfterItsBound(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(alice, 50*time.Millisecond)
 	defer cancel()
-	_, err = cp.WaitForChanges(ctx, &gensurla.WaitForChangesPayload{Since: current.Version})
+	_, err = cp.WaitForChanges(ctx, &genhighbay.WaitForChangesPayload{Since: current.Version})
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "a caller that goes away ends the wait")
 }
 
@@ -416,18 +416,18 @@ func TestWaitForChangesIsTracedButNotSaved(t *testing.T) {
 	list, err := cp.ListChanges(user)
 	require.NoError(t, err)
 	for range 3 {
-		_, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: list.Version})
+		_, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: list.Version})
 		require.NoError(t, err)
 	}
 	var exported []string
 	for _, span := range exporter.GetSpans() {
 		exported = append(exported, span.Name)
 	}
-	assert.Equal(t, []string{"surla.controlplane.list_changes", waitForChangesSpan, waitForChangesSpan, waitForChangesSpan}, exported)
+	assert.Equal(t, []string{"highbay.controlplane.list_changes", waitForChangesSpan, waitForChangesSpan, waitForChangesSpan}, exported)
 	history, err := cp.traces.List("alice@example.com", "all", 100, nil)
 	require.NoError(t, err)
 	require.Len(t, history.Spans, 1, "only list_changes is saved")
-	assert.Equal(t, "surla.controlplane.list_changes", history.Spans[0].Name)
+	assert.Equal(t, "highbay.controlplane.list_changes", history.Spans[0].Name)
 }
 
 // TestChangeListOperationsFollowTheRoleTable checks the two operations over
@@ -519,7 +519,7 @@ func TestChangeListOperationsFollowTheRoleTable(t *testing.T) {
 			assert.False(t, tools["wait_for_changes"], "the waiting read is never offered as a tool")
 		})
 	}
-	all, err := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil).ToolsList(t.Context(), &genmcpadapter.ToolsListPayload{})
+	all, err := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil).ToolsList(t.Context(), &genmcpadapter.ToolsListPayload{})
 	require.NoError(t, err)
 	declared := map[string]bool{}
 	for _, tool := range all.Tools {
@@ -534,7 +534,7 @@ func TestChangeListOperationsFollowTheRoleTable(t *testing.T) {
 
 // writeListedRun publishes a finished verification run of card for owner
 // under runsDir, with its report, as a verify-run supervisor leaves it.
-func writeListedRun(t *testing.T, runsDir, owner string, card *gensurla.ChangeCardResult, runID string, accepted time.Time, passed bool) {
+func writeListedRun(t *testing.T, runsDir, owner string, card *genhighbay.ChangeCardResult, runID string, accepted time.Time, passed bool) {
 	t.Helper()
 	writeListedRunAt(t, runsDir, owner, card, runID, accepted, passed, strings.Repeat("1", 40))
 }
@@ -542,7 +542,7 @@ func writeListedRun(t *testing.T, runsDir, owner string, card *gensurla.ChangeCa
 // writeListedRunAt binds a complete fixture report and request to the supplied
 // candidate, including a real commit for public-consumer branch recovery tests.
 func writeListedRunAt(
-	t *testing.T, runsDir, owner string, card *gensurla.ChangeCardResult,
+	t *testing.T, runsDir, owner string, card *genhighbay.ChangeCardResult,
 	runID string, accepted time.Time, passed bool, commit string,
 ) {
 	t.Helper()

@@ -1,7 +1,7 @@
 openapi: 3.2.0
 info:
     title: Orders reference platform
-    description: Refund assistant used as Surla's reference target under test.
+    description: Refund assistant used as Highbay's reference target under test.
     version: 0.0.1
 servers:
     - url: http://localhost:80
@@ -892,7 +892,7 @@ components:
             bearerFormat: JWT
         live_key_header_X-Live-Target-Key:
             type: apiKey
-            description: Key Surla minted for this process and passed to it at start.
+            description: Key Highbay minted for this process and passed to it at start.
             name: X-Live-Target-Key
             in: header
 tags:
@@ -903,4 +903,4 @@ tags:
     - name: payments
       description: 'External payment provider: issues refunds exactly once per idempotency key.'
     - name: prompts
-      description: Prompt text a live copy of the orders platform lets Surla replace. Each call replaces the text of one registered prompt for every tenant served by this orders process, until it exits.
+      description: Prompt text a live copy of the orders platform lets Highbay replace. Each call replaces the text of one registered prompt for every tenant served by this orders process, until it exits.

@@ -1,4 +1,4 @@
-// Package design defines the Goa and Goa-AI MCP contract for the Surla
+// Package design defines the Goa and Goa-AI MCP contract for the Highbay
 // software factory control plane.
 package design
 
@@ -7,9 +7,9 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var _ = API("surla", func() {
-	Title("Surla MCP Software Factory Control Plane")
-	Description("The Surla project server: coding agents propose, build, test and verify changes to a Goa and Goa-AI service through its MCP tools, and the user agrees each change and approves its result on its views page.")
+var _ = API("highbay", func() {
+	Title("Highbay MCP Software Factory Control Plane")
+	Description("The Highbay project server: coding agents propose, build, test and verify changes to a Goa and Goa-AI service through its MCP tools, and the user agrees each change and approves its result on its views page.")
 	Version("1.0.0")
 })
 
@@ -45,7 +45,7 @@ var ProposeChangePayload = Type("ProposeChangePayload", func() {
 	Description("The user's feature request and the caller's analysis of it, saved as a new Checkpoint 1 Change Card.")
 	Attribute("change_id", String, "Unique change identifier.")
 	Attribute("prompt", String, "The user's feature request.")
-	Attribute("story_refresh_op_id", String, "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Surla reads no file.")
+	Attribute("story_refresh_op_id", String, "op_id of a succeeded refresh_story operation whose evaluated draft this card adopts: its design, Stories, architecture, go.mod and made-from list. Required when the project folder holds a go.mod; Highbay reads no file.")
 	Attribute("analysis", CP1Analysis, "Your analysis of prompt against the target's current design.")
 	Required("change_id", "prompt", "analysis")
 })
@@ -57,7 +57,7 @@ var ReviseChangePayload = Type("ReviseChangePayload", func() {
 	Attribute("request_revision", String, "request_revision of the latest revision you read: the proposed revision's when the change shows one waiting (proposed_revision.request_revision), otherwise the change's own.")
 	Attribute("prompt", String, "The change's complete feature request as it now stands, restated in full: every requirement that still applies, with this and earlier revisions' additions, changes and removals applied, so a dropped or replaced requirement no longer appears. Never only the difference; that goes in revision_note.")
 	Attribute("revision_note", String, "What this revision changes and why, in the user's terms, for example \"Legal requires pre-approval before a listing goes live\".")
-	Attribute("story_refresh_op_id", String, "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Surla reads no file.")
+	Attribute("story_refresh_op_id", String, "op_id of a succeeded refresh_story operation whose evaluated draft this revision adopts. When omitted, the revision keeps every snapshot field of the revision it revises: design, Stories, architecture, go.mod and made-from list, even with zero Stories. A project with a go.mod refuses an omitted op_id when that revision has no design. Highbay reads no file.")
 	Attribute("analysis", CP1RevisionAnalysis, "Your analysis of the revised prompt against the current card and the target's current design.")
 	Required("change_id", "request_revision", "prompt", "revision_note", "analysis")
 })
@@ -83,22 +83,22 @@ var DeclineRevisionPayload = Type("DeclineRevisionPayload", func() {
 
 // InitProjectPayload is the input to the init_project tool.
 var InitProjectPayload = Type("InitProjectPayload", func() {
-	Description("Optional Go module path, directory and starting content for initializing a new Surla project in the bound workspace.")
-	Attribute("module_path", String, "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Surla derives example.com/<service> from the target folder name.", func() {
+	Description("Optional Go module path, directory and starting content for initializing a new Highbay project in the bound workspace.")
+	Attribute("module_path", String, "Optional Go module path of the new service (for example example.com/shop). Omit unless the user gave one: Highbay derives example.com/<service> from the target folder name.", func() {
 		MinLength(3)
 		Example("example.com/shop")
 	})
 	Attribute("dir", String, "Use . to initialize the bound workspace itself while preserving allowed agent configuration, or pass a direct child name. When omitted or empty, defaults to . when module_path is omitted, or to the service name derived from module_path when module_path is given.", func() {
 		Example(".")
 	})
-	Attribute("worked_example", Boolean, "Omit it for the user's own product: Surla creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Surla's worked example, a price-answering service with a helper agent, a model gateway and its own tests.", func() {
+	Attribute("worked_example", Boolean, "Omit it for the user's own product: Highbay creates a blank service with no methods, no Story flows and one test that the program starts, ready for the first change. Set true only when the user asks to see Highbay's worked example, a price-answering service with a helper agent, a model gateway and its own tests.", func() {
 		Default(false)
 	})
 })
 
 // InitProjectResult is the output of the init_project tool.
 var InitProjectResult = Type("InitProjectResult", func() {
-	Description("Newly initialized Surla starter project directory, derived service identity, and initial Git commit.")
+	Description("Newly initialized Highbay starter project directory, derived service identity, and initial Git commit.")
 	Attribute("dir", String, "Physical directory path of the newly created starter project (now the server's active workspace).")
 	Attribute("module_path", String, "Initialized Go module path.")
 	Attribute("service_name", String, "Derived service name.")
@@ -110,7 +110,7 @@ var InitProjectResult = Type("InitProjectResult", func() {
 
 // GenerateCodePayload selects the module of the builder's working folder to regenerate.
 var GenerateCodePayload = Type("GenerateCodePayload", func() {
-	Description("Selects the module of the builder's working folder to regenerate: candidate, the application, whose design/ Surla first writes from the open build; or eval, the test module, regenerated from its own design.")
+	Description("Selects the module of the builder's working folder to regenerate: candidate, the application, whose design/ Highbay first writes from the open build; or eval, the test module, regenerated from its own design.")
 	Attribute("target", String, "Module to regenerate: candidate (the application, the default when omitted) or eval (the test module).", func() { Enum("candidate", "eval") })
 })
 
@@ -163,7 +163,7 @@ var UpdateDependenciesResult = Type("UpdateDependenciesResult", func() {
 
 // ConfigureModelPayload is the input to the configure_model tool.
 var ConfigureModelPayload = Type("ConfigureModelPayload", func() {
-	Description("Selects either a direct model provider and model name (whose request settings the surla command handed to the project server) or a running goa-ai model gateway address.")
+	Description("Selects either a direct model provider and model name (whose request settings the hbay command handed to the project server) or a running goa-ai model gateway address.")
 	Attribute("provider", String, "Direct model provider name when configuring a direct provider; must be paired with model_name and omitted when gateway_addr is set.", func() {
 		Enum("anthropic", "openai")
 		Example("anthropic")
@@ -209,7 +209,7 @@ var ApprovalItem = Type("ApprovalItem", func() {
 	Attribute("report_digest", String, "SHA-256 digest of the approved CP4 verification report.")
 	Attribute("candidate_commit", String, "Candidate commit the report was checked against.")
 	Attribute("suite_id", String, "Suite identifier the tests at suite_commit declared in the report (shown, not compared).")
-	Attribute("suite_commit", String, "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Surla accepted for the change's build.")
+	Attribute("suite_commit", String, "Commit of the tests the report ran: the evaluator suite commit in the stored verification settings, or the tests Highbay accepted for the change's build.")
 	Attribute("environment", String, "Dependency profile the tests at suite_commit declared in the report, such as sim or scripted-model (shown, not compared).")
 	Attribute("artifacts", MapOf(String, String), "SHA-256 digest of each candidate binary the promotion target measured, keyed by binary name; empty when no promotion settings are configured.")
 	Attribute("scenario_count", Int, "Number of declared scenarios in the report, every one of which passed.")
@@ -567,13 +567,13 @@ var ModelConnection = Type("ModelConnection", func() {
 
 // ApproveMergePayload is the input to the CP5 approve_merge tool.
 var ApproveMergePayload = Type("ApproveMergePayload", func() {
-	Description("Identifies the confirmed Change Card revision, the candidate commit being promoted, and the verification report to check. Which tests' commit the report must have run comes from the project's stored verification settings or the tests Surla accepted for the revision's build, and the report itself and the measured candidate binary digests come from the control plane's promotion target, never from the caller.")
+	Description("Identifies the confirmed Change Card revision, the candidate commit being promoted, and the verification report to check. Which tests' commit the report must have run comes from the project's stored verification settings or the tests Highbay accepted for the revision's build, and the report itself and the measured candidate binary digests come from the control plane's promotion target, never from the caller.")
 	Attribute("change_id", String, "Confirmed Change Card identifier.")
 	Attribute("request_revision", String, "Current request_revision of the confirmed Change Card.")
 	Attribute("candidate_commit", String, "Full commit ID of the candidate being promoted (40 or 64 lowercase hex characters).", func() {
 		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
 	})
-	Attribute("report_digest", String, "SHA-256 digest of the CP4 verification report written by surla verify (64 lowercase hex characters).", func() {
+	Attribute("report_digest", String, "SHA-256 digest of the CP4 verification report written by hbay verify (64 lowercase hex characters).", func() {
 		Pattern("^[0-9a-f]{64}$")
 	})
 	Required("change_id", "request_revision", "candidate_commit", "report_digest")
@@ -601,7 +601,7 @@ var DiffResult = Type("DiffResult", func() {
 
 // VerifyChangePayload starts Checkpoint 4 verification of one candidate commit.
 var VerifyChangePayload = Type("VerifyChangePayload", func() {
-	Description("Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Surla accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.")
+	Description("Names the confirmed Change Card revision and the candidate commit to verify. What is built and which tests run come from the project, never from the caller: the candidate commit's programs and the tests Highbay accepted for the user's build of the revision or, with stored verification settings, the programs and evaluator suite those settings name.")
 	Attribute("change_id", String, "Confirmed Change Card identifier.")
 	Attribute("request_revision", String, "Current request_revision of the confirmed Change Card.")
 	Attribute("candidate_commit", String, "Full commit ID of the candidate to build and verify (40 or 64 lowercase hex characters).", func() {
@@ -652,7 +652,7 @@ var VerificationCounts = Type("VerificationCounts", func() {
 // BuilderVerificationReport is the builder view of a CP4 report.
 var BuilderVerificationReport = Type("BuilderVerificationReport", func() {
 	Description("The builder view of a Checkpoint 4 verification report: counts, verdict and repair scenario checks. Holdout details, evidence and logs stay with the evaluator.")
-	Attribute("report_digest", String, "SHA-256 digest of the full report the evaluator saved; approve_merge and surla approve take this digest.")
+	Attribute("report_digest", String, "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.")
 	Attribute("counts", VerificationCounts, "Every declared scenario, counted by outcome.")
 	Attribute("passed", Boolean, "The verdict: true only when every declared scenario passed and the suite ran cleanly.")
 	Attribute("suite_failed", Boolean, "Whether the evaluator suite itself failed or ended abnormally.")
@@ -716,13 +716,13 @@ var VerificationStatusResult = Type("VerificationStatusResult", func() {
 
 // OperatorEvaluatorTests is a run whose tests are the operator's evaluator.
 var OperatorEvaluatorTests = Type("OperatorEvaluatorTests", func() {
-	Description("The run used the operator's evaluator: the one stored with surla verification set, or the one named on surla verify's command line.")
+	Description("The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.")
 })
 
 // AgentWrittenTests is a run whose tests a test writer on this machine wrote.
 var AgentWrittenTests = Type("AgentWrittenTests", func() {
-	Description("The run used the tests Surla accepted for the change's build, which a separate agent on this machine wrote.")
-	Attribute("commit", String, "Commit Surla recorded the accepted tests at; the same as suite_commit.")
+	Description("The run used the tests Highbay accepted for the change's build, which a separate agent on this machine wrote.")
+	Attribute("commit", String, "Commit Highbay recorded the accepted tests at; the same as suite_commit.")
 	Attribute("notice", String, "Always: These tests were written by a separate agent on this machine and are not isolated from the builder.")
 	Required("commit", "notice")
 })
@@ -744,20 +744,20 @@ var VerificationListResult = Type("VerificationListResult", func() {
 	Required("change_id", "runs")
 })
 
-var _ = Service("surla", func() {
-	Description("Surla MCP software factory control plane.")
+var _ = Service("highbay", func() {
+	Description("Highbay MCP software factory control plane.")
 	Error("forbidden", ErrorResult, "The authenticated caller may not perform this operation or does not own the resource.")
 	HTTP(func() { Response("forbidden", StatusForbidden) })
 
-	MCP("surla", "1.0.0")
+	MCP("highbay", "1.0.0")
 	JSONRPC(func() {
 		POST("/mcp")
 	})
 
 	Method("golden_path", func() {
-		Description("Serve the Surla Golden Path architecture playbook for Goa-AI agentic platforms, followed by the decision component catalog for the optional ui_composition of a propose_change or revise_change analysis.")
+		Description("Serve the Highbay Golden Path architecture playbook for Goa-AI agentic platforms, followed by the decision component catalog for the optional ui_composition of a propose_change or revise_change analysis.")
 		Result(String)
-		Resource("golden_path", "surla://golden-path", "text/markdown")
+		Resource("golden_path", "highbay://golden-path", "text/markdown")
 		HTTP(func() {
 			GET("/golden-path")
 			Response(StatusOK)
@@ -765,13 +765,13 @@ var _ = Service("surla", func() {
 	})
 
 	Method("propose_change", func() {
-		Description("Save a new Checkpoint 1 Change Card from a feature request and the caller's analysis of it. Surla checks the analysis's structure and cross-field rules, gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs check_01, check_02, ... in list order, binds the card to the authenticated owner, and computes request_revision. With story_refresh_op_id, Surla saves what that succeeded refresh_story operation evaluated: the draft's design, Stories, architecture, go.mod and made-from list; it reads no file. A project with a go.mod requires story_refresh_op_id for a new card; with neither a go.mod nor an op_id, the card records no design. An op_id whose refresh read the draft before the user dropped a build is refused with drafted_before_drop. Every card waits for user confirmation, including a card without ambiguities. Surla runs no model for this step and cannot judge whether the analysis is complete or correct.")
+		Description("Save a new Checkpoint 1 Change Card from a feature request and the caller's analysis of it. Highbay checks the analysis's structure and cross-field rules, gives ambiguities the IDs <change_id>-ambiguity-NN and examples the IDs check_01, check_02, ... in list order, binds the card to the authenticated owner, and computes request_revision. With story_refresh_op_id, Highbay saves what that succeeded refresh_story operation evaluated: the draft's design, Stories, architecture, go.mod and made-from list; it reads no file. A project with a go.mod requires story_refresh_op_id for a new card; with neither a go.mod nor an op_id, the card records no design. An op_id whose refresh read the draft before the user dropped a build is refused with drafted_before_drop. Every card waits for user confirmation, including a card without ambiguities. Highbay runs no model for this step and cannot judge whether the analysis is complete or correct.")
 		Payload(ProposeChangePayload)
 		Result(ChangeCardResult)
 		Error("conflict", ErrorResult, "A Change Card with this change_id already exists; use revise_change or a new change_id.")
 		Error("unprocessable", ErrorResult, "The request could not be accepted: change_id or prompt is blank, an ambiguity repeats an option, story_refresh_op_id does not name the owner's current succeeded refresh_story operation, or the project folder holds a go.mod and story_refresh_op_id is missing. The message says which; nothing was saved.")
 		Error("drafted_before_drop", ErrorResult, "A build was dropped after this refresh. Call refresh_story to remake and evaluate the draft.")
-		Tool("propose_change", "Propose a feature change as a Checkpoint 1 Change Card for the user to review in the browser. Read surla://golden-path first. Draft only in the draft folder update_draft or refresh_story returns, then pass the succeeded op_id as story_refresh_op_id. Write every Change Card field in concise plain domain language for a user who knows only their goal—never mention Surla's worked example, repository file paths (such as design/design.go), or Surla's -listen flag, and send preserved_behaviors: [] on a brand-new product. Every card awaits the user's confirmation, including a card without open questions.")
+		Tool("propose_change", "Propose a feature change as a Checkpoint 1 Change Card for the user to review in the browser. Read highbay://golden-path first. Draft only in the draft folder update_draft or refresh_story returns, then pass the succeeded op_id as story_refresh_op_id. Write every Change Card field in concise plain domain language for a user who knows only their goal—never mention Highbay's worked example, repository file paths (such as design/design.go), or Highbay's -listen flag, and send preserved_behaviors: [] on a brand-new product. Every card awaits the user's confirmation, including a card without open questions.")
 		HTTP(func() {
 			POST("/changes/propose")
 			Response(StatusOK)
@@ -782,7 +782,7 @@ var _ = Service("surla", func() {
 	})
 
 	Method("revise_change", func() {
-		Description("Save the next revision of an existing Checkpoint 1 Change Card from the change's complete feature request as it now stands, a note saying what this revision changes and why, and the guide's analysis. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision's request_revision when one waits, otherwise the card's. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Surla keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated draft's design, Stories, architecture, go.mod and made-from list when story_refresh_op_id is given, without reading any file, or keeps every snapshot field of the revision it revises when it is omitted, even with zero Stories, and saves the new revision in needs_confirmation status for the user's review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Surla runs no model for this step and cannot judge whether the analysis is complete or correct. A project with a go.mod refuses an omitted op_id when the revision being revised has no design. A refresh from before the user dropped a build is refused with drafted_before_drop.")
+		Description("Save the next revision of an existing Checkpoint 1 Change Card from the change's complete feature request as it now stands, a note saying what this revision changes and why, and the guide's analysis. Only the guide revises a change; only the user confirms or adopts a revision, with confirm_intent on the views page. The request is bound to the latest revision: the proposed revision's request_revision when one waits, otherwise the card's. On a card that was never confirmed, the new revision replaces it. On a confirmed card, the new revision is saved as the proposed revision beside the confirmed one, replacing any earlier proposal, and the confirmed revision stays in force with its answers, confirmation, approval, Stories and design source until the user adopts the proposal with confirm_intent or declines it. The analysis accounts for every example of the revision it revises exactly once, keeping or editing it through prior_id or dropping it through removed_example_ids. Highbay keeps the IDs of kept examples, gives new examples the lowest check_NN ID neither card uses, adopts the evaluated draft's design, Stories, architecture, go.mod and made-from list when story_refresh_op_id is given, without reading any file, or keeps every snapshot field of the revision it revises when it is omitted, even with zero Stories, and saves the new revision in needs_confirmation status for the user's review. The new revision has no answers, confirmed_by or approval: earlier decisions carry over only where the analysis restates them in its summary, examples or preserved behaviors. The result is the change as get_change returns it. Highbay runs no model for this step and cannot judge whether the analysis is complete or correct. A project with a go.mod refuses an omitted op_id when the revision being revised has no design. A refresh from before the user dropped a build is refused with drafted_before_drop.")
 		Payload(ReviseChangePayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
@@ -846,13 +846,13 @@ var _ = Service("surla", func() {
 	})
 
 	Method("preview_architecture", func() {
-		Description("Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with surla preview -dir <draft_folder>.")
+		Description("Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with hbay preview -dir <draft_folder>.")
 		Payload(PreviewArchitecturePayload)
 		Result(ArchitecturePreviewResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
 		Error("conflict", ErrorResult, "The Change Card is not confirmed, its request_revision does not match, or the agreed revision records no architecture to show; confirm the card or read the current revision with get_change.")
 		Error("unprocessable", ErrorResult, "The request or evaluated design did not meet Checkpoint 2 requirements; the message states which check failed.")
-		Tool("preview_architecture", "Read the saved Checkpoint 2 C4 container topology and Goa-AI guardrails of a confirmed Change Card's agreed revision. Surla reads and evaluates no file. The result reports what the design declares; it does not compare the design with the Change Card's requirements.")
+		Tool("preview_architecture", "Read the saved Checkpoint 2 C4 container topology and Goa-AI guardrails of a confirmed Change Card's agreed revision. Highbay reads and evaluates no file. The result reports what the design declares; it does not compare the design with the Change Card's requirements.")
 		HTTP(func() {
 			POST("/changes/preview")
 			Response(StatusOK)
@@ -863,7 +863,7 @@ var _ = Service("surla", func() {
 	})
 
 	Method("draft_override", func() {
-		Description("Apply a Fast Draft Mode prompt override on the live target start_live_target runs, or reject a compiled-rule prompt hack. Surla changes prompts only in a live target it built and started itself, so a prompt_template override with no live target running is refused with no_live_target. A rejected update leaves the target's text unchanged; update_not_confirmed means the target may or may not have applied it.")
+		Description("Apply a Fast Draft Mode prompt override on the live target start_live_target runs, or reject a compiled-rule prompt hack. Highbay changes prompts only in a live target it built and started itself, so a prompt_template override with no live target running is refused with no_live_target. A rejected update leaves the target's text unchanged; update_not_confirmed means the target may or may not have applied it.")
 		Payload(DraftOverridePayload)
 		Result(DraftOverrideResult)
 		Error("no_live_target", ErrorResult, "No live target is running, so nothing changed. Call start_live_target with an owned confirmed change_id and a candidate commit first.")
@@ -913,7 +913,7 @@ var _ = Service("surla", func() {
 	Method("stop_live_target", func() {
 		Description("Stop this server's live CP3 target, if one runs, and unbind draft_override from it. Stopping when none runs is not an error.")
 		Result(StopLiveTargetResult)
-		Error("live_target_stop_failed", ErrorResult, "The live target's processes could not be confirmed stopped; stop and start Surla.")
+		Error("live_target_stop_failed", ErrorResult, "The live target's processes could not be confirmed stopped; stop and start Highbay.")
 		Tool("stop_live_target", "Stop this server's live CP3 target, if one runs. This discards every prompt draft applied to it; prompt text survives only when it is committed.")
 		HTTP(func() {
 			DELETE("/live-target")
@@ -933,21 +933,21 @@ var _ = Service("surla", func() {
 	})
 
 	Method("verify_change", func() {
-		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Surla checks, with git in the project's repository: the candidate is on the build's branch surla/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with surla verification set, the run uses the operator's evaluator. Otherwise Surla must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.")
+		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with hbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.")
 		Payload(VerifyChangePayload)
 		Result(VerificationStatusResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
 		Error("conflict", ErrorResult, "The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.")
-		Error("no_build", ErrorResult, "No build of this change is open (the user built another change or none), the user dropped it, or the open build is for another revision of the change. The message names what Surla found and the user's step.")
-		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
-		Error("no_test_layout", ErrorResult, "Without stored verification settings: a commit lacks the test layout surla init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.")
+		Error("no_build", ErrorResult, "No build of this change is open (the user built another change or none), the user dropped it, or the open build is for another revision of the change. The message names what Highbay found and the user's step.")
+		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Highbay has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
+		Error("no_test_layout", ErrorResult, "Without stored verification settings: a commit lacks the test layout hbay init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.")
 		Error("not_implemented", ErrorResult, "This server has no verification configuration, so it cannot run Checkpoint 4 verifications.")
 		Error("assignment_unread", ErrorResult, "A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.")
 		Error("copy_off_branch", CopyOffBranch, "Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and verify again.")
 		Error("working_folder_missing", ErrorResult, "Your working folder is missing; ask the user to build this change again on the views page.")
 		Error("build_branch_mismatch", ErrorResult, "The candidate is not on your build's branch, does not descend from the build's base, is the base itself, or holds a commit of another build's branch that the base lacks. The message names the commit and, for another build's work, its branch and the files it changed, and states the goal: your branch and working copy hold none of that work.")
-		Error("design_changed_outside", ErrorResult, "A design file at the candidate's merge base with the project's commit is not a version the revision was made from: it was changed outside Surla. The message names the file and the commit. When the change is uncommitted, the user commits the design change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change.")
-		Tool("verify_change", "Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Surla must also have accepted the build's tests (your assignment says when). A refusal states what Surla found and the goal: put your work right with git and verify again.")
+		Error("design_changed_outside", ErrorResult, "A design file at the candidate's merge base with the project's commit is not a version the revision was made from: it was changed outside Highbay. The message names the file and the commit. When the change is uncommitted, the user commits the design change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change.")
+		Tool("verify_change", "Start CP4 verification of a candidate commit on your build's branch for the agreed revision; returns a run_id to read with get_verification. The candidate must be on your branch, descend from the build's base, hold no other build's work and carry exactly the agreed design generate_code wrote; without stored verification settings Highbay must also have accepted the build's tests (your assignment says when). A refusal states what Highbay found and the goal: put your work right with git and verify again.")
 		HTTP(func() {
 			POST("/changes/{change_id}/verifications")
 			Response(StatusOK)
@@ -996,17 +996,17 @@ var _ = Service("surla", func() {
 	})
 
 	Method("approve_merge", func() {
-		Description("Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Surla accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with surla promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.")
+		Description("Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with hbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.")
 		Payload(ApproveMergePayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
 		Error("conflict", ErrorResult, "The Change Card is not confirmed, its request_revision does not match, or the accepted tests changed while approving; confirm the card, read the current revision with get_change, or approve again.")
 		Error("no_build", ErrorResult, "Without stored verification settings: the user has not built the change's revision in force with a test writer, so no tests are accepted for it. The message names the revision built, if any, and ends with the user's step.")
-		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Surla has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
+		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Highbay has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
 		Error("unprocessable", ErrorResult, "The verification report did not pass or does not match the Change Card, the chosen tests' commit, or (when promotion settings are configured) the promotion target's staged binary digests.")
 		Error("not_implemented", ErrorResult, "This control plane has no verification configuration bound to it.")
 		Error("build_branch_mismatch", ErrorResult, "The run's candidate is no longer on the build's branch, or that branch now holds another build's work: the builder verifies again, then the user approves that run.")
-		Tool("approve_merge", "Approve the confirmed Change Card revision after its CP4 verification report passed for the candidate commit and the tests chosen for the revision. When promotion settings are configured with surla promotion set, also checks that the staged release binaries match the report.")
+		Tool("approve_merge", "Approve the confirmed Change Card revision after its CP4 verification report passed for the candidate commit and the tests chosen for the revision. When promotion settings are configured with hbay promotion set, also checks that the staged release binaries match the report.")
 		HTTP(func() {
 			POST("/changes/approve")
 			Response(StatusOK)
@@ -1032,11 +1032,11 @@ var _ = Service("surla", func() {
 	})
 
 	Method("configure_model", func() {
-		Description("Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the surla command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.")
+		Description("Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the hbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.")
 		Payload(ConfigureModelPayload)
 		Result(ModelConfigResult)
 		Error("unprocessable", ErrorResult, "The field combination is invalid, or the project server holds no request settings for the chosen provider; the message names the provider's key variable and how to hand it over.")
-		Tool("configure_model", "Switch the model provider and model name (such as anthropic/claude-sonnet-4-6 or openai/gpt-5.4-mini, whose key the user exported in the shell that ran surla) or attach a running model gateway address, without restarting the project server. Live targets that start_live_target starts afterwards plan with this model.")
+		Tool("configure_model", "Switch the model provider and model name (such as anthropic/claude-sonnet-4-6 or openai/gpt-5.4-mini, whose key the user exported in the shell that ran hbay) or attach a running model gateway address, without restarting the project server. Live targets that start_live_target starts afterwards plan with this model.")
 		HTTP(func() {
 			POST("/cp1/model")
 			Response(StatusOK)
@@ -1054,7 +1054,7 @@ var _ = Service("surla", func() {
 	})
 
 	Method("hand_over_model_settings", func() {
-		Description("The surla command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the surla command's management credential may call this operation; it is never an MCP tool.")
+		Description("The hbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the hbay command's management credential may call this operation; it is never an MCP tool.")
 		Payload(HandOverModelSettingsPayload)
 		Result(ModelSettingsResult)
 		Error("unprocessable", ErrorResult, "A provider's settings do not include its key variable, or a value contains a NUL character. The message names the provider and the variable, never a value; nothing held changed.")
@@ -1066,13 +1066,13 @@ var _ = Service("surla", func() {
 	})
 
 	Method("init_project", func() {
-		Description("Initialize a new Surla starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. The project is blank (a service with no methods and one test that the program starts) unless worked_example is true, which creates Surla's price-answering worked example instead. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.")
+		Description("Initialize a new Highbay starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. The project is blank (a service with no methods and one test that the program starts) unless worked_example is true, which creates Highbay's price-answering worked example instead. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.")
 		Payload(InitProjectPayload)
 		Result(InitProjectResult)
 		Error("conflict", ErrorResult, "The workspace or target directory is already initialized.")
 		Error("unprocessable", ErrorResult, "The module path or child directory name is invalid.")
-		Error("not_implemented", ErrorResult, "This control plane has no exact Surla module version configured for starter generation.")
-		Tool("init_project", "Initialize a new Surla starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). The project starts blank; pass worked_example: true only when the user asks to see Surla's worked example. Returns the created commit ID in commit for start_live_target and verify_change.")
+		Error("not_implemented", ErrorResult, "This control plane has no exact Highbay module version configured for starter generation.")
+		Tool("init_project", "Initialize a new Highbay starter project inside the bound workspace directory, create its initial Git commit, and switch the server's active workspace to that project. Pass dir: \".\" and omit module_path to initialize an empty project folder in place with a module path derived from the folder name (pass module_path only when the user gave one). The project starts blank; pass worked_example: true only when the user asks to see Highbay's worked example. Returns the created commit ID in commit for start_live_target and verify_change.")
 		HTTP(func() {
 			POST("/workspace/init")
 			Response(StatusOK)
@@ -1083,7 +1083,7 @@ var _ = Service("surla", func() {
 	})
 
 	Method("generate_code", func() {
-		Description("Write the open build's agreed design into the builder's working folder and regenerate its code. Surla replaces, creates or removes the Go files under the builder's design/ so that design/ holds exactly the build's design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder's go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment's gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles and runs the design as an ordinary process with the user's file and network access and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder's eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.")
+		Description("Write the open build's agreed design into the builder's working folder and regenerate its code. Highbay replaces, creates or removes the Go files under the builder's design/ so that design/ holds exactly the build's design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder's go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment's gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles and runs the design as an ordinary process with the user's file and network access and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder's eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.")
 		Payload(GenerateCodePayload)
 		Result(GenerateCodeResult)
 		builderCopyRefusals()

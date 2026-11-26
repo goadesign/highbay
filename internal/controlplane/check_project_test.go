@@ -17,9 +17,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	genhttpclient "github.com/goadesign/surla/gen/http/surla/client"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/verify/candidate"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genhttpclient "github.com/goadesign/highbay/gen/http/highbay/client"
+	"github.com/goadesign/highbay/verify/candidate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
@@ -373,7 +373,7 @@ func TestOutputKeepsMultiByteCharactersWhole(t *testing.T) {
 	c := &ControlPlane{checkWorkDir: workDir}
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	var pages []string
-	p := &gensurla.ReadCheckOutputPayload{OpID: id}
+	p := &genhighbay.ReadCheckOutputPayload{OpID: id}
 	for {
 		page, err := c.ReadCheckOutput(ctx, p)
 		require.NoError(t, err)
@@ -470,7 +470,7 @@ func TestCheckFinishPreservesFailureCauses(t *testing.T) {
 				}
 				var cleanupErr *candidate.CleanupError
 				if keepContainer {
-					cleanupErr = &candidate.CleanupError{Name: "surla-check-" + op.id + "-0", Err: errors.New("removal failed")}
+					cleanupErr = &candidate.CleanupError{Name: "highbay-check-" + op.id + "-0", Err: errors.New("removal failed")}
 					op.owner.Containers = []ownedContainer{{Name: cleanupErr.Name, State: stateCreationAnswered}}
 					cause = errors.Join(cause, cleanupErr)
 				}
@@ -524,10 +524,10 @@ func TestReadCheckOutputBudgetsTheTextTheCallerReceives(t *testing.T) {
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	transport := genhttpclient.NewClient(origin.Scheme, origin.Host, generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	client := &gensurla.Client{ReadCheckOutputEndpoint: transport.ReadCheckOutput()}
+	client := &genhighbay.Client{ReadCheckOutputEndpoint: transport.ReadCheckOutput()}
 
 	var got strings.Builder
-	p := &gensurla.ReadCheckOutputPayload{OpID: id}
+	p := &genhighbay.ReadCheckOutputPayload{OpID: id}
 	pages := 0
 	for {
 		page, err := client.ReadCheckOutput(context.Background(), p)
@@ -573,7 +573,7 @@ func TestReadCheckOutputRefusesDamagedOutput(t *testing.T) {
 			id := strings.Repeat("ab", 16)
 			writeTree(t, filepath.Join(workDir, id), map[string]string{outputFile: tc.output, outputMetaFile: tc.meta})
 			c := &ControlPlane{checkWorkDir: workDir}
-			page, err := c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: id})
+			page, err := c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: id})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantErr)
 			assert.Nil(t, page)
@@ -597,10 +597,10 @@ func TestRecoverCheckOperationsKeepsScratchItCannotAttribute(t *testing.T) {
 		{name: "remote engine", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"tcp://build.example:2376","containers":[]}`, wantKept: true, wantError: "not a local engine endpoint"},
 		{name: "foreign container", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"production-db","state":"creation_answered"}]}`, wantKept: true, wantError: "does not belong to operation"},
 		{name: "completed operation", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]}`},
-		{name: "names only", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":["surla-check-efefefefefefefefefefefefefefefef-0"]}`, wantKept: true, wantError: "cannot unmarshal"},
-		{name: "an unknown state", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"running"}]}`, wantKept: true, wantError: `state "running"`},
-		{name: "an unknown entry field", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered","pid":7}]}`, wantKept: true, wantError: "unknown field"},
-		{name: "a name listed twice", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"},{"name":"surla-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"}]}`, wantKept: true, wantError: "listed twice"},
+		{name: "names only", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":["highbay-check-efefefefefefefefefefefefefefefef-0"]}`, wantKept: true, wantError: "cannot unmarshal"},
+		{name: "an unknown state", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"highbay-check-efefefefefefefefefefefefefefefef-0","state":"running"}]}`, wantKept: true, wantError: `state "running"`},
+		{name: "an unknown entry field", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"highbay-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered","pid":7}]}`, wantKept: true, wantError: "unknown field"},
+		{name: "a name listed twice", owner: `{"version":2,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[{"name":"highbay-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"},{"name":"highbay-check-efefefefefefefefefefefefefefefef-0","state":"creation_answered"}]}`, wantKept: true, wantError: "listed twice"},
 		{name: "unknown version", owner: `{"version":3,"docker":"/usr/local/bin/docker","host":"unix:///var/run/docker.sock","containers":[]}`, wantKept: true, wantError: "version 3 is not supported"},
 	}
 	for _, tc := range cases {
@@ -894,7 +894,7 @@ func TestCheckToolsRequireAnAuthenticatedPrincipal(t *testing.T) {
 	require.EqualError(t, err, "authenticated principal is required")
 	id := strings.Repeat("ab", 16)
 	writeTree(t, filepath.Join(workDir, id), map[string]string{outputFile: "secret test output", outputMetaFile: `{"captured":18,"dropped":0}`})
-	page, err := c.ReadCheckOutput(context.Background(), &gensurla.ReadCheckOutputPayload{OpID: id})
+	page, err := c.ReadCheckOutput(context.Background(), &genhighbay.ReadCheckOutputPayload{OpID: id})
 	require.EqualError(t, err, "authenticated principal is required")
 	assert.Nil(t, page)
 	entries, err := os.ReadDir(workDir)
@@ -933,30 +933,30 @@ func TestReadCheckOutputPages(t *testing.T) {
 	c := &ControlPlane{checkWorkDir: workDir}
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 
-	first, err := c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: id})
+	first, err := c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: id})
 	require.NoError(t, err)
 	assert.Len(t, first.Text, maxCheckMessageBytes)
 	assert.Equal(t, int64(3), first.DroppedBytes)
 	require.NotNil(t, first.NextCursor)
 
-	second, err := c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: id, Cursor: first.NextCursor})
+	second, err := c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: id, Cursor: first.NextCursor})
 	require.NoError(t, err)
 	assert.Equal(t, "tail", second.Text)
 	assert.Nil(t, second.NextCursor)
 
 	otherID := strings.Repeat("cd", 16)
 	foreign := encodeCursor(otherID, 0)
-	_, err = c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: id, Cursor: &foreign})
+	_, err = c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: id, Cursor: &foreign})
 	assertServiceError(t, err, "unprocessable")
 
 	bad := "not-base64!"
-	_, err = c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: id, Cursor: &bad})
+	_, err = c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: id, Cursor: &bad})
 	assertServiceError(t, err, "unprocessable")
 
-	_, err = c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: otherID})
+	_, err = c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: otherID})
 	assertServiceError(t, err, "not_found")
 
-	_, err = c.ReadCheckOutput(ctx, &gensurla.ReadCheckOutputPayload{OpID: "../../etc"})
+	_, err = c.ReadCheckOutput(ctx, &genhighbay.ReadCheckOutputPayload{OpID: "../../etc"})
 	assertServiceError(t, err, "not_found")
 }
 

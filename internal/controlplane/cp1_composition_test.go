@@ -16,9 +16,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	genmcpadapter "github.com/goadesign/surla/gen/mcp_surla"
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/goldenpath"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
+	"github.com/goadesign/highbay/internal/goldenpath"
 )
 
 // compositionProgram is an OpenUI Lang program that refers to the card's
@@ -47,7 +47,7 @@ type mcpResultFrame struct {
 func TestProposeChangeBindsTheCallerCompositionToTheRevision(t *testing.T) {
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
-	card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
+	card, err := cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: compositionAnalysis(&[]string{compositionProgram}[0]),
 	})
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestProposeChangeBindsTheCallerCompositionToTheRevision(t *testing.T) {
 	assert.Equal(t, "chg-ambiguity-01", card.Ambiguities[0].ID, "ordinal 1 in the program names this ambiguity")
 
 	plain := newControlPlane(t, Options{})
-	plainCard, err := plain.ProposeChange(ctx, &gensurla.ProposeChangePayload{
+	plainCard, err := plain.ProposeChange(ctx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: compositionAnalysis(nil),
 	})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestProposeChangeCarriesAnyCallerCompositionVerbatim(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cp := newControlPlane(t, Options{})
-			card, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
+			card, err := cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{
 				ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: compositionAnalysis(tc.program),
 			})
 			require.NoError(t, err, "a composition the views page cannot use must not cost the operator the analysis")
@@ -106,23 +106,23 @@ func TestProposeChangeCarriesAnyCallerCompositionVerbatim(t *testing.T) {
 func TestCompositionDescribesOnlyTheRevisionItWasComposedFor(t *testing.T) {
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
-	proposed, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{
+	proposed, err := cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: compositionAnalysis(&[]string{compositionProgram}[0]),
 	})
 	require.NoError(t, err)
 
-	first, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{
+	first, err := cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision,
 		Answers: map[string]string{"chg-ambiguity-01": "order_total"}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
 	assert.Nil(t, first.UIComposition, "confirming answers creates a new revision the composition does not describe")
 
-	read, err := cp.GetChange(ctx, &gensurla.GetChangePayload{ChangeID: "chg"})
+	read, err := cp.GetChange(ctx, &genhighbay.GetChangePayload{ChangeID: "chg"})
 	require.NoError(t, err)
 	assert.Nil(t, read.UIComposition, "get_change must not restore the earlier revision's composition")
 
-	noop, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{
+	noop, err := cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: first.RequestRevision,
 		Answers: map[string]string{"chg-ambiguity-01": "order_total"}, Examples: first.Examples,
 	})
@@ -136,14 +136,14 @@ func TestCompositionDescribesOnlyTheRevisionItWasComposedFor(t *testing.T) {
 func TestConfirmationDropsDraftCompositionAtTheNewRevision(t *testing.T) {
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	analysis := compositionAnalysis(&[]string{compositionProgram}[0])
-	analysis.Ambiguities = []*gensurla.CP1AnalysisAmbiguity{}
+	analysis.Ambiguities = []*genhighbay.CP1AnalysisAmbiguity{}
 	cp := newControlPlane(t, Options{})
-	proposed, err := cp.ProposeChange(ctx, &gensurla.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
+	proposed, err := cp.ProposeChange(ctx, &genhighbay.ProposeChangePayload{ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: analysis})
 	require.NoError(t, err)
 	require.Equal(t, StatusNeedsConfirmation, proposed.Status)
 	require.NotNil(t, proposed.UIComposition)
 
-	same, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{
+	same, err := cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{
 		ChangeID: "chg", RequestRevision: proposed.RequestRevision, Answers: map[string]string{}, Examples: proposed.Examples,
 	})
 	require.NoError(t, err)
@@ -152,8 +152,8 @@ func TestConfirmationDropsDraftCompositionAtTheNewRevision(t *testing.T) {
 
 	ex := *proposed.Examples[0]
 	ex.ExpectedOutcome = "Waits for a manager"
-	changed, err := cp.ConfirmIntent(ctx, &gensurla.ConfirmIntentPayload{
-		ChangeID: "chg", RequestRevision: same.RequestRevision, Answers: map[string]string{}, Examples: []*gensurla.ExampleItem{&ex},
+	changed, err := cp.ConfirmIntent(ctx, &genhighbay.ConfirmIntentPayload{
+		ChangeID: "chg", RequestRevision: same.RequestRevision, Answers: map[string]string{}, Examples: []*genhighbay.ExampleItem{&ex},
 	})
 	require.NoError(t, err)
 	assert.Nil(t, changed.UIComposition, "an edited example creates a revision the composition does not describe")
@@ -169,7 +169,7 @@ func TestProposeChangeOverMCPCarriesTheCompositionVerbatim(t *testing.T) {
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{"alice-token": {ID: "alice@example.com"}})))
 	defer srv.Close()
 
-	args := proposeArgs(t, &gensurla.ProposeChangePayload{
+	args := proposeArgs(t, &genhighbay.ProposeChangePayload{
 		ChangeID: "chg", Prompt: "Refunds up to $50 are instant.", Analysis: compositionAnalysis(&[]string{compositionProgram}[0]),
 	})
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{` +
@@ -231,7 +231,7 @@ func TestReportProgressWithoutARequestedTokenIsANoOp(t *testing.T) {
 func TestAnalysisToolsDescribeWhatAGoodAnalysisContains(t *testing.T) {
 	ctx := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "alice@example.com", Kind: CallerUser})
 	cp := newControlPlane(t, Options{})
-	adapter := genmcpadapter.NewMCPAdapter(gensurla.NewEndpoints(cp), nil)
+	adapter := genmcpadapter.NewMCPAdapter(genhighbay.NewEndpoints(cp), nil)
 	tools, err := adapter.ToolsList(ctx, &genmcpadapter.ToolsListPayload{})
 	require.NoError(t, err)
 	contracts := map[string]string{}
@@ -243,7 +243,7 @@ func TestAnalysisToolsDescribeWhatAGoodAnalysisContains(t *testing.T) {
 		contract := contracts[name]
 		require.NotEmpty(t, contract, name)
 		for _, rule := range []string{
-			"surla://golden-path",
+			"highbay://golden-path",
 			"Open questions only the requester can answer",
 			"never placeholder",
 			"decision components",
@@ -267,11 +267,11 @@ func TestAnalysisToolsDescribeWhatAGoodAnalysisContains(t *testing.T) {
 
 // compositionAnalysis returns a proposal analysis with one ambiguity and one
 // example, carrying program as ui_composition when it is not nil.
-func compositionAnalysis(program *string) *gensurla.CP1Analysis {
-	return &gensurla.CP1Analysis{
+func compositionAnalysis(program *string) *genhighbay.CP1Analysis {
+	return &genhighbay.CP1Analysis{
 		Summary:            "Refunds up to $50 are instant.",
-		Ambiguities:        []*gensurla.CP1AnalysisAmbiguity{{Question: "Is the limit the item subtotal or the order total?", Options: []string{"item_subtotal", "order_total"}}},
-		Examples:           []*gensurla.CP1AnalysisExample{{Scenario: "Refund with shipping", InputSummary: "$48 item + $6 shipping", ExpectedOutcome: "Depends on the limit", VerificationKind: "deterministic"}},
+		Ambiguities:        []*genhighbay.CP1AnalysisAmbiguity{{Question: "Is the limit the item subtotal or the order total?", Options: []string{"item_subtotal", "order_total"}}},
+		Examples:           []*genhighbay.CP1AnalysisExample{{Scenario: "Refund with shipping", InputSummary: "$48 item + $6 shipping", ExpectedOutcome: "Depends on the limit", VerificationKind: "deterministic"}},
 		PreservedBehaviors: []string{},
 		UIComposition:      program,
 	}

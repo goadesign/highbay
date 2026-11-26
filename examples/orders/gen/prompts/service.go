@@ -3,7 +3,7 @@
 // prompts service
 //
 // Command:
-// $ goa gen github.com/goadesign/surla/examples/orders/design
+// $ goa gen github.com/goadesign/highbay/examples/orders/design
 
 package prompts
 
@@ -20,9 +20,9 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Prompt text a live copy of the orders platform lets Surla replace. Each call
-// replaces the text of one registered prompt for every tenant served by this
-// orders process, until it exits.
+// Prompt text a live copy of the orders platform lets Highbay replace. Each
+// call replaces the text of one registered prompt for every tenant served by
+// this orders process, until it exits.
 type Service interface {
 	// Replace the text of a registered prompt. The agent's next model request
 	// planned by this process uses the new text, and a restarted process starts

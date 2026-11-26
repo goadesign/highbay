@@ -6,7 +6,7 @@
 //
 //	[[.Name]] -listen 127.0.0.1:8080 -model-gateway 127.0.0.1:9090
 //
-// When SURLA_LIVE_TARGET_KEY is set, override_prompt accepts that key; Surla's
+// When HIGHBAY_LIVE_TARGET_KEY is set, override_prompt accepts that key; Highbay's
 // start_live_target sets it for a live CP3 target. Without it, override_prompt
 // rejects every call.
 package main
@@ -37,7 +37,7 @@ import (
 )
 
 // liveKeyEnv names the environment variable holding the live key.
-const liveKeyEnv = "SURLA_LIVE_TARGET_KEY"
+const liveKeyEnv = "HIGHBAY_LIVE_TARGET_KEY"
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:8080", "HTTP listen address")

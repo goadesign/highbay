@@ -13,11 +13,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/modelsettings"
-	"github.com/goadesign/surla/internal/testwriter"
-	"github.com/goadesign/surla/internal/verify"
-	"github.com/goadesign/surla/internal/verifyrun"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/testwriter"
+	"github.com/goadesign/highbay/internal/verify"
+	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
 // VerificationConfig is the operator's Checkpoint 4 configuration: what is
@@ -35,7 +35,7 @@ type VerificationConfig struct {
 	// WorkDir are set per run and must be empty here. RunsDir grows by one
 	// directory per run, kept as evidence; the operator prunes it.
 	Plan verify.Plan
-	// Command is the argument list that runs this surla executable; runs
+	// Command is the argument list that runs this hbay executable; runs
 	// start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 	Command []string
 	// Timeout is how long a run may take before it is stopped and recorded
@@ -60,26 +60,26 @@ var errVerificationUnavailable = errors.New("verification is not configured on t
 // and checks the committed test layout. The run is accepted into its own
 // directory under the runs folder and carried out by processes that outlive
 // this call and this server (see verifyrun).
-func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChangePayload) (*gensurla.VerificationStatusResult, error) {
+func (c *ControlPlane) VerifyChange(ctx context.Context, p *genhighbay.VerifyChangePayload) (*genhighbay.VerificationStatusResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	if _, none := c.verifier.(noVerification); none {
-		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return nil, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
 	if err := c.verifiableCard(principal, p.ChangeID, p.RequestRevision); err != nil {
 		return nil, err
 	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.start_verification",
-		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.start_verification",
+		trace.WithAttributes(attribute.String("highbay.change_id", p.ChangeID)))
 	defer span.End()
 	// The caller owns the copy turn through readiness, candidate preflight and
 	// acceptance. Verification never joins a copy or marks an assignment read.
 	select {
 	case c.builderCopyTurn <- struct{}{}:
 	default:
-		return nil, gensurla.MakeConflict(errors.New("Surla is using the builder's working copy; call verify_change again when that operation has ended."))
+		return nil, genhighbay.MakeConflict(errors.New("Highbay is using the builder's working copy; call verify_change again when that operation has ended."))
 	}
 	defer func() { <-c.builderCopyTurn }()
 	c.mu.RLock()
@@ -94,7 +94,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if errors.As(err, &readiness) && readiness.Name == "unprocessable" {
 		// Go workspace selection can refuse a module resolving outside the
 		// copy. Verify exposes that readiness goal through its declared conflict.
-		err = gensurla.MakeConflict(fmt.Errorf("%s. Restore the builder's module folder inside its assigned working copy, then call verify_change again.", readiness.Message))
+		err = genhighbay.MakeConflict(fmt.Errorf("%s. Restore the builder's module folder inside its assigned working copy, then call verify_change again.", readiness.Message))
 	}
 	if _, written := c.verifier.(writtenTestVerification); written &&
 		(errors.Is(err, errNoRepository) || errors.Is(err, testwriter.ErrNotRepository)) {
@@ -105,7 +105,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if err == nil && (ready.build.file.ChangeID != held.file.ChangeID ||
 		ready.build.file.RequestRevision != held.file.RequestRevision ||
 		!ready.build.file.StartedAt.Equal(held.file.StartedAt)) {
-		err = gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
+		err = genhighbay.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
 	}
 	if err == nil {
 		var check testwriter.CommitCheck
@@ -156,7 +156,7 @@ func (c *ControlPlane) VerifyChange(ctx context.Context, p *gensurla.VerifyChang
 	if currentBuild.file.Number != held.file.Number ||
 		!currentBuild.file.StartedAt.Equal(held.file.StartedAt) {
 		c.mu.RUnlock()
-		return nil, gensurla.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
+		return nil, genhighbay.MakeConflict(errors.New("the open build changed while preparing verification: read get_builder_assignment and verify again"))
 	}
 	inputsCurrent, err := c.currentVerificationInputs(principal, p.ChangeID, plan)
 	c.mu.RUnlock()
@@ -199,7 +199,7 @@ func (c *ControlPlane) verifiableCard(principal Principal, changeID, revision st
 		return err
 	}
 	if record.card.RequestRevision != revision {
-		return gensurla.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", changeID, revision, record.card.RequestRevision))
+		return genhighbay.MakeConflict(fmt.Errorf("request_revision mismatch for %q: got %q, want %q", changeID, revision, record.card.RequestRevision))
 	}
 	return nil
 }
@@ -212,12 +212,12 @@ func (c *ControlPlane) confirmedCard(principal Principal, changeID string) (stor
 	if err != nil {
 		var serviceErr *goa.ServiceError
 		if errors.As(err, &serviceErr) && serviceErr.Name == "not_found" {
-			return storedChangeCard{}, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q: take the change_id from list_builder_assignments", changeID))
+			return storedChangeCard{}, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q: take the change_id from list_builder_assignments", changeID))
 		}
 		return storedChangeCard{}, err
 	}
 	if record.card.Status != StatusConfirmed {
-		return storedChangeCard{}, gensurla.MakeConflict(fmt.Errorf("change_id %q must be confirmed before verification or a live target (status %q)", changeID, record.card.Status))
+		return storedChangeCard{}, genhighbay.MakeConflict(fmt.Errorf("change_id %q must be confirmed before verification or a live target (status %q)", changeID, record.card.Status))
 	}
 	return record, nil
 }
@@ -228,13 +228,13 @@ func (c *ControlPlane) confirmedCard(principal Principal, changeID string) (stor
 // the card changes or this server restarts. A completed run returns only the
 // builder view of its report. A test writer reads only the runs of a change it
 // holds an assignment for (testWriterHolds); any other is forbidden.
-func (c *ControlPlane) GetVerification(ctx context.Context, p *gensurla.GetVerificationPayload) (*gensurla.VerificationStatusResult, error) {
+func (c *ControlPlane) GetVerification(ctx context.Context, p *genhighbay.GetVerificationPayload) (*genhighbay.VerificationStatusResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
-	ctx, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.get_verification",
-		trace.WithAttributes(attribute.String("surla.run_id", p.RunID)))
+	ctx, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.get_verification",
+		trace.WithAttributes(attribute.String("highbay.run_id", p.RunID)))
 	defer span.End()
 	req, state, inputsCurrent, err := c.readVerificationRun(principal, p.RunID, span)
 	if err != nil {
@@ -265,7 +265,7 @@ func (c *ControlPlane) readVerificationRun(
 ) (verifyrun.Request, verifyrun.State, bool, error) {
 	runsDir := c.runsDir
 	if runsDir == "" {
-		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return verifyrun.Request{}, verifyrun.State{}, false, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
 
 	c.mu.RLock()
@@ -273,11 +273,11 @@ func (c *ControlPlane) readVerificationRun(
 	c.mu.RUnlock()
 	switch {
 	case req.Owner == "" && errors.Is(err, fs.ErrNotExist):
-		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeNotFound(fmt.Errorf("unknown run_id %q", runID))
+		return verifyrun.Request{}, verifyrun.State{}, false, genhighbay.MakeNotFound(fmt.Errorf("unknown run_id %q", runID))
 	case req.Owner != principal.ID && req.Owner != "":
 		// Checked before any later read error, whose text may name
 		// evaluator paths.
-		return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of run_id %q", principal.ID, runID))
+		return verifyrun.Request{}, verifyrun.State{}, false, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of run_id %q", principal.ID, runID))
 	case err != nil:
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "read verification run")
@@ -298,7 +298,7 @@ func (c *ControlPlane) readVerificationRun(
 		}
 		if !holds {
 			c.mu.RUnlock()
-			return verifyrun.Request{}, verifyrun.State{}, false, gensurla.MakeForbidden(fmt.Errorf(
+			return verifyrun.Request{}, verifyrun.State{}, false, genhighbay.MakeForbidden(fmt.Errorf(
 				"the test writer reads only the runs of a change it has an assignment for, and change %q has none", req.ChangeID))
 		}
 	}
@@ -319,17 +319,17 @@ func (c *ControlPlane) readVerificationRun(
 // revision. Each completed run returns only the builder view of its report. A
 // test writer lists only the runs of a change it holds an assignment for
 // (testWriterHolds); any other is forbidden.
-func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVerificationsPayload) (*gensurla.VerificationListResult, error) {
+func (c *ControlPlane) ListVerifications(ctx context.Context, p *genhighbay.ListVerificationsPayload) (*genhighbay.VerificationListResult, error) {
 	principal, ok := PrincipalFromContext(ctx)
 	if !ok {
 		return nil, errors.New("authenticated principal is required")
 	}
 	runsDir := c.runsDir
 	if runsDir == "" {
-		return nil, gensurla.MakeNotImplemented(errVerificationUnavailable)
+		return nil, genhighbay.MakeNotImplemented(errVerificationUnavailable)
 	}
-	_, span := c.tracer("surla/controlplane").Start(ctx, "surla.controlplane.list_verifications",
-		trace.WithAttributes(attribute.String("surla.change_id", p.ChangeID)))
+	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.list_verifications",
+		trace.WithAttributes(attribute.String("highbay.change_id", p.ChangeID)))
 	defer span.End()
 
 	c.mu.RLock()
@@ -348,7 +348,7 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 					span.SetStatus(codes.Error, "read verification assignment")
 					return nil, fmt.Errorf("list verifications for %q: saved verification inputs could not be read", p.ChangeID)
 				}
-				return nil, gensurla.MakeForbidden(fmt.Errorf(
+				return nil, genhighbay.MakeForbidden(fmt.Errorf(
 					"the test writer reads only the runs of a change it has an assignment for, and change %q has none", p.ChangeID))
 			}
 		}
@@ -381,7 +381,7 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 			span.SetStatus(codes.Error, "resolve promotion target")
 			return nil, fmt.Errorf("list verifications for %q: promotion settings could not be read", p.ChangeID)
 		}
-		out := make([]*gensurla.VerificationStatusResult, 0, len(runs))
+		out := make([]*genhighbay.VerificationStatusResult, 0, len(runs))
 		for _, r := range runs {
 			binariesDir, err := verificationBinariesDirectory(r.Request, r.State, showBinaries)
 			if err != nil {
@@ -392,7 +392,7 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 			out = append(out, statusResult(r.Request, r.State,
 				c.verificationInputsCurrent(record, build, buildFound, r.Request.Plan), binariesDir))
 		}
-		return &gensurla.VerificationListResult{
+		return &genhighbay.VerificationListResult{
 			ChangeID: p.ChangeID,
 			Runs:     out,
 		}, nil
@@ -404,9 +404,9 @@ func (c *ControlPlane) ListVerifications(ctx context.Context, p *gensurla.ListVe
 		span.SetStatus(codes.Error, "load change card")
 		return nil, fmt.Errorf("list verifications for %q: saved change card could not be read", p.ChangeID)
 	case !exists:
-		return nil, gensurla.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
+		return nil, genhighbay.MakeNotFound(fmt.Errorf("unknown change_id %q", p.ChangeID))
 	default:
-		return nil, gensurla.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
+		return nil, genhighbay.MakeForbidden(fmt.Errorf("principal %q is not the owner of change_id %q", principal.ID, p.ChangeID))
 	}
 }
 
@@ -473,11 +473,11 @@ func (c *ControlPlane) currentVerificationInputs(
 // which verifyrun read strictly: the operator's evaluator, or the tests a
 // separate agent on this machine wrote, at the plan's suite commit, with the
 // fixed notice.
-func runTestSource(plan verify.Plan) gensurla.TestSource {
+func runTestSource(plan verify.Plan) genhighbay.TestSource {
 	if plan.Tests == verify.TestsEvaluator {
-		return gensurla.NewTestSourceEvaluator(&gensurla.OperatorEvaluatorTests{})
+		return genhighbay.NewTestSourceEvaluator(&genhighbay.OperatorEvaluatorTests{})
 	}
-	return gensurla.NewTestSourceWrittenTests(&gensurla.AgentWrittenTests{Commit: plan.SuiteCommit, Notice: writtenTestsNotice})
+	return genhighbay.NewTestSourceWrittenTests(&genhighbay.AgentWrittenTests{Commit: plan.SuiteCommit, Notice: writtenTestsNotice})
 }
 
 // testWriterHolds reports whether the test writer principal holds an
@@ -505,9 +505,9 @@ func statusResult(
 	state verifyrun.State,
 	inputsCurrent bool,
 	binariesDir *string,
-) *gensurla.VerificationStatusResult {
+) *genhighbay.VerificationStatusResult {
 	acceptedAt := req.AcceptedAt.UTC().Format(time.RFC3339Nano)
-	res := &gensurla.VerificationStatusResult{
+	res := &genhighbay.VerificationStatusResult{
 		RunID:                req.RunID,
 		ChangeID:             req.ChangeID,
 		RequestRevision:      req.Plan.RequestRevision,
@@ -520,15 +520,15 @@ func statusResult(
 	}
 	switch state.Kind {
 	case verifyrun.StateRunning:
-		res.State = gensurla.NewStateRunning(&gensurla.VerificationRunning{StartedAt: acceptedAt})
+		res.State = genhighbay.NewStateRunning(&genhighbay.VerificationRunning{StartedAt: acceptedAt})
 	case verifyrun.StateCompleted:
-		res.State = gensurla.NewStateCompleted(&gensurla.VerificationCompleted{
+		res.State = genhighbay.NewStateCompleted(&genhighbay.VerificationCompleted{
 			SuiteID:     state.Report.Binding.SuiteID,
 			Environment: state.Report.Binding.Environment,
 			Report:      builderReport(state.Report.ForBuilders()),
 		})
 	case verifyrun.StateNotCompleted:
-		res.State = gensurla.NewStateNotCompleted(&gensurla.VerificationNotCompleted{
+		res.State = genhighbay.NewStateNotCompleted(&genhighbay.VerificationNotCompleted{
 			Kind:    string(state.Result.Failure),
 			Stage:   state.Result.Stage,
 			Summary: state.Result.Summary,
@@ -538,24 +538,24 @@ func statusResult(
 }
 
 // builderReport converts the builder view of a report to its wire form.
-func builderReport(b verify.BuilderReport) *gensurla.BuilderVerificationReport {
-	out := &gensurla.BuilderVerificationReport{
+func builderReport(b verify.BuilderReport) *genhighbay.BuilderVerificationReport {
+	out := &genhighbay.BuilderVerificationReport{
 		ReportDigest: b.ReportDigest,
-		Counts: &gensurla.VerificationCounts{
+		Counts: &genhighbay.VerificationCounts{
 			Required: b.Counts.Required, Passed: b.Counts.Passed, Failed: b.Counts.Failed,
 			NotRun: b.Counts.NotRun, HarnessError: b.Counts.HarnessError,
 		},
 		Passed:      b.Passed,
 		SuiteFailed: b.SuiteFailed,
-		Scenarios:   make([]*gensurla.VerificationScenario, 0, len(b.Scenarios)),
+		Scenarios:   make([]*genhighbay.VerificationScenario, 0, len(b.Scenarios)),
 	}
 	for _, s := range b.Scenarios {
-		scenario := &gensurla.VerificationScenario{ID: s.ID, Outcome: string(s.Outcome)}
+		scenario := &genhighbay.VerificationScenario{ID: s.ID, Outcome: string(s.Outcome)}
 		if s.Error != "" {
 			scenario.Error = &s.Error
 		}
 		for _, check := range s.Checks {
-			wire := &gensurla.VerificationCheck{Name: check.Name, Passed: check.Passed}
+			wire := &genhighbay.VerificationCheck{Name: check.Name, Passed: check.Passed}
 			if check.Diagnostic != "" {
 				wire.Diagnostic = &check.Diagnostic
 			}

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/goadesign/surla/internal/designeval"
+	"github.com/goadesign/highbay/internal/designeval"
 )
 
 // testEvaluator and testChecker are shared by this package's tests, as one
@@ -27,7 +27,7 @@ var (
 
 // helperFailEnv, when set, makes TestMainHelper run, and fail when it is
 // "true"; TestMainRemovesItsFolder sets it for its child test process.
-const helperFailEnv = "SURLA_TESTWRITER_HELPER_FAILS"
+const helperFailEnv = "HIGHBAY_TESTWRITER_HELPER_FAILS"
 
 // TestMain runs the package's tests with testEvaluator and testChecker
 // working in one temporary folder, then closes them and removes the folder
@@ -37,11 +37,11 @@ const helperFailEnv = "SURLA_TESTWRITER_HELPER_FAILS"
 // test's temporary folders.
 func TestMain(m *testing.M) {
 	var err error
-	if testDir, err = os.MkdirTemp("", "surla-testwriter-*"); err != nil {
+	if testDir, err = os.MkdirTemp("", "highbay-testwriter-*"); err != nil {
 		fmt.Fprintln(os.Stderr, "create the test folder:", err)
 		os.Exit(1)
 	}
-	cache := os.Getenv("SURLA_TEST_BUILD_CACHE")
+	cache := os.Getenv("HIGHBAY_TEST_BUILD_CACHE")
 	if cache == "" {
 		cache = filepath.Join(testDir, "packages")
 	}
@@ -81,9 +81,9 @@ func TestMainRemovesItsFolder(t *testing.T) {
 			} else {
 				require.NoError(t, err, "%s", out)
 			}
-			assert.Contains(t, string(out), "TestMain's folder exists: "+filepath.Join(tmp, "surla-testwriter-"),
+			assert.Contains(t, string(out), "TestMain's folder exists: "+filepath.Join(tmp, "highbay-testwriter-"),
 				"the helper ran and TestMain's folder was in the child's temporary folder")
-			left, err := filepath.Glob(filepath.Join(tmp, "surla-testwriter-*"))
+			left, err := filepath.Glob(filepath.Join(tmp, "highbay-testwriter-*"))
 			require.NoError(t, err)
 			assert.Empty(t, left, "TestMain removed its folder")
 		})

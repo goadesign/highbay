@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	gensurla "github.com/goadesign/surla/gen/surla"
-	"github.com/goadesign/surla/internal/designeval"
-	"github.com/goadesign/surla/internal/testmodule"
-	"github.com/goadesign/surla/internal/testwriter"
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
+	"github.com/goadesign/highbay/internal/designeval"
+	"github.com/goadesign/highbay/internal/testmodule"
+	"github.com/goadesign/highbay/internal/testwriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,8 +58,8 @@ import (
 	"goa.design/goa-ai/eval"
 	"goa.design/goa-ai/runtime/agent/model"
 
-	"github.com/goadesign/surla/verify/candidate"
-	"github.com/goadesign/surla/verify/suite"
+	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/goadesign/highbay/verify/suite"
 )
 
 const Name = "shop"
@@ -138,7 +138,7 @@ async function nativeStage(name, report, expected, work, shown) {
     };
     console.error("NATIVE_STAGE_DIAGNOSTICS " + JSON.stringify({
       owner: bounded(owner), observed_build: bounded(latest(buildPath)),
-      findings: bounded(latest(findingsPath)), rendered_findings: page.text("#surla-build-findings").slice(0, 4000),
+      findings: bounded(latest(findingsPath)), rendered_findings: page.text("#highbay-build-findings").slice(0, 4000),
     }));
     const tests = owner.body?.build?.test_writer;
     if (tests?.tests.state === "could_not_run") {
@@ -186,15 +186,15 @@ async function report(number) {
   await control(origin, "act", { key: "release-check" });
 }
 ` + pageReportNativeStageScript + `
-await until(() => page.$("#surla-cp1-editor").dataset.changeId === input.change, "the confirmed Story did not open");
-await until(() => page.$("#surla-build-start") && !page.$("#surla-build-start").disabled, "the agreed change offered no enabled Build control");
-checkControl(page, page.$("#surla-build-start"), "Build control");
-await nativeStage("build", 0, "assigned", async () => page.$("#surla-build-start").click(),
+await until(() => page.$("#highbay-cp1-editor").dataset.changeId === input.change, "the confirmed Story did not open");
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "the agreed change offered no enabled Build control");
+checkControl(page, page.$("#highbay-build-start"), "Build control");
+await nativeStage("build", 0, "assigned", async () => page.$("#highbay-build-start").click(),
   () => page.sent("POST", buildPath).some((r) => r.status === 200) && shownBuild("assigned", 0));
 const started = shownBuild("assigned", 0);
 expect(started.required_test_count === 1 && started.request_revision === input.revision && started.in_force, "Build did not use exactly the complete Story flow: " + JSON.stringify(started));
 expect(!started.builder.read && !started.test_writer.read, "new assignments were already read");
-await until(() => page.text("#surla-build-builder").includes("assignment unread") && page.text("#surla-build-test-writer").includes("assignment unread"), "the page did not show both new assignments as unread");
+await until(() => page.text("#highbay-build-builder").includes("assignment unread") && page.text("#highbay-build-test-writer").includes("assignment unread"), "the page did not show both new assignments as unread");
 expect(page.sent("POST", buildPath).length === 1, "the user click did not send exactly one Build");
 await version("assigned");
 
@@ -207,36 +207,36 @@ expect(writer.progress.read && builder.read, "full assignment reads did not mark
 expect(writer.required_tests.length === 1 && writer.required_tests[0].hook === "RefundOverLimit", "the draft flow changed the required tests: " + JSON.stringify(writer.required_tests));
 expect(writer.stories.length === 1 && writer.stories[0].flows.length === 2 && writer.working_folder.length > 0, "the full assignment lacks its saved Story or working folder");
 await version("read-1");
-await until(() => page.text("#surla-build-builder").includes("assignment read") && page.text("#surla-build-test-writer").includes("assignment read"), "full agent reads did not update the page's assignment facts");
-expect(page.text(".surla-frame-attention dd") === "Nothing now." &&
-       page.text("#surla-frame-next dd").includes("The test writer prepares and reports the tests"),
+await until(() => page.text("#highbay-build-builder").includes("assignment read") && page.text("#highbay-build-test-writer").includes("assignment read"), "full agent reads did not update the page's assignment facts");
+expect(page.text(".highbay-frame-attention dd") === "Nothing now." &&
+       page.text("#highbay-frame-next dd").includes("The test writer prepares and reports the tests"),
        "agents reading their assignments did not clear user attention or preserve the next step");
 const inputSelector = 'textarea[data-field="expected_outcome"]';
 const typed = page.$(inputSelector);
 page.type(typed, "Keep this unsaved expected outcome");
 
 await nativeStage("report-1", 1, "needs_changes", () => report(1),
-  () => shownBuild("needs_changes", 1) && page.$("#surla-build-findings"));
+  () => shownBuild("needs_changes", 1) && page.$("#highbay-build-findings"));
 const rejected = shownBuild("needs_changes", 1);
 expect(rejected.test_writer.tests.finding_count === 1 && !rejected.test_writer.read, "the compilation verdict lacks its count or unread work");
 await until(() => answers(findingsPath).some((f) => f.report === 1), "the page did not read the user's finding text");
 const findings = answers(findingsPath).findLast((f) => f.report === 1);
 expect(findings.change_id === input.change && findings.request_revision === input.revision && findings.started_at === started.started_at && findings.report === 1 && findings.checked_at === rejected.test_writer.tests.checked_at, "finding text was not correlated to all five build/verdict values: " + JSON.stringify(findings));
 expect(findings.findings.length === 1 && findings.findings[0].includes("RefundOverLimit") && findings.findings[0].includes("does not compile"), "the finding did not come from the missing-hook compilation: " + JSON.stringify(findings));
-await until(() => page.text("#surla-build-findings").includes("RefundOverLimit"), "the user's page showed only a finding count");
-expect(page.text("#surla-build-test-writer").includes("assignment unread"), "the compiler verdict did not show new unread writer work");
+await until(() => page.text("#highbay-build-findings").includes("RefundOverLimit"), "the user's page showed only a finding count");
+expect(page.text("#highbay-build-test-writer").includes("assignment unread"), "the compiler verdict did not show new unread writer work");
 expect(page.$(inputSelector) === typed && typed.value === "Keep this unsaved expected outcome", "a worker refresh lost typed input");
 await version("needs_changes");
 
 await control(origin, "act", { key: "repair-hook" });
 await version("read-2");
 await nativeStage("report-2", 2, "accepted", () => report(2),
-  () => shownBuild("accepted", 2) && page.$("#surla-build-test-writer").dataset.state === "accepted");
+  () => shownBuild("accepted", 2) && page.$("#highbay-build-test-writer").dataset.state === "accepted");
 const accepted = shownBuild("accepted", 2);
 expect(/^[a-f0-9]{40,64}$/.test(accepted.test_writer.tests.commit) && !accepted.builder.read && !accepted.test_writer.read, "acceptance did not record a commit and new unread assignments: " + JSON.stringify(accepted));
-expect(page.text("#surla-build-builder").includes("assignment unread") && page.text("#surla-build-test-writer").includes("assignment unread"), "acceptance did not show both new unread assignments");
-expect(page.text("#surla-build-section").includes(accepted.test_writer.tests.not_judged) && accepted.test_writer.tests.not_judged.includes("did not judge what they assert"), "the page overstated what acceptance proves");
-expect(!page.$("#surla-build-findings"), "the superseded finding stayed beside acceptance");
+expect(page.text("#highbay-build-builder").includes("assignment unread") && page.text("#highbay-build-test-writer").includes("assignment unread"), "acceptance did not show both new unread assignments");
+expect(page.text("#highbay-build-section").includes(accepted.test_writer.tests.not_judged) && accepted.test_writer.tests.not_judged.includes("did not judge what they assert"), "the page overstated what acceptance proves");
+expect(!page.$("#highbay-build-findings"), "the superseded finding stayed beside acceptance");
 expect(page.$(inputSelector) === typed && typed.value === "Keep this unsaved expected outcome", "acceptance lost typed input");
 await version("accepted");
 const acceptedWriter = await agent("GET", writerPath, undefined, input.testWriter);
@@ -256,8 +256,8 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	}
 	requirePageTools(t)
 	repo, project := productionBuildProject(t, ".", pageReportModule(t))
-	team := &teamServiceFixture{snapshot: gensurla.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*gensurla.RoleAgentChoice{}, DismissedNotices: []string{},
-		Team: "shop", Roles: []*gensurla.TeamRoleState{},
+	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
+		Team: "shop", Roles: []*genhighbay.TeamRoleState{},
 	}}
 	// Written-test runs make the project verify with the tests a build
 	// accepts, so the build uses a test writer; without them the page harness
@@ -305,7 +305,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	ps.act("release-check", release)
 	ps.act("repair-hook", func() {
 		assignment, err := cp.GetTestWriterAssignment(asCaller(pageOwner, CallerTestWriter),
-			&gensurla.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
+			&genhighbay.GetTestWriterAssignmentPayload{ChangeID: card.ChangeID})
 		require.NoError(t, err)
 		require.Equal(t, filepath.Join(project, testwriter.Folder), assignment.WorkingFolder)
 		hook := filepath.Join(assignment.WorkingFolder, "eval", "acceptance", "acceptance.go")
@@ -324,7 +324,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, before.Changes, list.Changes, "report progress must not rewrite the change")
 			assert.NotEqual(t, previous, list.Version, "the %s transition must wake the page", stage)
-			waited, err := cp.WaitForChanges(user, &gensurla.WaitForChangesPayload{Since: previous})
+			waited, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: previous})
 			require.NoError(t, err)
 			assert.Equal(t, list.Version, waited.Version)
 			again, err := cp.ListChanges(user)
@@ -343,7 +343,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	assert.Equal(t, 2, build.TestWriter.Report)
 	assert.Equal(t, accepted.Commit, productionBuildGit(t, repo, "rev-parse", testwriter.TestsRole.Branch(1)))
 	assert.NotEqual(t, productionBuildGit(t, repo, "rev-parse", "HEAD"), accepted.Commit)
-	assert.Equal(t, "Add the tests Surla accepted for change "+card.ChangeID+", report 2",
+	assert.Equal(t, "Add the tests Highbay accepted for change "+card.ChangeID+", report 2",
 		productionBuildGit(t, repo, "show", "-s", "--format=%s", accepted.Commit))
 	assert.Contains(t, productionBuildGit(t, repo, "show", accepted.Commit+":eval/acceptance/acceptance.go"),
 		"func (h *Hooks) RefundOverLimit")
@@ -352,7 +352,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 
 // pageReportModule prepares the trusted starter-shaped fixture as the checker
 // tests do: the acceptance package exists before generation, and the generated
-// program's public Surla dependency is pinned before the final tidy. No authored
+// program's public Highbay dependency is pinned before the final tidy. No authored
 // binary or scenario is executed here.
 func pageReportModule(t *testing.T) map[string]string {
 	t.Helper()
@@ -369,6 +369,6 @@ func pageReportModule(t *testing.T) map[string]string {
 		module[name] = string(data)
 	}
 	module["go.mod"] = strings.Replace(module["go.mod"], "require (",
-		"require (\n\tgithub.com/goadesign/surla "+testmodule.PublishedSurlaVersion, 1)
+		"require (\n\tgithub.com/goadesign/highbay "+testmodule.PublishedHighbayVersion, 1)
 	return testmodule.Tidy(t, module)
 }
