@@ -42,17 +42,18 @@ func TestChorusManagedAddressRefusals(t *testing.T) {
 	}
 }
 
-// TestChorusManagedAddressAutoStartsWhenStopped starts Chorus with `chorus up`
-// when the initial `status -json` fails so `/highbay` works without running
-// `hbay up` or `chorus up` ahead of each session.
+// TestChorusManagedAddressAutoStartsWhenStopped starts Chorus with
+// `CHORUS_NO_SETUP=1 chorus up` when the initial `status -json` fails so
+// `/highbay` recovers a stopped daemon without repeating one-time client setup.
 func TestChorusManagedAddressAutoStartsWhenStopped(t *testing.T) {
 	var seen [][]string
+	var envs [][]string
 	running := false
 	commands := teamCommands{
 		chorus:    "chorus",
-		chorusEnv: []string{"PATH=/usr/bin"},
+		chorusEnv: []string{"PATH=/usr/bin", "CHORUS_NO_SETUP=0"},
 		run: func(_ context.Context, env []string, program string, args ...string) ([]byte, error) {
-			assert.Equal(t, []string{"PATH=/usr/bin"}, env)
+			envs = append(envs, append([]string(nil), env...))
 			seen = append(seen, append([]string{program}, args...))
 			if len(args) == 1 && args[0] == "up" {
 				running = true
@@ -71,6 +72,11 @@ func TestChorusManagedAddressAutoStartsWhenStopped(t *testing.T) {
 		{"chorus", "up"},
 		{"chorus", "status", "-json"},
 	}, seen)
+	assert.Equal(t, [][]string{
+		{"PATH=/usr/bin", "CHORUS_NO_SETUP=0"},
+		{"PATH=/usr/bin", "CHORUS_NO_SETUP=1"},
+		{"PATH=/usr/bin", "CHORUS_NO_SETUP=0"},
+	}, envs)
 	assert.Equal(t, "http://localhost:9550", connection.Endpoint)
 	assert.NotNil(t, connection.Observer)
 	assert.NotNil(t, connection.Sender)

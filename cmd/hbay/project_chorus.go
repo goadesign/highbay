@@ -9,20 +9,29 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/goadesign/highbay/internal/project"
 )
 
 // connectChorus resolves the healthy managed server at an accepted team start,
-// starting Chorus with `chorus up` (without model provider settings) when it is
-// not already running so users never have to run `hbay up` or `chorus up` before
-// invoking `/highbay`. Both adapters keep that immutable origin until the next
-// explicit team start; no command runs at server construction or during watcher polling.
+// starting Chorus with `CHORUS_NO_SETUP=1 chorus up` (without model provider
+// settings or repeating global client setup) when it is not already running so
+// users never have to run `hbay up` or `chorus up` before invoking `/highbay`.
+// Both adapters keep that immutable origin until the next explicit team start;
+// no command runs at server construction or during watcher polling.
 func (c teamCommands) connectChorus(ctx context.Context) (project.TeamConnection, error) {
 	raw, err := c.run(ctx, c.chorusEnv, c.chorus, "status", "-json")
 	if err != nil {
-		if _, upErr := c.run(ctx, c.chorusEnv, c.chorus, "up"); upErr != nil {
+		upEnv := make([]string, 0, len(c.chorusEnv)+1)
+		for _, entry := range c.chorusEnv {
+			if !strings.HasPrefix(entry, "CHORUS_NO_SETUP=") {
+				upEnv = append(upEnv, entry)
+			}
+		}
+		upEnv = append(upEnv, "CHORUS_NO_SETUP=1")
+		if _, upErr := c.run(ctx, upEnv, c.chorus, "up"); upErr != nil {
 			return project.TeamConnection{}, errors.New("Chorus managed address is unavailable")
 		}
 		raw, err = c.run(ctx, c.chorusEnv, c.chorus, "status", "-json")

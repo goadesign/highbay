@@ -2182,10 +2182,10 @@ The server tracks each team's role state in memory. In a Herdr workspace,
 Chorus launches role panes and reports which agents are waiting for messages.
 One-time `hbay up` starts Chorus when installed; the guide attaches in place
 through `hbay stdio`. When an accepted Herdr team start needs Chorus and
-`chorus status -json` fails, the project server runs `chorus up` once (without
-model provider environment variables) and retries `chorus status -json` so a
-reboot or stopped Chorus server does not require `hbay up` again. Open Herdr
-before launching pane workers. To use a custom managed address, run
+`chorus status -json` fails, the project server runs `CHORUS_NO_SETUP=1 chorus up`
+once (without model provider environment variables or repeating client setup) and
+retries `chorus status -json` so a reboot or stopped Chorus server does not
+require `hbay up` again. Open Herdr before launching pane workers. To use a custom managed address, run
 `chorus up -addr :9550` beforehand, then use **Start workers** to
 update the team's connection. A failed connection check leaves the page
 available. Once a roster exists, Chorus can inspect the team's panes. See

@@ -146,15 +146,59 @@ test('projectFolder follows labels, then focus, then panes, then the space folde
       want: '/work/focused',
     },
     {
-      name: 'active tab foreground cwd beats shell cwd and another tab project label',
-      space: { ...space, tabs: [{ id: 'tb1' }, { id: 'tb2', active: true }] },
+      name: 'active tab live cwd beats another tab project label',
+      space: { ...space, tabs: [{ id: 'tb1', active: false }, { id: 'tb2', active: true }] },
       terms: [
         { address: 't1', state: 'live', labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb1', 'chorus.project': '/work/other-tab' } },
-        { address: 't2', state: 'live', cwd: '/work/shell-spawn', foreground: { cwd: '/work/jarvis' }, labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb2' } },
+        { address: 't2', state: 'live', labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb2' } },
       ],
-      panes: [{ tab: 'tb2', terminal: 't2', cwd: '/work/shell-spawn', focused: true }],
-      focus: { space: 'sp1', tab: 'tb2', terminal: 't2', cwd: '/work/shell-spawn' },
+      panes: [
+        { pane: 'p1', tab: 'tb1', terminal: 't1', cwd: '/work/other-tab', focused: false },
+        { pane: 'p2', tab: 'tb2', terminal: 't2', cwd: '/work/jarvis', focused: true },
+      ],
+      focus: { space: 'sp1', tab: 'tb2', pane: 'p2', terminal: 't2', cwd: '/work/jarvis' },
       want: '/work/jarvis',
+    },
+    {
+      name: 'reused shell that moved outside its previous chorus.project drops the stale label',
+      space: { ...space, tabs: [{ id: 'tb1', active: true }] },
+      terms: [
+        {
+          address: 't1',
+          state: 'live',
+          labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb1', 'chorus.role': 'guide', 'chorus.project': '/work/surla', 'chorus.handle': 'guide-1' },
+        },
+      ],
+      panes: [{ pane: 'p1', tab: 'tb1', terminal: 't1', cwd: '/work/jarvis', focused: true }],
+      focus: { space: 'sp1', tab: 'tb1', pane: 'p1', terminal: 't1', cwd: '/work/jarvis' },
+      want: '/work/jarvis',
+    },
+    {
+      name: 'worker copy inside .highbay-build or .highbay-tests keeps its chorus.project root',
+      space: { ...space, tabs: [{ id: 'tb1', active: true }] },
+      terms: [
+        {
+          address: 't1',
+          state: 'live',
+          labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb1', 'chorus.role': 'builder', 'chorus.project': '/work/homes', 'chorus.handle': 'builder-1' },
+        },
+      ],
+      panes: [{ pane: 'p1', tab: 'tb1', terminal: 't1', cwd: '/work/homes/.highbay-build', focused: true }],
+      focus: { space: 'sp1', tab: 'tb1', pane: 'p1', terminal: 't1', cwd: '/work/homes/.highbay-build' },
+      want: '/work/homes',
+    },
+    {
+      name: 'mod-only active tab falls back to another tab project label before plain panes',
+      space: { ...space, tabs: [{ id: 'tb1', active: false }, { id: 'tb2', active: true }] },
+      terms: [
+        { address: 't1', state: 'live', labels: { 'herdr.space': 'sp1', 'herdr.tab': 'tb1', 'chorus.project': '/work/homes' } },
+      ],
+      panes: [
+        { pane: 'p0', tab: 'tb1', terminal: 't0', cwd: '/work/unrelated', focused: false },
+        { pane: 'pm', mod: 'changes', tab: 'tb2', terminal: null, cwd: null, focused: true },
+      ],
+      focus: { space: 'sp1', tab: 'tb2', pane: 'pm', terminal: null, cwd: null },
+      want: '/work/homes',
     },
     { name: 'space folder', space, panes: [{ tab: 'tb9', cwd: '/elsewhere' }], want: '/work/space' },
     { name: 'home space', space: { ...space, folder: '' }, want: null },

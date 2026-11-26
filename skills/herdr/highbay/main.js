@@ -46,55 +46,70 @@ const ROLE_STATES = {
   unknown: "status unknown",
 };
 
+// inProject reports whether cwd is project itself or a path inside it (such as
+// a subpackage or a `.highbay-build` / `.highbay-tests` worker copy).
+function inProject(cwd, project) {
+  if (!cwd || !project) return false;
+  if (cwd === project) return true;
+  const prefix = project.endsWith("/") ? project : `${project}/`;
+  return cwd.startsWith(prefix);
+}
+
 // projectFolder returns the folder whose Highbay project the window shows for
 // space, or null when there is none to ask about. A space on another machine
 // has none: `hbay` runs on this computer. Within the active tab (when one is
-// marked), a live terminal labeled with `chorus.project` wins first, followed
-// by the focused terminal/pane's live foreground working folder (for example an
-// agent started after `cd`ing inside a shell tab) before the shell's initial
-// folder, then another tab's labeled project, and finally the space's folder.
+// marked), a live terminal whose `chorus.project` label still matches its live
+// `cwd` (including `.highbay-build` and `.highbay-tests` worker copies) wins
+// first; a reused shell that `cd`d outside its old `chorus.project` drops that
+// stale label so the active tab's focused or pane `cwd` wins instead. When the
+// active tab has neither (for example a mod-only tab), another tab's valid
+// `chorus.project` label wins before other tabs' plain panes and `space.folder`.
 export function projectFolder(space, terms, paneList, focus) {
   if (!space || space.machine) return null;
   const list = terms ?? [];
-  const byAddr = new Map(list.filter(t => t?.address).map(t => [t.address, t]));
   const tabs = space.tabs ?? [];
-  const activeTabObj = tabs.find(tab => tab.active);
-  const activeTab = activeTabObj?.id;
+  const activeTab = tabs.find(tab => tab.active)?.id;
   const inSpace = (paneList ?? []).filter(p => tabs.some(tab => tab.id === p.tab));
   const inActiveTab = activeTab ? inSpace.filter(p => p.tab === activeTab) : inSpace;
-  const activeAddrs = new Set([
-    ...inActiveTab.map(p => p.terminal).filter(Boolean),
-    ...(activeTabObj?.terminals ?? []).map(t => t?.terminal ?? t).filter(s => typeof s === "string"),
-  ]);
-  for (const term of list) {
-    const labels = term?.labels ?? {};
-    if (term?.state !== "live" || labels["herdr.space"] !== space.id || typeof labels["chorus.project"] !== "string" || !labels["chorus.project"]) continue;
-    if (!activeTab || labels["herdr.tab"] === activeTab || activeAddrs.has(term.address)) {
-      return labels["chorus.project"];
-    }
+  const activeAddrs = new Set(inActiveTab.map(p => p.terminal).filter(Boolean));
+  if (activeTab && focus?.space === space.id && focus.tab === activeTab && focus.terminal) {
+    activeAddrs.add(focus.terminal);
   }
-  const termCwd = addr => {
-    const t = addr ? byAddr.get(addr) : null;
-    return t?.state === "live" && t.foreground?.cwd ? t.foreground.cwd : null;
+  const liveCwdFor = address => {
+    if (!address) return null;
+    if (focus?.space === space.id && focus.terminal === address && focus.cwd) return focus.cwd;
+    const pane = inSpace.find(p => p.terminal === address && p.cwd);
+    return pane?.cwd ?? null;
   };
-  if (focus?.space === space.id && (!activeTab || !focus.tab || focus.tab === activeTab)) {
-    const fg = termCwd(focus.terminal);
-    if (fg) return fg;
-    if (focus.cwd) return focus.cwd;
-  }
-  const candidates = activeTab
-    ? [...inActiveTab.filter(p => p.focused), ...inActiveTab, ...inSpace]
-    : [...inSpace.filter(p => p.focused), ...inSpace];
-  for (const p of candidates) {
-    const fg = termCwd(p.terminal);
-    if (fg) return fg;
-    if (p.cwd) return p.cwd;
-  }
-  for (const term of list) {
+  const validLabel = term => {
     const labels = term?.labels ?? {};
-    if (term?.state === "live" && labels["herdr.space"] === space.id && typeof labels["chorus.project"] === "string" && labels["chorus.project"]) {
-      return labels["chorus.project"];
+    const project = labels["chorus.project"];
+    if (term?.state !== "live" || labels["herdr.space"] !== space.id || typeof project !== "string" || !project) {
+      return null;
     }
+    const cwd = liveCwdFor(term.address);
+    if (cwd && !inProject(cwd, project)) return null;
+    return project;
+  };
+  for (const term of list) {
+    const project = validLabel(term);
+    if (!project) continue;
+    if (!activeTab || term.labels?.["herdr.tab"] === activeTab || activeAddrs.has(term.address)) {
+      return project;
+    }
+  }
+  if (focus?.space === space.id && focus.cwd && (!activeTab || !focus.tab || focus.tab === activeTab)) {
+    return focus.cwd;
+  }
+  const activePane = inActiveTab.find(p => p.cwd && p.focused) ?? inActiveTab.find(p => p.cwd);
+  if (activePane) return activePane.cwd;
+  for (const term of list) {
+    const project = validLabel(term);
+    if (project) return project;
+  }
+  if (activeTab) {
+    const otherPane = inSpace.find(p => p.cwd && p.focused) ?? inSpace.find(p => p.cwd);
+    if (otherPane) return otherPane.cwd;
   }
   return space.folder || null;
 }
