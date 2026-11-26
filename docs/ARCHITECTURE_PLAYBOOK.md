@@ -23,7 +23,7 @@ Every Highbay project shares the same two-module Go layout (`design/`, `gen/`, `
 No domain service or agent worker holds raw LLM provider API keys or calls external provider endpoints directly:
 - **Gateway Service**: Front all model calls with [`goa.design/goa-ai/features/model/gateway`](https://github.com/goadesign/goa-ai) (`RegisterGRPCServer` and `NewGRPCClient`) over `Complete`, `Stream`, and `CountTokens`.
 - **Distributed Token Rate Limiting**: Wrap the gateway with `middleware.NewAdaptiveRateLimiter` backed by a [Pulse](https://github.com/goadesign/pulse) replicated map (`rmap.Join`) so token-per-minute budgets and AIMD backpressure are coordinated across replicas.
-- **Fail-Closed Usage Attribution**: Goa-AI's runtime and model gateway emit OpenTelemetry `gen_ai.*` spans (exported via [Clue](https://github.com/goadesign/clue)'s `clue.ConfigureOpenTelemetry`) and record `TokenUsage` on every call. Treat a call whose usage is missing or only partly reported as unknown, never as zero, so budget gates fail closed (the `examples/orders-eval` gateway counts such calls in `Usage.Unreported` and fails the budget check).
+- **Fail-Closed Usage Attribution**: Goa-AI's runtime emits OpenTelemetry `gen_ai.*` spans (exported via [Clue](https://github.com/goadesign/clue)'s `clue.ConfigureOpenTelemetry`) and records `TokenUsage` on every call. Treat a call whose usage is missing or only partly reported as unknown, never as zero, so budget gates fail closed (the `examples/orders-eval` gateway counts such calls in `Usage.Unreported` and fails the budget check).
 
 ### 4. Security & Identity by Construction (`Inject`, `BindField`, `ServerData`)
 Never trust an LLM to supply or preserve security principals, tenant IDs, or credentials:
