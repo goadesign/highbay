@@ -129,7 +129,7 @@ Without `-global`, setup explains the flag and writes nothing. Unlike
 Open Herdr once before setup so it creates its configuration folder. Setup
 skips companion installation if that folder does not exist. When it exists,
 setup installs the Highbay floating companion in `mods/highbay/`. It shows the current project stage and role attention,
-focuses live panes, and offers **Open Highbay Window**. It reads project status and
+focuses live panes, and offers **Open Highbay Window**; focusing a pane or opening the window dismisses the companion overlay, while a failed open keeps it visible with the error. It reads project status and
 holds no Highbay browser-session credential. It does not change Herdr's shipped
 workspace layout. On macOS, setup adds `cmd-alt-shift-h` to the global section
 of Herdr's `keys.json` when that shortcut is free. Existing bindings are
@@ -2181,10 +2181,12 @@ verdict, returns at once and wakes the report checker.
 The server tracks each team's role state in memory. In a Herdr workspace,
 Chorus launches role panes and reports which agents are waiting for messages.
 One-time `hbay up` starts Chorus when installed; the guide attaches in place
-through `hbay stdio`. The project server does not start Chorus. If Chorus
-has stopped, including after a reboot, run `chorus up` (or `hbay up` to
-repeat setup too), then retry **Start workers**. Open Herdr before launching
-pane workers. To change the managed address, run `chorus up -addr :9550`, then use **Start workers** to
+through `hbay stdio`. When an accepted Herdr team start needs Chorus and
+`chorus status -json` fails, the project server runs `CHORUS_NO_SETUP=1 chorus up`
+once (without model provider environment variables or repeating client setup) and
+retries `chorus status -json` so a reboot or stopped Chorus server does not
+require `hbay up` again. Open Herdr before launching pane workers. To use a custom managed address, run
+`chorus up -addr :9550` beforehand, then use **Start workers** to
 update the team's connection. A failed connection check leaves the page
 available. Once a roster exists, Chorus can inspect the team's panes. See
 the [Chorus team command reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal).

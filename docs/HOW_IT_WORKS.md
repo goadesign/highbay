@@ -144,7 +144,8 @@ runs in an empty folder, the welcome card shows the current initialization phase
 live. Ask your coding agent to open the page again after a reload or close (the
 signed-out view also offers a one-click copyable prompt). The Herdr companion
 (`Cmd+Alt+Shift+H` on macOS) offers **Open Highbay Window**, alongside the current
-stage, role attention and pane focus buttons. Setup installs the companion as a
+stage, role attention and pane focus buttons; focusing a pane or opening the window
+dismisses the overlay. Setup installs the companion as a
 floating window; it does not change Herdr's workspace layout.
 
 For terminal operation and browser automation, `hbay --print-link` prints

@@ -277,8 +277,8 @@ curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
 ```
 
-`hbay up` starts Chorus when it is installed. If Chorus stops later, for
-example after a reboot, run `chorus up` before you start a build in Herdr.
+`hbay up` starts Chorus when it is installed, and Highbay starts it again on
+demand if it stops later (for example after a reboot).
 [Prerequisites](docs/REFERENCE.md#prerequisites) and
 [setup details](docs/REFERENCE.md#hbay-setup--global) cover the rest.
 

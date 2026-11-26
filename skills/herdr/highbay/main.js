@@ -46,28 +46,71 @@ const ROLE_STATES = {
   unknown: "status unknown",
 };
 
+// inProject reports whether cwd is project itself or a path inside it (such as
+// a subpackage or a `.highbay-build` / `.highbay-tests` worker copy).
+function inProject(cwd, project) {
+  if (!cwd || !project) return false;
+  if (cwd === project) return true;
+  const prefix = project.endsWith("/") ? project : `${project}/`;
+  return cwd.startsWith(prefix);
+}
+
 // projectFolder returns the folder whose Highbay project the window shows for
 // space, or null when there is none to ask about. A space on another machine
-// has none: `hbay` runs on this computer. The first live terminal in the
-// space labeled with a Highbay project names it; otherwise the focused
-// terminal's folder when it is in this space, then the folder of the active
-// tab's focused pane, of the active tab's first pane, of the space's first
-// pane, and finally the space's own folder.
+// has none: `hbay` runs on this computer. Within the active tab (when one is
+// marked), a live terminal whose `chorus.project` label still matches its live
+// `cwd` (including `.highbay-build` and `.highbay-tests` worker copies) wins
+// first; a reused shell that `cd`d outside its old `chorus.project` drops that
+// stale label so the active tab's focused or pane `cwd` wins instead. When the
+// active tab has neither (for example a mod-only tab), another tab's valid
+// `chorus.project` label wins before other tabs' plain panes and `space.folder`.
 export function projectFolder(space, terms, paneList, focus) {
   if (!space || space.machine) return null;
-  for (const term of terms ?? []) {
-    const labels = term?.labels ?? {};
-    if (term?.state === "live" && labels["herdr.space"] === space.id && typeof labels["chorus.project"] === "string" && labels["chorus.project"]) {
-      return labels["chorus.project"];
-    }
-  }
-  if (focus?.space === space.id && focus.cwd) return focus.cwd;
+  const list = terms ?? [];
   const tabs = space.tabs ?? [];
   const activeTab = tabs.find(tab => tab.active)?.id;
-  const inSpace = (paneList ?? []).filter(p => p.cwd && tabs.some(tab => tab.id === p.tab));
-  const inActiveTab = inSpace.filter(p => p.tab === activeTab);
-  const pane = inActiveTab.find(p => p.focused) ?? inActiveTab[0] ?? inSpace[0];
-  if (pane) return pane.cwd;
+  const inSpace = (paneList ?? []).filter(p => tabs.some(tab => tab.id === p.tab));
+  const inActiveTab = activeTab ? inSpace.filter(p => p.tab === activeTab) : inSpace;
+  const activeAddrs = new Set(inActiveTab.map(p => p.terminal).filter(Boolean));
+  if (activeTab && focus?.space === space.id && focus.tab === activeTab && focus.terminal) {
+    activeAddrs.add(focus.terminal);
+  }
+  const liveCwdFor = address => {
+    if (!address) return null;
+    if (focus?.space === space.id && focus.terminal === address && focus.cwd) return focus.cwd;
+    const pane = inSpace.find(p => p.terminal === address && p.cwd);
+    return pane?.cwd ?? null;
+  };
+  const validLabel = term => {
+    const labels = term?.labels ?? {};
+    const project = labels["chorus.project"];
+    if (term?.state !== "live" || labels["herdr.space"] !== space.id || typeof project !== "string" || !project) {
+      return null;
+    }
+    const cwd = liveCwdFor(term.address);
+    if (cwd && !inProject(cwd, project)) return null;
+    return project;
+  };
+  for (const term of list) {
+    const project = validLabel(term);
+    if (!project) continue;
+    if (!activeTab || term.labels?.["herdr.tab"] === activeTab || activeAddrs.has(term.address)) {
+      return project;
+    }
+  }
+  if (focus?.space === space.id && focus.cwd && (!activeTab || !focus.tab || focus.tab === activeTab)) {
+    return focus.cwd;
+  }
+  const activePane = inActiveTab.find(p => p.cwd && p.focused) ?? inActiveTab.find(p => p.cwd);
+  if (activePane) return activePane.cwd;
+  for (const term of list) {
+    const project = validLabel(term);
+    if (project) return project;
+  }
+  if (activeTab) {
+    const otherPane = inSpace.find(p => p.cwd && p.focused) ?? inSpace.find(p => p.cwd);
+    if (otherPane) return otherPane.cwd;
+  }
   return space.folder || null;
 }
 
@@ -202,8 +245,9 @@ export default class HighbayCompanion extends View {
   }
 
   // openPage runs `hbay` in folder, which starts the project's server when
-  // needed and opens its browser window.
-  openPage(cx, folder) {
+  // needed and opens its browser window. When shown as an overlay, opening the
+  // window dismisses the overlay; failures keep it open so the error is visible.
+  openPage(cx, folder, overlay) {
     if (this.opening === folder) return;
     this.opening = folder;
     this.opened = null;
@@ -218,8 +262,15 @@ export default class HighbayCompanion extends View {
         message = `Could not run hbay: ${err?.message ?? err}`;
       }
       if (this.opening === folder) this.opening = null;
-      if (message) this.openError = { folder, message };
-      else this.opened = { folder, fresh: true };
+      if (message) {
+        this.openError = { folder, message };
+      } else {
+        this.opened = { folder, fresh: true };
+        if (overlay) {
+          closeOverlay(overlay);
+          return;
+        }
+      }
       cx.notify();
       this.refresh(cx);
     });
@@ -279,7 +330,10 @@ export default class HighbayCompanion extends View {
             .items_center()
             .gap(8)
             .child(div().flex_1().min_w(0).truncate().child(roleLine(role)))
-            .when(Boolean(terminal), el => el.child(this.button(`highbay-show-${role.role}`, "Show", t, () => run("pane.focus", { terminal })))),
+            .when(Boolean(terminal), el => el.child(this.button(`highbay-show-${role.role}`, "Show", t, () => {
+              run("pane.focus", { terminal });
+              if (overlay) closeOverlay(overlay);
+            }))),
         );
       }
     }
@@ -292,7 +346,7 @@ export default class HighbayCompanion extends View {
     const footer = h_flex()
       .gap(8)
       .items_center()
-      .when(canOpen, el => el.child(this.button("highbay-open", label, t, cx => this.openPage(cx, target))))
+      .when(canOpen, el => el.child(this.button("highbay-open", label, t, cx => this.openPage(cx, target, overlay))))
       .when(Boolean(openError), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child(openError)))
       .when(Boolean(openSuccess), el => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.muted).child(openSuccess)));
     return v_flex()
