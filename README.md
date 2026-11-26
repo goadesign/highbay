@@ -25,10 +25,11 @@ Highbay is an open-source (MIT) local MCP server that plugs into the coding
 agents you already run — Claude Code, Codex, Gemini CLI, Cursor, Antigravity,
 Windsurf, Copilot, and VS Code:
 
-- **One consistent layout & Golden Path playbook.** Every service, MCP server,
-  and multi-agent platform shares the same two-module structure (`design/`,
-  `gen/`, `cmd/`, `internal/`, and `eval/`) and built-in `highbay://golden-path`
-  rules for auth, OpenTelemetry tracing & readiness checks
+- **One consistent layout & Golden Path playbook.** Every generated Highbay
+  project starts with the same two-module structure (`design/`, `gen/`, `cmd/`,
+  `internal/`, and `eval/`, or an external suite registered via
+  `hbay verification set` such as `examples/orders-eval`) and built-in
+  `highbay://golden-path` rules for auth, OpenTelemetry tracing & readiness checks
   ([Clue](https://github.com/goadesign/clue)), Redis Streams, job queues, &
   worker pools ([Pulse](https://github.com/goadesign/pulse)), and durable
   workflows — so engineers and coding agents move across services without
@@ -247,10 +248,12 @@ development across multiple services, this has four practical effects:
   interfaces. Highbay spends a second agent session on independent `eval/`
   verification rather than boilerplate; net token and wall-clock totals depend
   on your task and model.
-- **Identical layout and generated shape across projects and models.** Every
-  Highbay project uses `design/`, `gen/`, `cmd/`, `internal/`, and `eval/` (plus
-  a generated `AGENTS_QUICKSTART.md` map), and generated code stays identical
-  whether Claude, Codex, or Gemini wrote the surrounding business logic.
+- **Identical layout and generated shape across projects and models.** Projects
+  initialized with Highbay share the same `design/`, `gen/`, `cmd/`, `internal/`,
+  and `eval/` layout (existing Goa projects may also register a separate suite
+  module via `hbay verification set`), plus a generated `AGENTS_QUICKSTART.md`
+  map, and generated code stays identical whether Claude, Codex, or Gemini wrote
+  the surrounding business logic.
 - **Code-enforced guardrails at every boundary.** Changing a result type in
   `design/` and regenerating fails `go build` on stale handlers, builder checks
   compile and unit-test inside a Linux Docker container, and Highbay refuses a
