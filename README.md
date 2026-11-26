@@ -167,7 +167,7 @@ Method("chat", func() {
 	Description("Send a message to the refund assistant and start a run.")
 	Payload(func() {
 		Token("token", String, "Customer bearer token.")
-		// MinLength becomes a generated check on every request.
+		// MinLength becomes a check in the generated HTTP request decoder.
 		Attribute("message", String, "What the customer says.", func() { MinLength(1) })
 		Required("token", "message")
 	})
@@ -189,16 +189,17 @@ type Service interface {
 ```
 
 From that one method Goa also generates the HTTP route, the request decoder
-with its length check, a typed client and the OpenAPI description. For a
-coding agent this has three effects:
+that checks the message length, a typed client and the OpenAPI description.
+For a coding agent this has three effects:
 
 - **No model writes the generated files.** The generator does. Agents still
   spend tokens on the design and the logic, so the overall saving depends on
   the change. Highbay does not claim a measured figure.
 - **The same shape from any model.** Generated code looks the same whether
   Claude, Codex or Gemini wrote the logic around it.
-- **A changed contract breaks the build.** Change a method's payload and
-  regenerate: a handler with the old signature no longer compiles.
+- **A changed interface breaks stale code.** If the design gives a method a
+  new result type, a handler that returns the old type no longer implements
+  the generated interface, and the build fails until you update it.
 
 Highbay generates the transports a design declares: HTTP, JSON-RPC and MCP. It
 refuses a design with gRPC transports; see
@@ -255,7 +256,9 @@ hbay up
 ```
 
 From a checkout of this repository, `go install ./cmd/hbay` installs the
-version you are reading.
+version you are reading. A build that Go reports as `(devel)` or `+dirty`
+must be told which published Highbay version a new project requires; see
+[`hbay init`](docs/REFERENCE.md#hbay-init).
 
 `hbay up` registers Highbay as an MCP server with the coding agents it
 detects and installs the `/highbay` skill. It leaves unrelated settings
@@ -280,22 +283,26 @@ example after a reboot, run `chorus up` before you start a build in Herdr.
 [setup details](docs/REFERENCE.md#hbay-setup--global) cover the rest.
 
 **Highbay needs no account and no model key.** Each coding agent uses its own
-sign-in, and the tests a test writer wrote run without a model key. A key
-matters only when your own application calls a model and the builder tries
-prompt wording on a *live target*, a running copy of the application that the
-server starts from a commit. In that case, export the provider's key, such as
-`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, in the environment that starts your
-coding agent. Your coding agent must pass that environment on to Highbay; see
+sign-in. The tests a test writer wrote receive no provider key; a test of an
+agent uses a scripted model kept in the test module. A provider key or a
+model gateway matters in two cases. The first is when the
+builder tries prompt wording on a *live target*, a running copy of the
+application that the server starts from a commit. The second is when you
+register a test program of your own that calls a live model. For a live
+target, export the provider's key, such as `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY`, in the environment that starts your coding agent. Your
+coding agent must pass that environment on to Highbay; see
 [stdio integration](docs/REFERENCE.md#hbay-stdio). While no model is chosen,
 live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`, and the page's
 **Live target** view changes the model.
 
 ## Start a project
 
-**In an empty folder,** `/highbay` creates a blank starter in place: a Goa and
-Goa-AI service with no methods yet, an architecture diagram, an empty Story,
-and a test module with one test that the program starts. Nothing in it is
-about someone else's product. See
+**In an empty folder,** say `/highbay` and what you want to build. With
+`/highbay` alone, your coding agent opens the page and asks. It then creates
+a blank starter in place: a Goa and Goa-AI service with no methods yet, an
+architecture diagram, an empty Story, and a test module with one test that
+the program starts. Nothing in it is about someone else's product. See
 [`init_project`](docs/REFERENCE.md#init_project).
 
 **In a project you already have,** Highbay needs a Goa or Goa-AI project with
