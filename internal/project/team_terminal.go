@@ -101,7 +101,7 @@ func (s *Server) AttachTerminal(
 	if err != nil {
 		return terminalUnavailable()
 	}
-	err = errors.Join(relayTerminal(ctx, stream, viewer), stream.Close())
+	err = errors.Join(relayTerminal(ctx, stream, viewer, p.Observe), stream.Close())
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "terminal stream failed")
@@ -112,14 +112,18 @@ func (s *Server) AttachTerminal(
 }
 
 // relayTerminal copies the terminal's events to the viewer and, on its own
-// goroutine, the viewer's frames to the terminal. It returns when the
+// goroutine, the viewer's frames to the terminal. When observe is true, only
+// flow-control credit frames from the viewer are forwarded so passive watching
+// never sends input, focus changes, or grid resizes. It returns when the
 // terminal's stream closes, after telling the viewer why, or when the viewer
 // disconnects. A viewer that simply leaves is not an error.
-func relayTerminal(ctx context.Context, stream TerminalStream, viewer genhighbay.AttachRoleTerminalServerStream) error {
+func relayTerminal(
+	ctx context.Context, stream TerminalStream, viewer genhighbay.AttachRoleTerminalServerStream, observe bool,
+) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	viewerLeft := make(chan error, 1)
-	go relayViewerFrames(ctx, stream, viewer, cancel, viewerLeft)
+	go relayViewerFrames(ctx, stream, viewer, observe, cancel, viewerLeft)
 	err := relayTerminalEvents(ctx, stream, viewer)
 	// Closing the viewer's connection ends relayViewerFrames' read.
 	closeErr := viewer.Close()
@@ -168,11 +172,13 @@ func relayTerminalEvents(ctx context.Context, stream TerminalStream, viewer genh
 
 // relayViewerFrames applies each frame the viewer sends to the terminal:
 // typed bytes, a new size, a focus change, or credit for output the page has
-// drawn. When the viewer's connection ends it cancels the relay and reports
-// on left why, or nil for a viewer that closed its connection.
+// drawn. In read-only observe mode, input, resize, and focus frames are
+// ignored and only output credit is granted. When the viewer's connection ends
+// it cancels the relay and reports on left why, or nil for a viewer that closed
+// its connection.
 func relayViewerFrames(
 	ctx context.Context, stream TerminalStream, viewer genhighbay.AttachRoleTerminalServerStream,
-	cancel context.CancelFunc, left chan<- error,
+	observe bool, cancel context.CancelFunc, left chan<- error,
 ) {
 	defer cancel()
 	for {
@@ -183,14 +189,16 @@ func relayViewerFrames(
 			left <- nil
 			return
 		}
-		if input, ok := frame.ClientFrame.AsInput(); ok {
+		if credit, ok := frame.ClientFrame.AsCredit(); ok {
+			err = stream.GrantCredit(uint32(credit.Bytes))
+		} else if observe {
+			continue
+		} else if input, ok := frame.ClientFrame.AsInput(); ok {
 			err = stream.WriteInput(input.Data)
 		} else if resize, ok := frame.ClientFrame.AsResize(); ok {
 			err = stream.Resize(uint16(resize.Cols), uint16(resize.Rows))
 		} else if focus, ok := frame.ClientFrame.AsFocus(); ok {
 			err = stream.Focus(focus.Focused)
-		} else if credit, ok := frame.ClientFrame.AsCredit(); ok {
-			err = stream.GrantCredit(uint32(credit.Bytes))
 		}
 		if err != nil {
 			left <- err

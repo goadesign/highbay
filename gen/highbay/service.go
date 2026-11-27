@@ -385,8 +385,8 @@ type Service interface {
 	// wait_for_changes covers this snapshot.
 	GetTeam(context.Context) (res *TeamSnapshot, err error)
 	// Read the project's Chorus conversation messages and active pin for the
-	// browser workspace's Conversation Rail. Only the user's browser session may
-	// call it; wait_for_changes advances whenever new Chorus messages arrive.
+	// browser workspace. Only the user's browser session may call it;
+	// wait_for_changes advances whenever new Chorus messages arrive.
 	GetTeamConversation(context.Context) (res *TeamConversation, err error)
 	// Post a message from the user in the browser workspace to the project's
 	// Chorus channel (mentioning the target role when directed). If the message
@@ -410,7 +410,7 @@ type Service interface {
 	// non-managed sessions are never replaced.
 	RestartTeamRole(context.Context, *RestartTeamRolePayload) (err error)
 	// Mint a single-use 30-second WebSocket upgrade ticket for attaching the
-	// browser terminal drawer to a role's herdr-core terminal.
+	// browser workspace to a role's herdr-core terminal.
 	CreateTerminalTicket(context.Context, *CreateTerminalTicketPayload) (res *TerminalTicketResult, err error)
 	// Upgrade to a bidirectional WebSocket attached to a role's live herdr-core
 	// PTY with 256 KiB credit flow control.
@@ -1376,7 +1376,7 @@ type CopyOffBranch struct {
 // CreateTerminalTicketPayload is the payload type of the highbay service
 // create_terminal_ticket method.
 type CreateTerminalTicketPayload struct {
-	// Registered role whose terminal drawer is opening.
+	// Registered role whose terminal is opening.
 	Role string
 }
 
@@ -1859,6 +1859,13 @@ type ModelSettingsResult struct {
 	Connection Connection
 }
 
+// Browser request to prepare a separate new Change Card in the draft and
+// propose it with propose_change.
+type NewChangeContext struct {
+	// Scope of the requested Change Card.
+	Scope string
+}
+
 // A refusal of start_build or drop_build that names the project's one open
 // build, so the page shows what blocks the request and offers Drop for exactly
 // that build. Nothing changed.
@@ -2021,6 +2028,15 @@ type RecordedTestCoverage struct {
 	Examples []*ExampleItem
 	// Writer statements for this report; empty means Not stated.
 	CoverageStatements []*TestCoverageStatement
+}
+
+// Existing Change Card and latest request_revision that the user is asking the
+// guide to update with revise_change.
+type RefineChangeContext struct {
+	// Change Card identifier being revised.
+	ChangeID string
+	// Latest request_revision visible in the browser workspace.
+	RequestRevision string
 }
 
 // The open build of this same change that the page showed the user when the
@@ -2449,7 +2465,7 @@ type TeamRoleState struct {
 	// Registered Chorus handle.
 	Handle string
 	// True when this role has a managed or attached herdr-core terminal that can
-	// be opened in the browser terminal drawer.
+	// be opened in the browser workspace.
 	HasTerminal bool
 	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State string
@@ -2508,9 +2524,9 @@ type TerminalCreditFrame struct {
 	Bytes int
 }
 
-// Browser terminal drawer focus change.
+// Browser terminal focus change.
 type TerminalFocusFrame struct {
-	// Whether the terminal drawer currently holds focus.
+	// Whether the browser terminal currently holds focus.
 	Focused bool
 }
 
@@ -6200,6 +6216,28 @@ func validatejsonModelSettingsResultTransport(value *jsonModelSettingsResultTran
 	return err
 }
 
+// jsonNewChangeContextTransport stores JSON fields until they have been validated.
+type jsonNewChangeContextTransport struct {
+	// Scope of the requested Change Card.
+	Scope *string `json:"scope"`
+}
+
+// validatejsonNewChangeContextTransport checks decoded JSON before it becomes a service value.
+func validatejsonNewChangeContextTransport(value *jsonNewChangeContextTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if value.Scope != nil {
+		if !(*value.Scope == "separate_card") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *value.Scope, []any{"separate_card"}))
+		}
+	}
+	return err
+}
+
 // jsonOpenBuildRefusalTransport stores JSON fields until they have been validated.
 type jsonOpenBuildRefusalTransport struct {
 	// Error name.
@@ -6691,6 +6729,38 @@ func validatejsonRecordedTestCoverageTransport(value *jsonRecordedTestCoverageTr
 	return err
 }
 
+// jsonRefineChangeContextTransport stores JSON fields until they have been validated.
+type jsonRefineChangeContextTransport struct {
+	// Change Card identifier being revised.
+	ChangeID *string `json:"change_id"`
+	// Latest request_revision visible in the browser workspace.
+	RequestRevision *string `json:"request_revision"`
+}
+
+// validatejsonRefineChangeContextTransport checks decoded JSON before it becomes a service value.
+func validatejsonRefineChangeContextTransport(value *jsonRefineChangeContextTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.RequestRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
+	}
+	if value.ChangeID != nil {
+		if utf8.RuneCountInString(*value.ChangeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", *value.ChangeID, utf8.RuneCountInString(*value.ChangeID), 1, true))
+		}
+	}
+	if value.RequestRevision != nil {
+		if utf8.RuneCountInString(*value.RequestRevision) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", *value.RequestRevision, utf8.RuneCountInString(*value.RequestRevision), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonReplacedBuildTransport stores JSON fields until they have been validated.
 type jsonReplacedBuildTransport struct {
 	// change_id of the open build the page showed.
@@ -7073,6 +7143,20 @@ func validatejsonSendTeamMessagePayloadTransport(value *jsonSendTeamMessagePaylo
 			err = goa.MergeErrors(err, err2)
 		} else {
 			switch string(value.Context.Kind()) {
+			case "new_change":
+				actual, _ := value.Context.AsNewChange()
+				if actual != nil {
+					if err2 := validatejsonNewChangeContextTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "refine_change":
+				actual, _ := value.Context.AsRefineChange()
+				if actual != nil {
+					if err2 := validatejsonRefineChangeContextTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
 			case "revise_answers":
 				actual, _ := value.Context.AsReviseAnswers()
 				if actual != nil {
@@ -7781,7 +7865,7 @@ type jsonTeamRoleStateTransport struct {
 	// Registered Chorus handle.
 	Handle *string `json:"handle"`
 	// True when this role has a managed or attached herdr-core terminal that can
-	// be opened in the browser terminal drawer.
+	// be opened in the browser workspace.
 	HasTerminal *bool `json:"has_terminal"`
 	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `json:"state"`
@@ -8038,7 +8122,7 @@ func validatejsonTerminalCreditFrameTransport(value *jsonTerminalCreditFrameTran
 
 // jsonTerminalFocusFrameTransport stores JSON fields until they have been validated.
 type jsonTerminalFocusFrameTransport struct {
-	// Whether the terminal drawer currently holds focus.
+	// Whether the browser terminal currently holds focus.
 	Focused *bool `json:"focused"`
 }
 
@@ -11124,6 +11208,14 @@ func validateModelSettingsResultOriginal(value *ModelSettingsResult) (err error)
 	return err
 }
 
+// validateNewChangeContextOriginal checks the original typed value before JSON conversion.
+func validateNewChangeContextOriginal(value *NewChangeContext) (err error) {
+	if !(value.Scope == "separate_card") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.scope", value.Scope, []any{"separate_card"}))
+	}
+	return err
+}
+
 // validateOpenBuildRefusalOriginal checks the original typed value before JSON conversion.
 func validateOpenBuildRefusalOriginal(value *OpenBuildRefusal) (err error) {
 	if value.Build == nil {
@@ -11284,6 +11376,17 @@ func validateRecordedTestCoverageOriginal(value *RecordedTestCoverage) (err erro
 	return err
 }
 
+// validateRefineChangeContextOriginal checks the original typed value before JSON conversion.
+func validateRefineChangeContextOriginal(value *RefineChangeContext) (err error) {
+	if utf8.RuneCountInString(value.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.change_id", value.ChangeID, utf8.RuneCountInString(value.ChangeID), 1, true))
+	}
+	if utf8.RuneCountInString(value.RequestRevision) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.request_revision", value.RequestRevision, utf8.RuneCountInString(value.RequestRevision), 1, true))
+	}
+	return err
+}
+
 // validateReplacedBuildOriginal checks the original typed value before JSON conversion.
 func validateReplacedBuildOriginal(value *ReplacedBuild) (err error) {
 	if utf8.RuneCountInString(value.ChangeID) < 1 {
@@ -11366,6 +11469,20 @@ func validateSendTeamMessagePayloadOriginal(value *SendTeamMessagePayload) (err 
 			err = goa.MergeErrors(err, err2)
 		} else {
 			switch string(value.Context.Kind()) {
+			case "new_change":
+				actual, _ := value.Context.AsNewChange()
+				if actual != nil {
+					if err2 := validateNewChangeContextOriginal(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "refine_change":
+				actual, _ := value.Context.AsRefineChange()
+				if actual != nil {
+					if err2 := validateRefineChangeContextOriginal(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
 			case "revise_answers":
 				actual, _ := value.Context.AsReviseAnswers()
 				if actual != nil {
@@ -13506,6 +13623,8 @@ func (u *jsonConnectionTransport) UnmarshalJSON(data []byte) error {
 // jsonContextTransport stores exactly one selected Goa OneOf branch.
 type jsonContextTransport struct {
 	kind                jsonContextTransportKind
+	NewChange           *jsonNewChangeContextTransport
+	RefineChange        *jsonRefineChangeContextTransport
 	ReviseAnswers       *jsonReviseAnswersContextTransport
 	ArchitectureElement *jsonArchitectureElementContextTransport
 	StoryFlow           *jsonStoryFlowContextTransport
@@ -13515,6 +13634,8 @@ type jsonContextTransport struct {
 type jsonContextTransportKind string
 
 const (
+	jsonContextTransportKindNewChange           jsonContextTransportKind = "new_change"
+	jsonContextTransportKindRefineChange        jsonContextTransportKind = "refine_change"
 	jsonContextTransportKindReviseAnswers       jsonContextTransportKind = "revise_answers"
 	jsonContextTransportKindArchitectureElement jsonContextTransportKind = "architecture_element"
 	jsonContextTransportKindStoryFlow           jsonContextTransportKind = "story_flow"
@@ -13523,6 +13644,44 @@ const (
 // Kind returns the selected branch.
 func (u jsonContextTransport) Kind() jsonContextTransportKind {
 	return u.kind
+}
+
+// newjsonContextTransportNewChange creates jsonContextTransport with its new_change branch selected.
+func newjsonContextTransportNewChange(value *jsonNewChangeContextTransport) jsonContextTransport {
+	return jsonContextTransport{kind: jsonContextTransportKindNewChange, NewChange: value}
+}
+
+// AsNewChange returns the new_change branch when it is selected.
+func (u jsonContextTransport) AsNewChange() (_ *jsonNewChangeContextTransport, ok bool) {
+	if u.kind != jsonContextTransportKindNewChange {
+		return
+	}
+	return u.NewChange, true
+}
+
+// SetNewChange selects the new_change branch.
+func (u *jsonContextTransport) SetNewChange(value *jsonNewChangeContextTransport) {
+	u.kind = jsonContextTransportKindNewChange
+	u.NewChange = value
+}
+
+// newjsonContextTransportRefineChange creates jsonContextTransport with its refine_change branch selected.
+func newjsonContextTransportRefineChange(value *jsonRefineChangeContextTransport) jsonContextTransport {
+	return jsonContextTransport{kind: jsonContextTransportKindRefineChange, RefineChange: value}
+}
+
+// AsRefineChange returns the refine_change branch when it is selected.
+func (u jsonContextTransport) AsRefineChange() (_ *jsonRefineChangeContextTransport, ok bool) {
+	if u.kind != jsonContextTransportKindRefineChange {
+		return
+	}
+	return u.RefineChange, true
+}
+
+// SetRefineChange selects the refine_change branch.
+func (u *jsonContextTransport) SetRefineChange(value *jsonRefineChangeContextTransport) {
+	u.kind = jsonContextTransportKindRefineChange
+	u.RefineChange = value
 }
 
 // newjsonContextTransportReviseAnswers creates jsonContextTransport with its revise_answers branch selected.
@@ -13585,6 +13744,16 @@ func (u *jsonContextTransport) SetStoryFlow(value *jsonStoryFlowContextTransport
 // Validate checks that one complete branch is selected.
 func (u jsonContextTransport) Validate() error {
 	switch u.kind {
+	case jsonContextTransportKindNewChange:
+		if u.NewChange == nil {
+			return goa.MissingFieldError("value", "jsonContextTransport")
+		}
+		return nil
+	case jsonContextTransportKindRefineChange:
+		if u.RefineChange == nil {
+			return goa.MissingFieldError("value", "jsonContextTransport")
+		}
+		return nil
 	case jsonContextTransportKindReviseAnswers:
 		if u.ReviseAnswers == nil {
 			return goa.MissingFieldError("value", "jsonContextTransport")
@@ -13603,7 +13772,7 @@ func (u jsonContextTransport) Validate() error {
 	case "":
 		return goa.MissingFieldError("type", "jsonContextTransport")
 	default:
-		return goa.InvalidEnumValueError("type", u.kind, []any{string(jsonContextTransportKindReviseAnswers), string(jsonContextTransportKindArchitectureElement), string(jsonContextTransportKindStoryFlow)})
+		return goa.InvalidEnumValueError("type", u.kind, []any{string(jsonContextTransportKindNewChange), string(jsonContextTransportKindRefineChange), string(jsonContextTransportKindReviseAnswers), string(jsonContextTransportKindArchitectureElement), string(jsonContextTransportKindStoryFlow)})
 	}
 }
 
@@ -13614,6 +13783,10 @@ func (u jsonContextTransport) MarshalJSON() ([]byte, error) {
 	}
 	var value any
 	switch u.kind {
+	case jsonContextTransportKindNewChange:
+		value = u.NewChange
+	case jsonContextTransportKindRefineChange:
+		value = u.RefineChange
 	case jsonContextTransportKindReviseAnswers:
 		value = u.ReviseAnswers
 	case jsonContextTransportKindArchitectureElement:
@@ -13656,6 +13829,24 @@ func (u *jsonContextTransport) UnmarshalJSON(data []byte) error {
 		return goa.InvalidFieldTypeError("value", nil, "non-null JSON value")
 	}
 	switch raw.Type {
+	case string(jsonContextTransportKindNewChange):
+		var value *jsonNewChangeContextTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonContextTransportKindNewChange
+		u.NewChange = value
+	case string(jsonContextTransportKindRefineChange):
+		var value *jsonRefineChangeContextTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonContextTransportKindRefineChange
+		u.RefineChange = value
 	case string(jsonContextTransportKindReviseAnswers):
 		var value *jsonReviseAnswersContextTransport
 		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
@@ -13684,7 +13875,7 @@ func (u *jsonContextTransport) UnmarshalJSON(data []byte) error {
 		u.kind = jsonContextTransportKindStoryFlow
 		u.StoryFlow = value
 	default:
-		return goa.InvalidEnumValueError("type", raw.Type, []any{string(jsonContextTransportKindReviseAnswers), string(jsonContextTransportKindArchitectureElement), string(jsonContextTransportKindStoryFlow)})
+		return goa.InvalidEnumValueError("type", raw.Type, []any{string(jsonContextTransportKindNewChange), string(jsonContextTransportKindRefineChange), string(jsonContextTransportKindReviseAnswers), string(jsonContextTransportKindArchitectureElement), string(jsonContextTransportKindStoryFlow)})
 	}
 	return u.Validate()
 }
@@ -23287,6 +23478,89 @@ func DecodeModelSettingsResult(data []byte) (out *ModelSettingsResult, err error
 	return out, nil
 }
 
+// EncodeNewChangeContext turns a service value into JSON using the field names in the Goa design.
+func EncodeNewChangeContext(in *NewChangeContext) ([]byte, error) {
+	if err := checkNewChangeContextValue(in); err != nil {
+		return nil, fmt.Errorf("encode NewChangeContext JSON: %w", err)
+	}
+	if err := validateNewChangeContextOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate NewChangeContext value: %w", err)
+	}
+	var body *jsonNewChangeContextTransport
+	{
+		body = &jsonNewChangeContextTransport{
+			Scope: &in.Scope,
+		}
+	}
+	if err := validatejsonNewChangeContextTransport(body); err != nil {
+		return nil, fmt.Errorf("validate NewChangeContext JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode NewChangeContext JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateNewChangeContextValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateNewChangeContextValue(in *NewChangeContext) error {
+	if err := checkNewChangeContextValue(in); err != nil {
+		return fmt.Errorf("validate NewChangeContext value: %w", err)
+	}
+	if err := validateNewChangeContextOriginal(in); err != nil {
+		return fmt.Errorf("validate NewChangeContext value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "NewChangeContext")
+	}
+
+	var body *jsonNewChangeContextTransport
+	{
+		body = &jsonNewChangeContextTransport{
+			Scope: &in.Scope,
+		}
+	}
+	if err := validatejsonNewChangeContextTransport(body); err != nil {
+		return fmt.Errorf("validate NewChangeContext value: %w", err)
+	}
+	return nil
+}
+
+// DecodeNewChangeContext checks JSON field names from the Goa design and returns a service value.
+func DecodeNewChangeContext(data []byte) (out *NewChangeContext, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode NewChangeContext JSON: %w", err)
+	}
+	if err := validateNewChangeContextJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode NewChangeContext JSON: %w", err)
+	}
+	var body *jsonNewChangeContextTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode NewChangeContext JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode NewChangeContext JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode NewChangeContext JSON after first value: %w", err)
+	}
+	if err := validatejsonNewChangeContextTransport(body); err != nil {
+		return out, fmt.Errorf("validate NewChangeContext JSON: %w", err)
+	}
+	{
+		out = &NewChangeContext{
+			Scope: *body.Scope,
+		}
+	}
+	return out, nil
+}
+
 // EncodeOpenBuildRefusal turns a service value into JSON using the field names in the Goa design.
 func EncodeOpenBuildRefusal(in *OpenBuildRefusal) ([]byte, error) {
 	if err := checkOpenBuildRefusalValue(in); err != nil {
@@ -24597,6 +24871,92 @@ func DecodeRecordedTestCoverage(data []byte) (out *RecordedTestCoverage, err err
 	return out, nil
 }
 
+// EncodeRefineChangeContext turns a service value into JSON using the field names in the Goa design.
+func EncodeRefineChangeContext(in *RefineChangeContext) ([]byte, error) {
+	if err := checkRefineChangeContextValue(in); err != nil {
+		return nil, fmt.Errorf("encode RefineChangeContext JSON: %w", err)
+	}
+	if err := validateRefineChangeContextOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RefineChangeContext value: %w", err)
+	}
+	var body *jsonRefineChangeContextTransport
+	{
+		body = &jsonRefineChangeContextTransport{
+			ChangeID:        &in.ChangeID,
+			RequestRevision: &in.RequestRevision,
+		}
+	}
+	if err := validatejsonRefineChangeContextTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RefineChangeContext JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RefineChangeContext JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRefineChangeContextValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRefineChangeContextValue(in *RefineChangeContext) error {
+	if err := checkRefineChangeContextValue(in); err != nil {
+		return fmt.Errorf("validate RefineChangeContext value: %w", err)
+	}
+	if err := validateRefineChangeContextOriginal(in); err != nil {
+		return fmt.Errorf("validate RefineChangeContext value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RefineChangeContext")
+	}
+
+	var body *jsonRefineChangeContextTransport
+	{
+		body = &jsonRefineChangeContextTransport{
+			ChangeID:        &in.ChangeID,
+			RequestRevision: &in.RequestRevision,
+		}
+	}
+	if err := validatejsonRefineChangeContextTransport(body); err != nil {
+		return fmt.Errorf("validate RefineChangeContext value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRefineChangeContext checks JSON field names from the Goa design and returns a service value.
+func DecodeRefineChangeContext(data []byte) (out *RefineChangeContext, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RefineChangeContext JSON: %w", err)
+	}
+	if err := validateRefineChangeContextJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RefineChangeContext JSON: %w", err)
+	}
+	var body *jsonRefineChangeContextTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RefineChangeContext JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RefineChangeContext JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RefineChangeContext JSON after first value: %w", err)
+	}
+	if err := validatejsonRefineChangeContextTransport(body); err != nil {
+		return out, fmt.Errorf("validate RefineChangeContext JSON: %w", err)
+	}
+	{
+		out = &RefineChangeContext{
+			ChangeID:        *body.ChangeID,
+			RequestRevision: *body.RequestRevision,
+		}
+	}
+	return out, nil
+}
+
 // EncodeReplacedBuild turns a service value into JSON using the field names in the Goa design.
 func EncodeReplacedBuild(in *ReplacedBuild) ([]byte, error) {
 	if err := checkReplacedBuildValue(in); err != nil {
@@ -25600,6 +25960,24 @@ func EncodeSendTeamMessagePayload(in *SendTeamMessagePayload) ([]byte, error) {
 		if in.Context.Kind() != "" {
 			var contextValue jsonContextTransport
 			switch string(in.Context.Kind()) {
+			case "new_change":
+				actual, _ := in.Context.AsNewChange()
+				var obj *jsonNewChangeContextTransport
+				if actual != nil {
+					obj = encodeNewChangeContextToNewChangeContextTransport(actual)
+				}
+				u := contextValue
+				u.SetNewChange((*jsonNewChangeContextTransport)(obj))
+				contextValue = u
+			case "refine_change":
+				actual, _ := in.Context.AsRefineChange()
+				var obj *jsonRefineChangeContextTransport
+				if actual != nil {
+					obj = encodeRefineChangeContextToRefineChangeContextTransport(actual)
+				}
+				u := contextValue
+				u.SetRefineChange((*jsonRefineChangeContextTransport)(obj))
+				contextValue = u
 			case "revise_answers":
 				actual, _ := in.Context.AsReviseAnswers()
 				var obj *jsonReviseAnswersContextTransport
@@ -25672,6 +26050,24 @@ func ValidateSendTeamMessagePayloadValue(in *SendTeamMessagePayload) error {
 		if in.Context.Kind() != "" {
 			var contextValue jsonContextTransport
 			switch string(in.Context.Kind()) {
+			case "new_change":
+				actual, _ := in.Context.AsNewChange()
+				var obj *jsonNewChangeContextTransport
+				if actual != nil {
+					obj = encodeNewChangeContextToNewChangeContextTransport(actual)
+				}
+				u := contextValue
+				u.SetNewChange((*jsonNewChangeContextTransport)(obj))
+				contextValue = u
+			case "refine_change":
+				actual, _ := in.Context.AsRefineChange()
+				var obj *jsonRefineChangeContextTransport
+				if actual != nil {
+					obj = encodeRefineChangeContextToRefineChangeContextTransport(actual)
+				}
+				u := contextValue
+				u.SetRefineChange((*jsonRefineChangeContextTransport)(obj))
+				contextValue = u
 			case "revise_answers":
 				actual, _ := in.Context.AsReviseAnswers()
 				var obj *jsonReviseAnswersContextTransport
@@ -25747,6 +26143,24 @@ func DecodeSendTeamMessagePayload(data []byte) (out *SendTeamMessagePayload, err
 		}
 		if body.Context != nil {
 			switch string(body.Context.Kind()) {
+			case "new_change":
+				actual, _ := body.Context.AsNewChange()
+				var obj *NewChangeContext
+				if actual != nil {
+					obj = decodeNewChangeContextTransportToNewChangeContext(actual)
+				}
+				u := out.Context
+				u.SetNewChange((*NewChangeContext)(obj))
+				out.Context = u
+			case "refine_change":
+				actual, _ := body.Context.AsRefineChange()
+				var obj *RefineChangeContext
+				if actual != nil {
+					obj = decodeRefineChangeContextTransportToRefineChangeContext(actual)
+				}
+				u := out.Context
+				u.SetRefineChange((*RefineChangeContext)(obj))
+				out.Context = u
 			case "revise_answers":
 				actual, _ := body.Context.AsReviseAnswers()
 				var obj *ReviseAnswersContext
@@ -33157,6 +33571,14 @@ func decodeModelNoneTransportToModelNone(v *jsonModelNoneTransport) *ModelNone {
 	return res
 }
 
+func decodeNewChangeContextTransportToNewChangeContext(v *jsonNewChangeContextTransport) *NewChangeContext {
+	res := &NewChangeContext{
+		Scope: *v.Scope,
+	}
+
+	return res
+}
+
 func decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(v *jsonOperatorEvaluatorTestsTransport) *OperatorEvaluatorTests {
 	res := &OperatorEvaluatorTests{}
 
@@ -33325,6 +33747,15 @@ func decodeRecordedTestCoverageTransportToRecordedTestCoverage(v *jsonRecordedTe
 			continue
 		}
 		res.CoverageStatements[i] = decodeTestCoverageStatementTransportToTestCoverageStatement(val)
+	}
+
+	return res
+}
+
+func decodeRefineChangeContextTransportToRefineChangeContext(v *jsonRefineChangeContextTransport) *RefineChangeContext {
+	res := &RefineChangeContext{
+		ChangeID:        *v.ChangeID,
+		RequestRevision: *v.RequestRevision,
 	}
 
 	return res
@@ -34749,6 +35180,14 @@ func encodeModelNoneToModelNoneTransport(v *ModelNone) *jsonModelNoneTransport {
 	return res
 }
 
+func encodeNewChangeContextToNewChangeContextTransport(v *NewChangeContext) *jsonNewChangeContextTransport {
+	res := &jsonNewChangeContextTransport{
+		Scope: &v.Scope,
+	}
+
+	return res
+}
+
 func encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(v *OperatorEvaluatorTests) *jsonOperatorEvaluatorTestsTransport {
 	res := &jsonOperatorEvaluatorTestsTransport{}
 
@@ -34922,6 +35361,15 @@ func encodeRecordedTestCoverageToRecordedTestCoverageTransport(v *RecordedTestCo
 			continue
 		}
 		res.CoverageStatements[i] = encodeTestCoverageStatementToTestCoverageStatementTransport(val)
+	}
+
+	return res
+}
+
+func encodeRefineChangeContextToRefineChangeContextTransport(v *RefineChangeContext) *jsonRefineChangeContextTransport {
+	res := &jsonRefineChangeContextTransport{
+		ChangeID:        &v.ChangeID,
+		RequestRevision: &v.RequestRevision,
 	}
 
 	return res
@@ -43451,6 +43899,42 @@ func validateModelSettingsResultJSONValue3(path string, value any, description s
 	return nil
 }
 
+// validateNewChangeContextJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateNewChangeContextJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "scope":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Scope of the requested Change Card.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"scope",
+			})
+		}
+	}
+	return nil
+}
+
 // validateOpenBuildRefusalJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateOpenBuildRefusalJSONValue(path string, value any, description string) error {
 	field := path
@@ -44276,6 +44760,50 @@ func validateRecordedRunStoryJSONValue4(path string, value any, description stri
 	return nil
 }
 
+// validateRefineChangeContextJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateRefineChangeContextJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier being revised.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Latest request_revision visible in the browser workspace.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"request_revision",
+			})
+		}
+	}
+	return nil
+}
+
 // validateReplacedBuildJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateReplacedBuildJSONValue(path string, value any, description string) error {
 	field := path
@@ -44730,6 +45258,10 @@ func validateSendTeamMessagePayloadJSONValue2(path string, value any, descriptio
 		return fmt.Errorf("%s: missing union value", field)
 	}
 	switch discriminator {
+	case "new_change":
+		return validateNewChangeContextJSONValue(generatedJSONChildPath(path, "value", false), branch, "")
+	case "refine_change":
+		return validateRefineChangeContextJSONValue(generatedJSONChildPath(path, "value", false), branch, "")
 	case "revise_answers":
 		return validateReviseAnswersContextJSONValue(generatedJSONChildPath(path, "value", false), branch, "")
 	case "architecture_element":
@@ -45315,7 +45847,7 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 		case "has_terminal":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when this role has a managed or attached herdr-core terminal that can be opened in the browser terminal drawer.",
+				typed[key], "True when this role has a managed or attached herdr-core terminal that can be opened in the browser workspace.",
 			); err != nil {
 				return err
 			}
@@ -45699,7 +46231,7 @@ func validateTerminalClientFrameJSONValue6(path string, value any, description s
 		case "focused":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether the terminal drawer currently holds focus.",
+				typed[key], "Whether the browser terminal currently holds focus.",
 			); err != nil {
 				return err
 			}
@@ -51437,6 +51969,36 @@ func checkModelSettingsResultModelSettingsResultValue(in *ModelSettingsResult, f
 	return nil
 }
 
+// checkNewChangeContextValue checks text and cycles before conversion.
+func checkNewChangeContextValue(in *NewChangeContext) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkNewChangeContextNewChangeContextValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkNewChangeContextNewChangeContextValue checks one generated value on the active path.
+func checkNewChangeContextNewChangeContextValue(in *NewChangeContext, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Scope)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "scope", false))
+		}
+	}
+	return nil
+}
+
 // checkOpenBuildRefusalValue checks text and cycles before conversion.
 func checkOpenBuildRefusalValue(in *OpenBuildRefusal) error {
 	if in == nil {
@@ -51890,6 +52452,39 @@ func checkRecordedTestCoverageValue(in *RecordedTestCoverage) error {
 	return nil
 }
 
+// checkRefineChangeContextValue checks text and cycles before conversion.
+func checkRefineChangeContextValue(in *RefineChangeContext) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkRefineChangeContextRefineChangeContextValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRefineChangeContextRefineChangeContextValue checks one generated value on the active path.
+func checkRefineChangeContextRefineChangeContextValue(in *RefineChangeContext, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ChangeID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+		}
+		if !utf8.ValidString(string(in.RequestRevision)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "request_revision", false))
+		}
+	}
+	return nil
+}
+
 // checkReplacedBuildValue checks text and cycles before conversion.
 func checkReplacedBuildValue(in *ReplacedBuild) error {
 	if in == nil {
@@ -52218,6 +52813,18 @@ func checkSendTeamMessagePayloadSendTeamMessagePayloadValue(in *SendTeamMessageP
 		}
 		if err := checkRoleAgentChoiceRoleAgentChoiceValue(in.GuideChoice, generatedJSONChildPath(field, "guide_choice", false), active); err != nil {
 			return err
+		}
+		if branch1, ok := in.Context.AsNewChange(); ok {
+			_ = branch1
+			if err := checkNewChangeContextNewChangeContextValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "context", false), "value", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Context.AsRefineChange(); ok {
+			_ = branch1
+			if err := checkRefineChangeContextRefineChangeContextValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "context", false), "value", false), active); err != nil {
+				return err
+			}
 		}
 		if branch1, ok := in.Context.AsReviseAnswers(); ok {
 			_ = branch1

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,23 +38,21 @@ func TestViewsPageTeamInterruptStopRestartChoiceAndMessageContracts(t *testing.T
 			DismissedNotices: []string{},
 		},
 	}
-	var emptyOptions bool
-	var interruptFail bool
-	var sendFail bool
+	var emptyOptions, interruptFail, sendFail atomic.Bool
 	team.options = func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
-		if emptyOptions {
+		if emptyOptions.Load() {
 			return []*genhighbay.InstalledAgentOption{}, nil
 		}
 		return fixtureAgentOptions(), nil
 	}
 	team.interrupt = func(_ context.Context, role string) error {
-		if interruptFail {
+		if interruptFail.Load() {
 			return genhighbay.MakeRoleNotRunning(errors.New(role + " terminal already stopped"))
 		}
 		return nil
 	}
 	team.send = func(_ context.Context, p *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error) {
-		if sendFail {
+		if sendFail.Load() {
 			return nil, genhighbay.MakeTeamUnavailable(errors.New("Chorus temporarily unreachable."))
 		}
 		return fixtureTeamMessage(p.Text), nil
@@ -68,36 +67,12 @@ func TestViewsPageTeamInterruptStopRestartChoiceAndMessageContracts(t *testing.T
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 
 	ps := startPageServer(t, cp)
-	ps.act("empty-options", func() {
-		team.mu.Lock()
-		emptyOptions = true
-		team.mu.Unlock()
-	})
-	ps.act("restore-options", func() {
-		team.mu.Lock()
-		emptyOptions = false
-		team.mu.Unlock()
-	})
-	ps.act("interrupt-fail", func() {
-		team.mu.Lock()
-		interruptFail = true
-		team.mu.Unlock()
-	})
-	ps.act("interrupt-ok", func() {
-		team.mu.Lock()
-		interruptFail = false
-		team.mu.Unlock()
-	})
-	ps.act("send-fail", func() {
-		team.mu.Lock()
-		sendFail = true
-		team.mu.Unlock()
-	})
-	ps.act("send-ok", func() {
-		team.mu.Lock()
-		sendFail = false
-		team.mu.Unlock()
-	})
+	ps.act("empty-options", func() { emptyOptions.Store(true) })
+	ps.act("restore-options", func() { emptyOptions.Store(false) })
+	ps.act("interrupt-fail", func() { interruptFail.Store(true) })
+	ps.act("interrupt-ok", func() { interruptFail.Store(false) })
+	ps.act("send-fail", func() { sendFail.Store(true) })
+	ps.act("send-ok", func() { sendFail.Store(false) })
 	ps.act("guide-running-with-story-card", func() {
 		team.mu.Lock()
 		next := team.snapshot
@@ -133,14 +108,13 @@ const setVal = (page, el, val) => {
 };
 await control(origin, "act", { key: "empty-options" });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-describe-input") && page.$("#highbay-describe-submit") && page.sent("GET", "/team").some((r) => r.status === 200), "initial Describe composer and Team read did not settle");
+await until(() => page.$("#highbay-describe-input") && page.$("#highbay-describe-submit") && page.sent("GET", "/team").some((r) => r.status === 200) && page.sent("GET", "/team/agent-options").some((r) => r.status === 200) && Array.from(page.$$("#highbay-describe-form button")).some((b) => b.textContent.includes("refresh installed agents")), "initial Describe empty-options recovery control did not settle");
 setVal(page, page.$("#highbay-describe-input"), "Draft an incident triage workflow");
 expect(page.$("#highbay-describe-submit").disabled, "Describe allowed send when no valid coding agent was installed");
 page.$("#highbay-describe-submit").click();
 expect(page.sent("POST", "/team/messages").length === 0, "blocked Describe sent POST /team/messages");
 
 await control(origin, "act", { key: "restore-options" });
-await until(() => page.sent("GET", "/team/agent-options").some((r) => r.status === 200) && Array.from(page.$$("#highbay-describe-form button")).some((b) => b.textContent.includes("refresh installed agents")), "Describe empty-options refresh control did not render");
 Array.from(page.$$("#highbay-describe-form button")).find((b) => b.textContent.includes("refresh installed agents")).click();
 await until(() => !page.$("#highbay-describe-submit").disabled, "valid agent options did not enable Describe send");
 
@@ -159,7 +133,7 @@ await until(() => page.sent("POST", "/team/messages").length === 2 && page.$("#h
 // Seed a running Guide + confirmed Story Change Card to exercise Team controls and Story Ask Guide.
 await control(origin, "act", { key: "guide-running-with-story-card" });
 await until(() => page.$("#highbay-open-change-chg-protect") || page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-protect", "confirmed card did not arrive");
-if (!page.$("#highbay-cp1-editor")) {
+if (page.$("#highbay-cp1-editor")?.dataset.changeId !== "chg-protect") {
   page.$("#highbay-open-change-chg-protect").click();
   await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-protect", "confirmed card did not open");
 }

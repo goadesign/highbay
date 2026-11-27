@@ -249,6 +249,10 @@ export interface ModelConnection {
   connection: ({ "kind": "none" } | { "kind": "direct"; "model_name": string; "provider": "anthropic" | "openai" } | { "gateway_addr": string; "kind": "gateway" });
 }
 
+export interface NewChangeContext {
+  scope: "separate_card";
+}
+
 export interface OpenBuildRefusal {
   build: StartedBuild;
   change_id: string;
@@ -295,6 +299,11 @@ export interface ProposedRevisionItem {
   ui_composition?: UICompositionItem;
 }
 
+export interface RefineChangeContext {
+  change_id: string;
+  request_revision: string;
+}
+
 export interface ReplacedBuild {
   change_id: string;
   started_at: string;
@@ -326,7 +335,7 @@ export interface RoleAgentChoice {
 }
 
 export interface SendTeamMessagePayload {
-  context?: ({ "type": "revise_answers"; "value": ReviseAnswersContext } | { "type": "architecture_element"; "value": ArchitectureElementContext } | { "type": "story_flow"; "value": StoryFlowContext });
+  context?: ({ "type": "new_change"; "value": NewChangeContext } | { "type": "refine_change"; "value": RefineChangeContext } | { "type": "revise_answers"; "value": ReviseAnswersContext } | { "type": "architecture_element"; "value": ArchitectureElementContext } | { "type": "story_flow"; "value": StoryFlowContext });
   guide_choice?: RoleAgentChoice;
   reply_to?: number;
   text: string;
@@ -2596,6 +2605,21 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "NewChangeContext": {
+    "type": "object",
+    "required": [
+      "scope"
+    ],
+    "properties": {
+      "scope": {
+        "type": "string",
+        "enum": [
+          "separate_card"
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
   "OpenBuildRefusal": {
     "type": "object",
     "required": [
@@ -2775,6 +2799,22 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "RefineChangeContext": {
+    "type": "object",
+    "required": [
+      "change_id",
+      "request_revision"
+    ],
+    "properties": {
+      "change_id": {
+        "type": "string"
+      },
+      "request_revision": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "ReplacedBuild": {
     "type": "object",
     "required": [
@@ -2892,6 +2932,44 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "context": {
         "type": "object",
         "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "new_change"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/NewChangeContext"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "refine_change"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/RefineChangeContext"
+              }
+            },
+            "additionalProperties": false
+          },
           {
             "type": "object",
             "required": [

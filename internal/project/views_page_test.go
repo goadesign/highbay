@@ -168,27 +168,33 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
 
 	// (h) A stale tab receiving 401 must not erase a newer session written to localStorage by a sibling tab.
 	const staleTab = await openPage(origin, { storage: page.win.localStorage });
-	await until(() => staleTab.$("#highbay-open-change-chg-session") || staleTab.$('textarea[data-field="expected_outcome"]'), "staleTab did not restore initial session");
+	await until(() => (staleTab.$("#highbay-open-change-chg-session") || staleTab.$('textarea[data-field="expected_outcome"]')) && staleTab.requests.every((r) => r.path === "/change-updates" || r.status !== undefined), "staleTab did not settle initial session reads");
+	// Pause both tabs' waiting loops before invalidating their session so restart cannot trigger an early 401 race.
+	page.setHidden(true);
+	staleTab.setHidden(true);
 	await control(origin, "restart");
 	const postRestartLink = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
 	const siblingFresh = await openPage(origin, { link: postRestartLink });
 	await until(() => siblingFresh.win.localStorage.getItem("highbay.session") !== null && (siblingFresh.$("#highbay-open-change-chg-session") || siblingFresh.$('textarea[data-field="expected_outcome"]')), "siblingFresh did not establish a newer post-restart session");
 	const newerToken = siblingFresh.win.localStorage.getItem("highbay.session");
 	staleTab.win.localStorage.setItem("highbay.session", newerToken);
+	const teamReadsBefore = staleTab.sent("GET", "/team").length;
 	staleTab.$("#highbay-nav-team").click();
 	await until(() => staleTab.$("#highbay-team-refresh"), "staleTab did not open Team");
 	staleTab.$("#highbay-team-refresh").click();
-	await until(() => staleTab.$("#highbay-session-ended"), "staleTab did not end its rejected in-memory session");
+	await until(() => staleTab.sent("GET", "/team").slice(teamReadsBefore).some((r) => r.status === 401) && staleTab.$("#highbay-session-ended"), "staleTab did not receive 401 and end its rejected in-memory session");
 	expect(staleTab.win.localStorage.getItem("highbay.session") === newerToken, "staleTab 401 erased the sibling tab's newer stored session");
 	staleTab.close();
 	siblingFresh.close();
 
 	// After an unhanded-off restart without a newer sibling token, 401 on GET /project/browser-session clears localStorage.
 	await control(origin, "restart");
+	expect(page.win.localStorage.getItem("highbay.session") !== null, "hidden page lost its pre-restart stored session before reload test");
 	const restartedReload = await openPage(origin, { storage: page.win.localStorage });
-	await until(() => restartedReload.$("#highbay-signed-out"), "a reload after restart did not sign out cleanly");
+	await until(() => restartedReload.sent("GET", "/project/browser-session").some((r) => r.status === 401) && restartedReload.$("#highbay-signed-out"), "a reload after restart did not receive 401 and sign out cleanly");
 	expect(restartedReload.win.localStorage.length === 0, "401 on GET /project/browser-session did not clear localStorage");
 	restartedReload.close();
+	page.setHidden(false);
 
   const fresh = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
   field.focus();

@@ -629,7 +629,7 @@ func (c *Client) GetTeamConversation(ctx context.Context) (res *TeamConversation
 // service.
 // SendTeamMessage may return the following errors:
 //   - "team_unavailable" (type *goa.ServiceError): Chorus or herdr-core could not accept the message or start the guide.
-//   - "unprocessable" (type *goa.ServiceError): The selected guide client is not installed, does not support the requested options, or the referenced Change Card context is invalid.
+//   - "unprocessable" (type *goa.ServiceError): The selected guide client is not installed, does not support the requested options, the target worker role is not registered yet, the message with its context exceeds Chorus's 4,000-character limit, or a Change Card authoring context (new_change, refine_change, or revise_answers) targets a recipient other than guide.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) SendTeamMessage(ctx context.Context, p *SendTeamMessagePayload) (res *TeamMessage, err error) {

@@ -131,6 +131,15 @@ export function guideRoleNeedsStart(snapshot: TeamSnapshot | null): boolean {
 // describeComposerContext summarizes an attached stage context chip in plain English.
 export function describeComposerContext(ctx: ComposerContext): string {
   switch (ctx.type) {
+    case "new_change":
+      return "New Change Card";
+    case "refine_change":
+      return (
+        "Revise change " +
+        ctx.value.change_id +
+        " · revision " +
+        ctx.value.request_revision.slice(0, 12)
+      );
     case "revise_answers":
       return (
         "Revise change " +

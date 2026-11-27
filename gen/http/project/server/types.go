@@ -648,7 +648,7 @@ type TeamRoleStateResponseBody struct {
 	// Registered Chorus handle.
 	Handle string `form:"handle" json:"handle" xml:"handle"`
 	// True when this role has a managed or attached herdr-core terminal that can
-	// be opened in the browser terminal drawer.
+	// be opened in the browser workspace.
 	HasTerminal bool `form:"has_terminal" json:"has_terminal" xml:"has_terminal"`
 	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State string `form:"state" json:"state" xml:"state"`

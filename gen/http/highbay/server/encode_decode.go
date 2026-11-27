@@ -6420,6 +6420,29 @@ func unmarshalRoleAgentChoiceRequestBodyToHighbayRoleAgentChoice(v *RoleAgentCho
 	return res
 }
 
+// unmarshalNewChangeContextRequestBodyToHighbayNewChangeContext builds a value
+// of type *highbay.NewChangeContext from a value of type
+// *NewChangeContextRequestBody.
+func unmarshalNewChangeContextRequestBodyToHighbayNewChangeContext(v *NewChangeContextRequestBody) *highbay.NewChangeContext {
+	res := &highbay.NewChangeContext{
+		Scope: *v.Scope,
+	}
+
+	return res
+}
+
+// unmarshalRefineChangeContextRequestBodyToHighbayRefineChangeContext builds a
+// value of type *highbay.RefineChangeContext from a value of type
+// *RefineChangeContextRequestBody.
+func unmarshalRefineChangeContextRequestBodyToHighbayRefineChangeContext(v *RefineChangeContextRequestBody) *highbay.RefineChangeContext {
+	res := &highbay.RefineChangeContext{
+		ChangeID:        *v.ChangeID,
+		RequestRevision: *v.RequestRevision,
+	}
+
+	return res
+}
+
 // unmarshalReviseAnswersContextRequestBodyToHighbayReviseAnswersContext builds
 // a value of type *highbay.ReviseAnswersContext from a value of type
 // *ReviseAnswersContextRequestBody.

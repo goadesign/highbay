@@ -128,9 +128,16 @@ func highbayHandle(record Record) string {
 
 // messageText builds the text Chorus stores for the user's message: a mention
 // of the role it is for, the user's words, and the page's context for them,
-// if any. It refuses a message for a worker role that no build has
-// registered, and one that outgrows what Chorus stores.
+// if any. It refuses a Change Card authoring context sent to anyone other than
+// guide, a message for a worker role that no build has registered, and a
+// message that outgrows what Chorus stores.
 func messageText(p *genhighbay.SendTeamMessagePayload, guide teamRole, roles []teamRole) (string, error) {
+	_, isNew := p.Context.AsNewChange()
+	_, isRefine := p.Context.AsRefineChange()
+	_, isAnswers := p.Context.AsReviseAnswers()
+	if (isNew || isRefine || isAnswers) && p.To != "guide" {
+		return "", genhighbay.MakeUnprocessable(errors.New("Change Card authoring context may only be sent to guide"))
+	}
 	var text strings.Builder
 	switch p.To {
 	case "team":
@@ -152,10 +159,17 @@ func messageText(p *genhighbay.SendTeamMessagePayload, guide teamRole, roles []t
 	return message, nil
 }
 
-// messageContext says, in Markdown the guide can act on, what on the page the
-// user's message is about. It is empty when the message carries no context.
+// messageContext says, in Markdown the recipient can act on, what on the page
+// the user's message is about. It is empty when the message carries no context.
 func messageContext(context genhighbay.Context) string {
 	var text strings.Builder
+	if _, ok := context.AsNewChange(); ok {
+		text.WriteString("\n\n**New Change Card requested:** Prepare a separate change in the draft and save it as a new Change Card with propose_change (do not call revise_change on an existing Change Card).")
+	}
+	if refine, ok := context.AsRefineChange(); ok {
+		text.WriteString("\n\n**Revise this Change Card** (change `" + refine.ChangeID +
+			"`, latest request revision `" + refine.RequestRevision + "`): Update the draft for this request and submit a revised Change Card with revise_change.")
+	}
 	if answers, ok := context.AsReviseAnswers(); ok {
 		text.WriteString("\n\n**Revise the draft to implement my answers** (change `" + answers.ChangeID +
 			"`, request revision `" + answers.RequestRevision + "`):")

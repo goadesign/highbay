@@ -5828,7 +5828,7 @@ type TeamRoleStateResponseBody struct {
 	// Registered Chorus handle.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
 	// True when this role has a managed or attached herdr-core terminal that can
-	// be opened in the browser terminal drawer.
+	// be opened in the browser workspace.
 	HasTerminal *bool `form:"has_terminal,omitempty" json:"has_terminal,omitempty" xml:"has_terminal,omitempty"`
 	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
@@ -6487,6 +6487,21 @@ type RoleAgentChoiceRequestBody struct {
 	Yolo bool `form:"yolo" json:"yolo" xml:"yolo"`
 }
 
+// NewChangeContextRequestBody is used to define fields on request body types.
+type NewChangeContextRequestBody struct {
+	// Scope of the requested Change Card.
+	Scope string `form:"scope" json:"scope" xml:"scope"`
+}
+
+// RefineChangeContextRequestBody is used to define fields on request body
+// types.
+type RefineChangeContextRequestBody struct {
+	// Change Card identifier being revised.
+	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
+	// Latest request_revision visible in the browser workspace.
+	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
+}
+
 // ReviseAnswersContextRequestBody is used to define fields on request body
 // types.
 type ReviseAnswersContextRequestBody struct {
@@ -6544,7 +6559,7 @@ type TerminalResizeStreamingBody struct {
 // TerminalFocusFrameStreamingBody is used to define fields on request body
 // types.
 type TerminalFocusFrameStreamingBody struct {
-	// Whether the terminal drawer currently holds focus.
+	// Whether the browser terminal currently holds focus.
 	Focused bool `form:"focused" json:"focused" xml:"focused"`
 }
 
@@ -8143,6 +8158,8 @@ func (u *ConnectionResponseBody) UnmarshalJSON(data []byte) error {
 // ContextRequestBody holds exactly one of its branch values.
 type ContextRequestBody struct {
 	kind                ContextRequestBodyKind
+	newChange           *NewChangeContextRequestBody
+	refineChange        *RefineChangeContextRequestBody
 	reviseAnswers       *ReviseAnswersContextRequestBody
 	architectureElement *ArchitectureElementContextRequestBody
 	storyFlow           *StoryFlowContextRequestBody
@@ -8152,6 +8169,10 @@ type ContextRequestBody struct {
 type ContextRequestBodyKind string
 
 const (
+	// ContextRequestBodyKindNewChange identifies the new_change branch.
+	ContextRequestBodyKindNewChange ContextRequestBodyKind = "new_change"
+	// ContextRequestBodyKindRefineChange identifies the refine_change branch.
+	ContextRequestBodyKindRefineChange ContextRequestBodyKind = "refine_change"
 	// ContextRequestBodyKindReviseAnswers identifies the revise_answers branch.
 	ContextRequestBodyKindReviseAnswers ContextRequestBodyKind = "revise_answers"
 	// ContextRequestBodyKindArchitectureElement identifies the architecture_element branch.
@@ -8163,6 +8184,54 @@ const (
 // Kind returns the selected branch.
 func (u ContextRequestBody) Kind() ContextRequestBodyKind {
 	return u.kind
+}
+
+// NewContextRequestBodyNewChange constructs ContextRequestBody with the new_change branch set.
+func NewContextRequestBodyNewChange(v *NewChangeContextRequestBody) ContextRequestBody {
+	return ContextRequestBody{
+		kind:      ContextRequestBodyKindNewChange,
+		newChange: v,
+	}
+}
+
+// AsNewChange returns the value when the new_change branch is selected.
+func (u ContextRequestBody) AsNewChange() (_ *NewChangeContextRequestBody, ok bool) {
+	if u.kind != ContextRequestBodyKindNewChange {
+		return
+	}
+	return u.newChange, true
+}
+
+// SetNewChange selects the new_change branch and stores v.
+func (u *ContextRequestBody) SetNewChange(v *NewChangeContextRequestBody) {
+	*u = ContextRequestBody{
+		kind:      ContextRequestBodyKindNewChange,
+		newChange: v,
+	}
+}
+
+// NewContextRequestBodyRefineChange constructs ContextRequestBody with the refine_change branch set.
+func NewContextRequestBodyRefineChange(v *RefineChangeContextRequestBody) ContextRequestBody {
+	return ContextRequestBody{
+		kind:         ContextRequestBodyKindRefineChange,
+		refineChange: v,
+	}
+}
+
+// AsRefineChange returns the value when the refine_change branch is selected.
+func (u ContextRequestBody) AsRefineChange() (_ *RefineChangeContextRequestBody, ok bool) {
+	if u.kind != ContextRequestBodyKindRefineChange {
+		return
+	}
+	return u.refineChange, true
+}
+
+// SetRefineChange selects the refine_change branch and stores v.
+func (u *ContextRequestBody) SetRefineChange(v *RefineChangeContextRequestBody) {
+	*u = ContextRequestBody{
+		kind:         ContextRequestBodyKindRefineChange,
+		refineChange: v,
+	}
 }
 
 // NewContextRequestBodyReviseAnswers constructs ContextRequestBody with the revise_answers branch set.
@@ -8249,10 +8318,22 @@ func (u ContextRequestBody) Value() (any, error) {
 	switch u.kind {
 	case "":
 		return nil, goa.InvalidEnumValueError("type", "", []any{
+			string(ContextRequestBodyKindNewChange),
+			string(ContextRequestBodyKindRefineChange),
 			string(ContextRequestBodyKindReviseAnswers),
 			string(ContextRequestBodyKindArchitectureElement),
 			string(ContextRequestBodyKindStoryFlow),
 		})
+	case ContextRequestBodyKindNewChange:
+		if u.newChange == nil {
+			return nil, goa.MissingFieldError("value", "ContextRequestBody")
+		}
+		return u.newChange, nil
+	case ContextRequestBodyKindRefineChange:
+		if u.refineChange == nil {
+			return nil, goa.MissingFieldError("value", "ContextRequestBody")
+		}
+		return u.refineChange, nil
 	case ContextRequestBodyKindReviseAnswers:
 		if u.reviseAnswers == nil {
 			return nil, goa.MissingFieldError("value", "ContextRequestBody")
@@ -8270,6 +8351,8 @@ func (u ContextRequestBody) Value() (any, error) {
 		return u.storyFlow, nil
 	default:
 		return nil, goa.InvalidEnumValueError("type", u.kind, []any{
+			string(ContextRequestBodyKindNewChange),
+			string(ContextRequestBodyKindRefineChange),
 			string(ContextRequestBodyKindReviseAnswers),
 			string(ContextRequestBodyKindArchitectureElement),
 			string(ContextRequestBodyKindStoryFlow),
@@ -8308,6 +8391,18 @@ func (u *ContextRequestBody) UnmarshalJSON(data []byte) error {
 		return goa.InvalidFieldTypeError("value", nil, "non-null JSON value")
 	}
 	switch raw.Type {
+	case string(ContextRequestBodyKindNewChange):
+		var v *NewChangeContextRequestBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNewChange(v)
+	case string(ContextRequestBodyKindRefineChange):
+		var v *RefineChangeContextRequestBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRefineChange(v)
 	case string(ContextRequestBodyKindReviseAnswers):
 		var v *ReviseAnswersContextRequestBody
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -8331,6 +8426,8 @@ func (u *ContextRequestBody) UnmarshalJSON(data []byte) error {
 			return goa.MissingFieldError("type", "ContextRequestBody")
 		}
 		return goa.InvalidEnumValueError("type", raw.Type, []any{
+			string(ContextRequestBodyKindNewChange),
+			string(ContextRequestBodyKindRefineChange),
 			string(ContextRequestBodyKindReviseAnswers),
 			string(ContextRequestBodyKindArchitectureElement),
 			string(ContextRequestBodyKindStoryFlow),
@@ -10765,6 +10862,24 @@ func NewSendTeamMessageRequestBody(p *highbay.SendTeamMessagePayload) *SendTeamM
 	if p.Context.Kind() != "" {
 		var contextValue ContextRequestBody
 		switch string(p.Context.Kind()) {
+		case "new_change":
+			actual, _ := p.Context.AsNewChange()
+			var obj *NewChangeContextRequestBody
+			if actual != nil {
+				obj = marshalHighbayNewChangeContextToNewChangeContextRequestBody(actual)
+			}
+			u := contextValue
+			u.SetNewChange((*NewChangeContextRequestBody)(obj))
+			contextValue = u
+		case "refine_change":
+			actual, _ := p.Context.AsRefineChange()
+			var obj *RefineChangeContextRequestBody
+			if actual != nil {
+				obj = marshalHighbayRefineChangeContextToRefineChangeContextRequestBody(actual)
+			}
+			u := contextValue
+			u.SetRefineChange((*RefineChangeContextRequestBody)(obj))
+			contextValue = u
 		case "revise_answers":
 			actual, _ := p.Context.AsReviseAnswers()
 			var obj *ReviseAnswersContextRequestBody
@@ -26670,6 +26785,48 @@ func validateRoleAgentChoiceRequestBody(body *RoleAgentChoiceRequestBody, path s
 	}
 	if utf8.RuneCountInString(body.Program) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".program", body.Program, utf8.RuneCountInString(body.Program), 1, true))
+	}
+	return
+}
+
+// ValidateNewChangeContextRequestBody runs the validations defined on
+// NewChangeContext
+func ValidateNewChangeContextRequestBody(body *NewChangeContextRequestBody) (err error) {
+	if !(body.Scope == "separate_card") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"separate_card"}))
+	}
+	return
+}
+
+// validateNewChangeContextRequestBody checks NewChangeContext and reports
+// errors using the path supplied by its caller
+func validateNewChangeContextRequestBody(body *NewChangeContextRequestBody, path string) (err error) {
+	if !(body.Scope == "separate_card") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".scope", body.Scope, []any{"separate_card"}))
+	}
+	return
+}
+
+// ValidateRefineChangeContextRequestBody runs the validations defined on
+// RefineChangeContext
+func ValidateRefineChangeContextRequestBody(body *RefineChangeContextRequestBody) (err error) {
+	if utf8.RuneCountInString(body.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+	}
+	if utf8.RuneCountInString(body.RequestRevision) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
+	}
+	return
+}
+
+// validateRefineChangeContextRequestBody checks RefineChangeContext and
+// reports errors using the path supplied by its caller
+func validateRefineChangeContextRequestBody(body *RefineChangeContextRequestBody, path string) (err error) {
+	if utf8.RuneCountInString(body.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+	}
+	if utf8.RuneCountInString(body.RequestRevision) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
 	}
 	return
 }
