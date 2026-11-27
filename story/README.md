@@ -10,21 +10,21 @@ package design
 
 import . "github.com/goadesign/highbay/story/dsl"
 
-var _ = Story("Refunds", func() {
-	Actor("customer", "Customer")
-	Actor("manager", "Support manager")
+var _ = Story("Incidents", func() {
+	Actor("remediation", "Remediation agent")
+	Actor("oncall", "On-call engineer")
 
-	Flow("refund-over-limit", "Refund above the limit", func() {
-		StartsWith("request-refund", "customer", "Requests a refund")
-		Step("approve-refund", "manager", "Approves the refund")
-		Outcome("refund-paid", "customer", "Receives the refund")
+	Flow("production-rollback-requires-approval", "Production rollback requires on-call approval", func() {
+		StartsWith("detect-unhealthy-deploy", "remediation", "Detects an unhealthy production deploy")
+		Step("approve-rollback", "oncall", "Approves the production rollback")
+		Outcome("service-rolled-back", "remediation", "Rolls back the production service")
 	})
 
-	Flow("refund-without-receipt", "Refund without a receipt", func() {
-		StartsWith("request-refund", "customer", "Requests a refund", func() {
-			Question("proof-of-purchase", "Which proof of purchase is acceptable?", func() {
-				Option("Order number")
-				Option("Payment record")
+	Flow("staging-rollback-policy", "Staging rollback policy", func() {
+		StartsWith("detect-staging-regression", "remediation", "Detects an unhealthy staging deploy", func() {
+			Question("staging-autonomy", "Should staging rollbacks run autonomously or pause for approval?", func() {
+				Option("Autonomous staging rollbacks")
+				Option("Approval required everywhere")
 			})
 		})
 	})

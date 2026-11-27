@@ -706,7 +706,7 @@ type (
 		Message string
 		// Stable Chorus swarm name for this project.
 		Team string
-		// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+		// Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).
 		Channel string
 		// Registered Chorus handle for this project's guide (empty when no guide is
 		// registered yet).

@@ -1882,7 +1882,7 @@ type OpenViewsResult struct {
 	Message string
 	// Stable Chorus swarm name for this project.
 	Team string
-	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	// Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).
 	Channel string
 	// Registered Chorus handle for this project's guide (empty when no guide is
 	// registered yet).
@@ -2420,7 +2420,7 @@ type TeamConversation struct {
 // method.
 type TeamMessage struct {
 	// Unique message key combining target and sequence (for example
-	// #refunds-8f3a1c902b4e:12).
+	// #ops-8f3a1c902b4e:12).
 	ID string
 	// Chorus target (#channel or @handle) carrying this message.
 	Target string
@@ -6246,7 +6246,7 @@ type jsonOpenViewsResultTransport struct {
 	Message *string `json:"message"`
 	// Stable Chorus swarm name for this project.
 	Team *string `json:"team"`
-	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	// Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).
 	Channel *string `json:"channel"`
 	// Registered Chorus handle for this project's guide (empty when no guide is
 	// registered yet).
@@ -7709,7 +7709,7 @@ func validatejsonTeamConversationTransport(value *jsonTeamConversationTransport)
 // jsonTeamMessageTransport stores JSON fields until they have been validated.
 type jsonTeamMessageTransport struct {
 	// Unique message key combining target and sequence (for example
-	// #refunds-8f3a1c902b4e:12).
+	// #ops-8f3a1c902b4e:12).
 	ID *string `json:"id"`
 	// Chorus target (#channel or @handle) carrying this message.
 	Target *string `json:"target"`
@@ -43534,7 +43534,7 @@ func validateOpenViewsResultJSONValue(path string, value any, description string
 		case "channel":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).",
+				typed[key], "Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).",
 			); err != nil {
 				return err
 			}
@@ -45187,7 +45187,7 @@ func validateTeamConversationJSONValue3(path string, value any, description stri
 		case "id":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Unique message key combining target and sequence (for example #refunds-8f3a1c902b4e:12).",
+				typed[key], "Unique message key combining target and sequence (for example #ops-8f3a1c902b4e:12).",
 			); err != nil {
 				return err
 			}

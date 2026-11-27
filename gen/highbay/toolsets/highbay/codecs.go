@@ -9051,7 +9051,7 @@ var openViewsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("channel")},
 		JSONType:    "string",
-		Description: "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).",
+		Description: "Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("handle")},
@@ -28459,7 +28459,7 @@ func validateOpenViewsResultJSONValue(path string, value any, description string
 		case "channel":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).",
+				typed[key], "Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).",
 			); err != nil {
 				return err
 			}

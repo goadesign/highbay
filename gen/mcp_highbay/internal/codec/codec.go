@@ -7150,7 +7150,7 @@ type OpenViewsResultTransport struct {
 	Message *string `json:"message"`
 	// Stable Chorus swarm name for this project.
 	Team *string `json:"team"`
-	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	// Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).
 	Channel *string `json:"channel"`
 	// Registered Chorus handle for this project's guide (empty when no guide is
 	// registered yet).

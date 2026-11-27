@@ -607,7 +607,7 @@ the evaluator with the caller's shell environment unchanged (unlike
 prints the builder view of the report (hidden scenarios shown only as
 `holdout-N`) to standard output. Then it writes one summary line to standard
 error, such as
-`highbay: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
+`highbay: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "production_rollback_requires_approval", "staging_rollback_succeeds" (report 4f2c…)`.
 It exits 0 when the report completed and passed, and 1 otherwise.
 A report that did not pass is written and printed before the command exits
 non-zero; a setup or build failure prints no report. Omitting a required flag
@@ -1881,8 +1881,8 @@ working copy loses only uncommitted work: the next build recreates the folder.
 **Required tests.** For a build with a test writer, Highbay writes the test
 module's Story table, `eval/design/story_tests.go`, which declares one scenario
 per finished flow of the saved Story, and generates the module from its design.
-Flow `refund-over-limit` requires scenario `refund_over_limit` and the hook
-method `RefundOverLimit`. Unfinished flows require none; with no finished flow,
+Flow `production-rollback-requires-approval` requires scenario `production_rollback_requires_approval` and the hook
+method `ProductionRollbackRequiresApproval`. Unfinished flows require none; with no finished flow,
 the test program must still build. Highbay writes the table and the test module's
 generated code when `get_test_writer_assignment` marks an assigned build's
 assignment read (at report 0) and again at each report, generating with the
@@ -2164,8 +2164,8 @@ starts, so a revision proposed or adopted later does not change them. The
 test writer may not read the change with `get_change`, so these fields are
 how its tests learn what the user agreed: the tests must hold the service to
 them as well as to the Story's flows. For example, when the user answered
-"Without tax" to "Does the $50 limit include tax?" and the limit includes $50.00 itself, a test checks that an
-order of $50.00 before tax is refunded at once. Highbay's check of a report
+"Autonomous staging + gated production" to whether staging rollbacks require approval, a test checks that
+`rollback_staging` runs without pausing while `rollback_production` pauses for `oncall` confirmation. Highbay's check of a report
 confirms the required tests, not what they assert. Reading the assignment of
 a build that holds no example, such as one saved by a `highbay` without these
 fields, fails with `the build of change "<change_id>" holds none of the

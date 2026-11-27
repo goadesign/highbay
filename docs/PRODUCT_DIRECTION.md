@@ -100,8 +100,9 @@ this step.
   timeline itself or by messaging the guide from **Conversation**. Both
   update the timeline that Highbay uses to propose the architecture.
 - **Its flows become end-to-end tests.** A flow on the timeline is a path
-  from what starts it to an outcome — for example, a customer asks for a
-  refund over the limit, a manager approves it, and the refund is paid.
+  from what starts it to an outcome — for example, an unhealthy production
+  deploy is detected, an on-call engineer approves the rollback, and the
+  service rolls back.
   Each flow results in an end-to-end test of the built platform. An agent
   that did not write the platform code, the test writer, writes the tests.
 - **Finished flows are built; drafts wait.** Highbay builds and tests the
@@ -136,8 +137,8 @@ When the user edits the Story on the timeline or by telling the guide, the
 guide changes its source code. Highbay runs the changed Story code in the
 background and redraws the timeline. Drafts and incomplete flows must still
 run without errors so the user can refine them in place. Each step in a flow
-has an explicit stable key: a manager approval step can keep `approve-refund`
-when its label changes. Actors name roles such as a customer or manager,
+has an explicit stable key: an on-call approval step can keep `approve-rollback`
+when its label changes. Actors name roles such as an on-call engineer or remediation agent,
 rather than architecture elements such as an API or worker.
 
 ### Domain-driven design, without the vocabulary
@@ -263,7 +264,7 @@ diagram.
 ## Open questions
 
 - **Testing a deployed copy.** Running the flow tests against an address
-  the user supplies is decided; how is not. A test such as a refund could
+  the user supplies is decided; how is not. A test such as a rollback could
   have real effects there, outside services are real instead of simulated,
   and Highbay needs a way to call the platform's API in that environment.
   None of these is decided.

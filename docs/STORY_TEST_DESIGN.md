@@ -14,7 +14,7 @@ side, and the reference gives the exact contract of
 | Term | Meaning |
 | --- | --- |
 | Story | Go source, among the design files under `design/`, that describes what happens in the business: its actors and its flows. |
-| Flow | One path through a Story, from what starts it to an outcome. For example, a customer asks for a refund above the limit, a manager approves it, and the refund is paid. |
+| Flow | One path through a Story, from what starts it to an outcome. For example, an unhealthy production deploy is detected, an on-call engineer approves the rollback, and the service rolls back. |
 | Finished flow | A flow with a start, at least one outcome and no open question. Any other flow is unfinished: a draft. |
 | Change Card | The saved record of one requested change: the request, its open questions and the user's answers, its examples, its Story and its design source. |
 | `request_revision` | The identifier of one exact saved revision of a Change Card, including its Story. |
@@ -40,22 +40,22 @@ before any service, agent or architecture exists. Its
 [README](../story/README.md) lists every declaration. A short example:
 
 ```go
-var _ = Story("Refunds", func() {
-	Actor("customer", "Customer")
-	Actor("manager", "Support manager")
+var _ = Story("Incidents", func() {
+	Actor("remediation", "Remediation agent")
+	Actor("oncall", "On-call engineer")
 
-	Flow("refund-over-limit", "Refund above the limit", func() {
-		StartsWith("request-refund", "customer", "Requests a refund")
-		Step("approve-refund", "manager", "Approves the refund")
-		Outcome("refund-paid", "customer", "Receives the refund")
+	Flow("production-rollback-requires-approval", "Production rollback requires on-call approval", func() {
+		StartsWith("detect-unhealthy-deploy", "remediation", "Detects an unhealthy production deploy")
+		Step("approve-rollback", "oncall", "Approves the production rollback")
+		Outcome("service-rolled-back", "remediation", "Rolls back the production service")
 	})
 })
 ```
 
 Every actor, flow, step and question has a stable key. Titles and summaries
-can change without changing a key: renaming "Approves the refund" to
-"Support manager approves the refund" keeps `approve-refund`, and the
-required test of `refund-over-limit` keeps its name. A missing start, a
+can change without changing a key: renaming "Approves the production rollback" to
+"On-call engineer approves the rollback" keeps `approve-rollback`, and the
+required test of `production-rollback-requires-approval` keeps its name. A missing start, a
 missing outcome or an open question leaves a valid unfinished flow. A
 duplicate key, an invalid key or a step that names an undeclared actor is an
 error. Actor names are the user's business roles: `warehouse-worker` and
@@ -143,7 +143,7 @@ table leaves out without generating anything:
 
 | Flow key | Scenario name (Goa `codegen.SnakeCase`) | Hook method (Goa `codegen.Goify`) |
 | --- | --- | --- |
-| `refund-over-limit` | `refund_over_limit` | `RefundOverLimit` |
+| `production-rollback-requires-approval` | `production_rollback_requires_approval` | `ProductionRollbackRequiresApproval` |
 
 Two finished flows whose keys give the same scenario name or hook method,
 such as `a-b` and `a_b`, or the same key in two Stories, are refused, naming

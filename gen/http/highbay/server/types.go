@@ -1067,7 +1067,7 @@ type GetTeamConversationResponseBody struct {
 // "send_team_message" endpoint HTTP response body.
 type SendTeamMessageResponseBody struct {
 	// Unique message key combining target and sequence (for example
-	// #refunds-8f3a1c902b4e:12).
+	// #ops-8f3a1c902b4e:12).
 	ID string `form:"id" json:"id" xml:"id"`
 	// Chorus target (#channel or @handle) carrying this message.
 	Target string `form:"target" json:"target" xml:"target"`
@@ -1134,7 +1134,7 @@ type OpenViewsResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 	// Stable Chorus swarm name for this project.
 	Team string `form:"team" json:"team" xml:"team"`
-	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	// Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).
 	Channel string `form:"channel" json:"channel" xml:"channel"`
 	// Registered Chorus handle for this project's guide (empty when no guide is
 	// registered yet).
@@ -5861,7 +5861,7 @@ type RoleAgentChoiceResponseBody struct {
 // TeamMessageResponseBody is used to define fields on response body types.
 type TeamMessageResponseBody struct {
 	// Unique message key combining target and sequence (for example
-	// #refunds-8f3a1c902b4e:12).
+	// #ops-8f3a1c902b4e:12).
 	ID string `form:"id" json:"id" xml:"id"`
 	// Chorus target (#channel or @handle) carrying this message.
 	Target string `form:"target" json:"target" xml:"target"`
