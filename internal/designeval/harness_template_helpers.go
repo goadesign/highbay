@@ -174,6 +174,40 @@ func describeErrors(api *goaexpr.APIExpr, errs []*goaexpr.ErrorExpr) []errorDecl
 	})
 	return out
 }
+`
+
+	// harnessModelFile is compiled into the evaluator program as model.go only
+	// when the target's design packages load goa.design/model.
+	harnessModelFile = `package main
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	modelexpr "goa.design/model/expr"
+)
+
+type (
+	modelRelDecl struct {
+		Destination     string ` + "`json:\"destination\"`" + `
+		Description     string ` + "`json:\"description,omitempty\"`" + `
+		Technology      string ` + "`json:\"technology,omitempty\"`" + `
+		InteractionKind int    ` + "`json:\"interaction_kind,omitempty\"`" + `
+		Tags            string ` + "`json:\"tags,omitempty\"`" + `
+	}
+
+	modelElementDecl struct {
+		Kind          string            ` + "`json:\"kind\"`" + `
+		Name          string            ` + "`json:\"name\"`" + `
+		Description   string            ` + "`json:\"description,omitempty\"`" + `
+		Technology    string            ` + "`json:\"technology,omitempty\"`" + `
+		Tags          string            ` + "`json:\"tags,omitempty\"`" + `
+		URL           string            ` + "`json:\"url,omitempty\"`" + `
+		Properties    map[string]string ` + "`json:\"properties,omitempty\"`" + `
+		Relationships []modelRelDecl    ` + "`json:\"relationships,omitempty\"`" + `
+	}
+)
 
 // describeModelElement records Model's resolved relationship identities, which
 // are shared by the graph nodes and distinguish equal names in different scopes.

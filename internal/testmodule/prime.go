@@ -205,12 +205,15 @@ func PrimeProfiles() ([]PrimeProfile, error) {
 		if historicalGoa.withGoaCmd {
 			extra = [][]string{{"list", "-deps", "goa.design/goa/v3/cmd/goa"}}
 		}
+		designFiles := map[string]string{
+			"design/design.go": blankImports("goa.design/goa/v3/dsl"),
+		}
 		profiles = append(profiles,
 			PrimeProfile{
 				Name: "snapshot-" + historicalGoa.label,
 				Files: map[string]string{
-					"go.mod":           moduleGoMod("example.com/design", historicalGoa.version, goaAIVer, modelVer),
-					"design/design.go": blankImports("goa.design/goa/v3/dsl"),
+					"go.mod":           moduleGoMod("example.com/design", historicalGoa.version, goaAIVer, modelVer, designFiles),
+					"design/design.go": designFiles["design/design.go"],
 				},
 				ExtraCommands: extra,
 			},
