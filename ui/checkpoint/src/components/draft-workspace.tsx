@@ -78,7 +78,6 @@ export interface DraftChangeWorkspaceProps {
   teamLoading: boolean;
   conversation: TeamConversation | null;
   sentMessageId: string | undefined;
-  proposalArrivedAfterSend: boolean;
   sendUncertain: boolean;
   sendError: string | null;
   sending: boolean;
@@ -144,7 +143,6 @@ export function DraftChangeWorkspace({
   teamLoading,
   conversation,
   sentMessageId,
-  proposalArrivedAfterSend,
   sendUncertain,
   sendError,
   sending,
@@ -387,11 +385,9 @@ export function DraftChangeWorkspace({
       );
     }
 
-    // 3b. Confirmed receipt (sentMessageId !== undefined), then Guide ended / error / not_started
-    // before any new Change Card proposal arrived for this request.
+    // 3b. Confirmed receipt (sentMessageId !== undefined) while Guide is ended, failed, or not running.
     if (
       sentMessageId !== undefined &&
-      !proposalArrivedAfterSend &&
       !teamLoading &&
       snapshot !== null &&
       (guideState === "ended" || guideState === "error" || guideState === "not_started")
@@ -404,11 +400,14 @@ export function DraftChangeWorkspace({
         >
           {proposalsQueue}
           <h2 id={titleId} tabIndex={-1}>
-            Guide stopped before proposing a Change Card
+            {isFirstProjectChange
+              ? "Guide stopped before proposing a Change Card"
+              : "Guide is not running"}
           </h2>
           <p id="highbay-change-list-empty" role="status">
-            Your request is already saved in the Chorus team channel. Restart Guide so it resumes from
-            that message without posting a duplicate request.
+            {isFirstProjectChange
+              ? "Your request is already saved in the Chorus team channel. Restart Guide so it resumes from that message without posting a duplicate request."
+              : "Your request is saved in the Chorus team channel. If Guide still needs to act on it, restart Guide so it resumes without posting a duplicate request, or start another request."}
           </p>
           <div id="highbay-draft-receipt" className="highbay-panel-section">
             <p className="highbay-muted">

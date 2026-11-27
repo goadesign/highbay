@@ -1377,7 +1377,7 @@ async function workspaceScenario(input, facts, views) {
   }
 
   // Seed a confirmed Change Card so the header renders project + Changes + + New change +
-  // #highbay-stage-menu + wrapped Inspect at 320px and 375px, then verify both popovers fit inside [0, clientWidth].
+  // #highbay-stage-menu + wrapped Inspect across [320, 375, 768, 1024, 1280], verifying open popovers fit inside [0, clientWidth].
   const seedResp = await fetch(input.origin + "/__test/seed-card", { method: "POST" });
   if (!seedResp.ok) {
     throw new Error("seeding mobile popover card failed: " + seedResp.status);
@@ -1391,25 +1391,31 @@ async function workspaceScenario(input, facts, views) {
   if (stageMenuPresent.timed_out) {
     mobilePopoversFit = false;
   } else {
-    for (const width of [320, 375]) {
-      await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: true }, views.sessionId);
+    for (const width of [320, 375, 768, 1024, 1280]) {
+      await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 }, views.sessionId);
       await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
       const fits = await evaluate(
         views,
-        "(() => {" +
+        "((w) => {" +
           "const stageDetails = document.getElementById('highbay-stage-menu');" +
           "const inspectDetails = document.querySelector('.highbay-frame-project-menu');" +
-          "if (!stageDetails || !inspectDetails) return false;" +
-          "stageDetails.open = true;" +
-          "const sr = stageDetails.querySelector('.highbay-frame-journey').getBoundingClientRect();" +
-          "const stageOk = sr.left >= 0 && sr.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
-          "stageDetails.open = false;" +
+          "if (!inspectDetails) return false;" +
+          "let stageOk = true;" +
+          "if (w <= 899) {" +
+            "if (!stageDetails) return false;" +
+            "stageDetails.open = true;" +
+            "const sr = stageDetails.querySelector('.highbay-frame-journey').getBoundingClientRect();" +
+            "stageOk = sr.left >= 0 && sr.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
+            "stageDetails.open = false;" +
+          "} else if (stageDetails !== null) {" +
+            "stageOk = false;" +
+          "}" +
           "inspectDetails.open = true;" +
           "const ir = inspectDetails.querySelector('.highbay-frame-references').getBoundingClientRect();" +
           "const inspectOk = ir.left >= 0 && ir.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
           "inspectDetails.open = false;" +
           "return stageOk && inspectOk;" +
-        "})()"
+        "})(" + String(width) + ")"
       );
       if (!fits) {
         mobilePopoversFit = false;

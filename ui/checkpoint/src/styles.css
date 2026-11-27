@@ -845,6 +845,9 @@ html { scroll-padding-block-start: calc(var(--highbay-frame-height, 120px) + 16p
 .highbay-frame-brand-group, .highbay-frame-end-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-inline-size: 0;
 }
+.highbay-frame-end-actions {
+  margin-inline-start: auto;
+}
 .highbay-frame-project {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px;
   min-inline-size: 0; margin: 0; font-size: 0.84rem; line-height: 1.4;
@@ -926,8 +929,16 @@ html { scroll-padding-block-start: calc(var(--highbay-frame-height, 120px) + 16p
 .highbay-frame-references [aria-current="page"], .highbay-frame-references [aria-expanded="true"] {
   color: var(--accent);
 }
+@media (max-width: 899px) {
+  .highbay-stage-menu {
+    position: static;
+  }
+  .highbay-stage-menu .highbay-frame-journey {
+    inset-inline: 12px;
+    inline-size: min(20rem, calc(100% - 24px));
+  }
+}
 @media (max-width: 640px) {
-  .highbay-stage-menu,
   .highbay-frame-project-menu {
     position: static;
   }
