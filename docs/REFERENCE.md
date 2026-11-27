@@ -2933,11 +2933,11 @@ with the root requirements currently in this repository, run:
 
 ```sh
 GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.36.1-0.20261127003656-164e9345c403 </dev/null
-GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.36.1-0.20261127003656-164e9345c403 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11 </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.36.1-0.20261127003656-164e9345c403 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.12-0.20261127050201-b0d6898e1c22 </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.36.1-0.20261127003656-164e9345c403 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
 GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
 GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
-GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.36.1-0.20261127003656-164e9345c403 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11 </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.36.1-0.20261127003656-164e9345c403 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.12-0.20261127050201-b0d6898e1c22 </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
 ```
