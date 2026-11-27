@@ -1313,10 +1313,13 @@ async function workspaceScenario(input, facts, views) {
   await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
   await until(views, "document.getElementById('highbay-terminal-drawer') === null");
 
-  // Verify zero horizontal overflow, <= 1 primary action, and narrow-width sheet focus
-  // across 320, 375, 768, 1024, and 1280 px viewports, recording any failing width.
+  // Verify zero horizontal overflow, <= 1 primary action, narrow-width sheet focus,
+  // hidden-terminal needs_you primary preservation, and narrow popover bounds across
+  // 320, 375, 768, 1024, and 1280 px viewports, recording any failing width.
   const failingViewports = [];
   let mobileSheetFocusClean = false;
+  let mobileHiddenTerminalPrimary = false;
+  let mobilePopoversFit = true;
   for (const width of [320, 375, 768, 1024, 1280]) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 }, views.sessionId);
     await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
@@ -1356,6 +1359,62 @@ async function workspaceScenario(input, facts, views) {
       if (!convOpenCheck) {
         failingViewports.push("375px-conversation-sheet");
       }
+
+      // Open interactive builder terminal on 375px, then hide the terminal sheet via Back to stage:
+      // #highbay-team-attention-terminal-builder must remain primary and never claim "terminal open" while hidden.
+      await evaluate(views, "document.getElementById('highbay-team-attention-terminal-builder')?.click(), true");
+      await until(views, "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'builder' && !document.getElementById('highbay-terminal-region').hidden");
+      await evaluate(views, "document.getElementById('highbay-mobile-terminal-toggle')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      mobileHiddenTerminalPrimary = await evaluate(
+        views,
+        "document.getElementById('highbay-terminal-region').hidden === true && document.getElementById('highbay-team-attention-terminal-builder')?.dataset.primaryAction === 'true' && !document.getElementById('highbay-team-attention-terminal-builder')?.textContent.includes('terminal open')"
+      );
+      await evaluate(views, "document.getElementById('highbay-mobile-terminal-toggle')?.click(), true");
+      await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
+      await until(views, "document.getElementById('highbay-terminal-drawer') === null");
+    }
+  }
+
+  // Seed a confirmed Change Card so the header renders project + Changes + + New change +
+  // #highbay-stage-menu + wrapped Inspect at 320px and 375px, then verify both popovers fit inside [0, clientWidth].
+  const seedResp = await fetch(input.origin + "/__test/seed-card", { method: "POST" });
+  if (!seedResp.ok) {
+    throw new Error("seeding mobile popover card failed: " + seedResp.status);
+  }
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 800, deviceScaleFactor: 1, mobile: true }, views.sessionId);
+  await reload(views);
+  const stageMenuPresent = await until(
+    views,
+    "document.getElementById('highbay-stage-menu') !== null && document.querySelector('.highbay-frame-project-menu') !== null"
+  );
+  if (stageMenuPresent.timed_out) {
+    mobilePopoversFit = false;
+  } else {
+    for (const width of [320, 375]) {
+      await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: true }, views.sessionId);
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const fits = await evaluate(
+        views,
+        "(() => {" +
+          "const stageDetails = document.getElementById('highbay-stage-menu');" +
+          "const inspectDetails = document.querySelector('.highbay-frame-project-menu');" +
+          "if (!stageDetails || !inspectDetails) return false;" +
+          "stageDetails.open = true;" +
+          "const sr = stageDetails.querySelector('.highbay-frame-journey').getBoundingClientRect();" +
+          "const stageOk = sr.left >= 0 && sr.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
+          "stageDetails.open = false;" +
+          "inspectDetails.open = true;" +
+          "const ir = inspectDetails.querySelector('.highbay-frame-references').getBoundingClientRect();" +
+          "const inspectOk = ir.left >= 0 && ir.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
+          "inspectDetails.open = false;" +
+          "return stageOk && inspectOk;" +
+        "})()"
+      );
+      if (!fits) {
+        mobilePopoversFit = false;
+        failingViewports.push(String(width) + "px-popovers");
+      }
     }
   }
   await views.dt.send("Emulation.clearDeviceMetricsOverride", {}, views.sessionId);
@@ -1376,6 +1435,8 @@ async function workspaceScenario(input, facts, views) {
     viewports_clean: failingViewports.length === 0,
     failing_viewports: failingViewports,
     mobile_sheet_focus_clean: mobileSheetFocusClean,
+    mobile_hidden_terminal_primary: mobileHiddenTerminalPrimary,
+    mobile_popovers_fit: mobilePopoversFit,
     browser_cookies: (await views.dt.send("Storage.getCookies", {})).cookies.length,
   };
 }

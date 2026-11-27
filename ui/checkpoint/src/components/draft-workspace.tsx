@@ -78,6 +78,7 @@ export interface DraftChangeWorkspaceProps {
   teamLoading: boolean;
   conversation: TeamConversation | null;
   sentMessageId: string | undefined;
+  proposalArrivedAfterSend: boolean;
   sendUncertain: boolean;
   sendError: string | null;
   sending: boolean;
@@ -105,26 +106,31 @@ export interface DraftChangeWorkspaceProps {
   onWatchGuideTerminal: (invoker: HTMLElement | null) => void;
 }
 
-// findLinkedGuideReply returns the latest primary-channel Guide message that
-// explicitly replies to sentMessage.seq, or null if none exists.
-function findLinkedGuideReply(
+// findLinkedGuideReply walks conversation.messages forward on conversation.channel
+// starting from sentMessage.seq, returning the latest unanswered Guide message in
+// that reply chain (or null once the user replies or before Guide replies).
+export function findLinkedGuideReply(
   conversation: TeamConversation | null,
   sentMessage: TeamMessage | null
 ): TeamMessage | null {
   if (conversation === null || sentMessage === null) {
     return null;
   }
-  for (let i = conversation.messages.length - 1; i >= 0; i--) {
-    const candidate = conversation.messages[i];
+  const threadSeqs = new Set<number>([sentMessage.seq]);
+  let latestInThread: TeamMessage | null = null;
+  for (const candidate of conversation.messages) {
     if (
       candidate.target === conversation.channel &&
-      candidate.sender_role === "guide" &&
-      candidate.reply_to === sentMessage.seq
+      candidate.reply_to !== undefined &&
+      threadSeqs.has(candidate.reply_to)
     ) {
-      return candidate;
+      threadSeqs.add(candidate.seq);
+      latestInThread = candidate;
     }
   }
-  return null;
+  return latestInThread !== null && latestInThread.sender_role === "guide"
+    ? latestInThread
+    : null;
 }
 
 // DraftChangeWorkspace renders the single goal composer, live milestones,
@@ -138,6 +144,7 @@ export function DraftChangeWorkspace({
   teamLoading,
   conversation,
   sentMessageId,
+  proposalArrivedAfterSend,
   sendUncertain,
   sendError,
   sending,
@@ -380,9 +387,11 @@ export function DraftChangeWorkspace({
       );
     }
 
-    // 3b. Confirmed receipt (sentMessageId !== undefined), then Guide ended / error / not_started.
+    // 3b. Confirmed receipt (sentMessageId !== undefined), then Guide ended / error / not_started
+    // before any new Change Card proposal arrived for this request.
     if (
       sentMessageId !== undefined &&
+      !proposalArrivedAfterSend &&
       !teamLoading &&
       snapshot !== null &&
       (guideState === "ended" || guideState === "error" || guideState === "not_started")

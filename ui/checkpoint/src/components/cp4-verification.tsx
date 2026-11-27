@@ -52,6 +52,8 @@ export interface VerificationViewProps {
   cardLoadError: string | null;
   // primaryCheckStatus marks Check status as the page's single primary action.
   primaryCheckStatus: boolean;
+  // primaryMessageBuilder marks Message Builder as primary when a current-build run failed.
+  primaryMessageBuilder?: boolean;
   // onMessageBuilder focuses the Builder conversation composer when a current check failed.
   onMessageBuilder: (() => void) | null;
   // onCheckStatus reads this exact run; it never restarts verification.
@@ -130,6 +132,7 @@ export function VerificationView({
   listError,
   cardLoadError,
   primaryCheckStatus,
+  primaryMessageBuilder = false,
   onMessageBuilder,
   onCheckStatus,
   onLoadVerifications,
@@ -411,7 +414,11 @@ export function VerificationView({
           </Button>
         ) : null}
         {onMessageBuilder !== null ? (
-          <Button id="highbay-cp4-message-builder" variant="secondary" onClick={onMessageBuilder}>
+          <Button
+            id="highbay-cp4-message-builder"
+            variant={primaryMessageBuilder ? "primary" : "secondary"}
+            onClick={onMessageBuilder}
+          >
             Message Builder
           </Button>
         ) : null}

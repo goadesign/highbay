@@ -258,17 +258,7 @@ li { margin-bottom: 0.35rem; }
 .shadcn-card-title { font-size: 1rem; font-weight: 600; letter-spacing: -0.015em; margin: 0; }
 .shadcn-card-desc { font-size: 0.84rem; color: var(--muted-foreground); margin-top: 0.2rem; max-inline-size: 75ch; }
 
-/* Workspace navigation bar & truthful displayed-subject context strip. */
-#highbay-checkpoint-nav:not([hidden]) {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0.35rem 0 0.85rem 0;
-  padding: 0.55rem 0.7rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
+/* Truthful displayed-subject context strip. */
 .highbay-workspace-context {
   display: flex;
   flex-wrap: wrap;
@@ -840,6 +830,7 @@ html { scroll-padding-block-start: calc(var(--highbay-frame-height, 120px) + 16p
 }
 .highbay-skip-link:focus { transform: translateY(0); }
 #highbay-checkpoint-nav:not([hidden]) {
+  display: flex; flex-direction: column; gap: 0.5rem;
   position: sticky; inset-block-start: 0; z-index: 30;
   margin: -0.85rem -0.15rem 16px; padding: 0;
   border: 0; border-block-end: 1px solid var(--border); border-radius: 0;
@@ -847,6 +838,7 @@ html { scroll-padding-block-start: calc(var(--highbay-frame-height, 120px) + 16p
 }
 .highbay-fixed-frame { font-size: 0.8125rem; line-height: 1.4; }
 .highbay-frame-where {
+  position: relative;
   display: flex; flex-wrap: wrap; justify-content: space-between;
   gap: 8px 12px; align-items: center; padding: 8px 12px;
 }
@@ -933,6 +925,17 @@ html { scroll-padding-block-start: calc(var(--highbay-frame-height, 120px) + 16p
 .highbay-frame-references .highbay-btn { justify-content: flex-start; margin: 0; }
 .highbay-frame-references [aria-current="page"], .highbay-frame-references [aria-expanded="true"] {
   color: var(--accent);
+}
+@media (max-width: 640px) {
+  .highbay-stage-menu,
+  .highbay-frame-project-menu {
+    position: static;
+  }
+  .highbay-stage-menu .highbay-frame-journey,
+  .highbay-frame-project-menu .highbay-frame-references {
+    inset-inline: 12px;
+    inline-size: auto;
+  }
 }
 .highbay-approval-stage { min-inline-size: 0; font-size: 0.875rem; line-height: 1.5; padding: 8px 0 24px; }
 .highbay-approval-stage h2 { font-size: 1.125rem; line-height: 1.4; margin: 0 0 8px; }

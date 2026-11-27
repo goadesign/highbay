@@ -23,7 +23,11 @@ import {
   contextRequiresGuide,
   guideRoleNeedsStart,
 } from "./components/conversation";
-import { DraftChangeWorkspace, ProposalReviewQueue } from "./components/draft-workspace";
+import {
+  DraftChangeWorkspace,
+  ProposalReviewQueue,
+  findLinkedGuideReply,
+} from "./components/draft-workspace";
 import { CP1EditorView } from "./components/cp1-editor";
 import {
   BuildMergeInstructions,
@@ -730,6 +734,7 @@ export function bootstrapViewsPage() {
     }
   >();
   const pendingDefaultVerifyCheck = new Map<string, number>();
+  const pendingDefaultBuildSeq = new Map<string, number>();
 
   let traceOpen = false;
   let traceFilter: TraceFilter = "error";
@@ -785,6 +790,8 @@ export function bootstrapViewsPage() {
   let composerDraft: ComposerDraft = { to: "guide", text: "", replyTo: null, context: null };
   let activeComposerScope = "draft";
   const composerDraftsByScope = new Map<string, ComposerDraft>();
+  const composerSendErrorsByScope = new Map<string, string | null>();
+  const composerDraftGenerationByScope = new Map<string, number>();
   let composerSendError: string | null = null;
   let composerDetachedNotice: string | null = null;
 
@@ -792,6 +799,7 @@ export function bootstrapViewsPage() {
   let describeSendError: string | null = null;
   let describeSendUncertain = false;
   let draftSentMessageId: string | undefined = undefined;
+  let draftBaselineChangeIds: Set<string> | null = null;
 
   // Stage-docked terminal state.
   let openTerminalRole: TeamRoleState["role"] | null = null;
@@ -883,23 +891,24 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // composerScopeFor isolates per-change composer drafts from + New change / general drafts.
-  function composerScopeFor(viewKind: WorkspaceView["kind"], changeId: string | null): string {
-    if (
-      changeId !== null &&
-      (viewKind === "change" || viewKind === "story" || viewKind === "live")
-    ) {
-      return "change:" + changeId;
+  // targetComposerScope derives the active composer scope from currentView and activeChangeId.
+  function targetComposerScope(): string {
+    if (currentView.kind === "change") {
+      return "change:" + currentView.changeId;
+    }
+    if ((currentView.kind === "story" || currentView.kind === "live") && activeChangeId !== null) {
+      return "change:" + activeChangeId;
     }
     return "draft";
   }
 
-  // switchComposerScope saves the current scope's unsent composer draft and restores nextScope's.
+  // switchComposerScope saves the current scope's unsent composer draft/error and restores nextScope's.
   function switchComposerScope(nextScope: string) {
     if (nextScope === activeComposerScope) {
       return;
     }
     composerDraftsByScope.set(activeComposerScope, composerDraft);
+    composerSendErrorsByScope.set(activeComposerScope, composerSendError);
     activeComposerScope = nextScope;
     composerDraft = composerDraftsByScope.get(nextScope) ?? {
       to: "guide",
@@ -907,8 +916,129 @@ export function bootstrapViewsPage() {
       replyTo: null,
       context: null,
     };
+    composerSendError = composerSendErrorsByScope.get(nextScope) ?? null;
     composerDetachedNotice = null;
-    composerSendError = null;
+  }
+
+  // syncComposerScope aligns activeComposerScope with targetComposerScope().
+  function syncComposerScope() {
+    switchComposerScope(targetComposerScope());
+  }
+
+  // bumpScopeDraftGeneration increments scope's draft generation when user/UI mutates its draft.
+  function bumpScopeDraftGeneration(scope: string) {
+    composerDraftGenerationByScope.set(scope, (composerDraftGenerationByScope.get(scope) ?? 0) + 1);
+  }
+
+  // readScopeDraft reads scope's current ComposerDraft without changing activeComposerScope.
+  function readScopeDraft(scope: string): ComposerDraft {
+    if (scope === activeComposerScope) {
+      return composerDraft;
+    }
+    return (
+      composerDraftsByScope.get(scope) ?? {
+        to: "guide",
+        text: "",
+        replyTo: null,
+        context: null,
+      }
+    );
+  }
+
+  // writeScopeDraft updates scope's ComposerDraft in place or in composerDraftsByScope.
+  function writeScopeDraft(scope: string, next: ComposerDraft, bumpGeneration = false) {
+    if (scope === activeComposerScope) {
+      composerDraft = next;
+    } else {
+      composerDraftsByScope.set(scope, next);
+    }
+    if (bumpGeneration) {
+      bumpScopeDraftGeneration(scope);
+    }
+  }
+
+  // writeScopeSendError updates scope's send error in place or in composerSendErrorsByScope.
+  function writeScopeSendError(scope: string, nextError: string | null) {
+    if (scope === activeComposerScope) {
+      composerSendError = nextError;
+    } else {
+      composerSendErrorsByScope.set(scope, nextError);
+    }
+  }
+
+  // isScopeSending reports whether a rail or agree send is in flight for scope.
+  function isScopeSending(scope: string): boolean {
+    return (
+      hasPending("send_team_message", "rail:" + scope) ||
+      hasPending("send_team_message", "agree:" + scope)
+    );
+  }
+
+  // isChorusUnavailable reports whether either Chorus observation indicates unavailability.
+  function isChorusUnavailable(): boolean {
+    return (
+      teamConversation?.chorus_status === "unavailable" ||
+      teamSnapshot?.chorus_status === "unavailable"
+    );
+  }
+
+  // isGuideChoiceInvalidForRecipient reports whether recipient requires starting Guide with an invalid choice.
+  function isGuideChoiceInvalidForRecipient(to: ComposerRecipient): boolean {
+    const needsGuide = (to === "guide" || to === "team") && guideRoleNeedsStart(teamSnapshot);
+    return (
+      needsGuide &&
+      (agentOptions === null ||
+        guideChoice === undefined ||
+        roleChoiceError(guideChoice, agentOptions.agents) !== null)
+    );
+  }
+
+  // canSendFromRailComposer checks whether draft may be submitted from ConversationRail right now.
+  function canSendFromRailComposer(draft: ComposerDraft): boolean {
+    return (
+      sessionState === "active" &&
+      !isScopeSending(activeComposerScope) &&
+      !isChorusUnavailable() &&
+      !isGuideChoiceInvalidForRecipient(draft.to) &&
+      draft.text.trim() !== ""
+    );
+  }
+
+  // isTerminalVisible reports whether an open TerminalDrawer is currently visible on screen.
+  function isTerminalVisible(): boolean {
+    return openTerminalRole !== null && (!isNarrowViewport() || mobileSurface === "terminal");
+  }
+
+  // proposalArrivedSinceDraftSend reports whether a Change Card was saved after draftSentMessageId was sent.
+  function proposalArrivedSinceDraftSend(): boolean {
+    if (draftSentMessageId === undefined || changeList === null || changeList.changes.length === 0) {
+      return false;
+    }
+    if (
+      draftBaselineChangeIds !== null &&
+      changeList.changes.some((c) => !draftBaselineChangeIds!.has(c.change_id))
+    ) {
+      return true;
+    }
+    const sentMsg =
+      (teamConversation?.messages ?? []).find((m) => m.id === draftSentMessageId) ?? null;
+    if (sentMsg !== null) {
+      return changeList.changes.some((c) => {
+        const savedMs = Date.parse(c.saved_at);
+        return Number.isFinite(savedMs) && savedMs >= sentMsg.sent_at_ms;
+      });
+    }
+    return false;
+  }
+
+  // isMissingOrForbiddenFailure reports whether failure proves a resource is absent or forbidden.
+  function isMissingOrForbiddenFailure(failure: Failure): boolean {
+    return (
+      failure.status === 404 ||
+      failure.status === 403 ||
+      failure.body?.name === "not_found" ||
+      failure.body?.name === "forbidden"
+    );
   }
 
   // isFocusableVisible reports whether el is attached and neither hidden nor inert.
@@ -949,10 +1079,18 @@ export function bootstrapViewsPage() {
 
   // currentHistoryState derives opaque IDs for window.history.state on /views.
   function currentHistoryState(): HistoryViewState {
+    const normalizedSurface: MobileSurface =
+      mobileSurface === "terminal" && openTerminalRole === null ? "stage" : mobileSurface;
+    const isDraftSurface =
+      currentView.kind === "new" ||
+      (currentView.kind === "changes" &&
+        (changeList === null || changeList.changes.length === 0));
     const base: HistoryViewState = {
       view: currentView.kind,
-      ...(mobileSurface !== "stage" ? { mobileSurface } : {}),
-      ...(draftSentMessageId !== undefined ? { newDraft: { sentMessageId: draftSentMessageId } } : {}),
+      ...(normalizedSurface !== "stage" ? { mobileSurface: normalizedSurface } : {}),
+      ...(isDraftSurface && draftSentMessageId !== undefined
+        ? { newDraft: { sentMessageId: draftSentMessageId } }
+        : {}),
     };
     if (currentView.kind === "change") {
       base.changeId = currentView.changeId;
@@ -1537,7 +1675,8 @@ export function bootstrapViewsPage() {
     return pending;
   }
 
-  // loadCardIntoCache loads changeId into editorsByChangeId without altering currentView.
+  // loadCardIntoCache warms changeId in editorsByChangeId via the shared
+  // fetchChangeCard path so any concurrent openChange request consumes it.
   function loadCardIntoCache(changeId: string) {
     if (
       !changeId ||
@@ -1547,29 +1686,7 @@ export function bootstrapViewsPage() {
     ) {
       return;
     }
-    callEditorServer(
-      "get_change",
-      { change_id: changeId },
-      changeId,
-      (loadedCard) => {
-        if (loadedCard.change_id === changeId && !editorsByChangeId.has(changeId)) {
-          recordObservedCard(loadedCard);
-          editorsByChangeId.set(changeId, {
-            card: loadedCard,
-            priorCard: null,
-            incomingCard: null,
-            ...editorDraftFrom(loadedCard),
-            preservedDraft: null,
-            formError: null,
-          });
-          if (activeChangeId === null) {
-            activeChangeId = changeId;
-          }
-          syncAllRegions();
-        }
-      },
-      () => {}
-    );
+    fetchChangeCard(changeId);
   }
 
   // applyListChanges auto-opens the sole Change Card on 0 -> 1 transitions when
@@ -1593,6 +1710,7 @@ export function bootstrapViewsPage() {
             (currentView.kind === "changes" || currentView.kind === "new")))
       ) {
         draftSentMessageId = undefined;
+        draftBaselineChangeIds = null;
         describeSendUncertain = false;
         describeSendError = null;
         openChange(onlyId, undefined, {
@@ -2348,8 +2466,8 @@ export function bootstrapViewsPage() {
     selectedRunId = null;
     selectedVerificationChangeId = changeId;
     mobileSurface = "stage";
-    switchComposerScope(composerScopeFor("change", changeId));
     currentView = { kind: "change", changeId, stage: "approve" };
+    syncComposerScope();
     refreshVerificationsInBackground(changeId);
     syncHistoryState("push");
     syncAllRegions();
@@ -2448,8 +2566,10 @@ export function bootstrapViewsPage() {
       });
     }
     composerDraft = { ...composerDraft, text: "", seededText: undefined };
+    bumpScopeDraftGeneration(activeComposerScope);
     for (const [scope, draft] of composerDraftsByScope.entries()) {
       composerDraftsByScope.set(scope, { ...draft, text: "", seededText: undefined });
+      bumpScopeDraftGeneration(scope);
     }
     describeText = "";
     if (!hasPending("configure_model", "")) {
@@ -2475,8 +2595,8 @@ export function bootstrapViewsPage() {
   function showChanges(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
     mobileSurface = options?.mobileSurface ?? "stage";
-    switchComposerScope("draft");
     currentView = { kind: "changes" };
+    syncComposerScope();
     statusEl.textContent =
       changeList === null
         ? "Reading this project's changes..."
@@ -2491,13 +2611,25 @@ export function bootstrapViewsPage() {
   }
 
   function openNewChange(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
+    const enteringFreshFromOtherView = !handlingPopState && currentView.kind !== "new";
     navigationSeq++;
     mobileSurface = options?.mobileSurface ?? "stage";
-    switchComposerScope("draft");
     if (changeList !== null && changeList.changes.length === 0) {
       currentView = { kind: "changes" };
     } else {
       currentView = { kind: "new" };
+    }
+    syncComposerScope();
+    const guide = teamSnapshot?.roles.find((r) => r.role === "guide");
+    const guideBusy =
+      guide?.state === "starting" ||
+      guide?.state === "working" ||
+      storyEvaluation?.state === "running";
+    if (enteringFreshFromOtherView && proposalArrivedSinceDraftSend() && !guideBusy) {
+      draftSentMessageId = undefined;
+      draftBaselineChangeIds = null;
+      describeSendUncertain = false;
+      describeSendError = null;
     }
     statusEl.textContent = "Describe the next change for Guide to draft.";
     if (storyEvaluation === null || storyEvaluationStale) {
@@ -2511,8 +2643,8 @@ export function bootstrapViewsPage() {
   function openStory(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
     mobileSurface = options?.mobileSurface ?? "stage";
-    switchComposerScope(composerScopeFor("story", activeChangeId));
     currentView = { kind: "story" };
+    syncComposerScope();
     const ed = getActiveEditor();
     statusEl.textContent =
       ed !== null
@@ -2560,8 +2692,8 @@ export function bootstrapViewsPage() {
   function openTeam(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
     mobileSurface = options?.mobileSurface ?? "stage";
-    switchComposerScope("draft");
     currentView = { kind: "team" };
+    syncComposerScope();
     statusEl.textContent = "Showing the project team.";
     if (teamSnapshot === null || teamReadError !== null || waitTroubleShown) {
       readTeam();
@@ -3486,6 +3618,7 @@ export function bootstrapViewsPage() {
     suggestedText = "",
     explicitReplyTo?: number | null
   ) {
+    syncComposerScope();
     openConversationSurface();
     composerDetachedNotice = null;
     const switchingAwayFromGuide = role !== "guide" && composerDraft.to === "guide";
@@ -3529,6 +3662,7 @@ export function bootstrapViewsPage() {
           ? undefined
           : composerDraft.seededText,
     };
+    bumpScopeDraftGeneration(activeComposerScope);
     syncAllRegions();
     document.getElementById("highbay-composer-input")?.focus();
   }
@@ -3539,6 +3673,7 @@ export function bootstrapViewsPage() {
     seq: number,
     senderRole: TeamConversation["messages"][number]["sender_role"]
   ) {
+    syncComposerScope();
     const nextTo: ComposerRecipient =
       senderRole === "builder"
         ? "builder"
@@ -3572,6 +3707,7 @@ export function bootstrapViewsPage() {
       context: nextContext,
       seededText: nextSeeded,
     };
+    bumpScopeDraftGeneration(activeComposerScope);
     syncAllRegions();
     document.getElementById("highbay-composer-input")?.focus();
   }
@@ -3579,6 +3715,7 @@ export function bootstrapViewsPage() {
   // handleSwitchComposerRecipient detaches Guide-only contexts/replies and
   // action-seeded boilerplate while preserving user-typed text and informative contexts.
   function handleSwitchComposerRecipient(nextTo: ComposerRecipient) {
+    syncComposerScope();
     if (nextTo === composerDraft.to) {
       return;
     }
@@ -3617,6 +3754,7 @@ export function bootstrapViewsPage() {
       context: nextContext,
       seededText: nextSeeded,
     };
+    bumpScopeDraftGeneration(activeComposerScope);
     syncAllRegions();
   }
 
@@ -3672,9 +3810,14 @@ export function bootstrapViewsPage() {
     source: "rail" | "describe" | "agree",
     payload: SendTeamMessagePayload
   ) {
+    syncComposerScope();
+    const originScope = activeComposerScope;
+    const originNavSeq = navigationSeq;
+    const submittedGen = composerDraftGenerationByScope.get(originScope) ?? 0;
+    const pendingKey = source === "describe" ? "describe" : source + ":" + originScope;
     if (
       sessionState !== "active" ||
-      hasPending("send_team_message", source) ||
+      hasPending("send_team_message", pendingKey) ||
       payload.text.trim() === ""
     ) {
       return;
@@ -3697,23 +3840,36 @@ export function bootstrapViewsPage() {
       describeSendError = null;
       describeSendUncertain = false;
     } else {
-      composerSendError = null;
+      writeScopeSendError(originScope, null);
       composerDetachedNotice = null;
     }
     callServer(
       "send_team_message",
       fullPayload,
-      source,
+      pendingKey,
       (posted) => {
         if (sessionState !== "active") return;
+        syncComposerScope();
         if (source === "describe") {
           describeText = "";
           describeSendUncertain = false;
           describeSendError = null;
           draftSentMessageId = posted.id;
+          draftBaselineChangeIds = new Set((changeList?.changes ?? []).map((c) => c.change_id));
           syncHistoryState("replace");
         } else if (source === "rail") {
-          composerDraft = { to: composerDraft.to, text: "", replyTo: null, context: null };
+          if ((composerDraftGenerationByScope.get(originScope) ?? 0) === submittedGen) {
+            const existing = readScopeDraft(originScope);
+            writeScopeDraft(originScope, {
+              to: existing.to,
+              text: "",
+              replyTo: null,
+              context: null,
+            });
+          }
+          writeScopeSendError(originScope, null);
+        } else {
+          writeScopeSendError(originScope, null);
         }
         if (
           teamConversation !== null &&
@@ -3730,6 +3886,7 @@ export function bootstrapViewsPage() {
       },
       (message, failure) => {
         if (sessionState !== "active") return;
+        syncComposerScope();
         const knownPrePostRefusal = failure.status >= 400 && failure.status < 500;
         if (source === "describe") {
           describeSendUncertain = !knownPrePostRefusal;
@@ -3738,28 +3895,42 @@ export function bootstrapViewsPage() {
             readConversation();
             readTeam();
           }
+          statusEl.textContent = knownPrePostRefusal
+            ? "Could not send message. " + message
+            : "Send not confirmed — check Conversation before sending again.";
         } else {
           if (source === "agree") {
-            composerDraft = {
-              to: payload.to,
-              text: payload.text,
-              replyTo: payload.reply_to ?? null,
-              context: payload.context ?? null,
-              seededText: payload.text,
-            };
+            const currentOriginDraft = readScopeDraft(originScope);
+            if (
+              (composerDraftGenerationByScope.get(originScope) ?? 0) === submittedGen ||
+              currentOriginDraft.text.trim() === ""
+            ) {
+              writeScopeDraft(originScope, {
+                to: payload.to,
+                text: payload.text,
+                replyTo: payload.reply_to ?? null,
+                context: payload.context ?? null,
+                seededText: payload.text,
+              });
+            }
           }
-          openConversationSurface();
-          composerSendError = knownPrePostRefusal
-            ? message
-            : "Send not confirmed — check Conversation before sending again. " + message;
+          writeScopeSendError(
+            originScope,
+            knownPrePostRefusal
+              ? message
+              : "Send not confirmed — check Conversation before sending again. " + message
+          );
           if (!knownPrePostRefusal) {
             readConversation();
             readTeam();
           }
+          if (activeComposerScope === originScope && navigationSeq === originNavSeq) {
+            openConversationSurface();
+            statusEl.textContent = knownPrePostRefusal
+              ? "Could not send message. " + message
+              : "Send not confirmed — check Conversation before sending again.";
+          }
         }
-        statusEl.textContent = knownPrePostRefusal
-          ? "Could not send message. " + message
-          : "Send not confirmed — check Conversation before sending again.";
       }
     );
   }
@@ -3767,8 +3938,8 @@ export function bootstrapViewsPage() {
   function openLive(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
     mobileSurface = options?.mobileSurface ?? "stage";
-    switchComposerScope(composerScopeFor("live", activeChangeId));
     currentView = { kind: "live" };
+    syncComposerScope();
     statusEl.textContent = "Showing the live target and the model connection.";
     if (liveTarget === null || liveTargetStale) {
       readLiveTarget();
@@ -3982,11 +4153,40 @@ export function bootstrapViewsPage() {
     handleListVerifications(changeId);
   }
 
+  // isResolvingDefaultStage reports whether openChange is still awaiting build
+  // or verification facts before settling onto a confirmed card's default stage.
+  function isResolvingDefaultStage(changeId: string): boolean {
+    return (
+      pendingDefaultBuildSeq.get(changeId) === navigationSeq ||
+      pendingDefaultVerifyCheck.get(changeId) === navigationSeq
+    );
+  }
+
+  // displayedRunNeedsBuilderFix reports whether displayedRun is a failed or
+  // incomplete check started in the current in-force build.
+  function displayedRunNeedsBuilderFix(displayedRun: VerificationStatusResult | null): boolean {
+    if (displayedRun === null) {
+      return false;
+    }
+    const cardForBuild = editorsByChangeId.get(displayedRun.change_id)?.card ?? null;
+    const inForce = cardForBuild !== null ? currentInForceBuild(cardForBuild) : null;
+    return (
+      cardForBuild !== null &&
+      inForce !== null &&
+      runInputsKnown(displayedRun) &&
+      displayedRun.inputs_current &&
+      runStartedInCurrentBuild(cardForBuild, inForce, displayedRun) &&
+      (displayedRun.state.type === "not_completed" ||
+        (displayedRun.state.type === "completed" && !displayedRun.state.value.report.passed))
+    );
+  }
+
   // resolvePrimaryAttentionRole orders needs_you roles by stage affinity, then
-  // guide -> builder -> test_writer, returning the first role whose interactive
-  // terminal is not yet open.
+  // guide -> builder -> test_writer, returning the first role whose visible
+  // interactive terminal is not yet open.
   function resolvePrimaryAttentionRole(): TeamRoleState["role"] | null {
     const roles = teamSnapshot?.roles ?? [];
+    const terminalVis = isTerminalVisible();
     const buildCentric =
       currentView.kind === "live" ||
       (currentView.kind === "change" &&
@@ -4000,7 +4200,7 @@ export function bootstrapViewsPage() {
       const role = roles.find((item) => item.role === roleName && item.state === "needs_you");
       if (
         role !== undefined &&
-        !(role.has_terminal && openTerminalRole === role.role && !terminalObserveMode)
+        !(role.has_terminal && terminalVis && openTerminalRole === role.role && !terminalObserveMode)
       ) {
         return role.role;
       }
@@ -4017,11 +4217,7 @@ export function bootstrapViewsPage() {
     const narrow = isNarrowViewport();
     const attentionRole = resolvePrimaryAttentionRole();
     if (attentionRole !== null) {
-      if (
-        openTerminalRole === attentionRole &&
-        terminalObserveMode &&
-        (!narrow || mobileSurface === "terminal")
-      ) {
+      if (openTerminalRole === attentionRole && terminalObserveMode && isTerminalVisible()) {
         return { attentionRole: null, actionId: "highbay-terminal-interactive" };
       }
       return { attentionRole, actionId: "attention:" + attentionRole };
@@ -4029,11 +4225,8 @@ export function bootstrapViewsPage() {
     if (narrow && mobileSurface === "conversation") {
       return { attentionRole: null, actionId: "highbay-composer-send" };
     }
-    if (narrow && mobileSurface === "terminal") {
-      const roleState =
-        openTerminalRole !== null
-          ? teamSnapshot?.roles.find((r) => r.role === openTerminalRole) ?? null
-          : null;
+    if (narrow && mobileSurface === "terminal" && openTerminalRole !== null) {
+      const roleState = teamSnapshot?.roles.find((r) => r.role === openTerminalRole) ?? null;
       const canRestart =
         roleState !== null &&
         !roleState.has_terminal &&
@@ -4054,21 +4247,14 @@ export function bootstrapViewsPage() {
           ? (teamConversation?.messages ?? []).find((m) => m.id === draftSentMessageId) ?? null
           : null;
       const hasLinkedReply =
-        guide?.state === "waiting" &&
-        sentMsg !== null &&
-        teamConversation !== null &&
-        teamConversation.messages.some(
-          (m) =>
-            m.target === teamConversation!.channel &&
-            m.sender_role === "guide" &&
-            m.reply_to === sentMsg.seq
-        );
+        guide?.state === "waiting" && findLinkedGuideReply(teamConversation, sentMsg) !== null;
       if (!describeSendUncertain && hasLinkedReply) {
         return { attentionRole: null, actionId: "highbay-draft-reply" };
       }
       if (
         !describeSendUncertain &&
         draftSentMessageId !== undefined &&
+        !proposalArrivedSinceDraftSend() &&
         !hasPending("get_team", "") &&
         teamSnapshot !== null &&
         (guide === undefined ||
@@ -4158,6 +4344,9 @@ export function bootstrapViewsPage() {
     }
 
     if (currentView.stage === "build" && ed !== null) {
+      if (isResolvingDefaultStage(ed.card.change_id)) {
+        return { attentionRole: null, actionId: null };
+      }
       const saved =
         buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
           ? buildSnapshot
@@ -4263,6 +4452,9 @@ export function bootstrapViewsPage() {
           !runInputsKnown(displayedRun))
       ) {
         return { attentionRole: null, actionId: "highbay-cp4-check-status" };
+      }
+      if (displayedRunNeedsBuilderFix(displayedRun)) {
+        return { attentionRole: null, actionId: "highbay-cp4-message-builder" };
       }
       return { attentionRole: null, actionId: "highbay-verify-review-result" };
     }
@@ -4812,6 +5004,9 @@ export function bootstrapViewsPage() {
           </Button>
         );
       }
+    } else if (onBuild && ed !== null && isResolvingDefaultStage(ed.card.change_id)) {
+      attention = "Reading this change’s build and latest check.";
+      next = <span>Wait for the current status to load.</span>;
     } else if (onBuild && ed !== null) {
       const build =
         buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
@@ -4895,16 +5090,22 @@ export function bootstrapViewsPage() {
           .join(". ");
       }
     } else if (onVerify) {
-      attention = "Read the saved test evidence, then review the result for approval.";
-      next = (
-        <Button
-          id="highbay-verify-review-result"
-          variant={primaryActionId === "highbay-verify-review-result" ? "primary" : "secondary"}
-          onClick={openApproval}
-        >
-          Review result
-        </Button>
-      );
+      const displayedRun = resolveDisplayedVerificationRun();
+      if (displayedRunNeedsBuilderFix(displayedRun)) {
+        attention = "This check did not pass.";
+        next = <span>Message Builder in Verify below to fix the issue and run another check.</span>;
+      } else {
+        attention = "Read the saved test evidence, then review the result for approval.";
+        next = (
+          <Button
+            id="highbay-verify-review-result"
+            variant={primaryActionId === "highbay-verify-review-result" ? "primary" : "secondary"}
+            onClick={openApproval}
+          >
+            Review result
+          </Button>
+        );
+      }
     }
 
     if (next === null) {
@@ -5457,7 +5658,7 @@ export function bootstrapViewsPage() {
               snapshot={teamSnapshot}
               lastRead={teamFactsError() !== null}
               disabled={sessionState !== "active"}
-              openTerminalRole={terminalObserveMode ? null : openTerminalRole}
+              openTerminalRole={isTerminalVisible() && !terminalObserveMode ? openTerminalRole : null}
               primaryRole={primaryAttentionRole}
               onOpenTerminal={(role, invoker) => openRoleTerminal(role, invoker, false)}
               onMessageRole={(role) => focusComposerForRole(role)}
@@ -5468,7 +5669,13 @@ export function bootstrapViewsPage() {
             <ProposalReviewQueue
               items={globalQueueItems}
               disabled={sessionState !== "active"}
-              onOpenChange={(id) => openChange(id, "agree")}
+              onOpenChange={(id) => {
+                if (draftBaselineChangeIds !== null && !draftBaselineChangeIds.has(id)) {
+                  draftSentMessageId = undefined;
+                  draftBaselineChangeIds = null;
+                }
+                openChange(id, "agree");
+              }}
             />
           ) : null}
           {teamActionError !== null && currentView.kind !== "team" ? (
@@ -5525,12 +5732,13 @@ export function bootstrapViewsPage() {
   ) {
     if (choices.length === 0) return null;
     const needsGuide = guideRoleNeedsStart(teamSnapshot);
-    const sending = hasPending("send_team_message", "agree");
+    const sending = hasPending("send_team_message", "agree:change:" + changeId);
     const guideInvalid =
       needsGuide &&
       (agentOptions === null ||
         guideChoice === undefined ||
         roleChoiceError(guideChoice, agentOptions.agents) !== null);
+    const chorusDown = isChorusUnavailable();
     const changedAnswers: Record<string, string> = {};
     for (const item of choices) {
       changedAnswers[item.id] = item.answer;
@@ -5557,7 +5765,7 @@ export function bootstrapViewsPage() {
           <Button
             id={id + "-send"}
             variant={primarySend ? "primary" : "secondary"}
-            disabled={sessionState !== "active" || sending || guideInvalid}
+            disabled={sessionState !== "active" || sending || guideInvalid || chorusDown}
             onClick={() =>
               submitTeamMessage("agree", {
                 to: "guide",
@@ -5593,6 +5801,7 @@ export function bootstrapViewsPage() {
         teamLoading={hasPending("get_team", "")}
         conversation={teamConversation}
         sentMessageId={draftSentMessageId}
+        proposalArrivedAfterSend={proposalArrivedSinceDraftSend()}
         sendUncertain={describeSendUncertain}
         sendError={describeSendError}
         sending={hasPending("send_team_message", "describe")}
@@ -5611,7 +5820,13 @@ export function bootstrapViewsPage() {
             <ProposalReviewQueue
               items={queueItems}
               disabled={sessionState !== "active"}
-              onOpenChange={(id) => openChange(id, "agree")}
+              onOpenChange={(id) => {
+                if (draftBaselineChangeIds !== null && !draftBaselineChangeIds.has(id)) {
+                  draftSentMessageId = undefined;
+                  draftBaselineChangeIds = null;
+                }
+                openChange(id, "agree");
+              }}
             />
           ) : null
         }
@@ -5651,6 +5866,7 @@ export function bootstrapViewsPage() {
         onRestartGuide={() => restartTeamRole("guide")}
         onResetRequest={() => {
           draftSentMessageId = undefined;
+          draftBaselineChangeIds = null;
           describeSendUncertain = false;
           describeSendError = null;
           syncHistoryState("replace");
@@ -5677,18 +5893,7 @@ export function bootstrapViewsPage() {
         : null;
     const loadedCard = editorsByChangeId.get(effectiveChangeId)?.card ?? getActiveEditor()?.card ?? null;
     const current = changeList?.changes.find((item) => item.change_id === effectiveChangeId);
-    const cardForBuild = editorsByChangeId.get(effectiveChangeId)?.card ?? null;
-    const inForce = cardForBuild !== null ? currentInForceBuild(cardForBuild) : null;
-    const runNeedsBuilderFix =
-      !onApproveStage &&
-      displayedRun !== null &&
-      cardForBuild !== null &&
-      inForce !== null &&
-      runInputsKnown(displayedRun) &&
-      displayedRun.inputs_current &&
-      runStartedInCurrentBuild(cardForBuild, inForce, displayedRun) &&
-      (displayedRun.state.type === "not_completed" ||
-        (displayedRun.state.type === "completed" && !displayedRun.state.value.report.passed));
+    const runNeedsBuilderFix = !onApproveStage && displayedRunNeedsBuilderFix(displayedRun);
 
     return (
       <VerificationView
@@ -5718,6 +5923,9 @@ export function bootstrapViewsPage() {
         listError={listRequestErrors.get(effectiveChangeId) ?? null}
         cardLoadError={effectiveChangeId ? cardLoadErrors.get(effectiveChangeId) ?? null : null}
         primaryCheckStatus={!onApproveStage && primaryActionId === "highbay-cp4-check-status"}
+        primaryMessageBuilder={
+          !onApproveStage && primaryActionId === "highbay-cp4-message-builder"
+        }
         onMessageBuilder={
           runNeedsBuilderFix && displayedRun !== null
             ? () =>
@@ -5797,13 +6005,7 @@ export function bootstrapViewsPage() {
               openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
               openChangeId={activeChangeId}
               dirtyChangeIds={dirtyChangeIds()}
-              loadingChangeIds={
-                new Set(
-                  Array.from(editorRequestsByChangeId.entries())
-                    .filter(([id, op]) => op === "get_change" && !editorsByChangeId.has(id))
-                    .map(([id]) => id)
-                )
-              }
+              loadingChangeIds={new Set(pendingOpenByChangeId.keys())}
               disabled={sessionState !== "active"}
               launchWorkspace={renderDraftWorkspace(true, primaryActionId)}
               onNewChange={() => openNewChange()}
@@ -6114,6 +6316,34 @@ export function bootstrapViewsPage() {
         });
         return;
       }
+      if (isResolvingDefaultStage(ed.card.change_id)) {
+        flushSync(() => {
+          viewRoot.render(
+            <div
+              id="highbay-result-view"
+              data-change-id={ed.card.change_id}
+              data-request-revision={ed.card.request_revision}
+            >
+              <Card
+                id="highbay-build-section"
+                data-state="unread"
+                className="highbay-card"
+                role="region"
+                aria-labelledby="highbay-build-title"
+                aria-busy="true"
+              >
+                <h3 id="highbay-build-title" tabIndex={-1}>
+                  Loading change status
+                </h3>
+                <p id="highbay-build-loading" role="status">
+                  Reading this change’s build and latest check…
+                </p>
+              </Card>
+            </div>
+          );
+        });
+        return;
+      }
       const saved =
         buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
           ? buildSnapshot
@@ -6397,13 +6627,10 @@ export function bootstrapViewsPage() {
               <Button
                 id="highbay-composer-update-send"
                 variant="secondary"
-                disabled={
-                  sessionState !== "active" ||
-                  hasPending("send_team_message", "rail") ||
-                  composerDraft.text.trim() === ""
-                }
+                disabled={!canSendFromRailComposer(composerDraft)}
                 onClick={() => {
                   composerDraft = { ...composerDraft, context: updatedContext };
+                  bumpScopeDraftGeneration(activeComposerScope);
                   submitTeamMessage("rail", {
                     to: composerDraft.to,
                     text: composerDraft.text,
@@ -6419,6 +6646,7 @@ export function bootstrapViewsPage() {
                 variant="ghost"
                 onClick={() => {
                   composerDraft = { ...composerDraft, context: updatedContext };
+                  bumpScopeDraftGeneration(activeComposerScope);
                   syncAllRegions();
                 }}
               >
@@ -6489,13 +6717,10 @@ export function bootstrapViewsPage() {
               <Button
                 id="highbay-composer-send-reconciled"
                 variant="secondary"
-                disabled={
-                  sessionState !== "active" ||
-                  hasPending("send_team_message", "rail") ||
-                  composerDraft.text.trim() === ""
-                }
+                disabled={!canSendFromRailComposer(composerDraft)}
                 onClick={() => {
                   composerDraft = { ...composerDraft, context: reconciledContext };
+                  bumpScopeDraftGeneration(activeComposerScope);
                   submitTeamMessage("rail", {
                     to: composerDraft.to,
                     text: composerDraft.text,
@@ -6514,8 +6739,14 @@ export function bootstrapViewsPage() {
                 if (latest.knownAmbiguities && keptCount > 0) {
                   composerDraft = { ...composerDraft, context: reconciledContext };
                 } else {
-                  composerDraft = { ...composerDraft, context: null, seededText: undefined };
+                  composerDraft = {
+                    ...composerDraft,
+                    text: stripSeededBoilerplate(composerDraft.text, composerDraft.seededText),
+                    context: null,
+                    seededText: undefined,
+                  };
                 }
+                bumpScopeDraftGeneration(activeComposerScope);
                 openChange(ctx.value.change_id, "agree");
               }}
             >
@@ -6563,9 +6794,7 @@ export function bootstrapViewsPage() {
           conversation={teamConversation}
           snapshot={teamSnapshot}
           loading={hasPending("get_team_conversation", "")}
-          sending={
-            hasPending("send_team_message", "rail") || hasPending("send_team_message", "agree")
-          }
+          sending={isScopeSending(activeComposerScope)}
           error={conversationError}
           sendError={composerSendError}
           disabled={sessionState !== "active"}
@@ -6574,7 +6803,7 @@ export function bootstrapViewsPage() {
           agentOptions={agentOptions?.agents ?? null}
           agentOptionsLoading={hasPending("list_team_agent_options", "")}
           agentOptionsError={agentOptionsError}
-          openTerminalRole={openTerminalRole}
+          openTerminalRole={isTerminalVisible() ? openTerminalRole : null}
           onToggleOpen={() => {
             if (isNarrowViewport()) {
               const returnTo = mobileSurfaceInvoker;
@@ -6598,8 +6827,14 @@ export function bootstrapViewsPage() {
           }}
           onRefresh={readConversation}
           onDraftChange={(patch) => {
-            composerDraft = { ...composerDraft, ...patch };
-            if (patch.text !== undefined) {
+            const detachingContext =
+              patch.context === null && composerDraft.context !== null && patch.text === undefined;
+            const nextText = detachingContext
+              ? stripSeededBoilerplate(composerDraft.text, composerDraft.seededText)
+              : patch.text ?? composerDraft.text;
+            composerDraft = { ...composerDraft, ...patch, text: nextText };
+            bumpScopeDraftGeneration(activeComposerScope);
+            if (patch.text !== undefined || detachingContext) {
               composerSendError = null;
               composerDetachedNotice = null;
             }
@@ -6698,6 +6933,10 @@ export function bootstrapViewsPage() {
     try {
       do {
         syncAgain = false;
+        if (mobileSurface === "terminal" && openTerminalRole === null) {
+          mobileSurface = "stage";
+        }
+        syncComposerScope();
         statusEl.toggleAttribute("data-connection-warning", waitTroubleShown);
         syncSkipLink();
         const { attentionRole, actionId } = resolvePrimaryActionId();
@@ -6927,6 +7166,8 @@ export function bootstrapViewsPage() {
         const pendingOpenSeq = pendingDefaultVerifyCheck.get(changeId);
         if (
           pendingOpenSeq !== undefined &&
+          generation === verificationGeneration &&
+          !runReadAgain.has(runID) &&
           navigationSeq === pendingOpenSeq &&
           sessionState === "active" &&
           currentView.kind === "change" &&
@@ -6934,19 +7175,24 @@ export function bootstrapViewsPage() {
           currentView.stage === "build"
         ) {
           pendingDefaultVerifyCheck.delete(changeId);
-          const latestEd = editorsByChangeId.get(changeId);
-          const currentBuild = buildChangeId === changeId ? buildSnapshot : null;
-          if (latestEd !== undefined && currentBuild !== null) {
-            const nextStage = computeDefaultStageForConfirmed(latestEd, currentBuild);
-            if (nextStage !== "build") {
-              activateChangeStage(changeId, nextStage, "replace");
+          if (pendingDefaultBuildSeq.get(changeId) !== pendingOpenSeq) {
+            const latestEd = editorsByChangeId.get(changeId);
+            const currentBuild = buildChangeId === changeId ? buildSnapshot : null;
+            if (latestEd !== undefined && currentBuild !== null) {
+              const nextStage = computeDefaultStageForConfirmed(latestEd, currentBuild);
+              if (nextStage !== "build") {
+                activateChangeStage(changeId, nextStage, "replace", mobileSurface);
+              }
             }
           }
         }
         finish();
       },
-      (message) => {
-        if (pendingRestoredRunByChangeId.get(changeId) === runID) {
+      (message, failure) => {
+        if (
+          pendingRestoredRunByChangeId.get(changeId) === runID &&
+          isMissingOrForbiddenFailure(failure)
+        ) {
           pendingRestoredRunByChangeId.delete(changeId);
           const fallback = lastLoadedListByChangeId.get(changeId)?.[0] ?? null;
           if (selectedVerificationChangeId === changeId && selectedRunId === runID && fallback !== null) {
@@ -6955,9 +7201,14 @@ export function bootstrapViewsPage() {
           }
         }
         const pendingOpenSeq = pendingDefaultVerifyCheck.get(changeId);
-        if (pendingOpenSeq !== undefined) {
+        if (
+          pendingOpenSeq !== undefined &&
+          generation === verificationGeneration &&
+          !runReadAgain.has(runID)
+        ) {
           pendingDefaultVerifyCheck.delete(changeId);
           if (
+            pendingDefaultBuildSeq.get(changeId) !== pendingOpenSeq &&
             navigationSeq === pendingOpenSeq &&
             sessionState === "active" &&
             currentView.kind === "change" &&
@@ -6969,7 +7220,7 @@ export function bootstrapViewsPage() {
             if (latestEd !== undefined && currentBuild !== null) {
               const nextStage = computeDefaultStageForConfirmed(latestEd, currentBuild);
               if (nextStage !== "build") {
-                activateChangeStage(changeId, nextStage, "replace");
+                activateChangeStage(changeId, nextStage, "replace", mobileSurface);
               }
             }
           }
@@ -7050,7 +7301,10 @@ export function bootstrapViewsPage() {
         finish();
       },
       (message, failure) => {
-        if (pendingRestoredRunByChangeId.get(changeId) === runId) {
+        if (
+          pendingRestoredRunByChangeId.get(changeId) === runId &&
+          isMissingOrForbiddenFailure(failure)
+        ) {
           pendingRestoredRunByChangeId.delete(changeId);
           const fallback = lastLoadedListByChangeId.get(changeId)?.[0] ?? null;
           if (selectedVerificationChangeId === changeId && selectedRunId === runId && fallback !== null) {
@@ -7256,7 +7510,6 @@ export function bootstrapViewsPage() {
   ) {
     activeChangeId = changeId;
     mobileSurface = targetMobileSurface;
-    switchComposerScope(composerScopeFor("change", changeId));
     const ed = editorsByChangeId.get(changeId);
     const restoredRun = pendingRestoredRunByChangeId.get(changeId) ?? null;
     if (stage === "approve") {
@@ -7274,6 +7527,7 @@ export function bootstrapViewsPage() {
       const run = savedRun ?? latestVerificationFor(changeId);
       selectedRunId = currentSelectedForChange ?? run?.run_id ?? null;
       currentView = { kind: "change", changeId, stage: "approve" };
+      syncComposerScope();
       statusEl.textContent = "Review the saved check before approving it.";
       if (!lastLoadedListByChangeId.has(changeId)) {
         refreshVerificationsInBackground(changeId);
@@ -7299,6 +7553,7 @@ export function bootstrapViewsPage() {
         lastLoadedListByChangeId.get(changeId)?.[0] ??
         null;
       currentView = { kind: "change", changeId, stage: "verify" };
+      syncComposerScope();
       statusEl.textContent =
         selectedRunId !== null
           ? "Showing the saved verification result."
@@ -7315,6 +7570,7 @@ export function bootstrapViewsPage() {
     }
     if (stage === "arch") {
       currentView = { kind: "change", changeId, stage: "arch" };
+      syncComposerScope();
       if (ed !== undefined && ed.card.status === "confirmed") {
         if (
           previewState === null ||
@@ -7329,6 +7585,7 @@ export function bootstrapViewsPage() {
       return;
     }
     currentView = { kind: "change", changeId, stage };
+    syncComposerScope();
     if (ed !== undefined) {
       const card = ed.card;
       statusEl.textContent = ed.incomingCard
@@ -7365,9 +7622,126 @@ export function bootstrapViewsPage() {
     }
   }
 
+  // fetchChangeCard reads requestedChangeId once and consumes any queued
+  // pendingOpenByChangeId entry so background cache warms and explicit opens share one owner.
+  function fetchChangeCard(requestedChangeId: string) {
+    if (!requestedChangeId || editorRequestsByChangeId.has(requestedChangeId)) {
+      return;
+    }
+    callEditorServer(
+      "get_change",
+      { change_id: requestedChangeId },
+      requestedChangeId,
+      (loadedCard) => {
+        const pendingOpen = pendingOpenByChangeId.get(requestedChangeId);
+        pendingOpenByChangeId.delete(requestedChangeId);
+        if (loadedCard.change_id !== requestedChangeId) {
+          if (pendingOpen !== undefined) {
+            cardLoadErrors.set(
+              requestedChangeId,
+              "The server returned Change Card " +
+                loadedCard.change_id +
+                " instead of " +
+                requestedChangeId +
+                "."
+            );
+            if (navigationSeq === pendingOpen.openSeq) {
+              statusEl.textContent = "Could not load the requested Change Card.";
+            }
+          }
+          return;
+        }
+        recordObservedCard(loadedCard);
+        cardLoadErrors.delete(requestedChangeId);
+        const newEd: ActiveEditorState = {
+          card: loadedCard,
+          priorCard: null,
+          incomingCard: null,
+          ...editorDraftFrom(loadedCard),
+          preservedDraft: null,
+          formError: null,
+        };
+        if (!editorsByChangeId.has(loadedCard.change_id)) {
+          editorsByChangeId.set(loadedCard.change_id, newEd);
+        }
+        if (pendingOpen === undefined) {
+          if (activeChangeId === null) {
+            activeChangeId = loadedCard.change_id;
+          }
+          syncAllRegions();
+          return;
+        }
+        if (navigationSeq !== pendingOpen.openSeq) {
+          return;
+        }
+        const effectiveSeq = pendingOpen.openSeq;
+        const effectiveStage = pendingOpen.explicitStage;
+        const effectiveHistoryMode = pendingOpen.historyMode;
+        const effectiveMobileSurface = pendingOpen.mobileSurface;
+        activeChangeId = loadedCard.change_id;
+        if (
+          effectiveStage !== undefined ||
+          loadedCard.status !== "confirmed" ||
+          loadedCard.proposed_revision !== undefined
+        ) {
+          pendingDefaultBuildSeq.delete(loadedCard.change_id);
+          pendingDefaultVerifyCheck.delete(loadedCard.change_id);
+          const targetStage = effectiveStage ?? "agree";
+          readBuild(loadedCard.change_id);
+          refreshVerificationObservations(loadedCard.change_id);
+          activateChangeStage(
+            loadedCard.change_id,
+            targetStage,
+            effectiveHistoryMode,
+            effectiveMobileSurface
+          );
+          return;
+        }
+        pendingDefaultBuildSeq.set(loadedCard.change_id, effectiveSeq);
+        armPendingVerifyCheck(loadedCard.change_id, effectiveSeq);
+        refreshVerificationObservations(loadedCard.change_id);
+        activateChangeStage(
+          loadedCard.change_id,
+          "build",
+          effectiveHistoryMode,
+          effectiveMobileSurface
+        );
+        readBuild(loadedCard.change_id, (settled) => {
+          if (pendingDefaultBuildSeq.get(loadedCard.change_id) === effectiveSeq) {
+            pendingDefaultBuildSeq.delete(loadedCard.change_id);
+          }
+          if (navigationSeq !== effectiveSeq || sessionState !== "active") {
+            return;
+          }
+          if (pendingDefaultVerifyCheck.get(loadedCard.change_id) === effectiveSeq) {
+            syncAllRegions();
+            return;
+          }
+          const latestEd = editorsByChangeId.get(loadedCard.change_id) ?? newEd;
+          const targetStage = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
+          if (targetStage !== "build") {
+            activateChangeStage(loadedCard.change_id, targetStage, "replace", mobileSurface);
+          } else {
+            syncAllRegions();
+          }
+        });
+      },
+      (message) => {
+        const pendingOpen = pendingOpenByChangeId.get(requestedChangeId);
+        pendingOpenByChangeId.delete(requestedChangeId);
+        if (pendingOpen !== undefined) {
+          cardLoadErrors.set(requestedChangeId, "Could not load Change Card: " + message);
+          if (navigationSeq === pendingOpen.openSeq) {
+            statusEl.textContent = "Could not load the requested Change Card.";
+          }
+        }
+      }
+    );
+  }
+
   // openChange opens requestedChangeId in editorsByChangeId, preserving any
-  // unsaved drafts on other cards and awaiting get_build before mounting a
-  // confirmed card's default stage so it never flashes Agree then jumps.
+  // unsaved drafts on other cards and awaiting get_build/get_verification before
+  // mounting a confirmed card's default stage so it never flashes then jumps.
   function openChange(
     requestedChangeId: string,
     explicitStage?: ChangeStageName,
@@ -7394,6 +7768,7 @@ export function bootstrapViewsPage() {
       activeChangeId = requestedChangeId;
       refreshOpenCard(requestedChangeId);
       if (explicitStage !== undefined) {
+        pendingDefaultBuildSeq.delete(requestedChangeId);
         pendingDefaultVerifyCheck.delete(requestedChangeId);
         readBuild(requestedChangeId);
         refreshVerificationObservations(requestedChangeId);
@@ -7411,6 +7786,7 @@ export function bootstrapViewsPage() {
         existing.incomingCard !== null ||
         isEditorDirtyState(existing)
       ) {
+        pendingDefaultBuildSeq.delete(requestedChangeId);
         pendingDefaultVerifyCheck.delete(requestedChangeId);
         readBuild(requestedChangeId);
         refreshVerificationObservations(requestedChangeId);
@@ -7418,6 +7794,7 @@ export function bootstrapViewsPage() {
         return;
       }
       if (buildChangeId === requestedChangeId && buildSnapshot !== null && buildReadError === null) {
+        pendingDefaultBuildSeq.delete(requestedChangeId);
         armPendingVerifyCheck(requestedChangeId, openSeq);
         refreshVerificationObservations(requestedChangeId);
         activateChangeStage(
@@ -7428,120 +7805,44 @@ export function bootstrapViewsPage() {
         );
         return;
       }
+      pendingDefaultBuildSeq.set(requestedChangeId, openSeq);
       armPendingVerifyCheck(requestedChangeId, openSeq);
       refreshVerificationObservations(requestedChangeId);
       activateChangeStage(requestedChangeId, "build", initialHistoryMode, targetMobileSurface);
       readBuild(requestedChangeId, (settled) => {
+        if (pendingDefaultBuildSeq.get(requestedChangeId) === openSeq) {
+          pendingDefaultBuildSeq.delete(requestedChangeId);
+        }
         if (navigationSeq !== openSeq || sessionState !== "active") {
+          return;
+        }
+        if (pendingDefaultVerifyCheck.get(requestedChangeId) === openSeq) {
+          syncAllRegions();
           return;
         }
         const latestEd = editorsByChangeId.get(requestedChangeId) ?? existing;
         const target = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
         if (target !== "build") {
           activateChangeStage(requestedChangeId, target, "replace", mobileSurface);
+        } else {
+          syncAllRegions();
         }
       });
       return;
     }
 
     const openSeq = ++navigationSeq;
+    lastOpenAttempt = requestedChangeId;
+    cardLoadErrors.delete(requestedChangeId);
+    statusEl.textContent = "Loading Change Card " + requestedChangeId + "...";
     pendingOpenByChangeId.set(requestedChangeId, {
       openSeq,
       explicitStage,
       historyMode: initialHistoryMode,
       mobileSurface: targetMobileSurface,
     });
-    if (editorRequestsByChangeId.has(requestedChangeId)) {
-      return;
-    }
-    lastOpenAttempt = requestedChangeId;
-    cardLoadErrors.delete(requestedChangeId);
-    statusEl.textContent = "Loading Change Card " + requestedChangeId + "...";
-    callEditorServer(
-      "get_change",
-      { change_id: requestedChangeId },
-      requestedChangeId,
-      (loadedCard) => {
-        const pendingOpen = pendingOpenByChangeId.get(requestedChangeId);
-        pendingOpenByChangeId.delete(requestedChangeId);
-        const effectiveSeq = pendingOpen?.openSeq ?? openSeq;
-        const effectiveStage = pendingOpen !== undefined ? pendingOpen.explicitStage : explicitStage;
-        const effectiveHistoryMode = pendingOpen?.historyMode ?? initialHistoryMode;
-        const effectiveMobileSurface = pendingOpen?.mobileSurface ?? targetMobileSurface;
-        if (loadedCard.change_id !== requestedChangeId) {
-          cardLoadErrors.set(
-            requestedChangeId,
-            "The server returned Change Card " +
-              loadedCard.change_id +
-              " instead of " +
-              requestedChangeId +
-              "."
-          );
-          if (navigationSeq === effectiveSeq) {
-            statusEl.textContent = "Could not load the requested Change Card.";
-          }
-          return;
-        }
-        recordObservedCard(loadedCard);
-        cardLoadErrors.delete(requestedChangeId);
-        const newEd: ActiveEditorState = {
-          card: loadedCard,
-          priorCard: null,
-          incomingCard: null,
-          ...editorDraftFrom(loadedCard),
-          preservedDraft: null,
-          formError: null,
-        };
-        editorsByChangeId.set(loadedCard.change_id, newEd);
-        if (navigationSeq !== effectiveSeq) {
-          return;
-        }
-        activeChangeId = loadedCard.change_id;
-        if (
-          effectiveStage !== undefined ||
-          loadedCard.status !== "confirmed" ||
-          loadedCard.proposed_revision !== undefined
-        ) {
-          pendingDefaultVerifyCheck.delete(loadedCard.change_id);
-          const targetStage = effectiveStage ?? "agree";
-          readBuild(loadedCard.change_id);
-          refreshVerificationObservations(loadedCard.change_id);
-          activateChangeStage(
-            loadedCard.change_id,
-            targetStage,
-            effectiveHistoryMode,
-            effectiveMobileSurface
-          );
-          return;
-        }
-        armPendingVerifyCheck(loadedCard.change_id, effectiveSeq);
-        refreshVerificationObservations(loadedCard.change_id);
-        activateChangeStage(
-          loadedCard.change_id,
-          "build",
-          effectiveHistoryMode,
-          effectiveMobileSurface
-        );
-        readBuild(loadedCard.change_id, (settled) => {
-          if (navigationSeq !== effectiveSeq || sessionState !== "active") {
-            return;
-          }
-          const latestEd = editorsByChangeId.get(loadedCard.change_id) ?? newEd;
-          const targetStage = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
-          if (targetStage !== "build") {
-            activateChangeStage(loadedCard.change_id, targetStage, "replace", mobileSurface);
-          }
-        });
-      },
-      (message) => {
-        const pendingOpen = pendingOpenByChangeId.get(requestedChangeId);
-        pendingOpenByChangeId.delete(requestedChangeId);
-        cardLoadErrors.set(requestedChangeId, "Could not load Change Card: " + message);
-        if (navigationSeq === (pendingOpen?.openSeq ?? openSeq)) {
-          statusEl.textContent = "Could not load the requested Change Card.";
-        }
-      }
-    );
+    fetchChangeCard(requestedChangeId);
+    syncAllRegions();
   }
 
   // applyHistoryViewState restores opaque navigation state on Back/Forward or reload
@@ -7549,8 +7850,15 @@ export function bootstrapViewsPage() {
   function applyHistoryViewState(state: HistoryViewState) {
     handlingPopState = true;
     try {
-      const restoredSurface = state.mobileSurface ?? "stage";
-      draftSentMessageId = state.newDraft?.sentMessageId;
+      const rawSurface = state.mobileSurface ?? "stage";
+      const restoredSurface: MobileSurface =
+        rawSurface === "terminal" && openTerminalRole === null ? "stage" : rawSurface;
+      const isDraftView =
+        state.view === "new" ||
+        (state.view === "changes" && (changeList === null || changeList.changes.length === 0));
+      if (isDraftView) {
+        draftSentMessageId = state.newDraft?.sentMessageId;
+      }
       switch (state.view) {
         case "changes":
           showChanges({ historyMode: "replace", mobileSurface: restoredSurface });
@@ -7709,6 +8017,7 @@ export function bootstrapViewsPage() {
     statusEl.textContent = "Saving your confirmed answers and examples...";
 
     const submittedCard = ed.card;
+    const originNavSeq = navigationSeq;
     const submittedAnswers = { ...ed.draftAnswers };
     const submittedExamples = ed.draftExamples.map((item) => ({
       id: item.id,
@@ -7733,15 +8042,16 @@ export function bootstrapViewsPage() {
           updatedCard,
           null,
           nextPriorCard(currentEd, updatedCard),
-          "agree"
+          "agree",
+          { originNavSeq }
         );
-        if (isViewingChangeOnAgree(submittedCard.change_id)) {
+        if (navigationSeq === originNavSeq && isViewingChangeOnAgree(submittedCard.change_id)) {
           focusResult("#highbay-cp1-editor");
         }
       },
       (message, failure) => {
         showFormError(submittedCard.change_id, message);
-        if (isViewingChangeOnAgree(submittedCard.change_id)) {
+        if (navigationSeq === originNavSeq && isViewingChangeOnAgree(submittedCard.change_id)) {
           focusResult("#highbay-confirm-error");
         }
         if (failure.status === 0) {
@@ -7771,6 +8081,7 @@ export function bootstrapViewsPage() {
     for (const question of proposal.ambiguities ?? []) {
       answers[question.id] = ed.proposalAnswers[question.id];
     }
+    const originNavSeq = navigationSeq;
     statusEl.textContent = "Adopting the proposed revision...";
     callEditorServer(
       "confirm_intent",
@@ -7784,14 +8095,16 @@ export function bootstrapViewsPage() {
       (adopted) => {
         const currentEd = editorsByChangeId.get(card.change_id) ?? null;
         const preserved = currentEd ? snapshotUnsavedDraft(currentEd, adopted) : null;
-        mountChangeCard(adopted, preserved, nextPriorCard(currentEd, adopted), "agree");
-        if (isViewingChangeOnAgree(card.change_id)) {
+        mountChangeCard(adopted, preserved, nextPriorCard(currentEd, adopted), "agree", {
+          originNavSeq,
+        });
+        if (navigationSeq === originNavSeq && isViewingChangeOnAgree(card.change_id)) {
           statusEl.textContent = "Adopted the proposed revision; it is now the agreed revision.";
           focusResult("#highbay-cp1-editor");
         }
       },
       (message, failure) => {
-        failProposal(message, failure, card.change_id);
+        failProposal(message, failure, card.change_id, originNavSeq);
       }
     );
   }
@@ -7806,6 +8119,7 @@ export function bootstrapViewsPage() {
     if (proposal === undefined) {
       return;
     }
+    const originNavSeq = navigationSeq;
     statusEl.textContent = "Declining the proposed revision...";
     callEditorServer(
       "decline_revision",
@@ -7826,32 +8140,41 @@ export function bootstrapViewsPage() {
             declined,
             null,
             nextPriorCard(currentEd ?? null, declined),
-            "agree"
+            "agree",
+            { originNavSeq }
           );
         }
         syncAllRegions();
-        if (isViewingChangeOnAgree(card.change_id)) {
+        if (navigationSeq === originNavSeq && isViewingChangeOnAgree(card.change_id)) {
           statusEl.textContent =
             "Declined the proposed revision; the agreed revision stays in force.";
           focusResult("#highbay-cp1-editor");
         }
       },
       (message, failure) => {
-        failProposal(message, failure, card.change_id);
+        failProposal(message, failure, card.change_id, originNavSeq);
       }
     );
   }
 
-  function failProposal(message: string, failure: Failure, changeId: string) {
+  function failProposal(
+    message: string,
+    failure: Failure,
+    changeId: string,
+    originNavSeq?: number
+  ) {
     const currentEd = editorsByChangeId.get(changeId);
     if (currentEd) {
       editorsByChangeId.set(changeId, { ...currentEd, proposalError: message });
     }
-    if (isViewingChangeOnAgree(changeId)) {
+    const stillOnOriginAgree =
+      (originNavSeq === undefined || navigationSeq === originNavSeq) &&
+      isViewingChangeOnAgree(changeId);
+    if (stillOnOriginAgree) {
       statusEl.textContent = "The proposed revision was not changed.";
     }
     syncAllRegions();
-    if (isViewingChangeOnAgree(changeId)) {
+    if (stillOnOriginAgree) {
       focusResult("#highbay-proposal-error");
     }
     if (failure.status === 0 || failure.status === 409) {
@@ -7962,6 +8285,7 @@ export function bootstrapViewsPage() {
       return;
     }
     const changeId = ed.card.change_id;
+    const originNavSeq = navigationSeq;
     listRequestErrors.delete(changeId);
     statusEl.textContent = "Loading the latest saved Change Card...";
     callEditorServer(
@@ -7997,7 +8321,7 @@ export function bootstrapViewsPage() {
         }
         const preserved = currentEd ? snapshotUnsavedDraft(currentEd) : null;
         const prior = nextPriorCard(currentEd ?? null, latestCard);
-        mountChangeCard(latestCard, preserved, prior, "agree");
+        mountChangeCard(latestCard, preserved, prior, "agree", { originNavSeq });
       },
       (message) => {
         const error = "Could not load the current card and approval: " + message;
@@ -8012,7 +8336,7 @@ export function bootstrapViewsPage() {
     preservedDraft: PreservedDraft | null,
     priorCard: ChangeCardResult | null = null,
     explicitStage?: ChangeStageName,
-    options?: { forceActivate?: boolean }
+    options?: { forceActivate?: boolean; originNavSeq?: number }
   ) {
     recordObservedCard(card);
     const existing = editorsByChangeId.get(card.change_id);
@@ -8039,19 +8363,23 @@ export function bootstrapViewsPage() {
     editorsByChangeId.set(card.change_id, nextEd);
     const shouldActivate =
       options?.forceActivate === true ||
-      (activeChangeId === card.change_id &&
-        currentView.kind === "change" &&
-        currentView.changeId === card.change_id);
+      (options?.originNavSeq !== undefined &&
+        navigationSeq === options.originNavSeq &&
+        isViewingChangeOnAgree(card.change_id));
     if (!shouldActivate) {
+      if (activeChangeId === card.change_id) {
+        readBuild(card.change_id);
+        refreshVerificationObservations(card.change_id);
+      }
       syncAllRegions();
       return;
     }
     activeChangeId = card.change_id;
-    switchComposerScope(composerScopeFor("change", card.change_id));
     const stage: ChangeStageName =
       explicitStage ??
       (card.status === "confirmed" && card.proposed_revision === undefined ? "build" : "agree");
     currentView = { kind: "change", changeId: card.change_id, stage };
+    syncComposerScope();
     statusEl.textContent =
       card.proposed_revision !== undefined
         ? "Review the proposed revision, then choose whether to adopt or decline it."

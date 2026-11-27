@@ -66,6 +66,7 @@ func TestViewsPageStudioDraftChangeSendAndRecovery(t *testing.T) {
 		mu           sync.Mutex
 		sent         []*genhighbay.SendTeamMessagePayload
 		questionSeq  int
+		followupSeq  int
 		secondMsgSeq int
 		bQuestionSeq int
 	)
@@ -166,6 +167,24 @@ func TestViewsPageStudioDraftChangeSendAndRecovery(t *testing.T) {
 		})
 		team.conversation.Messages = msgs
 	})
+	ps.act("guide-waiting-with-followup-question", func() {
+		team.mu.Lock()
+		defer team.mu.Unlock()
+		msgs := append([]*genhighbay.TeamMessage{}, team.conversation.Messages...)
+		userReplySeq := msgs[len(msgs)-1].Seq
+		followupSeq = len(msgs) + 1
+		msgs = append(msgs, &genhighbay.TeamMessage{
+			ID:         "#studio-team:question-followup",
+			Target:     "#studio-team",
+			Seq:        followupSeq,
+			Sender:     "guide-1",
+			SenderRole: "guide",
+			Text:       "Should partial refunds also allow restocking fees?",
+			ReplyTo:    &userReplySeq,
+			SentAtMs:   time.Now().UnixMilli(),
+		})
+		team.conversation.Messages = msgs
+	})
 	ps.act("guide-waiting-with-second-question", func() {
 		team.mu.Lock()
 		defer team.mu.Unlock()
@@ -213,6 +232,20 @@ func TestViewsPageStudioDraftChangeSendAndRecovery(t *testing.T) {
 			StoryRefreshOpID: &op,
 			Prompt:           "Add dispute webhooks.",
 			Analysis:         refundAnalysis("Add dispute webhooks."),
+		})
+		require.NoError(t, err)
+	})
+
+	ps.act("propose-third", func() {
+		guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
+		wsDir, _, _ := cp.currentWorkspaceTarget()
+		writeWorkspaceFiles(t, filepath.Join(wsDir, draftFolderName), map[string]string{"design/design.go": "package design // third\n"})
+		op := seedStoryRefreshForTest(t, cp, pageOwner, storyRefreshStateSucceeded, pageStories(), "")
+		_, err := cp.ProposeChange(guide, &genhighbay.ProposeChangePayload{
+			ChangeID:         "chg-third",
+			StoryRefreshOpID: &op,
+			Prompt:           "Add chargeback exports.",
+			Analysis:         refundAnalysis("Add chargeback exports."),
 		})
 		require.NoError(t, err)
 	})
@@ -288,6 +321,11 @@ expect(page.doc.activeElement === page.$("#highbay-composer-input") && page.$("#
 page.type(page.$("#highbay-composer-input"), "Yes, support partial refunds.");
 page.$("#highbay-composer-send").click();
 await until(() => page.sent("POST", "/team/messages").length === sendsBeforeRestart + 1, "clarification reply was not sent");
+// Answered Guide question must clear immediately while Guide is still waiting, then surface multi-hop follow-up!
+await until(() => !page.$("#highbay-draft-reply-conversation"), "already-answered Guide question stayed active on DraftChangeWorkspace");
+await control(origin, "act", { key: "guide-waiting-with-followup-question" });
+page.$("#highbay-conversation-refresh").click();
+await until(() => page.$("#highbay-draft-reply-conversation") && page.text("#highbay-draft-guide-reply").includes("restocking fees"), "multi-turn Guide follow-up question was missed");
 
 // 7. 0 -> 1 proposal auto-opens Agree; seed an unsent refine_change draft on chg-first,
 // set Guide to working, and verify + New change stays editable AND isolates chg-first's composer draft!
@@ -324,21 +362,34 @@ const beforeSecondReply = page.sent("POST", "/team/messages").length;
 page.$("#highbay-composer-send").click();
 await until(() => page.sent("POST", "/team/messages").length === beforeSecondReply + 1, "second clarification reply was not sent");
 
-// Returning to chg-first restores chg-first's unsent composer text and refine_change attachment intact!
+// Returning to chg-first restores chg-first's unsent composer text and refine_change attachment intact,
+// including when navigating Changes -> header stepper #highbay-nav-cp1!
 page.$("#highbay-nav-changes").click();
-page.$("#highbay-open-change-chg-first").click();
-await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-first", "chg-first did not reopen");
-expect(page.$("#highbay-composer-input").value === "Unsent refinement on chg-first" && page.$("#highbay-composer-context-chip")?.textContent.includes("chg-first"), "returning to chg-first lost its unsent composer draft");
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-first", "chg-first did not reopen via header stepper");
+expect(page.$("#highbay-composer-input").value === "Unsent refinement on chg-first" && page.$("#highbay-composer-context-chip")?.textContent.includes("chg-first"), "returning to chg-first via #highbay-nav-cp1 lost its unsent composer draft");
 
-// ProposalReviewQueue preserves active + New change draft when chg-second arrives concurrently.
+// Navigating Back across chg-first must not wipe + New change's active draftSentMessageId;
+// once chg-second arrives and Guide exits, DraftChangeWorkspace must not falsely claim Guide stopped before proposing,
+// and opening chg-second then clicking + New change starts a fresh composer for Change #3!
 page.$("#highbay-new-change").click();
-page.$("#highbay-draft-start-another").click();
-await until(() => page.$("#highbay-describe-input"), "Start another request did not reopen form");
-expect(page.$("#highbay-describe-input").value === "", "Start another request did not start empty");
-page.type(page.$("#highbay-describe-input"), "Keep this third request safe while chg-second arrives");
+await until(() => page.$("#highbay-draft-receipt"), "chg-first history entry wiped + New change receipt");
 await control(origin, "act", { key: "propose-second" });
-await until(() => page.$("#highbay-proposals-ready") && page.$("#highbay-review-ready-chg-second"), "concurrent proposal did not appear in #highbay-proposals-ready");
-expect(page.$("#highbay-describe-input").value === "Keep this third request safe while chg-second arrives", "concurrent proposal overwrote active + New change draft");
+await control(origin, "act", { key: "guide-ended" });
+page.$("#highbay-nav-team").click();
+page.$("#highbay-team-refresh").click();
+await until(() => page.text("#highbay-team-stage").includes("Ended"), "Guide ended state did not refresh after chg-second");
+page.win.history.back();
+await until(() => page.state() === "new" && page.$("#highbay-proposals-ready") && page.$("#highbay-review-ready-chg-second"), "chg-second did not appear in #highbay-proposals-ready on + New change");
+expect(!page.$("#highbay-draft-guide-stopped"), "ended Guide after proposing chg-second falsely claimed Guide stopped before proposing");
+page.$("#highbay-review-ready-chg-second").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-second", "Review in Agree did not open chg-second");
+page.$("#highbay-new-change").click();
+await until(() => page.$("#highbay-describe-input") && page.$("#highbay-describe-input").value === "", "+ New change for Change #3 did not open a fresh composer");
+page.type(page.$("#highbay-describe-input"), "Keep this third request safe while chg-third arrives");
+await control(origin, "act", { key: "propose-third" });
+await until(() => page.$("#highbay-proposals-ready") && page.$("#highbay-review-ready-chg-third"), "concurrent third proposal did not appear in #highbay-proposals-ready");
+expect(page.$("#highbay-describe-input").value === "Keep this third request safe while chg-third arrives", "concurrent proposal overwrote active + New change draft");
 page.close();
 `)
 
@@ -537,6 +588,19 @@ func TestViewsPageStudioComposerGuardsAndRecipientDetachment(t *testing.T) {
 		r4Rev = withR4.ProposedRevision.RequestRevision
 	})
 
+	ps.act("chorus-unavailable", func() {
+		team.mu.Lock()
+		defer team.mu.Unlock()
+		team.snapshot.ChorusStatus = "unavailable"
+		team.conversation.ChorusStatus = "unavailable"
+	})
+	ps.act("chorus-connected", func() {
+		team.mu.Lock()
+		defer team.mu.Unlock()
+		team.snapshot.ChorusStatus = "connected"
+		team.conversation.ChorusStatus = "connected"
+	})
+
 	runPageScript(t, ps, map[string]any{"qKeep": qKeepID, "qDrop": qDropID}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-guard", "chg-guard did not open on Agree");
@@ -557,12 +621,22 @@ await until(() => page.$('button[aria-label^="Reply to message #1"]'), "builder 
 page.$('button[aria-label^="Reply to message #1"]').click();
 expect(page.$("#highbay-composer-to").value === "builder" && page.$("#highbay-composer-input").value === "" && page.$("#highbay-composer-detached-notice") && !page.$("#highbay-composer-context-chip") && page.$("#highbay-composer-reply-chip"), "message Reply to builder did not strip Guide boilerplate and detach revise_answers");
 
-// 1d. Re-open Edit message first, advance card to R2 (which drops qDrop at index 0, shifting Limit currency to index 0), and send reconciled!
+// 1d. Edit message first + Remove attachment strips Highbay-seeded boilerplate cleanly;
+// then re-open Edit message first, advance card to R2, verify Chorus-unavailable disables stale send, and send reconciled!
 page.$("#highbay-confirm-revision-needed-compose").click();
 expect(page.$("#highbay-composer-context-chip")?.textContent.includes("2 answers"), "revise_answers chip did not re-attach");
+page.$("#highbay-composer-context-chip button").click();
+expect(!page.$("#highbay-composer-context-chip") && page.$("#highbay-composer-input").value === "", "Remove attachment left Highbay-seeded boilerplate behind");
+page.$("#highbay-confirm-revision-needed-compose").click();
 await control(origin, "act", { key: "advance-revision" });
 await until(() => page.$("#highbay-composer-stale-context") && page.$("#highbay-composer-send-reconciled"), "stale revise_answers guard did not reconcile R2 answers after revision advance");
 expect(page.$("#highbay-composer-send").disabled && page.text("#highbay-composer-review-reconciled").includes("1 compatible answer was kept"), "stale revise_answers did not reconcile 1 kept answer by question identity");
+await control(origin, "act", { key: "chorus-unavailable" });
+page.$("#highbay-conversation-refresh").click();
+await until(() => page.$("#highbay-conversation-unavailable") && page.$("#highbay-composer-send-reconciled").disabled, "Chorus unavailable did not disable #highbay-composer-send-reconciled");
+await control(origin, "act", { key: "chorus-connected" });
+page.$("#highbay-conversation-refresh").click();
+await until(() => !page.$("#highbay-conversation-unavailable") && !page.$("#highbay-composer-send-reconciled").disabled, "Chorus recovery did not re-enable #highbay-composer-send-reconciled");
 page.$("#highbay-composer-send-reconciled").click();
 await until(() => page.sent("POST", "/team/messages").some((r) => r.status === 201), "Send reconciled answers did not complete");
 await until(() => page.$("#highbay-replace-incoming-card"), "incoming R2 card banner did not appear");
@@ -638,9 +712,15 @@ page.close();
 func TestViewsPageStudioMultiChangeIsolationAndHistory(t *testing.T) {
 	workspace := t.TempDir()
 	writeWorkspaceFiles(t, workspace, validWorkspaceStub("package design\n"))
+	isoTeam := &teamServiceFixture{
+		snapshot: pageTeamSnapshot("waiting"),
+		send: func(_ context.Context, p *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error) {
+			return fixtureTeamMessage(p.Text), nil
+		},
+	}
 	cp := newBuildControlPlane(t, Options{
 		WorkspaceDir: workspace,
-		Team:         &TeamBinding{Owner: pageOwner, Service: &teamServiceFixture{snapshot: pageTeamSnapshot("waiting")}},
+		Team:         &TeamBinding{Owner: pageOwner, Service: isoTeam},
 	})
 	cp.changesWait, cp.changesPoll = 400*time.Millisecond, 20*time.Millisecond
 
@@ -787,6 +867,73 @@ await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-b
 await control(origin, "release", { key: "POST /changes/confirm" });
 await until(() => page.sent("POST", "/changes/confirm").at(-1)?.status === 200, "second confirm on A did not complete");
 expect(page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-b" && page.win.history.state.changeId === "chg-iso-b", "late 200 confirm on A hijacked visible sibling change B");
+
+// 3b. Same-change stage preservation: confirm A on Agree, navigate to A's Build before confirm settles -> stays on Build!
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-a").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-a", "chg-iso-a Agree did not reopen for same-change stage test");
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$('textarea[data-field="expected_outcome"]'), "saved-while-viewing-build");
+await control(origin, "hold", { key: "POST /changes/confirm" });
+page.$("#highbay-confirm-submit").click();
+await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === undefined), "third confirm on A was not held");
+page.$("#highbay-nav-build").click();
+await until(() => page.state() === "build", "chg-iso-a Build did not open while confirm was in flight");
+await control(origin, "release", { key: "POST /changes/confirm" });
+await until(() => page.sent("POST", "/changes/confirm").at(-1)?.status === 200, "third confirm on A did not complete");
+expect(page.state() === "build" && page.win.history.state.stage === "build", "late confirm on A hijacked A's Build stage back to Agree");
+
+// 3c. Cross-scope async rail success & agree refusal isolation with drafts on BOTH A and B!
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-b").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-b", "chg-iso-b Agree did not open for composer isolation");
+page.type(page.$("#highbay-composer-input"), "Unsent composer note on B");
+
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-a").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-a", "chg-iso-a Agree did not open for composer isolation");
+expect(page.$("#highbay-composer-input").value === "", "chg-iso-a inherited B's composer draft");
+page.type(page.$("#highbay-composer-input"), "Sent rail note from A");
+await control(origin, "hold", { key: "POST /team/messages" });
+page.$("#highbay-composer-send").click();
+await until(() => page.sent("POST", "/team/messages").some((r) => r.status === undefined), "rail send on A was not held");
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-b").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-b", "chg-iso-b did not reopen while A rail send was held");
+expect(page.$("#highbay-composer-input").value === "Unsent composer note on B" && !page.$("#highbay-composer-send").disabled, "in-flight rail send on A clobbered or locked B's composer");
+await control(origin, "release", { key: "POST /team/messages" });
+await until(() => page.sent("POST", "/team/messages").at(-1)?.status === 201, "held rail send on A did not settle");
+expect(page.$("#highbay-composer-input").value === "Unsent composer note on B", "settled rail send on A cleared B's composer draft");
+
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-a").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-a", "chg-iso-a did not reopen after rail send");
+expect(page.$("#highbay-composer-input").value === "", "settled rail send on A stayed cached in A's scope");
+page.$('button[data-option="safe"]').click();
+await until(() => page.$("#highbay-confirm-revision-needed-send"), "A RevisionAid did not appear");
+await control(origin, "reply", { key: "POST /team/messages", status: 422, body: { name: "unprocessable", id: "u-iso", message: "Refused A agree send.", temporary: false, timeout: false, fault: false } });
+await control(origin, "hold", { key: "POST /team/messages" });
+page.$("#highbay-confirm-revision-needed-send").click();
+await until(() => page.sent("POST", "/team/messages").some((r) => r.status === undefined), "agree send on A was not held");
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-b").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-b", "chg-iso-b did not reopen while A agree send was held");
+await control(origin, "release", { key: "POST /team/messages" });
+await until(() => page.sent("POST", "/team/messages").at(-1)?.status === 422, "held 422 agree send on A did not settle");
+expect(page.$("#highbay-composer-input").value === "Unsent composer note on B" && !page.$("#highbay-composer-context-chip") && !page.$("#highbay-composer-error"), "rejected agree send on A overwrote B's draft or injected A's error");
+
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-iso-a").click();
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-a", "chg-iso-a did not reopen after refused agree send");
+expect(page.$("#highbay-composer-error") && page.text("#highbay-composer-error").includes("Refused A agree send.") && page.$("#highbay-composer-context-chip")?.textContent.includes("chg-iso-a"), "rejected agree send on A was not recorded in A's scope");
+page.$('button[data-option="fast"]').click();
 
 // Re-dirty A so both A and B are dirty for #highbay-discard-all-drafts.
 page.$("#highbay-nav-changes").click();
@@ -976,10 +1123,17 @@ func TestViewsPageStudioActionableFailureRoutesToVerifyAndBuilder(t *testing.T) 
 	})
 
 	runPageScript(t, ps, map[string]any{"oldRun": olderPass.RunID, "failRun": failed.RunID, "newRun": newerPass.RunID}, `
+// Hold GET /verifications/<failRun> on initial open to verify interactive Build controls never flash before routing to Verify!
+const failRunPath = "/verifications/" + input.failRun;
+await control(origin, "hold", { key: "GET " + failRunPath });
 const page = await openPage(origin, { link: input.link });
+await until(() => page.sent("GET", "/changes/chg-verify-fail/build").some((r) => r.status === 200) && page.sent("GET", failRunPath).some((r) => r.status === undefined) && page.$("#highbay-build-loading"), "default-stage check resolution did not hold on loading state after build settled");
+expect(!page.$("#highbay-build-start") && !page.$("#highbay-build-review-check"), "interactive Build controls flashed while default-stage verification read was still settling");
+await control(origin, "release", { key: "GET " + failRunPath });
 
-// 1. Even though build.taking.state === "passed" from olderPass, newer current-build failed run opens Verify (!, needs attention) with neutral Approve.
+// 1. Even though build.taking.state === "passed" from olderPass, newer current-build failed run opens Verify (!, needs attention) with #highbay-cp4-message-builder as sole primary action!
 await until(() => page.state() === "verify" && page.$("#highbay-result-view")?.dataset.runId === input.failRun && page.$("#highbay-cp4-message-builder"), "current-build failed run beside older pass did not open Verify with #highbay-cp4-message-builder");
+expect(page.$("#highbay-cp4-message-builder").dataset.primaryAction === "true" && !page.$("#highbay-verify-review-result") && page.$$('[data-primary-action="true"]').length === 1, "#highbay-cp4-message-builder must be the sole primary action on a failed current-build check");
 expect(page.text("#highbay-nav-cp4").includes("!") && page.text("#highbay-nav-cp4").includes("needs attention"), "Verify stepper pill omitted ! glyph or screen-reader status");
 expect(page.$("#highbay-nav-cp5").dataset.stepStatus === "neutral" && !page.text("#highbay-nav-cp5").includes("✓"), "Approve showed ✓ before any recorded review");
 page.$("#highbay-cp4-message-builder").click();
@@ -1012,6 +1166,35 @@ const reloadArch = await openPage(origin, {
 });
 await until(() => reloadArch.state() === "arch", "1-card cold reload on Architecture was clobbered by auto-open");
 reloadArch.close();
+
+// Reload on Team while holding background loadCardIntoCache GET /changes/chg-verify-fail, then click Changes -> Open:
+// openChange must consume the in-flight read instead of dropping the user's click!
+await control(origin, "hold", { key: "GET /changes/chg-verify-fail" });
+const reloadTeamOpen = await openPage(origin, {
+  storage: page.win.localStorage,
+  historyState: { view: "team" },
+});
+await until(() => reloadTeamOpen.state() === "team" && reloadTeamOpen.sent("GET", "/changes/chg-verify-fail").some((r) => r.status === undefined), "Team reload did not start held loadCardIntoCache read");
+reloadTeamOpen.$("#highbay-nav-changes").click();
+await until(() => reloadTeamOpen.$("#highbay-open-change-chg-verify-fail"), "Changes row did not render while background card read was held");
+reloadTeamOpen.$("#highbay-open-change-chg-verify-fail").click();
+await control(origin, "release", { key: "GET /changes/chg-verify-fail" });
+await until(() => reloadTeamOpen.state() === "approve", "clicking Open while loadCardIntoCache was in flight dropped the open");
+reloadTeamOpen.close();
+
+// Transient 503 reading restored olderPass on Verify must keep olderPass selected (never jump to newerPass),
+// and restored mobileSurface="terminal" with no open terminal must normalize to stage!
+const oldRunPath = "/verifications/" + input.oldRun;
+await control(origin, "reply", { key: "GET " + oldRunPath, status: 503, body: { name: "internal", id: "v503", message: "Transient verification read outage.", temporary: true, timeout: false, fault: true } });
+const reloadTransient = await openPage(origin, {
+  storage: page.win.localStorage,
+  historyState: { view: "change", changeId: "chg-verify-fail", stage: "verify", runId: input.oldRun, mobileSurface: "terminal" },
+});
+await until(() => reloadTransient.state() === "verify" && reloadTransient.sent("GET", oldRunPath).some((r) => r.status === 503) && reloadTransient.sent("GET", "/changes/chg-verify-fail/verifications").some((r) => r.status === 200), "Verify reload with transient 503 did not settle");
+expect(!reloadTransient.$("#highbay-checkpoint-view").hidden && reloadTransient.win.history.state.mobileSurface === undefined, "restored mobileSurface='terminal' without open terminal hid the stage");
+expect(reloadTransient.$("#highbay-result-view")?.dataset.runId === null || reloadTransient.$("#highbay-result-view")?.dataset.runId === undefined ? reloadTransient.win.history.state.runId === input.oldRun : reloadTransient.$("#highbay-result-view")?.dataset.runId === input.oldRun, "transient 503 replaced restored oldRun with cached newerPass");
+expect(reloadTransient.win.history.state.runId === input.oldRun, "transient 503 overwrote history.state.runId");
+reloadTransient.close();
 
 // 3. Passively watching Builder terminal (observe=true) when Builder enters needs_you promotes #highbay-terminal-interactive as primary!
 page.$("#highbay-rail-terminal-builder").click();
