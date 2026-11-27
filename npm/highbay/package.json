@@ -1,0 +1,46 @@
+{
+  "name": "@goadesign/highbay",
+  "version": "0.0.0",
+  "description": "Build Go services and AI agents with checkpoints you approve in your browser.",
+  "license": "MIT",
+  "homepage": "https://goa.design/highbay/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goadesign/highbay.git",
+    "directory": "npm/highbay"
+  },
+  "type": "module",
+  "bin": {
+    "highbay": "bin/highbay.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@goadesign/chorus": "^1.2.0"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "mcpName": "io.github.goadesign/highbay",
+  "bugs": {
+    "url": "https://github.com/goadesign/highbay/issues"
+  },
+  "keywords": [
+    "goa",
+    "go",
+    "mcp",
+    "coding-agents",
+    "verification"
+  ]
+}

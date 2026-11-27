@@ -42,6 +42,7 @@ import (
 
 	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/hc"
 	"github.com/goadesign/highbay/internal/testmodule"
 )
 
@@ -74,6 +75,8 @@ type (
 		TestReview bool `json:"test_review,omitempty"`
 		// TestReviewState identifies the typed test-verdict fixture.
 		TestReviewState string `json:"test_review_state,omitempty"`
+		// Workspace selects the ConversationRail, TerminalDrawer WebSocket, and UpdateBanner scenario.
+		Workspace bool `json:"workspace,omitempty"`
 		// CaptureDirectory receives the requested private viewport screenshots.
 		CaptureDirectory string `json:"capture_directory,omitempty"`
 		// Origin is the project server's origin.
@@ -137,6 +140,8 @@ type (
 		Reload reloadFacts `json:"reload"`
 		// LinkRecovery observes same-tab fragment navigation and deferred reload.
 		LinkRecovery linkRecoveryFacts `json:"link_recovery"`
+		// Workspace records ConversationRail, TerminalDrawer WebSocket, and UpdateBanner observations.
+		Workspace *workspaceBrowserFacts `json:"workspace,omitempty"`
 	}
 
 	// linkRecoveryFacts covers native reloads; layout-free tests own input guards.
@@ -420,15 +425,20 @@ type (
 		WrappedLongText     bool     `json:"wrapped_long_text"`
 	}
 
-	// reloadFacts is the views page after a reload.
+	// reloadFacts is the views page across live reload, sibling tab, other-port check, and post-restart reload.
 	reloadFacts struct {
-		SignedOutText     string `json:"signed_out_text"`
-		SignedOutTimedOut bool   `json:"signed_out_timed_out"`
-		Href              string `json:"href"`
-		// PageRequests are the reloaded page's own requests until it showed
+		StayedSignedIn    bool              `json:"stayed_signed_in"`
+		SiblingSignedIn   bool              `json:"sibling_signed_in"`
+		OtherPortStorage  int               `json:"other_port_storage"`
+		LiveRequests      []observedRequest `json:"live_requests"`
+		SignedOutText     string            `json:"signed_out_text"`
+		SignedOutTimedOut bool              `json:"signed_out_timed_out"`
+		PostRestartStore  int               `json:"post_restart_storage"`
+		Href              string            `json:"href"`
+		// PageRequests are the post-restart reloaded page's own requests until it showed
 		// how to open it again.
 		PageRequests []observedRequest `json:"page_requests"`
-		// DataRequestStatus is what a data read sent from the reloaded page
+		// DataRequestStatus is what a data read sent from the post-restart reloaded page
 		// answered: a status number, or the error the page saw.
 		DataRequestStatus json.RawMessage   `json:"data_request_status"`
 		DataRequest       []observedRequest `json:"data_request"`
@@ -552,7 +562,7 @@ func checkViewsSessionInBrowser(t *testing.T) {
 			}
 			assert.Equal(t, "same-origin", r.SentHeaders["sec-fetch-site"], "Sec-Fetch-Site of %s %s", r.Method, r.URL)
 			assert.Equal(t, vp.state.Address(), r.SentHeaders["host"], "Host of %s %s", r.Method, r.URL)
-			if pathOf(r.URL) == "/project/browser-session" {
+			if pathOf(r.URL) == "/project/browser-session" && r.Method == http.MethodPost {
 				assert.NotContains(t, r.SentHeaders, "authorization", "the link exchange carried a credential")
 			} else {
 				assert.Equal(t, "Bearer <redacted>", r.SentHeaders["authorization"], "Authorization of %s %s", r.Method, r.URL)
@@ -570,9 +580,9 @@ func checkViewsSessionInBrowser(t *testing.T) {
 		}
 	})
 
-	t.Run("c nothing left in browser storage", func(t *testing.T) {
+	t.Run("c origin-scoped localStorage session with zero cookies", func(t *testing.T) {
 		storage := facts.Views.Storage
-		assert.Zero(t, storage.LocalStorage, "localStorage entries")
+		assert.Equal(t, 1, storage.LocalStorage, "origin-scoped localStorage session entry")
 		assert.Zero(t, storage.SessionStorage, "sessionStorage entries")
 		assert.Empty(t, storage.Cookie, "document.cookie")
 		assert.Zero(t, storage.IndexedDB, "IndexedDB databases")
@@ -681,19 +691,31 @@ func checkViewsSessionInBrowser(t *testing.T) {
 			live.LiveState, live.DirectDisplay, live.GatewayDisplay, live.DocumentScrollWidth, live.ViewportWidth)
 	})
 
-	t.Run("g a reload ends the session", func(t *testing.T) {
-		assert.False(t, facts.Reload.SignedOutTimedOut, "the reloaded page did not say how to open it")
-		assert.Contains(t, facts.Reload.SignedOutText,
-			"Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.",
-			"the reloaded page's recovery routes")
+	t.Run("g reload and sibling tab stay signed in while running, port-isolated, and sign out after restart", func(t *testing.T) {
+		assert.True(t, facts.Reload.StayedSignedIn, "reloading while the server runs did not keep the session active")
+		assert.True(t, facts.Reload.SiblingSignedIn, "a second tab on the same origin did not share the session")
+		assert.Zero(t, facts.Reload.OtherPortStorage, "another loopback port saw this origin's localStorage")
+		liveValidation := requestsTo(facts.Reload.LiveRequests, http.MethodGet, "/project/browser-session")
+		if assert.Len(t, liveValidation, 1, "live reload did not validate its session via GET /project/browser-session") {
+			assert.Equal(t, http.StatusOK, liveValidation[0].Status)
+			assert.NotContains(t, liveValidation[0].SentHeaders, "cookie")
+		}
+		assert.False(t, facts.Reload.SignedOutTimedOut, "the post-restart reloaded page did not say how to open it")
+		assert.Contains(t, facts.Reload.SignedOutText, "highbay", "the post-restart recovery routes omitted highbay")
+		assert.Contains(t, facts.Reload.SignedOutText, "/highbay", "the post-restart recovery routes omitted /highbay")
+		assert.NotContains(t, facts.Reload.SignedOutText, "Herdr companion", "the post-restart recovery routes mentioned retired companion")
+		assert.Zero(t, facts.Reload.PostRestartStore, "401 after restart did not clear localStorage")
 		assert.Equal(t, origin+"/views", facts.Reload.Href, "the reloaded page's address")
 		assert.Len(t, requestsTo(facts.Reload.PageRequests, http.MethodGet, "/views"), 1, "the reload did not load the page again")
-		assert.Empty(t, pageFetches(facts.Reload.PageRequests), "the reloaded page sent requests of its own")
-		assert.JSONEq(t, strconv.Itoa(http.StatusUnauthorized), string(facts.Reload.DataRequestStatus), "a data read from the reloaded page")
+		rejectedSession := requestsTo(facts.Reload.PageRequests, http.MethodGet, "/project/browser-session")
+		if assert.Len(t, rejectedSession, 1, "post-restart reload did not attempt GET /project/browser-session") {
+			assert.Equal(t, http.StatusUnauthorized, rejectedSession[0].Status)
+		}
+		assert.JSONEq(t, strconv.Itoa(http.StatusUnauthorized), string(facts.Reload.DataRequestStatus), "a data read from the signed-out page")
 		if assert.Len(t, facts.Reload.DataRequest, 1) && assert.NotNil(t, facts.Reload.DataRequest[0].SentHeaders) {
 			sent := facts.Reload.DataRequest[0].SentHeaders
 			assert.Equal(t, "same-origin", sent["sec-fetch-site"], "the reloaded page's read carried the mark")
-			assert.NotContains(t, sent, "authorization", "the reloaded page still held a session")
+			assert.NotContains(t, sent, "authorization", "the signed-out page still held a session")
 			assert.NotContains(t, sent, "cookie", "the browser attached a cookie")
 		}
 	})
@@ -886,11 +908,10 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 	vp.cp.Store(cp)
 	vp.handler.Store(&handler)
 	// Register the longest legal handles and derive needs_you through the existing
-	// supervisor owner from three independent, recorded blocked terminal snapshots.
+	// observation owner from three independent, recorded blocked terminal snapshots.
 	vp.state.Record.Team = strings.Repeat("t", 32)
-	vp.state.Record.Space = "phone-space"
-	vp.state.Record.Tab = "phone-tab"
 	guide := ""
+	var blockedTerminals []hc.Terminal
 	for _, role := range []string{"guide", "builder", "test_writer"} {
 		handle := role + strings.Repeat("x", 32-len(role))
 		agent, err := registerTestAgent(server, handle, role, vp.state.Record.Directory)
@@ -900,19 +921,25 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 			require.NoError(t, err)
 			guide = string(raw)
 		}
+		blockedTerminals = append(blockedTerminals, hc.Terminal{
+			Address:    role,
+			State:      hc.StateLive,
+			Reported:   true,
+			Status:     &hc.Status{State: "blocked", Kind: "permission"},
+			Foreground: &hc.Foreground{Argv: []string{"codex"}},
+			Labels: map[string]string{
+				labelProject: vp.state.Record.ID,
+				labelRole:    role,
+				labelManaged: "true",
+			},
+		})
 	}
 	now := time.Now()
-	o := &teamSupervisor{server: server, roles: map[string]*supervisedRole{}}
-	o.syncSelection(server.teamSelection())
-	for _, role := range o.selection.Roles {
-		o.event(t.Context(), TeamEvent{Kind: "snapshot", Role: role.Role, Sequence: 1, Terminals: []TeamTerminal{{
-			Address: role.Role, State: "live", Reported: true,
-			Status:     &TeamStatus{State: "blocked", Kind: "permission"},
-			Foreground: &TeamForeground{Argv: []string{"codex"}},
-			Labels:     map[string]string{"chorus.project": vp.state.Record.Directory, "herdr.space": "phone-space", "chorus.handle": role.Handle},
-		}}}, now)
-	}
-	o.publish(t.Context(), now, false)
+	server.team.observed.applyTerminals(hc.Snapshot{Terminals: blockedTerminals}, vp.state.Record.ID)
+	server.team.observed.mu.Lock()
+	server.team.observed.assignmentsKnown = true
+	server.team.observed.chorusConnected = true
+	server.team.observed.mu.Unlock()
 	// These are layout inputs, not claims that a worker ran or a checker judged tests.
 	findingTexts := make([]string, 4)
 	for i := range findingTexts {
@@ -971,14 +998,14 @@ func TestTeamAndBuildAtPhoneWidth(t *testing.T) {
 			assert.True(t, view.WrappedLongText, "long text did not wrap")
 			assert.ElementsMatch(t, []string{"guide", "builder", "test_writer"}, view.AttentionRoles)
 			for _, role := range []string{"guide", "builder", "test_writer"} {
-				assert.Contains(t, view.Controls, "highbay-team-attention-show-pane-"+role)
-				assert.Contains(t, view.KeyboardControls, "highbay-team-attention-show-pane-"+role)
+				assert.Contains(t, view.Controls, "highbay-team-attention-terminal-"+role)
+				assert.Contains(t, view.KeyboardControls, "highbay-team-attention-terminal-"+role)
 			}
 		})
 	}
 	assert.ElementsMatch(t, []string{"needs_you", "needs_you", "needs_you"}, facts.Phone.Team.RoleStates)
 	assert.Contains(t, facts.Phone.Team.LongText, strings.Repeat("x", 21))
-	for _, id := range []string{"highbay-team-start", "highbay-team-refresh", "highbay-team-show-guide", "highbay-team-show-builder", "highbay-team-show-test_writer"} {
+	for _, id := range []string{"highbay-team-start", "highbay-team-refresh", "highbay-team-terminal-guide", "highbay-team-terminal-builder", "highbay-team-terminal-test_writer"} {
 		assert.Contains(t, facts.Phone.Team.Controls, id)
 		assert.Contains(t, facts.Phone.Team.KeyboardControls, id)
 	}

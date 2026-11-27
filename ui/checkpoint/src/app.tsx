@@ -1,6 +1,6 @@
 // Package main implements the Highbay views page. The page exchanges the
-// one-use link `hbay` opened it with for a session held only in this
-// script's memory, then reads and acts on the project's changes by calling
+// one-use link `highbay` opened it with for an origin-scoped Bearer session,
+// then reads and acts on the project's changes by calling
 // the Highbay server at the address it was loaded from. It coordinates the
 // stage navigation bar (#highbay-checkpoint-nav), the displayed-subject context
 // strip (#highbay-workspace-context), the two-region layout (#highbay-cp1-editor
@@ -15,11 +15,18 @@ import { flushSync } from "react-dom";
 import { createRoot, Root } from "react-dom/client";
 import { ArchitecturePreviewView, IncomingChangeCardView } from "./components/c4-graph";
 import { ChangeListView } from "./components/change-list";
-import { CopyPrompt } from "./components/copy-prompt";
+import {
+  ComposerContext,
+  ComposerDraft,
+  ComposerRecipient,
+  ConversationRail,
+  DescribeComposer,
+  guideRoleNeedsStart,
+} from "./components/conversation";
 import { CP1EditorView } from "./components/cp1-editor";
 import { BuildMergeInstructions, BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
 import { AgentPickerView } from "./components/agent-picker";
-import { choicesForRoles, proposeWorkerChoices, workerChoicesReady } from "./agent-choices";
+import { choicesForRoles, proposeGuideChoice, proposeWorkerChoices, roleChoiceError, workerChoicesReady } from "./agent-choices";
 import type { WorkerChoices, WorkerRole } from "./agent-choices";
 import { MergeFeedback, MergePrimaryAction, MergedBranchVerification } from "./components/merge-action";
 import type { MergeControls } from "./components/merge-action";
@@ -29,7 +36,9 @@ import { ApprovalStage } from "./components/approval-stage";
 import { WorkspaceFrame } from "./components/workspace-frame";
 import { SessionEndedNotice, SignedOutReason, SignedOutView } from "./components/session";
 import { StoryStageView } from "./components/story";
-import { GlobalTeamAttention, roleHasPane, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
+import { GlobalTeamAttention, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
+import { TerminalDrawer, TerminalTicketOutcome } from "./components/terminal-drawer";
+import { UpdateBanner, UpdateProgress } from "./components/update-banner";
 import { LiveTargetStageView, ModelDraft, ServerAnswer, describeApplied } from "./components/live-target";
 import { Alert, Button, Card } from "./components/shadcn";
 import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
@@ -47,16 +56,20 @@ import {
   OperationName,
   OpenBuildRefusal,
   ReplacedBuild,
+  RoleAgentChoice,
   ProposedRevisionItem,
   Operations,
   ROUTES,
+  SendTeamMessagePayload,
   ServerFailure,
   StartedBuild,
   StoryRefreshResult,
+  TeamConversation,
   TraceList,
   TeamRoleState,
   TeamSnapshot,
   TestFindings,
+  UpdateStatusResult,
   VerificationListResult,
   VerificationReview,
   VerificationStatusResult,
@@ -467,6 +480,14 @@ export function bootstrapViewsPage() {
   const noticeEl = document.createElement("div");
   noticeEl.setAttribute("id", "highbay-session-notice");
   statusEl.after(noticeEl);
+  const traceRegionEl = document.createElement("aside");
+  traceRegionEl.setAttribute("aria-label", "Operation diagnostics");
+  viewEl.before(traceRegionEl);
+  const columnsEl = document.createElement("div");
+  columnsEl.setAttribute("id", "highbay-workspace-columns");
+  columnsEl.className = "highbay-workspace-columns";
+  viewEl.before(columnsEl);
+  columnsEl.appendChild(viewEl);
   const editorRegionEl = document.createElement("div");
   editorRegionEl.setAttribute("id", "highbay-cp1-editor");
   editorRegionEl.setAttribute("tabindex", "-1");
@@ -475,22 +496,28 @@ export function bootstrapViewsPage() {
   resultRegionEl.setAttribute("id", "highbay-result-view");
   viewEl.appendChild(editorRegionEl);
   viewEl.appendChild(resultRegionEl);
-  const traceRegionEl = document.createElement("aside");
-  traceRegionEl.setAttribute("aria-label", "Operation diagnostics");
-  viewEl.before(traceRegionEl);
+  const conversationRegionEl = document.createElement("aside");
+  conversationRegionEl.setAttribute("id", "highbay-conversation-rail");
+  conversationRegionEl.setAttribute("aria-label", "Team conversation");
+  columnsEl.appendChild(conversationRegionEl);
+  const terminalRegionEl = document.createElement("div");
+  terminalRegionEl.setAttribute("id", "highbay-terminal-region");
+  columnsEl.after(terminalRegionEl);
 
   const navRoot: Root = createRoot(navEl);
   const noticeRoot: Root = createRoot(noticeEl);
   const editorRoot: Root = createRoot(editorRegionEl);
   const resultRoot: Root = createRoot(resultRegionEl);
   const traceRoot: Root = createRoot(traceRegionEl);
+  const conversationRoot: Root = createRoot(conversationRegionEl);
+  const terminalRoot: Root = createRoot(terminalRegionEl);
 
-  // session is the credential the server issued for this page. It lives only
-  // in this closure: never in browser storage or a cookie, so a reload or a
-  // closed tab ends it.
+  const SESSION_STORAGE_KEY = "highbay.session";
+  // session is the Bearer credential scoped to this origin (scheme + host + port)
+  // in localStorage, never sent in cross-port 127.0.0.1 cookies.
   let session: string | null = null;
   // projectName is the physical folder's base name from the authenticated
-  // exchange, fixed for this page session and never derived from a team ID.
+  // session, fixed for this page session and never derived from a team ID.
   let projectName: string | null = null;
   let sessionState: SessionState = "starting";
   let signedOutReason: SignedOutReason = "no-link";
@@ -590,7 +617,32 @@ export function bootstrapViewsPage() {
   let agentOptionsError: string | null = null;
   let workerChoices: WorkerChoices = {};
   const editedWorkerChoices = new Set<WorkerRole>();
-  let backgroundConsent = false;
+  let guideChoice: RoleAgentChoice | undefined = undefined;
+  let guideChoiceEdited = false;
+  // Chorus conversation rail and live terminal drawer state.
+  let conversationOpen = true;
+  let teamConversation: TeamConversation | null = null;
+  let conversationError: string | null = null;
+  let conversationReadAgain = false;
+  let composerDraft: ComposerDraft = { to: "guide", text: "", replyTo: null, context: null };
+  let composerSendError: string | null = null;
+  let describeText = "";
+  let describeSendError: string | null = null;
+  let openTerminalRole: TeamRoleState["role"] | null = null;
+  let terminalInvoker: HTMLElement | null = null;
+  let terminalActionError: string | null = null;
+  const terminalRestartSeq: Record<TeamRoleState["role"], number> = {
+    guide: 0,
+    builder: 0,
+    test_writer: 0,
+  };
+  // Server release update and UI bundle build tracking.
+  let initialUiBuild: string | null = null;
+  let uiBuildChanged = false;
+  let uiBuildProbeInFlight = false;
+  let uiBuildProbeAgain = false;
+  let updateStatus: UpdateStatusResult | null = null;
+  let updateProgress: UpdateProgress | null = null;
   // Successful dismissal receipts prevent an earlier team read restoring a
   // notice. Reload still reads the preference from its project owner.
   type TeamNotice = TeamSnapshot["dismissed_notices"][number];
@@ -668,8 +720,9 @@ export function bootstrapViewsPage() {
     if (encoded.body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
-    if (session !== null) {
-      headers.Authorization = "Bearer " + session;
+    const sentSession = session;
+    if (sentSession !== null) {
+      headers.Authorization = "Bearer " + sentSession;
     }
     let status = 0;
     let text = "";
@@ -693,7 +746,7 @@ export function bootstrapViewsPage() {
         ok: false,
         kind: "network",
         status: 0,
-        message: "The Highbay server did not answer. Check that hbay is still running.",
+        message: "The Highbay server did not answer. Check that highbay is still running.",
       };
     }
     let parsed: unknown = undefined;
@@ -714,6 +767,9 @@ export function bootstrapViewsPage() {
       };
     }
     const body = route.decodeFailure(status, parsed) ? parsed : undefined;
+    if (status === 401) {
+      clearStoredSession(sentSession);
+    }
     return {
       ok: false,
       kind: status === 401 ? "session" : "server",
@@ -807,37 +863,94 @@ export function bootstrapViewsPage() {
 
   // sessionEndedMessage tells the user what to do once the session is gone.
   function sessionEndedMessage(): string {
-    return "This page's Highbay session has ended. Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.";
+    return "This page’s Highbay session has ended. Run highbay in your project folder or invoke /highbay in your coding agent to open Highbay views.";
   }
 
-  // start exchanges the link from the address fragment for a session, removes
-  // the link from the address, and reads the project's changes.
+  function saveStoredSession(token: string) {
+    try {
+      window.localStorage.setItem(SESSION_STORAGE_KEY, token);
+    } catch {
+      // Storage-restricted browser profiles still retain the in-memory session.
+    }
+  }
+
+  function readStoredSession(): string | null {
+    try {
+      const stored = window.localStorage.getItem(SESSION_STORAGE_KEY);
+      return stored !== null && stored !== "" ? stored : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // clearStoredSession removes SESSION_STORAGE_KEY only when it still holds
+  // rejectedToken, so a stale tab cannot erase a newer session stored by a sibling tab.
+  function clearStoredSession(rejectedToken: string | null) {
+    if (rejectedToken === null) {
+      return;
+    }
+    try {
+      if (window.localStorage.getItem(SESSION_STORAGE_KEY) === rejectedToken) {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage access errors on teardown.
+    }
+  }
+
+  // start exchanges #link=<token> for an origin-scoped Bearer session when present,
+  // or validates the stored origin-scoped session on reload/sibling tab via GET /project/browser-session.
   async function start() {
     const link = readLinkFromFragment(window.location.hash);
     if (window.location.hash !== "") {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
-    if (link === null) {
-      signOut("no-link", "");
-      return;
+    if (link !== null) {
+      statusEl.textContent = "Opening your Highbay session...";
+      const outcome = await send("exchange_browser_link", { link });
+      if (!outcome.ok) {
+        signOut(outcome.status === 422 ? "link-used" : "link-failed", outcome.message);
+        return;
+      }
+      session = outcome.result.session;
+      projectName = outcome.result.project_name;
+      initialUiBuild = outcome.result.ui_build;
+      saveStoredSession(session);
+      maybeCheckUpdateStatus(outcome.result.version);
+    } else {
+      const stored = readStoredSession();
+      if (stored === null) {
+        signOut("no-link", "");
+        return;
+      }
+      statusEl.textContent = "Restoring your Highbay session...";
+      session = stored;
+      const outcome = await send("get_browser_session", {});
+      if (!outcome.ok) {
+        session = null;
+        if (outcome.kind === "session") {
+          clearStoredSession(stored);
+          signOut("no-link", "");
+        } else {
+          signOut("link-failed", outcome.message);
+        }
+        return;
+      }
+      session = outcome.result.session;
+      projectName = outcome.result.project_name;
+      initialUiBuild = outcome.result.ui_build;
+      maybeCheckUpdateStatus(outcome.result.version);
     }
-    statusEl.textContent = "Opening your Highbay session...";
-    const outcome = await send("exchange_browser_link", { link });
-    if (!outcome.ok) {
-      signOut(outcome.status === 422 ? "link-used" : "link-failed", outcome.message);
-      return;
-    }
-    session = outcome.result.session;
-    projectName = outcome.result.project_name;
     sessionState = "active";
     rootEl.dataset.session = "active";
     activeResult = { kind: "changes" };
     rootEl.dataset.state = "changes";
+    readConversation();
     await loadChanges();
   }
 
-  // signOut shows how to open the page with `hbay`; the page then sends no
-  // further requests.
+  // signOut shows how to open the page with `highbay` or `/highbay`; the page then
+  // sends no further requests.
   function signOut(reason: SignedOutReason, message: string) {
     sessionState = "signed-out";
     signedOutReason = reason;
@@ -846,9 +959,190 @@ export function bootstrapViewsPage() {
     rootEl.dataset.state = reason === "link-used" ? "link-used" : "signed-out";
     statusEl.textContent =
       reason === "link-used"
-        ? "This link was already used. Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion."
-        : "Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.";
+        ? "This link was already used. Run highbay in your project folder or invoke /highbay in your coding agent."
+        : "Run highbay in your project folder or invoke /highbay in your coding agent to open Highbay views.";
     syncAllRegions();
+  }
+
+  // isReleaseBuildVersion reports whether version is a canonical MAJOR.MINOR.PATCH
+  // release build (with or without leading "v") rather than "(devel)" or a pseudo-version.
+  function isReleaseBuildVersion(version: string): boolean {
+    return /^v?\d+\.\d+\.\d+$/.test(version);
+  }
+
+  // maybeCheckUpdateStatus checks for a newer Highbay release in the background
+  // when the running server reports a release build version. Offline or 502
+  // responses quietly leave the workspace undisturbed.
+  function maybeCheckUpdateStatus(currentVersion: string) {
+    if (!isReleaseBuildVersion(currentVersion)) {
+      return;
+    }
+    void (async () => {
+      const outcome = await send("get_update_status", {});
+      if (!outcome.ok) {
+        if (outcome.kind === "session") {
+          endSession();
+          syncAllRegions();
+        }
+        return;
+      }
+      updateStatus = outcome.result.update_available ? outcome.result : null;
+      syncNoticeRegion();
+    })();
+  }
+
+  // normalizeVersionTag ensures a release version carries a leading "v".
+  function normalizeVersionTag(version: string): string {
+    return version.startsWith("v") ? version : "v" + version;
+  }
+
+  // probeUiBuildAfterReconnect checks whether an in-place server restart
+  // (such as `highbay update` from a terminal while the tab was hidden or
+  // between two waiting reads) replaced the embedded /views bundle.
+  function probeUiBuildAfterReconnect() {
+    if (session === null || sessionState !== "active" || uiBuildChanged) {
+      return;
+    }
+    if (uiBuildProbeInFlight) {
+      uiBuildProbeAgain = true;
+      return;
+    }
+    uiBuildProbeInFlight = true;
+    uiBuildProbeAgain = false;
+    void (async () => {
+      try {
+        const outcome = await send("get_browser_session", {});
+        if (!outcome.ok) {
+          if (outcome.kind === "session") {
+            endSession();
+            syncAllRegions();
+          }
+          return;
+        }
+        let changed = false;
+        if (initialUiBuild !== null && outcome.result.ui_build !== initialUiBuild) {
+          uiBuildChanged = true;
+          changed = true;
+        }
+        if (
+          updateStatus !== null &&
+          normalizeVersionTag(outcome.result.version) === normalizeVersionTag(updateStatus.latest_version)
+        ) {
+          updateStatus = null;
+          changed = true;
+        }
+        if (changed) {
+          syncNoticeRegion();
+        }
+      } finally {
+        uiBuildProbeInFlight = false;
+        if (uiBuildProbeAgain && session !== null && sessionState === "active" && !uiBuildChanged) {
+          probeUiBuildAfterReconnect();
+        }
+      }
+    })();
+  }
+
+  // waitForUpdatedServer polls GET /project/browser-session for up to 30 seconds
+  // until the in-place restarted server answers with targetVersion, preserving
+  // the browser session across syscall.Exec without re-issuing POST /project/update.
+  async function waitForUpdatedServer(targetVersion: string) {
+    const normalizedTarget = targetVersion.startsWith("v") ? targetVersion : "v" + targetVersion;
+    updateProgress = { kind: "restarting", targetVersion: normalizedTarget };
+    syncNoticeRegion();
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 30000);
+    try {
+      while (!controller.signal.aborted && session !== null) {
+        const outcome = await send("get_browser_session", {}, controller.signal);
+        if (outcome.ok) {
+          const observed = outcome.result.version.startsWith("v")
+            ? outcome.result.version
+            : "v" + outcome.result.version;
+          if (observed === normalizedTarget) {
+            if (initialUiBuild !== null && outcome.result.ui_build !== initialUiBuild) {
+              uiBuildChanged = true;
+            }
+            updateStatus = null;
+            updateProgress = { kind: "ready", version: normalizedTarget };
+            syncNoticeRegion();
+            void loadChanges();
+            return;
+          }
+        } else if (outcome.kind === "session") {
+          endSession();
+          syncAllRegions();
+          return;
+        }
+        if (!controller.signal.aborted) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 250));
+        }
+      }
+      if (session !== null) {
+        updateProgress = {
+          kind: "restart_failed",
+          targetVersion: normalizedTarget,
+          message:
+            "Highbay " +
+            normalizedTarget +
+            " has not finished restarting yet. Check highbay status, then check again.",
+        };
+        syncNoticeRegion();
+      }
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  // applyServerUpdate installs the approved release version on the running
+  // server and waits for its session-preserving in-place restart.
+  function applyServerUpdate() {
+    if (sessionState !== "active" || session === null) {
+      return;
+    }
+    const target =
+      updateProgress?.kind === "error"
+        ? updateProgress.targetVersion
+        : updateStatus?.latest_version;
+    if (target === undefined || target === "") {
+      return;
+    }
+    if (updateProgress?.kind === "installing" || updateProgress?.kind === "restarting") {
+      return;
+    }
+    updateProgress = { kind: "installing", targetVersion: target };
+    syncNoticeRegion();
+    void (async () => {
+      const outcome = await send("apply_update", { version: target });
+      if (!outcome.ok) {
+        if (outcome.kind === "session") {
+          endSession();
+          syncAllRegions();
+          return;
+        }
+        if (outcome.status === 409) {
+          updateProgress = {
+            kind: "conflict",
+            message: outcome.message + " Reload when ready to check the current version.",
+          };
+        } else {
+          updateProgress = {
+            kind: "error",
+            targetVersion: target,
+            message: "Could not complete the Highbay update: " + outcome.message,
+          };
+        }
+        syncNoticeRegion();
+        return;
+      }
+      if (outcome.result.status === "up_to_date") {
+        updateStatus = null;
+        updateProgress = { kind: "ready", version: outcome.result.version };
+        syncNoticeRegion();
+        return;
+      }
+      await waitForUpdatedServer(outcome.result.version);
+    })();
   }
 
   // endSession forgets a session the server no longer accepts, stops the
@@ -857,8 +1151,11 @@ export function bootstrapViewsPage() {
     if (sessionState !== "active") {
       return;
     }
+    const expiredSession = session;
     session = null;
+    clearStoredSession(expiredSession);
     sessionState = "ended";
+    openTerminalRole = null;
     buildStartReceipt = null;
     buildStartError = null;
     openBuildRefusal = null;
@@ -906,6 +1203,7 @@ export function bootstrapViewsPage() {
       applyListChanges(previous, outcome.result);
       if (previous === null || previous.version !== outcome.result.version) {
         readTeam();
+        readConversation();
         if (activeEditor !== null) {
           readBuild(activeEditor.card.change_id);
           refreshVerificationObservations(activeEditor.card.change_id);
@@ -1019,6 +1317,7 @@ export function bootstrapViewsPage() {
             statusEl.textContent = "This page is up to date with the Highbay server again.";
             syncAllRegions();
           }
+          probeUiBuildAfterReconnect();
           continue;
         }
         if (session === null) {
@@ -1525,6 +1824,7 @@ export function bootstrapViewsPage() {
   // Agreement warnings continue to use the narrower CP1 draft predicate.
   function hasUnsavedPageInput(): boolean {
     return hasUnsavedEdits() || hasPendingEditorSave() || modelDraftDirty ||
+      composerDraft.text.trim() !== "" || describeText.trim() !== "" ||
       (activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0);
   }
 
@@ -1689,17 +1989,49 @@ export function bootstrapViewsPage() {
       (role.assignment === "unread" || role.assignment === "nothing_owed") ? [role.role] : []);
   }
 
+  // readConversation follows the change-list version chain and coalesces
+  // overlapping reads so Chorus messages stay current without polling.
+  function readConversation() {
+    if (sessionState !== "active") return;
+    if (hasPending("get_team_conversation", "")) {
+      conversationReadAgain = true;
+      return;
+    }
+    conversationReadAgain = false;
+    const done = () => {
+      if (conversationReadAgain && sessionState === "active") readConversation();
+    };
+    callServer(
+      "get_team_conversation", {}, "",
+      (conv) => {
+        if (sessionState !== "active") return;
+        teamConversation = conv;
+        conversationError = null;
+        done();
+      },
+      (message) => {
+        if (sessionState !== "active") return;
+        conversationError = message;
+        done();
+      }
+    );
+  }
+
   // proposeMissingWorkerChoices refreshes only automatic proposals. A user's
   // input remains unchanged even when saved preferences or discovery change.
   function proposeMissingWorkerChoices() {
-    if (agentOptions === null || teamSnapshot === null) return;
-    const saved = { ...teamSnapshot.saved_choices };
+    if (agentOptions === null) return;
+    const saved = { ...(teamSnapshot?.saved_choices ?? {}) };
+    if (!guideChoiceEdited) {
+      guideChoice = proposeGuideChoice(agentOptions.agents, saved);
+    }
+    if (teamSnapshot === null) return;
     for (const role of editedWorkerChoices) {
       const choice = workerChoices[role];
       if (choice !== undefined) saved[role] = choice;
     }
     const roles = Array.from(new Set([...buildWorkerRoles(), ...teamWorkerRoles()]));
-    const proposed = proposeWorkerChoices(roles, agentOptions.agents, saved, teamSnapshot.herdr_mode);
+    const proposed = proposeWorkerChoices(roles, agentOptions.agents, saved);
     for (const role of roles) {
       if (!editedWorkerChoices.has(role)) workerChoices[role] = proposed[role];
     }
@@ -1731,8 +2063,7 @@ export function bootstrapViewsPage() {
   function workersReady(roles: readonly WorkerRole[]): boolean {
     return agentOptions !== null && agentOptionsError === null &&
       !hasPending("list_team_agent_options", "") && teamFactsError() === null &&
-      workerChoicesReady(roles, workerChoices, agentOptions.agents,
-        teamSnapshot?.herdr_mode ?? null, backgroundConsent);
+      workerChoicesReady(roles, workerChoices, agentOptions.agents);
   }
 
   // dismissTeamNotice saves only the named recommendation, without launching
@@ -1754,20 +2085,11 @@ export function bootstrapViewsPage() {
   function workerRecommendations(idPrefix: string): React.ReactNode {
     const snapshot = teamSnapshot;
     if (snapshot === null || teamFactsError() !== null) return null;
-    const families = new Set((agentOptions?.agents ?? []).filter((option) =>
-      snapshot.herdr_mode !== "unavailable" || option.headless_supported).map((option) => option.client));
+    const families = new Set((agentOptions?.agents ?? []).map((option) => option.client));
     const notices: { notice: TeamNotice; title: string; text: string }[] = [];
     if (buildWorkerRoles().includes("test_writer") && families.size === 1) notices.push({
       notice: "single_agent_family", title: "One coding-agent family is installed.",
       text: "Highbay can use it for both workers. A second model family can give the builder and test writer different perspectives.",
-    });
-    if (snapshot.herdr_mode === "available") notices.push({
-      notice: "outside_herdr", title: "No Herdr pane linked.",
-      text: "To link your coding agent’s pane, open a project tab in Herdr and run /highbay there. Starting workers opens their panes in Herdr without bringing its window to the foreground.",
-    });
-    if (snapshot.herdr_mode === "unavailable") notices.push({
-      notice: "herdr_unavailable", title: "Workers will run in the background.",
-      text: "Herdr provides a live workspace with agent panes. You can continue here with server-managed background workers instead.",
     });
     return notices.filter(({ notice }) => !noticeDismissed.has(notice) &&
       !snapshot.dismissed_notices.includes(notice)).map(({ notice, title, text }) =>
@@ -1787,12 +2109,9 @@ export function bootstrapViewsPage() {
     return <>{workerRecommendations(idPrefix)}<AgentPickerView idPrefix={idPrefix} roles={roles}
       options={agentOptions?.agents ?? null} choices={workerChoices}
       loading={hasPending("list_team_agent_options", "")} error={agentOptionsError}
-      herdrMode={teamSnapshot?.herdr_mode ?? null} disabled={sessionState !== "active" ||
+      disabled={sessionState !== "active" ||
         hasPending("start_team_agents", "") || Array.from(pendingCalls).some((call) => call.op === "start_build")}
-      backgroundConsent={backgroundConsent} onBackgroundConsentChange={(value) => {
-        backgroundConsent = value;
-        syncAllRegions();
-      }} onChoiceChange={(role, choice) => {
+      onChoiceChange={(role, choice) => {
         workerChoices = { ...workerChoices, [role]: choice };
         editedWorkerChoices.add(role);
         proposeMissingWorkerChoices();
@@ -1809,19 +2128,19 @@ export function bootstrapViewsPage() {
     return null;
   }
 
-  // connectedGuide finds a registered guide that can still follow the project,
-  // including a guide whose terminal state Herdr cannot observe.
+  // connectedGuide finds a registered guide that can still follow the project.
   function connectedGuide(): TeamRoleState | undefined {
     return teamSnapshot?.roles.find((role) =>
       role.role === "guide" && role.state !== "not_started" && role.state !== "ended"
     );
   }
 
-  // showingTeamRoles derives pending controls from the registered snapshot,
-  // preserving the generated role type instead of casting arbitrary subjects.
-  function showingTeamRoles(): TeamRoleState["role"][] {
+  // pendingRoleOperations lists registered roles with an outstanding operation.
+  function pendingRoleOperations(
+    op: "interrupt_team_role" | "stop_team_role" | "restart_team_role"
+  ): TeamRoleState["role"][] {
     return (teamSnapshot?.roles ?? [])
-      .filter((role) => hasPending("show_team_pane", role.role))
+      .filter((role) => hasPending(op, role.role))
       .map((role) => role.role);
   }
 
@@ -2190,24 +2509,216 @@ export function bootstrapViewsPage() {
       });
   }
 
-  // showTeamPane sends only the registered role the user selected; the server
-  // rechecks ownership and open dialogs before it changes the window.
-  function showTeamPane(role: TeamRoleState["role"]) {
-    if (sessionState !== "active" || !roleHasPane(role, teamSnapshot?.herdr_mode) ||
-        hasPending("show_team_pane", role)) return;
+  // openRoleTerminal attaches the on-demand TerminalDrawer to the selected role.
+  function openRoleTerminal(role: TeamRoleState["role"], invoker: HTMLElement | null) {
+    if (sessionState !== "active") return;
+    openTerminalRole = role;
+    terminalInvoker = invoker;
+    terminalActionError = null;
+    syncAllRegions();
+    document.getElementById("highbay-terminal-drawer")?.scrollIntoView({ block: "nearest" });
+  }
+
+  // closeRoleTerminal detaches the TerminalDrawer and restores keyboard focus.
+  function closeRoleTerminal() {
+    const returnTo = terminalInvoker;
+    openTerminalRole = null;
+    terminalInvoker = null;
+    terminalActionError = null;
+    syncAllRegions();
+    if (returnTo !== null && document.contains(returnTo)) {
+      returnTo.focus();
+    } else {
+      focusCurrentViewHeading();
+    }
+  }
+
+  // createTerminalTicket requests a single-use short-lived WebSocket upgrade ticket.
+  async function createTerminalTicket(
+    role: TeamRoleState["role"],
+    signal: AbortSignal
+  ): Promise<TerminalTicketOutcome> {
+    if (session === null) {
+      return { ok: false, message: sessionEndedMessage() };
+    }
+    const outcome = await send("create_terminal_ticket", { role }, signal);
+    if (!outcome.ok) {
+      if (outcome.kind === "session") {
+        endSession();
+      }
+      return { ok: false, message: outcome.message };
+    }
+    return { ok: true, ticket: outcome.result.ticket };
+  }
+
+  // interruptTeamRole sends Ctrl-C to a terminal-backed role in herdr-core.
+  function interruptTeamRole(role: TeamRoleState["role"]) {
+    if (sessionState !== "active" || hasPending("interrupt_team_role", role)) return;
     teamActionError = null;
-    const label = role === "guide" ? "coding agent" : role.replaceAll("_", " ");
+    terminalActionError = null;
     callServer(
-      "show_team_pane", { role }, role,
+      "interrupt_team_role", { role }, role,
       () => {
         if (sessionState !== "active") return;
-        statusEl.textContent = "The " + label + "'s pane is shown in Herdr.";
+        statusEl.textContent = "Sent interrupt signal to " + role.replaceAll("_", " ") + ".";
         readTeam();
       },
       (message) => {
         if (sessionState !== "active") return;
         teamActionError = message;
-        statusEl.textContent = "Could not show the " + label + "'s pane. " + message;
+        terminalActionError = message;
+      }
+    );
+  }
+
+  // stopTeamRole terminates and removes a managed role's herdr-core terminal.
+  function stopTeamRole(role: TeamRoleState["role"]) {
+    if (sessionState !== "active" || hasPending("stop_team_role", role)) return;
+    teamActionError = null;
+    terminalActionError = null;
+    callServer(
+      "stop_team_role", { role }, role,
+      () => {
+        if (sessionState !== "active") return;
+        statusEl.textContent = "Stopped " + role.replaceAll("_", " ") + " terminal.";
+        readTeam();
+      },
+      (message) => {
+        if (sessionState !== "active") return;
+        teamActionError = message;
+        terminalActionError = message;
+      }
+    );
+  }
+
+  // restartTeamRole atomically stops any existing managed herdr-core terminal
+  // for role and launches a fresh managed terminal, reconnecting an open drawer.
+  function restartTeamRole(role: TeamRoleState["role"]) {
+    if (sessionState !== "active" || hasPending("restart_team_role", role)) return;
+    teamActionError = null;
+    terminalActionError = null;
+    let choice: RoleAgentChoice | undefined = undefined;
+    if (role === "guide") {
+      if (guideChoiceEdited && guideChoice !== undefined) {
+        choice = guideChoice;
+      }
+    } else if (editedWorkerChoices.has(role) && workerChoices[role] !== undefined) {
+      choice = workerChoices[role];
+    }
+    callServer(
+      "restart_team_role",
+      choice !== undefined ? { role, choice } : { role },
+      role,
+      () => {
+        if (sessionState !== "active") return;
+        terminalRestartSeq[role]++;
+        statusEl.textContent = "Restarted " + role.replaceAll("_", " ") + " terminal.";
+        readTeam();
+      },
+      (message) => {
+        if (sessionState !== "active") return;
+        teamActionError = message;
+        terminalActionError = message;
+      }
+    );
+  }
+
+  // mergeStagePrompt appends a suggested stage prompt without discarding any
+  // unsent text already drafted in the conversation rail.
+  function mergeStagePrompt(existingText: string, stageText: string): string {
+    const trimmedExisting = existingText.trimEnd();
+    if (trimmedExisting.trim() === "") {
+      return stageText;
+    }
+    if (stageText === "" || trimmedExisting.includes(stageText)) {
+      return existingText;
+    }
+    return trimmedExisting + "\n\n" + stageText;
+  }
+
+  // focusComposerForRole opens the conversation rail targeting role, preserves
+  // unsent text, clears unrelated reply links on stage context actions, and focuses input.
+  function focusComposerForRole(
+    role: ComposerRecipient,
+    context: ComposerContext | null = null,
+    suggestedText = ""
+  ) {
+    conversationOpen = true;
+    composerDraft = {
+      to: role,
+      text:
+        suggestedText !== ""
+          ? mergeStagePrompt(composerDraft.text, suggestedText)
+          : composerDraft.text,
+      replyTo: context !== null ? null : composerDraft.replyTo,
+      context: context !== null ? context : composerDraft.context,
+    };
+    syncAllRegions();
+    document.getElementById("highbay-composer-input")?.focus();
+  }
+
+  // submitTeamMessage posts a message to Chorus through Highbay, auto-starting
+  // guide in herdr-core when needed while preserving unsent text on failure.
+  function submitTeamMessage(
+    source: "rail" | "describe" | "agree",
+    payload: SendTeamMessagePayload
+  ) {
+    if (
+      sessionState !== "active" ||
+      hasPending("send_team_message", source) ||
+      payload.text.trim() === ""
+    ) {
+      return;
+    }
+    const needsGuide =
+      (payload.to === "guide" || payload.to === "team") && guideRoleNeedsStart(teamSnapshot);
+    if (
+      needsGuide &&
+      (agentOptions === null ||
+        guideChoice === undefined ||
+        roleChoiceError(guideChoice, agentOptions.agents) !== null)
+    ) {
+      return;
+    }
+    const fullPayload: SendTeamMessagePayload = {
+      ...payload,
+      ...(needsGuide && guideChoice !== undefined ? { guide_choice: guideChoice } : {}),
+    };
+    if (source === "describe") {
+      describeSendError = null;
+    } else {
+      composerSendError = null;
+    }
+    callServer(
+      "send_team_message",
+      fullPayload,
+      source,
+      (posted) => {
+        if (sessionState !== "active") return;
+        if (source === "describe") {
+          describeText = "";
+        } else if (source === "rail") {
+          composerDraft = { to: composerDraft.to, text: "", replyTo: null, context: null };
+        }
+        if (teamConversation !== null && !teamConversation.messages.some((m) => m.id === posted.id)) {
+          teamConversation = {
+            ...teamConversation,
+            messages: [...teamConversation.messages, posted],
+          };
+        }
+        statusEl.textContent = "Message sent to " + payload.to.replaceAll("_", " ") + ".";
+        readConversation();
+        readTeam();
+      },
+      (message) => {
+        if (sessionState !== "active") return;
+        if (source === "describe") {
+          describeSendError = message;
+        } else {
+          conversationOpen = true;
+          composerSendError = message;
+        }
+        statusEl.textContent = "Could not send message. " + message;
       }
     );
   }
@@ -2590,13 +3101,11 @@ export function bootstrapViewsPage() {
     const teamLoading = hasPending("get_team", "");
     const teamStarting = hasPending("start_team_agents", "");
     const teamRoles = teamSnapshot?.roles ?? [];
-    const herdrMode = teamSnapshot?.herdr_mode;
-    const guideInHerdr = herdrMode === "attached";
-    const herdrWorkerAvailable = herdrMode !== "unavailable";
     const guide = connectedGuide();
+    const guideHasTerminal = guide?.has_terminal ?? false;
     const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
     const teamStatusUnknown = teamRoles.some((role) => role.state === "error" ||
-      (role.state === "unknown" && (role.role !== "guide" || guideInHerdr)));
+      (role.state === "unknown" && (role.role !== "guide" || guideHasTerminal)));
     const proposal = activeEditor?.card.proposed_revision;
     const revisionTarget = activeEditor === null ? null : proposal !== undefined
       ? answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0
@@ -2606,12 +3115,12 @@ export function bootstrapViewsPage() {
     const showingInitialization = onDescribe && !editorOpen && listError === null &&
       changeList?.initializing_phase !== undefined && changeList.changes.length === 0;
     const storyDraftAttention = changeList?.draft_state === "story_failed" &&
-      (!guideInHerdr || guide?.state !== "working");
+      guide?.state !== "working";
     const showSlots = !showingInitialization && !(onDescribe && !editorOpen && listError === null &&
       (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)) &&
       changeList !== null && changeList.changes.length === 0 && !storyDraftAttention && teamError === null &&
       !teamLoading && !teamStarting && teamSnapshot !== null && teamNeedsYou === undefined &&
-      !teamStatusUnknown && guide !== undefined && (!guideInHerdr || guide.state !== "starting"));
+      !teamStatusUnknown && (guide === undefined || guide.state !== "starting"));
     let attention = "Nothing now.";
     let next: React.ReactNode = null;
     if (onApproval) {
@@ -2723,7 +3232,7 @@ export function bootstrapViewsPage() {
       }
       if (next !== null && teamError === null && teamNeedsYou !== undefined) {
         attention = teamRoles.filter((role) => role.state === "needs_you")
-          .map((role) => teamAttentionText(role, roleHasPane(role.role, herdrMode), teamSnapshot?.chorus_status)).join(". ");
+          .map((role) => teamAttentionText(role)).join(". ");
       }
     } else if (activeResult?.kind === "cp4-verification") {
       next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
@@ -2731,15 +3240,14 @@ export function bootstrapViewsPage() {
     }
     if (next === null) {
       // Recovery takes precedence over guidance based on retained observations.
-      const connectGuide = "Connect your coding agent to this project’s Highbay MCP server.";
-      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou, roleHasPane(teamNeedsYou.role, herdrMode), teamSnapshot?.chorus_status)
+      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou)
         : teamLoading || teamSnapshot === null ? "Waiting for Team status."
         : teamStatusUnknown ? "Team status unknown."
         : "Nothing now.";
       let step: string | React.ReactElement;
       if (sessionState !== "active") {
         attention = "The session ended.";
-        step = "Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.";
+        step = "Run highbay in your project folder or invoke /highbay in your coding agent to open Highbay views.";
       } else if (listError !== null) {
         attention = "The changes could not be read.";
         step = onDescribe ? "Choose Read the changes again below." : "Open " + changesLabel + " to retry reading changes.";
@@ -2770,41 +3278,27 @@ export function bootstrapViewsPage() {
         } else if (teamLoading || teamSnapshot === null) {
           step = "Wait for Team status.";
         } else if (guide === undefined) {
-          if (teamNeedsYou === undefined) attention = "Coding agent needed.";
-          step = connectGuide + " Then describe your change.";
-        } else if (!guideInHerdr) {
-          if (guide.state === "needs_you") {
-            step = "Return to your coding agent to address its request.";
-          } else if (guide.state === "error") {
-            step = "Return to your coding agent to check its error.";
-          } else if (teamStatusUnknown && teamNeedsYou === undefined) {
-            step = "Open Team to check role status.";
-          } else if (changeList.draft_state === "story_failed") {
-            if (teamNeedsYou === undefined) attention = "Story check needs attention.";
-            step = "Return to your coding agent so it can fix the Story and propose the Change Card.";
-          } else if (changeList.draft_state !== undefined) {
-            step = "Wait for your coding agent to propose the Change Card.";
-          } else {
-            step = "Describe what you want to build in your coding agent.";
-          }
+          step = "Describe what you want to build below to start Guide.";
         } else if (guide.state === "starting") {
-          step = "Wait for your coding agent to start.";
-        } else if (guide.state === "unknown" || guide.state === "error") {
-          if (teamNeedsYou === undefined) {
-            attention = guide.state === "unknown" ? "Coding agent status unknown." : "Your coding agent reported an error.";
-          }
-          step = "Open Team and refresh to check your coding agent’s status.";
+          step = "Wait for Guide to start.";
         } else if (guide.state === "needs_you") {
-          step = "In Team, choose Show coding agent pane to address its request.";
+          step = guideHasTerminal
+            ? "Open Guide terminal to answer its prompt, or reply in Team conversation."
+            : "Reply to Guide in Team conversation.";
+        } else if (guide.state === "error" || (guideHasTerminal && guide.state === "unknown")) {
+          if (teamNeedsYou === undefined) {
+            attention = guide.state === "unknown" ? "Guide status unknown." : "Guide reported an error.";
+          }
+          step = "Open Team or Guide terminal to check Guide’s status.";
         } else if (guide.state === "working" || changeList.draft_state === "evaluating_story") {
-          step = "Wait for your coding agent to propose the Change Card.";
+          step = "Wait for Guide to propose the Change Card.";
         } else if (changeList.draft_state === "story_failed") {
           if (teamNeedsYou === undefined) attention = "Story check needs attention.";
-          step = "Choose Show coding agent pane below so it can fix the Story and propose the Change Card.";
+          step = "Ask Guide below or in Team conversation to fix the Story and propose the Change Card.";
         } else if (changeList.draft_state !== undefined) {
-          step = "Choose Show coding agent pane below to check on your coding agent.";
+          step = "Wait for Guide to propose the Change Card, or message Guide in Team conversation.";
         } else {
-          step = "Choose Show coding agent pane below to describe your change.";
+          step = "Describe what you want to build below or in Team conversation.";
         }
       } else if (cp1Active && activeEditor !== null) {
         const ed = activeEditor;
@@ -2868,9 +3362,9 @@ export function bootstrapViewsPage() {
         step = teamStarting ? "Wait for workers to start."
           : teamLoading || teamSnapshot === null ? "Wait for Team status."
           : teamNeedsYou === undefined && teamWorkersHaveWork() ? "Use Start workers to bring up missing build workers."
-          : guide === undefined ? connectGuide
-          : guideInHerdr || (herdrWorkerAvailable && teamRoles.some((role) => role.role !== "guide"))
-            ? "Review role status and use Show pane to contact an agent."
+          : guide === undefined ? "Send a message in Team conversation to start Guide."
+          : teamRoles.some((role) => role.has_terminal)
+            ? "Review role status and open a role terminal or message an agent."
           : "Review role status below.";
       } else if (activeResult?.kind === "story") {
         if (storyEvaluationError !== null) {
@@ -2987,7 +3481,7 @@ export function bootstrapViewsPage() {
         teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
       ).find((role) => role !== undefined);
       if (attention !== undefined) {
-        step = teamAttentionText(attention, roleHasPane(attention.role, teamSnapshot?.herdr_mode), teamSnapshot?.chorus_status);
+        step = teamAttentionText(attention);
       } else if (activeEditor !== null) {
         const ed = activeEditor;
         if (ed.incomingCard !== null || ed.card.proposed_revision !== undefined) {
@@ -3026,6 +3520,20 @@ export function bootstrapViewsPage() {
     flushSync(() => {
       noticeRoot.render(
         <>
+        {sessionState === "active" || sessionState === "ended" ? (
+          <UpdateBanner
+            available={updateStatus}
+            progress={updateProgress}
+            uiBuildChanged={uiBuildChanged}
+            hasUnsavedInput={hasUnsavedPageInput()}
+            disabled={sessionState !== "active"}
+            onInstall={applyServerUpdate}
+            onCheckRestart={(targetVersion) => {
+              void waitForUpdatedServer(targetVersion);
+            }}
+            onReload={() => window.location.reload()}
+          />
+        ) : null}
         {pendingLinkFragment !== null ? (
           <Alert id="highbay-pending-link" role="status">
             <p>You opened a new Highbay link in this tab. Save or discard your edits, then choose Open link.</p>
@@ -3052,8 +3560,9 @@ export function bootstrapViewsPage() {
             snapshot={teamSnapshot}
             lastRead={teamFactsError() !== null}
             disabled={sessionState !== "active"}
-            showing={showingTeamRoles()}
-            onShowPane={showTeamPane}
+            openTerminalRole={openTerminalRole}
+            onOpenTerminal={openRoleTerminal}
+            onMessageRole={(role) => focusComposerForRole(role)}
             onFocusedControlRemoved={focusCurrentViewHeading}
           />
         ) : null}
@@ -3088,27 +3597,66 @@ export function bootstrapViewsPage() {
       "Its tests must be reported, checked and accepted again before verification.";
   }
 
-  // draftRevisionAid gives the guide the exact decisions to incorporate. It
-  // leaves the saved revision and the user's selections in place for review.
-  function draftRevisionAid(id: string, changeId: string, choices: ReturnType<typeof answersNeedingRevision>) {
+  // draftRevisionAid sends the user's selected ambiguity answers directly to
+  // Guide over Chorus (with structured revise_answers context) so Guide updates
+  // the draft without any clipboard copy-paste step.
+  function draftRevisionAid(
+    id: string,
+    changeId: string,
+    requestRevision: string,
+    answers: Record<string, string>,
+    choices: ReturnType<typeof answersNeedingRevision>
+  ) {
     if (choices.length === 0) return null;
-    const prompt = [
-      "Please revise change " + changeId + " so the draft implements these answers.",
-      ...choices.map(({ question, answer }) => question + "\n" + answer),
-      "Update the design, Story, examples, and preserved behaviors as needed. Propose the revised change for my review.",
-    ].join("\n\n");
-    const guidePane = teamFactsError() === null && roleHasPane("guide", teamSnapshot?.herdr_mode) &&
-      connectedGuide() !== undefined;
-    return <Alert id={id} tabIndex={-1} variant="warning" role="region" aria-labelledby={id + "-label"}>
-      <p id={id + "-label"}>
-        Your selected answers need a revision. Send this request to your coding agent, then review its revised draft here.
-      </p>
-      <div className="highbay-field-row">
-        <CopyPrompt text={prompt} label="Copy request for coding agent" />
-        {guidePane ? <Button disabled={hasPending("show_team_pane", "guide")}
-          onClick={() => showTeamPane("guide")}>Show coding agent pane</Button> : null}
-      </div>
-    </Alert>;
+    const needsGuide = guideRoleNeedsStart(teamSnapshot);
+    if (needsGuide && agentOptions === null && agentOptionsError === null) {
+      queueMicrotask(loadAgentOptions);
+    }
+    const sending = hasPending("send_team_message", "agree");
+    const guideInvalid =
+      needsGuide &&
+      (agentOptions === null ||
+        guideChoice === undefined ||
+        roleChoiceError(guideChoice, agentOptions.agents) !== null);
+    const context: ComposerContext = {
+      type: "revise_answers",
+      value: { change_id: changeId, request_revision: requestRevision, answers },
+    };
+    const summaryText =
+      "Please revise change " +
+      changeId +
+      " so the draft implements my attached answers, updating the design, Story, examples, and preserved behaviors as needed, then propose the revised change.";
+    return (
+      <Alert id={id} tabIndex={-1} variant="warning" role="region" aria-labelledby={id + "-label"}>
+        <p id={id + "-label"}>
+          Your selected answers differ from what this draft currently implements. Ask Guide to revise
+          the draft for your answers, then review its proposed revision here.
+        </p>
+        <div className="highbay-field-row">
+          <Button
+            id={id + "-send"}
+            variant="primary"
+            disabled={sessionState !== "active" || sending || guideInvalid}
+            onClick={() =>
+              submitTeamMessage("agree", {
+                to: "guide",
+                text: summaryText,
+                context,
+              })
+            }
+          >
+            {sending ? "Sending to Guide…" : "Revise draft for my answers"}
+          </Button>
+          <Button
+            id={id + "-compose"}
+            disabled={sessionState !== "active" || sending}
+            onClick={() => focusComposerForRole("guide", context, summaryText)}
+          >
+            Edit message first
+          </Button>
+        </div>
+      </Alert>
+    );
   }
 
   // syncEditorRegion renders saved values and drafts together when editorOpen
@@ -3138,8 +3686,13 @@ export function bootstrapViewsPage() {
             answers={ed.proposalAnswers}
             busy={editorRequest !== null}
             error={ed.proposalError}
-            revisionAid={draftRevisionAid("highbay-proposal-revision-needed", ed.card.change_id,
-              answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers))}
+            revisionAid={draftRevisionAid(
+              "highbay-proposal-revision-needed",
+              ed.card.change_id,
+              proposal.request_revision,
+              ed.proposalAnswers,
+              answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers)
+            )}
             buildRevisionNotice={buildRevisionNotice}
             onAnswer={(questionId, option) => {
               if (!activeEditor || editorRequest !== null) {
@@ -3203,8 +3756,13 @@ export function bootstrapViewsPage() {
             />
           }
           proposalWaiting={proposal !== undefined}
-          revisionAid={proposal === undefined ? draftRevisionAid("highbay-confirm-revision-needed", ed.card.change_id,
-            answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers)) : null}
+          revisionAid={proposal === undefined ? draftRevisionAid(
+            "highbay-confirm-revision-needed",
+            ed.card.change_id,
+            ed.card.request_revision,
+            ed.draftAnswers,
+            answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers)
+          ) : null}
           priorCard={ed.priorCard}
           draftAnswers={ed.draftAnswers}
           draftExamples={ed.draftExamples}
@@ -3307,6 +3865,7 @@ export function bootstrapViewsPage() {
     const res = activeResult;
     resultRegionEl.dataset.state = res.kind;
     if (res.kind === "changes") {
+      const guide = connectedGuide();
       flushSync(() => {
         resultRoot.render(
           <ChangeListView
@@ -3316,12 +3875,40 @@ export function bootstrapViewsPage() {
             openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
             openChangeId={activeEditor ? activeEditor.card.change_id : null}
             busy={editorRequest !== null}
-            guideConnected={connectedGuide() !== undefined}
-            guideInHerdr={teamSnapshot?.herdr_mode === "attached"}
-            guideState={connectedGuide()?.state ?? null}
+            guideConnected={guide !== undefined}
+            guideHasTerminal={guide?.has_terminal ?? false}
+            guideState={guide?.state ?? null}
             disabled={sessionState !== "active"}
-            showingGuide={hasPending("show_team_pane", "guide")}
-            onShowGuidePane={() => showTeamPane("guide")}
+            describeComposer={
+              <DescribeComposer
+                disabled={sessionState !== "active"}
+                sending={hasPending("send_team_message", "describe")}
+                sendError={describeSendError}
+                guideNeedsLaunch={guideRoleNeedsStart(teamSnapshot)}
+                guideChoice={guideChoice}
+                agentOptions={agentOptions?.agents ?? null}
+                agentOptionsLoading={hasPending("list_team_agent_options", "")}
+                agentOptionsError={agentOptionsError}
+                draftText={describeText}
+                onDraftTextChange={(next) => {
+                  describeText = next;
+                  syncAllRegions();
+                }}
+                onGuideChoiceChange={(choice) => {
+                  guideChoice = choice;
+                  guideChoiceEdited = true;
+                  syncAllRegions();
+                }}
+                onLoadAgentOptions={loadAgentOptions}
+                onRefreshAgentOptions={readAgentOptions}
+                onSubmit={() => {
+                  const trimmed = describeText.trim();
+                  if (trimmed === "") return;
+                  submitTeamMessage("describe", { to: "guide", text: describeText });
+                }}
+              />
+            }
+            onOpenGuideTerminal={(invoker) => openRoleTerminal("guide", invoker)}
             onOpen={openChange}
             onRetry={() => void loadChanges()}
           />
@@ -3330,20 +3917,31 @@ export function bootstrapViewsPage() {
       return;
     }
     if (res.kind === "story") {
+      const openCard = activeEditor !== null ? activeEditor.card : null;
       flushSync(() => {
         resultRoot.render(
           <StoryStageView
-            card={activeEditor !== null ? activeEditor.card : null}
+            card={openCard}
             evaluation={storyEvaluation}
             loading={hasPending("get_story_refresh", "")}
             error={storyEvaluationError}
             onRetry={readStoryEvaluation}
+            onAskAboutFlow={(storyName, flowKey) =>
+              focusComposerForRole("guide", {
+                type: "story_flow",
+                value: {
+                  ...(openCard !== null ? { change_id: openCard.change_id } : {}),
+                  story: storyName,
+                  ...(flowKey !== undefined ? { flow_key: flowKey } : {}),
+                },
+              })
+            }
           />
         );
       });
-      if (activeEditor !== null) {
-        resultRegionEl.dataset.changeId = activeEditor.card.change_id;
-        resultRegionEl.dataset.requestRevision = activeEditor.card.request_revision;
+      if (openCard !== null) {
+        resultRegionEl.dataset.changeId = openCard.change_id;
+        resultRegionEl.dataset.requestRevision = openCard.request_revision;
       }
       return;
     }
@@ -3359,12 +3957,19 @@ export function bootstrapViewsPage() {
             agentPicker={teamWorkersHaveWork() ? workerPicker("highbay-team-agents", teamWorkerRoles()) : workerRecommendations("highbay-team-agents")}
             agentsReady={workersReady(teamWorkerRoles())}
             disabled={sessionState !== "active"}
-            showing={showingTeamRoles()}
+            interruptingRoles={pendingRoleOperations("interrupt_team_role")}
+            stoppingRoles={pendingRoleOperations("stop_team_role")}
+            restartingRoles={pendingRoleOperations("restart_team_role")}
+            openTerminalRole={openTerminalRole}
             startReceipt={teamStartReceipt}
             actionError={teamActionError}
             onRefresh={readTeam}
             onStartWorkers={startTeamWorkers}
-            onShowPane={showTeamPane}
+            onOpenTerminal={openRoleTerminal}
+            onInterruptRole={interruptTeamRole}
+            onStopRole={stopTeamRole}
+            onRestartRole={restartTeamRole}
+            onMessageRole={(role) => focusComposerForRole(role)}
             onFocusedControlRemoved={focusCurrentViewHeading}
           />
         );
@@ -3421,6 +4026,16 @@ export function bootstrapViewsPage() {
                 loadingCard={editorRequest !== null}
                 cardLoadError={cardLoadErrors.get(preview.change_id) ?? null}
                 onOpenChangeCard={() => openChange(preview.change_id)}
+                onAskAboutElement={(elementId, elementName) =>
+                  focusComposerForRole("guide", {
+                    type: "architecture_element",
+                    value: {
+                      change_id: preview.change_id,
+                      element_id: elementId,
+                      element_name: elementName,
+                    },
+                  })
+                }
               />
             ) : null}
             {loading ? (
@@ -3521,7 +4136,99 @@ export function bootstrapViewsPage() {
     });
   }
 
-  // syncAllRegions synchronizes the notice, editor, result, nav, and trace regions.
+  // syncConversationRegion renders the persistent Chorus conversation rail.
+  function syncConversationRegion() {
+    if (sessionState === "starting" || sessionState === "signed-out") {
+      conversationRegionEl.hidden = true;
+      columnsEl.dataset.rail = "hidden";
+      flushSync(() => conversationRoot.render(null));
+      return;
+    }
+    conversationRegionEl.hidden = false;
+    columnsEl.dataset.rail = conversationOpen ? "open" : "collapsed";
+    flushSync(() =>
+      conversationRoot.render(
+        <ConversationRail
+          open={conversationOpen}
+          conversation={teamConversation}
+          snapshot={teamSnapshot}
+          loading={hasPending("get_team_conversation", "")}
+          sending={hasPending("send_team_message", "rail") || hasPending("send_team_message", "agree")}
+          error={conversationError}
+          sendError={composerSendError}
+          disabled={sessionState !== "active"}
+          draft={composerDraft}
+          guideChoice={guideChoice}
+          agentOptions={agentOptions?.agents ?? null}
+          agentOptionsLoading={hasPending("list_team_agent_options", "")}
+          agentOptionsError={agentOptionsError}
+          openTerminalRole={openTerminalRole}
+          onToggleOpen={() => {
+            conversationOpen = !conversationOpen;
+            syncAllRegions();
+          }}
+          onRefresh={readConversation}
+          onDraftChange={(patch) => {
+            composerDraft = { ...composerDraft, ...patch };
+            if (patch.text !== undefined) {
+              composerSendError = null;
+            }
+            syncAllRegions();
+          }}
+          onGuideChoiceChange={(choice) => {
+            guideChoice = choice;
+            guideChoiceEdited = true;
+            syncAllRegions();
+          }}
+          onLoadAgentOptions={loadAgentOptions}
+          onRefreshAgentOptions={readAgentOptions}
+          onSend={() => {
+            if (composerDraft.text.trim() === "") return;
+            submitTeamMessage("rail", {
+              to: composerDraft.to,
+              text: composerDraft.text,
+              ...(composerDraft.replyTo !== null ? { reply_to: composerDraft.replyTo } : {}),
+              ...(composerDraft.context !== null ? { context: composerDraft.context } : {}),
+            });
+          }}
+          onOpenTerminal={openRoleTerminal}
+        />
+      )
+    );
+  }
+
+  // syncTerminalRegion renders the on-demand @xterm/xterm role terminal drawer.
+  function syncTerminalRegion() {
+    if (sessionState === "starting" || sessionState === "signed-out" || openTerminalRole === null) {
+      terminalRegionEl.hidden = true;
+      flushSync(() => terminalRoot.render(null));
+      return;
+    }
+    const role = openTerminalRole;
+    terminalRegionEl.hidden = false;
+    const roleState = teamSnapshot?.roles.find((r) => r.role === role) ?? null;
+    flushSync(() =>
+      terminalRoot.render(
+        <TerminalDrawer
+          role={role}
+          roleState={roleState}
+          disabled={sessionState !== "active"}
+          interrupting={hasPending("interrupt_team_role", role)}
+          stopping={hasPending("stop_team_role", role)}
+          restarting={hasPending("restart_team_role", role)}
+          restartSeq={terminalRestartSeq[role]}
+          actionError={terminalActionError}
+          onCreateTicket={createTerminalTicket}
+          onInterrupt={interruptTeamRole}
+          onStop={stopTeamRole}
+          onRestart={restartTeamRole}
+          onClose={closeRoleTerminal}
+        />
+      )
+    );
+  }
+
+  // syncAllRegions synchronizes the notice, editor, result, conversation, terminal, nav, and trace regions.
   function syncAllRegions() {
     statusEl.toggleAttribute("data-connection-warning", waitTroubleShown);
     viewEl.classList.toggle(
@@ -3531,6 +4238,8 @@ export function bootstrapViewsPage() {
     syncNoticeRegion();
     syncEditorRegion();
     syncResultRegion();
+    syncConversationRegion();
+    syncTerminalRegion();
     syncNavRegion();
     syncTraceRegion();
     syncOpenedCheckStatus();
@@ -4378,6 +5087,7 @@ export function bootstrapViewsPage() {
       syncAllRegions();
       return;
     }
+    probeUiBuildAfterReconnect();
     if (activeEditor !== null) refreshVerificationObservations(activeEditor.card.change_id);
     startWaiting();
   });

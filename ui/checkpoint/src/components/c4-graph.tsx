@@ -35,9 +35,11 @@ interface NodePosition {
 export function C4GraphSVG({
   containers,
   edges,
+  onSelectContainer,
 }: {
   containers: C4ContainerItem[];
   edges: C4EdgeItem[];
+  onSelectContainer?: (containerId: string, containerName: string) => void;
 }) {
   const colRows = [0, 0, 0];
   const colX = [20, 290, 560];
@@ -74,7 +76,7 @@ export function C4GraphSVG({
     >
       <svg
         id="highbay-c4-svg"
-        role="img"
+        role={onSelectContainer !== undefined ? "group" : "img"}
         aria-label={
           "C4 Architecture Directed Graph (" +
           containers.length +
@@ -194,11 +196,38 @@ export function C4GraphSVG({
           return (
             <g
               key={c.id}
+              id={"highbay-c4-node-" + c.id}
               className="highbay-svg-node"
               data-container-id={c.id}
               data-container-kind={c.kind}
+              data-interactive={onSelectContainer !== undefined ? "true" : undefined}
+              role={onSelectContainer !== undefined ? "button" : undefined}
+              tabIndex={onSelectContainer !== undefined ? 0 : undefined}
+              aria-label={
+                onSelectContainer !== undefined
+                  ? "Ask Guide about " + c.name + " (" + c.id + ")"
+                  : undefined
+              }
               transform={"translate(" + pos.x + "," + pos.y + ")"}
+              onClick={
+                onSelectContainer !== undefined ? () => onSelectContainer(c.id, c.name) : undefined
+              }
+              onKeyDown={
+                onSelectContainer !== undefined
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onSelectContainer(c.id, c.name);
+                      }
+                    }
+                  : undefined
+              }
             >
+              <title>
+                {onSelectContainer !== undefined
+                  ? c.name + " (" + c.id + ") — click to ask Guide"
+                  : c.name + " (" + c.id + ")"}
+              </title>
               <rect
                 width={String(boxW)}
                 height={String(boxH)}
@@ -229,12 +258,14 @@ export function ArchitecturePreviewView({
   loadingCard,
   cardLoadError,
   onOpenChangeCard,
+  onAskAboutElement,
 }: {
   preview: ArchitecturePreviewResult;
   loadedCard: ChangeCardResult | null;
   loadingCard: boolean;
   cardLoadError: string | null;
   onOpenChangeCard: () => void;
+  onAskAboutElement?: (elementId: string, elementName: string) => void;
 }) {
   const sameCardLoaded = loadedCard !== null && loadedCard.change_id === preview.change_id;
   const differentRevision =
@@ -306,7 +337,11 @@ export function ArchitecturePreviewView({
             preview.edges.length +
             " edges)"}
         </h3>
-        <C4GraphSVG containers={preview.containers} edges={preview.edges} />
+        <C4GraphSVG
+          containers={preview.containers}
+          edges={preview.edges}
+          onSelectContainer={onAskAboutElement}
+        />
         <div className="highbay-arch-grid">
           <div className="highbay-panel-section">
             <h3>{"C4 Containers (" + preview.containers.length + ")"}</h3>
@@ -316,6 +351,19 @@ export function ArchitecturePreviewView({
                   <Badge>{c.kind}</Badge>
                   <code>{c.id}</code>
                   {" (" + c.name + "): " + c.description}
+                  {onAskAboutElement !== undefined ? (
+                    <>
+                      {" "}
+                      <Button
+                        id={"highbay-cp2-ask-" + c.id}
+                        variant="ghost"
+                        aria-label={"Ask Guide about " + c.name + " (" + c.id + ")"}
+                        onClick={() => onAskAboutElement(c.id, c.name)}
+                      >
+                        Ask Guide
+                      </Button>
+                    </>
+                  ) : null}
                 </li>
               ))}
             </ul>

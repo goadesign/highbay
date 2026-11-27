@@ -191,7 +191,7 @@ func TestTraceHistoryHTTPAndMCP(t *testing.T) {
 	require.NoError(t, err)
 	doer := generationDoer{client: srv.Client()}
 	httpTransport := genhttpclient.NewClient(origin.Scheme, origin.Host, doer,
-		goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+		goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 	client := &genhighbay.Client{ListTracesEndpoint: httpTransport.ListTraces()}
 	page, err := client.ListTraces(t.Context(), &genhighbay.ListTracesPayload{Status: "error", Limit: 20})
 	require.NoError(t, err)
@@ -310,7 +310,7 @@ func TestTraceToolExplainsMissingRecording(t *testing.T) {
 	assert.True(t, *complete.IsError)
 	require.NotEmpty(t, complete.Content)
 	require.NotNil(t, complete.Content[0].Text)
-	assert.Contains(t, *complete.Content[0].Text, "start the project with hbay")
+	assert.Contains(t, *complete.Content[0].Text, "start the project with highbay")
 	srv := httptest.NewServer(NewHTTPHandler(cp, workflowAuthenticator(map[string]Principal{
 		"generation-token": {ID: "alice@example.com"},
 	})))
@@ -807,8 +807,9 @@ func TestMCPTransportFailureAppearsInHistory(t *testing.T) {
 
 // TestUserGETRoutesOnlyRead checks the fact the history's rule for the user's
 // reads rests on, instead of trusting it: every GET route of the generated
-// HTTP server that the operation table allows to the user's session leaves the
-// project's saved files unchanged. The fixture holds a confirmed change whose
+// HTTP server that the operation table allows to the user's session, except
+// the terminal stream's WebSocket upgrade, leaves the project's saved files
+// unchanged. The fixture holds a confirmed change whose
 // build has unread assignments, the state a read that records it was read
 // would save. Every request carries since, the only required query parameter
 // of a GET route the user may call; a route that cannot be decoded fails as
@@ -832,13 +833,20 @@ func TestUserGETRoutesOnlyRead(t *testing.T) {
 		operations[codegen.Goify(name, true)] = name
 	}
 	routes := genhighbayhttp.New(genhighbay.NewEndpoints(cp), goahttp.NewMuxer(), StrictJSONRequestDecoder,
-		goahttp.ResponseEncoder, nil, nil).Mounts
+		goahttp.ResponseEncoder, nil, nil, nil, nil).Mounts
 	param := regexp.MustCompile(`\{[^}]+\}`)
 	var called []string
 	for _, route := range routes {
 		operation, ok := operations[route.Method]
 		require.True(t, ok, "mount point %s names no design method", route.Method)
 		if route.Verb != http.MethodGet || !OperationAllowed(CallerUser, operation) {
+			continue
+		}
+		// A WebSocket upgrade is sent with GET, but attach_role_terminal opens
+		// a stream that can type into a role's terminal, so it is not a read.
+		// NewHTTPHandler leaves the read mark off an upgrade, and
+		// TestRoleTerminalStream checks that the history records one.
+		if operation == "attach_role_terminal" {
 			continue
 		}
 		called = append(called, operation)

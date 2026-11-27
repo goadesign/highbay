@@ -28,7 +28,7 @@ type ApproveMergePayloadTransport struct {
 	// Full commit ID of the candidate being promoted (40 or 64 lowercase hex
 	// characters).
 	CandidateCommit *string `json:"candidate_commit"`
-	// SHA-256 digest of the CP4 verification report written by hbay verify (64
+	// SHA-256 digest of the CP4 verification report written by highbay verify (64
 	// lowercase hex characters).
 	ReportDigest *string `json:"report_digest"`
 }
@@ -5473,7 +5473,7 @@ func ValidateGetVerificationResultAgentWrittenTestsTransport(value *GetVerificat
 // GetVerificationResultBuilderVerificationReportTransport stores JSON fields until they have been validated.
 type GetVerificationResultBuilderVerificationReportTransport struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest *string `json:"report_digest"`
 	// Every declared scenario, counted by outcome.
 	Counts *GetVerificationResultVerificationCountsTransport `json:"counts"`
@@ -6182,14 +6182,14 @@ type ListChangesResultTransport struct {
 	// Opaque value for change detection. It changes whenever the listed cards, a
 	// card's get_build view (including the builder's branch head_commit and latest
 	// check), approval_available, initializing_phase, the owner's Story
-	// evaluation, get_team, or get_live_target changes; list_changes items carry
-	// no build or branch fields, so read get_build for those facts. Compare it
-	// only for equality.
+	// evaluation, get_team, get_team_conversation, or get_live_target changes;
+	// list_changes items carry no build or branch fields, so read get_build for
+	// those facts. Compare it only for equality.
 	Version *string `json:"version"`
 	// Whether approve_merge can record approvals on this server: true when the
-	// server runs Checkpoint 4 verification, as every server hbay starts does, and
-	// any stored promotion settings could be resolved; false when the server runs
-	// no verification or resolving the promotion target fails.
+	// server runs Checkpoint 4 verification, as every server highbay starts does,
+	// and any stored promotion settings could be resolved; false when the server
+	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable *bool `json:"approval_available"`
 	// What init_project is doing now, as a short sentence for the user, such as
 	// "Resolving the service's Go modules"; absent when no initialization is
@@ -6740,7 +6740,7 @@ func ValidateListVerificationsResultAgentWrittenTestsTransport(value *ListVerifi
 // ListVerificationsResultBuilderVerificationReportTransport stores JSON fields until they have been validated.
 type ListVerificationsResultBuilderVerificationReportTransport struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest *string `json:"report_digest"`
 	// Every declared scenario, counted by outcome.
 	Counts *ListVerificationsResultVerificationCountsTransport `json:"counts"`
@@ -7148,6 +7148,13 @@ type OpenViewsResultTransport struct {
 	Opened *bool `json:"opened"`
 	// Safe handoff result without a URL or credential.
 	Message *string `json:"message"`
+	// Stable Chorus swarm name for this project.
+	Team *string `json:"team"`
+	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	Channel *string `json:"channel"`
+	// Registered Chorus handle for this project's guide (empty when no guide is
+	// registered yet).
+	Handle *string `json:"handle"`
 }
 
 // ValidateOpenViewsResultTransport checks decoded JSON before it becomes a service value.
@@ -7160,6 +7167,15 @@ func ValidateOpenViewsResultTransport(value *OpenViewsResultTransport) (err erro
 	}
 	if value.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if value.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if value.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
 	return err
 }
@@ -9203,7 +9219,7 @@ func ValidateReviewVerificationResultApprovalItemTransport(value *ReviewVerifica
 // ReviewVerificationResultBuilderVerificationReportTransport stores JSON fields until they have been validated.
 type ReviewVerificationResultBuilderVerificationReportTransport struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest *string `json:"report_digest"`
 	// Every declared scenario, counted by outcome.
 	Counts *ReviewVerificationResultVerificationCountsTransport `json:"counts"`
@@ -11500,7 +11516,7 @@ func ValidateVerifyChangeResultAgentWrittenTestsTransport(value *VerifyChangeRes
 // VerifyChangeResultBuilderVerificationReportTransport stores JSON fields until they have been validated.
 type VerifyChangeResultBuilderVerificationReportTransport struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest *string `json:"report_digest"`
 	// Every declared scenario, counted by outcome.
 	Counts *VerifyChangeResultVerificationCountsTransport `json:"counts"`
@@ -18144,6 +18160,9 @@ func EncodeOpenViewsResult(in *highbay.OpenViewsResult) ([]byte, error) {
 		body = &OpenViewsResultTransport{
 			Opened:  &in.Opened,
 			Message: &in.Message,
+			Team:    &in.Team,
+			Channel: &in.Channel,
+			Handle:  &in.Handle,
 		}
 	}
 	if err := ValidateOpenViewsResultTransport(body); err != nil {

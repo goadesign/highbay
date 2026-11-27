@@ -43,6 +43,18 @@ type Client struct {
 	// exchange_browser_link endpoint.
 	ExchangeBrowserLinkDoer goahttp.Doer
 
+	// GetBrowserSession Doer is the HTTP client used to make requests to the
+	// get_browser_session endpoint.
+	GetBrowserSessionDoer goahttp.Doer
+
+	// GetUpdateStatus Doer is the HTTP client used to make requests to the
+	// get_update_status endpoint.
+	GetUpdateStatusDoer goahttp.Doer
+
+	// ApplyUpdate Doer is the HTTP client used to make requests to the
+	// apply_update endpoint.
+	ApplyUpdateDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -70,6 +82,9 @@ func NewClient(
 		StopDoer:                doer,
 		BrowserLinkDoer:         doer,
 		ExchangeBrowserLinkDoer: doer,
+		GetBrowserSessionDoer:   doer,
+		GetUpdateStatusDoer:     doer,
+		ApplyUpdateDoer:         doer,
 		RestoreResponseBody:     restoreBody,
 		scheme:                  scheme,
 		host:                    host,
@@ -216,6 +231,68 @@ func (c *Client) ExchangeBrowserLink() goa.Endpoint {
 		resp, err := c.ExchangeBrowserLinkDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("project", "exchange_browser_link", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetBrowserSession returns an endpoint that makes HTTP requests to the
+// project service get_browser_session server.
+func (c *Client) GetBrowserSession() goa.Endpoint {
+	var (
+		decodeResponse = DecodeGetBrowserSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetBrowserSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetBrowserSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("project", "get_browser_session", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUpdateStatus returns an endpoint that makes HTTP requests to the project
+// service get_update_status server.
+func (c *Client) GetUpdateStatus() goa.Endpoint {
+	var (
+		decodeResponse = DecodeGetUpdateStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUpdateStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUpdateStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("project", "get_update_status", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ApplyUpdate returns an endpoint that makes HTTP requests to the project
+// service apply_update server.
+func (c *Client) ApplyUpdate() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeApplyUpdateRequest(c.encoder)
+		decodeResponse = DecodeApplyUpdateResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildApplyUpdateRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ApplyUpdateDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("project", "apply_update", err)
 		}
 		return decodeResponse(resp)
 	}

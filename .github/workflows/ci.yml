@@ -187,3 +187,6 @@ jobs:
 
       - name: Test generated page contract consumers
         run: node --test ui/checkpoint/build_test.mjs </dev/null
+
+      - name: Test Highbay npm launcher
+        run: node --test npm/highbay/test_cli.mjs </dev/null

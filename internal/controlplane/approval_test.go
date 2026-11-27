@@ -294,7 +294,7 @@ func TestApproveMergeRecordsApprovalOnlyForTheCheckedRevision(t *testing.T) {
 		assert.Contains(t, read.UnverifiedApproval.Reason, "in a folder named after the commit")
 		assert.Contains(t, read.UnverifiedApproval.Reason, "Check current approval")
 		assert.Contains(t, read.UnverifiedApproval.Reason, "Approve this result")
-		assert.Contains(t, read.UnverifiedApproval.Reason, "hbay promotion remove")
+		assert.Contains(t, read.UnverifiedApproval.Reason, "highbay promotion remove")
 		assert.NotContains(t, read.UnverifiedApproval.Reason, "/")
 		assert.NotContains(t, read.UnverifiedApproval.Reason, "get_change")
 		assert.NotContains(t, read.UnverifiedApproval.Reason, "approve_merge")
@@ -1071,7 +1071,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		assert.Contains(t, got.UnverifiedApproval.Reason, "in a folder named after the commit")
 		assert.Contains(t, got.UnverifiedApproval.Reason, "Check current approval")
 		assert.Contains(t, got.UnverifiedApproval.Reason, "Approve this result")
-		assert.Contains(t, got.UnverifiedApproval.Reason, "hbay promotion remove")
+		assert.Contains(t, got.UnverifiedApproval.Reason, "highbay promotion remove")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, "get_change")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, "approve_merge")
 		assert.NotContains(t, got.UnverifiedApproval.Reason, "/")
@@ -1090,7 +1090,7 @@ func TestCurrentCardAllFiveApprovalStatesAndSpanRecording(t *testing.T) {
 		assert.Contains(t, sp.attrs, attribute.String("highbay.candidate_commit", commit))
 	}
 
-	// State 5: absent target (server restarted after `hbay promotion remove`):
+	// State 5: absent target (server restarted after `highbay promotion remove`):
 	// without promotion settings, the saved approval remains valid while the
 	// chosen tests' commit still matches.
 	require.NoError(t, cp.Close())

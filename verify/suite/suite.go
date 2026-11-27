@@ -1,13 +1,13 @@
 // Package suite implements Highbay's evaluator suite command contract: the
-// protocol between `hbay verify` and an evaluator suite program.
+// protocol between `highbay verify` and an evaluator suite program.
 //
-// `hbay verify` builds the suite program from the suite commit and runs it
+// `highbay verify` builds the suite program from the suite commit and runs it
 // twice:
 //
 //   - suite --describe prints the suite's Declaration as JSON and exits 0. It
 //     needs no candidate binaries.
 //   - suite --artifact name=path ... receives every candidate binary the
-//     verification plan binds (`hbay verify -binary name=package`). The suite
+//     verification plan binds (`highbay verify -binary name=package`). The suite
 //     pins each one, runs its scenarios, and prints the goa-ai eval.Report as
 //     JSON. It exits 0 when every scenario passed and the pinned binaries
 //     were removed, 1 when a scenario did not pass, and 2 when it could not

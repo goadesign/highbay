@@ -15,31 +15,32 @@ import (
 	io "io"
 	sort "sort"
 	strconv "strconv"
-	utf8 "unicode/utf8"
+	"unicode/utf8"
 
 	goa "goa.design/goa/v3/pkg"
 )
 
-// Owns one local project's server identity, agent credentials, and one-use
-// browser access. Management credentials last for one listening server and
-// never authorize application decisions; besides this service, they may only
-// hand over the model provider request settings of the shell running hbay (the
-// highbay service's hand_over_model_settings). This service is not exposed as
-// agent tools.
+// Owns one local project's server identity, agent credentials, self-update
+// lifecycle, and origin-scoped browser session. Management credentials last
+// for one listening server and never authorize application decisions; besides
+// this service, they may only hand over the model provider request settings of
+// the shell running highbay (the highbay service's hand_over_model_settings).
+// This service is not exposed as agent tools.
 type Service interface {
-	// The CLI checks the answering server reports its expected project identity
-	// using the current server-lifetime management credential.
+	// The CLI checks that the answering server reports its expected project
+	// identity using the current server-lifetime management credential.
 	Identity(context.Context) (res *ProjectIdentity, err error)
 	// Read existing project team metadata with the management credential. Creates
-	// no team, credential, space, roster or agent and opens no window. This
-	// management operation is never an MCP tool.
+	// no team, credential, or agent. This management operation is never an MCP
+	// tool.
 	EnsureTeam(context.Context) (res *ProjectTeam, err error)
-	// Attach the invoking coding agent as this project's guide. A live Herdr
-	// terminal is adopted only when session lineage, model pane, local project
-	// directory, client family and labels match. Omit terminal identity outside
-	// Herdr. Never opens a launcher.
+	// Attach the invoking coding agent session as this project's guide. When the
+	// invoking session runs inside a live herdr-core (hc) terminal in the project
+	// folder, Highbay labels that terminal for team supervision and Chorus
+	// turn-boundary wakes; external IDE sessions register without a managed
+	// terminal.
 	AttachGuide(context.Context, *AttachGuidePayload) (res *AttachGuideResult, err error)
-	// Read existing project, saved change stage and observed role state. Creates
+	// Read existing project, saved change stage, and observed role state. Creates
 	// nothing and starts no agent. Merge status uses the build owner's read-only
 	// Git checks, including a manual merge into the project branch.
 	Status(context.Context) (res *ProjectStatus, err error)
@@ -50,10 +51,21 @@ type Service interface {
 	// The CLI mints a short-lived single-use browser link. The URL is the only
 	// credential allowed in a browser-launch command line.
 	BrowserLink(context.Context) (res *BrowserLinkResult, err error)
-	// The browser exchanges the single-use link once for an in-memory user
-	// session. The session is never a cookie or stored on disk and is sent only to
-	// this server address.
-	ExchangeBrowserLink(context.Context, *ExchangeBrowserLinkPayload) (res *ExchangeBrowserLinkResult, err error)
+	// The browser exchanges a single-use launch link once for an origin-scoped
+	// Bearer session credential and project folder name.
+	ExchangeBrowserLink(context.Context, *ExchangeBrowserLinkPayload) (res *BrowserSessionResult, err error)
+	// Validate an existing origin-scoped Bearer browser session credential across
+	// page reloads and sibling tabs and return its project folder name, server
+	// version, and UI bundle digest.
+	GetBrowserSession(context.Context) (res *BrowserSessionResult, err error)
+	// Check GitHub Releases for a newer stable Highbay version and report whether
+	// this running server can self-update and restart in place.
+	GetUpdateStatus(context.Context) (res *UpdateStatusResult, err error)
+	// Install the exact approved Highbay release version (via Homebrew or
+	// SHA-256-verified release archive), refresh companions and global MCP
+	// registrations, and re-execute highbay serve in place while preserving the
+	// active browser session and in-memory model settings.
+	ApplyUpdate(context.Context, *ApplyUpdatePayload) (res *ApplyUpdateResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -70,12 +82,29 @@ const ServiceName = "project"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"identity", "ensure_team", "attach_guide", "status", "stop", "browser_link", "exchange_browser_link"}
+var MethodNames = [10]string{"identity", "ensure_team", "attach_guide", "status", "stop", "browser_link", "exchange_browser_link", "get_browser_session", "get_update_status", "apply_update"}
+
+// ApplyUpdatePayload is the payload type of the project service apply_update
+// method.
+type ApplyUpdatePayload struct {
+	// Approved target release version (for example 0.5.1 or v0.5.1).
+	Version string
+}
+
+// ApplyUpdateResult is the result type of the project service apply_update
+// method.
+type ApplyUpdateResult struct {
+	// restarting when the new binary was installed and the server is re-executing
+	// in place; up_to_date when the running server already matches version.
+	Status string
+	// Target release version with leading v (for example v0.5.1).
+	Version string
+}
 
 // AttachGuidePayload is the payload type of the project service attach_guide
 // method.
 type AttachGuidePayload struct {
-	// Invoking local Herdr terminal identity.
+	// Invoking local herdr-core terminal identity when present in the environment.
 	HcTerminalID *string
 	// Invoking coding-agent client.
 	Client *string
@@ -90,10 +119,8 @@ type AttachGuideResult struct {
 	Team string
 	// Guide's registered Chorus handle.
 	Handle string
-	// Whether the invoking terminal was adopted.
-	AdoptedHerdr bool
-	// Current desktop attachment.
-	HerdrMode string
+	// Whether a live herdr-core terminal was matched and labeled for this guide.
+	HasTerminal bool
 }
 
 // BrowserLinkResult is the result type of the project service browser_link
@@ -105,21 +132,28 @@ type BrowserLinkResult struct {
 	ExpiresAt string
 }
 
+// BrowserSessionResult is the result type of the project service
+// exchange_browser_link method.
+type BrowserSessionResult struct {
+	// Bearer session credential stored in origin-scoped localStorage and sent in
+	// Authorization: Bearer.
+	Session string
+	// Base name of the physical project folder, without its path, for this page
+	// session.
+	ProjectName string
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	Version string
+	// Base64 SHA-256 digest of the inline /views bundle served by this running
+	// server, allowing open tabs to detect UI changes across server restarts.
+	UIBuild string
+}
+
 // ExchangeBrowserLinkPayload is the payload type of the project service
 // exchange_browser_link method.
 type ExchangeBrowserLinkPayload struct {
 	// Unexpired single-use link value.
 	Link string
-}
-
-// ExchangeBrowserLinkResult is the result type of the project service
-// exchange_browser_link method.
-type ExchangeBrowserLinkResult struct {
-	// User session kept only in the page's memory.
-	Session string
-	// Base name of the physical project folder, without its path, for this page
-	// session.
-	ProjectName string
 }
 
 // ProjectIdentity is the result type of the project service identity method.
@@ -130,11 +164,15 @@ type ProjectIdentity struct {
 	Directory string
 	// Immutable operating-system account identity.
 	Owner string
-	// SHA-256 of the hbay executable the server started from, read when it
+	// SHA-256 of the highbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and hbay stop must still reach them, so it is not required.
+	// field omit it, and highbay stop must still reach them, so it is not required.
 	Build *string
+	// Version reported by the running highbay executable (for example v0.5.0 or
+	// (devel)). Servers built before this field omit it so highbay stop and
+	// highbay update can still reach them.
+	Version *string
 }
 
 // ProjectStatus is the result type of the project service status method.
@@ -145,8 +183,6 @@ type ProjectStatus struct {
 	Directory string
 	// Stable project team name.
 	Team string
-	// Current desktop attachment.
-	HerdrMode string
 	// Current saved stage.
 	Stage string
 	// Current change identifier, empty when none exists.
@@ -163,64 +199,101 @@ type ProjectStatus struct {
 type ProjectTeam struct {
 	// Stable Chorus team name.
 	Team string
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space string
+	// Observed state of each registered project role.
 	Roles []*ProjectTeamRole
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode string
 	// What the user does next for the prepared team.
 	Step string
 }
 
+// Observed identity and terminal liveness of one registered project role.
 type ProjectTeamRole struct {
 	// Trusted role.
 	Role string
 	// Stable Chorus handle and Highbay actor identity.
 	Handle string
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal bool
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running bool
 }
 
+// Selected coding-agent CLI executable, optional model/reasoning settings, and
+// unattended permission switch for one project role.
+type RoleAgentChoice struct {
+	// Installed coding-agent client family.
+	Client string
+	// Installed executable selected from list_team_agent_options.
+	Program string
+	// Optional client-supported model.
+	Model *string
+	// Optional client-supported reasoning effort.
+	Thinking *string
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo bool
+}
+
+// Observed terminal, Chorus liveness, attention, and assignment state of one
+// registered project role.
 type TeamRoleState struct {
 	// Registered role.
 	Role string
 	// Registered Chorus handle.
 	Handle string
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal bool
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State string
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention string
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher string
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment string
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *RoleAgentChoice
 }
 
+// Structured failure cause returned when project team preparation or agent
+// launch cannot proceed.
 type TeamUnavailable struct {
 	// Error name.
 	Name string
 	// What could not be used: stopping (the server is shutting down), chorus (the
-	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Highbay no longer accepts and is still open), roster_folder
-	// (Herdr's launcher roster folder could not be written), project_state (the
-	// project's private record or an agent credential could not be read or
-	// written), or role_folder (a role's working folder could not be read).
+	// local Chorus server is unavailable), hc (herdr-core is unavailable or a
+	// terminal command failed), project_state (the project's private record or an
+	// agent credential could not be read or written), or role_folder (a role's
+	// working folder could not be prepared).
 	Cause string
+}
+
+// UpdateStatusResult is the result type of the project service
+// get_update_status method.
+type UpdateStatusResult struct {
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	CurrentVersion string
+	// Newest stable Highbay release version published on GitHub (with leading v,
+	// for example v0.5.1).
+	LatestVersion string
+	// True when latest_version is newer than current_version.
+	UpdateAvailable bool
+	// HTTPS URL of the latest GitHub release notes.
+	ReleaseURL string
+	// True when this running server can install the release binary or Homebrew
+	// upgrade and restart in place.
+	CanAutoUpdate bool
+	// Shell command to update manually when can_auto_update is false (for example
+	// go install or npm install -g).
+	ManualCommand *string
 }
 
 // Error returns an error description.
 func (e *TeamUnavailable) Error() string {
-	return ""
+	return "Structured failure cause returned when project team preparation or agent launch cannot proceed."
 }
 
 // ErrorName returns the error name.
@@ -245,6 +318,110 @@ func MakeUnprocessable(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unprocessable", false, false, false)
 }
 
+// MakeUnauthorized builds a goa.ServiceError from an error.
+func MakeUnauthorized(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unauthorized", false, false, false)
+}
+
+// MakeReleaseUnavailable builds a goa.ServiceError from an error.
+func MakeReleaseUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "release_unavailable", false, false, false)
+}
+
+// MakeConflict builds a goa.ServiceError from an error.
+func MakeConflict(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "conflict", false, false, false)
+}
+
+// jsonApplyUpdateResultTransport stores JSON fields until they have been validated.
+type jsonApplyUpdateResultTransport struct {
+	// restarting when the new binary was installed and the server is re-executing
+	// in place; up_to_date when the running server already matches version.
+	Status *string `json:"status"`
+	// Target release version with leading v (for example v0.5.1).
+	Version *string `json:"version"`
+}
+
+// validatejsonApplyUpdateResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonApplyUpdateResultTransport(value *jsonApplyUpdateResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if value.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if value.Status != nil {
+		if !(*value.Status == "restarting" || *value.Status == "up_to_date") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *value.Status, []any{"restarting", "up_to_date"}))
+		}
+	}
+	if value.Version != nil {
+		if utf8.RuneCountInString(*value.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *value.Version, utf8.RuneCountInString(*value.Version), 1, true))
+		}
+	}
+	return err
+}
+
+// jsonBrowserSessionResultTransport stores JSON fields until they have been validated.
+type jsonBrowserSessionResultTransport struct {
+	// Bearer session credential stored in origin-scoped localStorage and sent in
+	// Authorization: Bearer.
+	Session *string `json:"session"`
+	// Base name of the physical project folder, without its path, for this page
+	// session.
+	ProjectName *string `json:"project_name"`
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	Version *string `json:"version"`
+	// Base64 SHA-256 digest of the inline /views bundle served by this running
+	// server, allowing open tabs to detect UI changes across server restarts.
+	UIBuild *string `json:"ui_build"`
+}
+
+// validatejsonBrowserSessionResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonBrowserSessionResultTransport(value *jsonBrowserSessionResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Session == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session", "body"))
+	}
+	if value.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if value.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if value.UIBuild == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ui_build", "body"))
+	}
+	if value.Session != nil {
+		if utf8.RuneCountInString(*value.Session) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session", *value.Session, utf8.RuneCountInString(*value.Session), 16, true))
+		}
+	}
+	if value.ProjectName != nil {
+		if utf8.RuneCountInString(*value.ProjectName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.project_name", *value.ProjectName, utf8.RuneCountInString(*value.ProjectName), 1, true))
+		}
+	}
+	if value.Version != nil {
+		if utf8.RuneCountInString(*value.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *value.Version, utf8.RuneCountInString(*value.Version), 1, true))
+		}
+	}
+	if value.UIBuild != nil {
+		if utf8.RuneCountInString(*value.UIBuild) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ui_build", *value.UIBuild, utf8.RuneCountInString(*value.UIBuild), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonProjectIdentityTransport stores JSON fields until they have been validated.
 type jsonProjectIdentityTransport struct {
 	// Stable private project identifier.
@@ -253,11 +430,15 @@ type jsonProjectIdentityTransport struct {
 	Directory *string `json:"directory"`
 	// Immutable operating-system account identity.
 	Owner *string `json:"owner"`
-	// SHA-256 of the hbay executable the server started from, read when it
+	// SHA-256 of the highbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and hbay stop must still reach them, so it is not required.
+	// field omit it, and highbay stop must still reach them, so it is not required.
 	Build *string `json:"build,omitempty"`
+	// Version reported by the running highbay executable (for example v0.5.0 or
+	// (devel)). Servers built before this field omit it so highbay stop and
+	// highbay update can still reach them.
+	Version *string `json:"version,omitempty"`
 }
 
 // validatejsonProjectIdentityTransport checks decoded JSON before it becomes a service value.
@@ -277,6 +458,11 @@ func validatejsonProjectIdentityTransport(value *jsonProjectIdentityTransport) (
 	if value.Build != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.build", *value.Build, "^[0-9a-f]{64}$"))
 	}
+	if value.Version != nil {
+		if utf8.RuneCountInString(*value.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *value.Version, utf8.RuneCountInString(*value.Version), 1, true))
+		}
+	}
 	return err
 }
 
@@ -288,8 +474,6 @@ type jsonProjectStatusTransport struct {
 	Directory *string `json:"directory"`
 	// Stable project team name.
 	Team *string `json:"team"`
-	// Current desktop attachment.
-	HerdrMode *string `json:"herdr_mode"`
 	// Current saved stage.
 	Stage *string `json:"stage"`
 	// Current change identifier, empty when none exists.
@@ -316,9 +500,6 @@ func validatejsonProjectStatusTransport(value *jsonProjectStatusTransport) (err 
 	if value.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if value.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
-	}
 	if value.Stage == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
 	}
@@ -333,11 +514,6 @@ func validatejsonProjectStatusTransport(value *jsonProjectStatusTransport) (err 
 	}
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if value.HerdrMode != nil {
-		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
-		}
 	}
 	if value.Stage != nil {
 		if !(*value.Stage == "describe" || *value.Stage == "agree" || *value.Stage == "build" || *value.Stage == "check" || *value.Stage == "approve" || *value.Stage == "merged") {
@@ -360,8 +536,10 @@ type jsonProjectTeamRoleTransport struct {
 	Role *string `json:"role"`
 	// Stable Chorus handle and Highbay actor identity.
 	Handle *string `json:"handle"`
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal *bool `json:"has_terminal"`
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running *bool `json:"running"`
 }
 
@@ -375,6 +553,9 @@ func validatejsonProjectTeamRoleTransport(value *jsonProjectTeamRoleTransport) (
 	}
 	if value.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if value.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
 	}
 	if value.Running == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("running", "body"))
@@ -391,11 +572,8 @@ func validatejsonProjectTeamRoleTransport(value *jsonProjectTeamRoleTransport) (
 type jsonProjectTeamTransport struct {
 	// Stable Chorus team name.
 	Team *string `json:"team"`
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space *string                         `json:"space"`
+	// Observed state of each registered project role.
 	Roles []*jsonProjectTeamRoleTransport `json:"roles"`
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode *string `json:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step *string `json:"step"`
 }
@@ -408,14 +586,8 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if value.Space == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("space", "body"))
-	}
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if value.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if value.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -423,22 +595,11 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
-	if value.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-		if utf8.RuneCountInString(*value.Space) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 64, false))
-		}
-	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validatejsonProjectTeamRoleTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if value.HerdrMode != nil {
-		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if value.Step != nil {
@@ -452,28 +613,68 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	return err
 }
 
+// jsonRoleAgentChoiceTransport stores JSON fields until they have been validated.
+type jsonRoleAgentChoiceTransport struct {
+	// Installed coding-agent client family.
+	Client *string `json:"client"`
+	// Installed executable selected from list_team_agent_options.
+	Program *string `json:"program"`
+	// Optional client-supported model.
+	Model *string `json:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `json:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo *bool `json:"yolo"`
+}
+
+// validatejsonRoleAgentChoiceTransport checks decoded JSON before it becomes a service value.
+func validatejsonRoleAgentChoiceTransport(value *jsonRoleAgentChoiceTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if value.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if value.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", "body"))
+	}
+	if value.Client != nil {
+		if !(*value.Client == "claude" || *value.Client == "codex" || *value.Client == "antigravity" || *value.Client == "cursor" || *value.Client == "gemini" || *value.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *value.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if value.Program != nil {
+		if utf8.RuneCountInString(*value.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.program", *value.Program, utf8.RuneCountInString(*value.Program), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonTeamRoleStateTransport stores JSON fields until they have been validated.
 type jsonTeamRoleStateTransport struct {
 	// Registered role.
 	Role *string `json:"role"`
 	// Registered Chorus handle.
 	Handle *string `json:"handle"`
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal *bool `json:"has_terminal"`
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `json:"state"`
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention *string `json:"attention"`
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher *string `json:"watcher"`
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment *string `json:"assignment"`
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *jsonRoleAgentChoiceTransport `json:"choice,omitempty"`
 }
 
 // validatejsonTeamRoleStateTransport checks decoded JSON before it becomes a service value.
@@ -487,14 +688,14 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 	if value.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
+	if value.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
+	}
 	if value.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
 	if value.Attention == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
-	}
-	if value.Watcher == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", "body"))
 	}
 	if value.Assignment == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", "body"))
@@ -510,18 +711,18 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 		}
 	}
 	if value.Attention != nil {
-		if !(*value.Attention == "none" || *value.Attention == "permission" || *value.Attention == "question" || *value.Attention == "auth" || *value.Attention == "silent" || *value.Attention == "assignment" || *value.Attention == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *value.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-		}
-	}
-	if value.Watcher != nil {
-		if !(*value.Watcher == "held" || *value.Watcher == "gone" || *value.Watcher == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.watcher", *value.Watcher, []any{"held", "gone", "unknown"}))
+		if !(*value.Attention == "none" || *value.Attention == "permission" || *value.Attention == "question" || *value.Attention == "auth" || *value.Attention == "silent" || *value.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *value.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 		}
 	}
 	if value.Assignment != nil {
 		if !(*value.Assignment == "unread" || *value.Assignment == "nothing_owed" || *value.Assignment == "no_work" || *value.Assignment == "unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+		}
+	}
+	if value.Choice != nil {
+		if err2 := validatejsonRoleAgentChoiceTransport(value.Choice); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return err
@@ -532,12 +733,10 @@ type jsonTeamUnavailableTransport struct {
 	// Error name.
 	Name *string `json:"name"`
 	// What could not be used: stopping (the server is shutting down), chorus (the
-	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Highbay no longer accepts and is still open), roster_folder
-	// (Herdr's launcher roster folder could not be written), project_state (the
-	// project's private record or an agent credential could not be read or
-	// written), or role_folder (a role's working folder could not be read).
+	// local Chorus server is unavailable), hc (herdr-core is unavailable or a
+	// terminal command failed), project_state (the project's private record or an
+	// agent credential could not be read or written), or role_folder (a role's
+	// working folder could not be prepared).
 	Cause *string `json:"cause"`
 }
 
@@ -553,9 +752,100 @@ func validatejsonTeamUnavailableTransport(value *jsonTeamUnavailableTransport) (
 		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
 	}
 	if value.Cause != nil {
-		if !(*value.Cause == "stopping" || *value.Cause == "chorus" || *value.Cause == "herdr" || *value.Cause == "saved_space" || *value.Cause == "roster_folder" || *value.Cause == "project_state" || *value.Cause == "role_folder") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *value.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
+		if !(*value.Cause == "stopping" || *value.Cause == "chorus" || *value.Cause == "hc" || *value.Cause == "project_state" || *value.Cause == "role_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *value.Cause, []any{"stopping", "chorus", "hc", "project_state", "role_folder"}))
 		}
+	}
+	return err
+}
+
+// jsonUpdateStatusResultTransport stores JSON fields until they have been validated.
+type jsonUpdateStatusResultTransport struct {
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	CurrentVersion *string `json:"current_version"`
+	// Newest stable Highbay release version published on GitHub (with leading v,
+	// for example v0.5.1).
+	LatestVersion *string `json:"latest_version"`
+	// True when latest_version is newer than current_version.
+	UpdateAvailable *bool `json:"update_available"`
+	// HTTPS URL of the latest GitHub release notes.
+	ReleaseURL *string `json:"release_url"`
+	// True when this running server can install the release binary or Homebrew
+	// upgrade and restart in place.
+	CanAutoUpdate *bool `json:"can_auto_update"`
+	// Shell command to update manually when can_auto_update is false (for example
+	// go install or npm install -g).
+	ManualCommand *string `json:"manual_command,omitempty"`
+}
+
+// validatejsonUpdateStatusResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonUpdateStatusResultTransport(value *jsonUpdateStatusResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if value.LatestVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("latest_version", "body"))
+	}
+	if value.UpdateAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("update_available", "body"))
+	}
+	if value.ReleaseURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("release_url", "body"))
+	}
+	if value.CanAutoUpdate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_auto_update", "body"))
+	}
+	if value.CurrentVersion != nil {
+		if utf8.RuneCountInString(*value.CurrentVersion) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.current_version", *value.CurrentVersion, utf8.RuneCountInString(*value.CurrentVersion), 1, true))
+		}
+	}
+	if value.LatestVersion != nil {
+		if utf8.RuneCountInString(*value.LatestVersion) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.latest_version", *value.LatestVersion, utf8.RuneCountInString(*value.LatestVersion), 1, true))
+		}
+	}
+	if value.ReleaseURL != nil {
+		if utf8.RuneCountInString(*value.ReleaseURL) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.release_url", *value.ReleaseURL, utf8.RuneCountInString(*value.ReleaseURL), 1, true))
+		}
+	}
+	if value.ManualCommand != nil {
+		if utf8.RuneCountInString(*value.ManualCommand) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.manual_command", *value.ManualCommand, utf8.RuneCountInString(*value.ManualCommand), 1, true))
+		}
+	}
+	return err
+}
+
+// validateApplyUpdateResultOriginal checks the original typed value before JSON conversion.
+func validateApplyUpdateResultOriginal(value *ApplyUpdateResult) (err error) {
+	if !(value.Status == "restarting" || value.Status == "up_to_date") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.status", value.Status, []any{"restarting", "up_to_date"}))
+	}
+	if utf8.RuneCountInString(value.Version) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.version", value.Version, utf8.RuneCountInString(value.Version), 1, true))
+	}
+	return err
+}
+
+// validateBrowserSessionResultOriginal checks the original typed value before JSON conversion.
+func validateBrowserSessionResultOriginal(value *BrowserSessionResult) (err error) {
+	if utf8.RuneCountInString(value.Session) < 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.session", value.Session, utf8.RuneCountInString(value.Session), 16, true))
+	}
+	if utf8.RuneCountInString(value.ProjectName) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.project_name", value.ProjectName, utf8.RuneCountInString(value.ProjectName), 1, true))
+	}
+	if utf8.RuneCountInString(value.Version) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.version", value.Version, utf8.RuneCountInString(value.Version), 1, true))
+	}
+	if utf8.RuneCountInString(value.UIBuild) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.ui_build", value.UIBuild, utf8.RuneCountInString(value.UIBuild), 1, true))
 	}
 	return err
 }
@@ -565,6 +855,11 @@ func validateProjectIdentityOriginal(value *ProjectIdentity) (err error) {
 	if value.Build != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("value.build", *value.Build, "^[0-9a-f]{64}$"))
 	}
+	if value.Version != nil {
+		if utf8.RuneCountInString(*value.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("value.version", *value.Version, utf8.RuneCountInString(*value.Version), 1, true))
+		}
+	}
 	return err
 }
 
@@ -572,9 +867,6 @@ func validateProjectIdentityOriginal(value *ProjectIdentity) (err error) {
 func validateProjectStatusOriginal(value *ProjectStatus) (err error) {
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
-	}
-	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
 	}
 	if !(value.Stage == "describe" || value.Stage == "agree" || value.Stage == "build" || value.Stage == "check" || value.Stage == "approve" || value.Stage == "merged") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.stage", value.Stage, []any{"describe", "agree", "build", "check", "approve", "merged"}))
@@ -597,14 +889,27 @@ func validateTeamRoleStateOriginal(value *TeamRoleState) (err error) {
 	if !(value.State == "not_started" || value.State == "ended" || value.State == "starting" || value.State == "needs_you" || value.State == "working" || value.State == "waiting" || value.State == "error" || value.State == "unknown") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.state", value.State, []any{"not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown"}))
 	}
-	if !(value.Attention == "none" || value.Attention == "permission" || value.Attention == "question" || value.Attention == "auth" || value.Attention == "silent" || value.Attention == "assignment" || value.Attention == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.attention", value.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-	}
-	if !(value.Watcher == "held" || value.Watcher == "gone" || value.Watcher == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.watcher", value.Watcher, []any{"held", "gone", "unknown"}))
+	if !(value.Attention == "none" || value.Attention == "permission" || value.Attention == "question" || value.Attention == "auth" || value.Attention == "silent" || value.Attention == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.attention", value.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 	}
 	if !(value.Assignment == "unread" || value.Assignment == "nothing_owed" || value.Assignment == "no_work" || value.Assignment == "unknown") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.assignment", value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+	}
+	if value.Choice != nil {
+		if err2 := validateRoleAgentChoiceOriginal(value.Choice); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return err
+}
+
+// validateRoleAgentChoiceOriginal checks the original typed value before JSON conversion.
+func validateRoleAgentChoiceOriginal(value *RoleAgentChoice) (err error) {
+	if !(value.Client == "claude" || value.Client == "codex" || value.Client == "antigravity" || value.Client == "cursor" || value.Client == "gemini" || value.Client == "opencode") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.client", value.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+	}
+	if utf8.RuneCountInString(value.Program) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.program", value.Program, utf8.RuneCountInString(value.Program), 1, true))
 	}
 	return err
 }
@@ -615,19 +920,12 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.team", value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-	if utf8.RuneCountInString(value.Space) > 64 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 64, false))
-	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleOriginal(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
 	}
 	if utf8.RuneCountInString(value.Step) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", value.Step, utf8.RuneCountInString(value.Step), 1, true))
@@ -648,10 +946,207 @@ func validateProjectTeamRoleOriginal(value *ProjectTeamRole) (err error) {
 
 // validateTeamUnavailableOriginal checks the original typed value before JSON conversion.
 func validateTeamUnavailableOriginal(value *TeamUnavailable) (err error) {
-	if !(value.Cause == "stopping" || value.Cause == "chorus" || value.Cause == "herdr" || value.Cause == "saved_space" || value.Cause == "roster_folder" || value.Cause == "project_state" || value.Cause == "role_folder") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.cause", value.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
+	if !(value.Cause == "stopping" || value.Cause == "chorus" || value.Cause == "hc" || value.Cause == "project_state" || value.Cause == "role_folder") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.cause", value.Cause, []any{"stopping", "chorus", "hc", "project_state", "role_folder"}))
 	}
 	return err
+}
+
+// validateUpdateStatusResultOriginal checks the original typed value before JSON conversion.
+func validateUpdateStatusResultOriginal(value *UpdateStatusResult) (err error) {
+	if utf8.RuneCountInString(value.CurrentVersion) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.current_version", value.CurrentVersion, utf8.RuneCountInString(value.CurrentVersion), 1, true))
+	}
+	if utf8.RuneCountInString(value.LatestVersion) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.latest_version", value.LatestVersion, utf8.RuneCountInString(value.LatestVersion), 1, true))
+	}
+	if utf8.RuneCountInString(value.ReleaseURL) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.release_url", value.ReleaseURL, utf8.RuneCountInString(value.ReleaseURL), 1, true))
+	}
+	if value.ManualCommand != nil {
+		if utf8.RuneCountInString(*value.ManualCommand) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("value.manual_command", *value.ManualCommand, utf8.RuneCountInString(*value.ManualCommand), 1, true))
+		}
+	}
+	return err
+}
+
+// EncodeApplyUpdateResult turns a service value into JSON using the field names in the Goa design.
+func EncodeApplyUpdateResult(in *ApplyUpdateResult) ([]byte, error) {
+	if err := checkApplyUpdateResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode ApplyUpdateResult JSON: %w", err)
+	}
+	if err := validateApplyUpdateResultOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate ApplyUpdateResult value: %w", err)
+	}
+	var body *jsonApplyUpdateResultTransport
+	{
+		body = &jsonApplyUpdateResultTransport{
+			Status:  &in.Status,
+			Version: &in.Version,
+		}
+	}
+	if err := validatejsonApplyUpdateResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate ApplyUpdateResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode ApplyUpdateResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateApplyUpdateResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateApplyUpdateResultValue(in *ApplyUpdateResult) error {
+	if err := checkApplyUpdateResultValue(in); err != nil {
+		return fmt.Errorf("validate ApplyUpdateResult value: %w", err)
+	}
+	if err := validateApplyUpdateResultOriginal(in); err != nil {
+		return fmt.Errorf("validate ApplyUpdateResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "ApplyUpdateResult")
+	}
+
+	var body *jsonApplyUpdateResultTransport
+	{
+		body = &jsonApplyUpdateResultTransport{
+			Status:  &in.Status,
+			Version: &in.Version,
+		}
+	}
+	if err := validatejsonApplyUpdateResultTransport(body); err != nil {
+		return fmt.Errorf("validate ApplyUpdateResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeApplyUpdateResult checks JSON field names from the Goa design and returns a service value.
+func DecodeApplyUpdateResult(data []byte) (out *ApplyUpdateResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode ApplyUpdateResult JSON: %w", err)
+	}
+	if err := validateApplyUpdateResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode ApplyUpdateResult JSON: %w", err)
+	}
+	var body *jsonApplyUpdateResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode ApplyUpdateResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode ApplyUpdateResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode ApplyUpdateResult JSON after first value: %w", err)
+	}
+	if err := validatejsonApplyUpdateResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate ApplyUpdateResult JSON: %w", err)
+	}
+	{
+		out = &ApplyUpdateResult{
+			Status:  *body.Status,
+			Version: *body.Version,
+		}
+	}
+	return out, nil
+}
+
+// EncodeBrowserSessionResult turns a service value into JSON using the field names in the Goa design.
+func EncodeBrowserSessionResult(in *BrowserSessionResult) ([]byte, error) {
+	if err := checkBrowserSessionResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode BrowserSessionResult JSON: %w", err)
+	}
+	if err := validateBrowserSessionResultOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate BrowserSessionResult value: %w", err)
+	}
+	var body *jsonBrowserSessionResultTransport
+	{
+		body = &jsonBrowserSessionResultTransport{
+			Session:     &in.Session,
+			ProjectName: &in.ProjectName,
+			Version:     &in.Version,
+			UIBuild:     &in.UIBuild,
+		}
+	}
+	if err := validatejsonBrowserSessionResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate BrowserSessionResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode BrowserSessionResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateBrowserSessionResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateBrowserSessionResultValue(in *BrowserSessionResult) error {
+	if err := checkBrowserSessionResultValue(in); err != nil {
+		return fmt.Errorf("validate BrowserSessionResult value: %w", err)
+	}
+	if err := validateBrowserSessionResultOriginal(in); err != nil {
+		return fmt.Errorf("validate BrowserSessionResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "BrowserSessionResult")
+	}
+
+	var body *jsonBrowserSessionResultTransport
+	{
+		body = &jsonBrowserSessionResultTransport{
+			Session:     &in.Session,
+			ProjectName: &in.ProjectName,
+			Version:     &in.Version,
+			UIBuild:     &in.UIBuild,
+		}
+	}
+	if err := validatejsonBrowserSessionResultTransport(body); err != nil {
+		return fmt.Errorf("validate BrowserSessionResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeBrowserSessionResult checks JSON field names from the Goa design and returns a service value.
+func DecodeBrowserSessionResult(data []byte) (out *BrowserSessionResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode BrowserSessionResult JSON: %w", err)
+	}
+	if err := validateBrowserSessionResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode BrowserSessionResult JSON: %w", err)
+	}
+	var body *jsonBrowserSessionResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode BrowserSessionResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode BrowserSessionResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode BrowserSessionResult JSON after first value: %w", err)
+	}
+	if err := validatejsonBrowserSessionResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate BrowserSessionResult JSON: %w", err)
+	}
+	{
+		out = &BrowserSessionResult{
+			Session:     *body.Session,
+			ProjectName: *body.ProjectName,
+			Version:     *body.Version,
+			UIBuild:     *body.UIBuild,
+		}
+	}
+	return out, nil
 }
 
 // EncodeProjectIdentity turns a service value into JSON using the field names in the Goa design.
@@ -669,6 +1164,7 @@ func EncodeProjectIdentity(in *ProjectIdentity) ([]byte, error) {
 			Directory: &in.Directory,
 			Owner:     &in.Owner,
 			Build:     in.Build,
+			Version:   in.Version,
 		}
 	}
 	if err := validatejsonProjectIdentityTransport(body); err != nil {
@@ -703,6 +1199,7 @@ func ValidateProjectIdentityValue(in *ProjectIdentity) error {
 			Directory: &in.Directory,
 			Owner:     &in.Owner,
 			Build:     in.Build,
+			Version:   in.Version,
 		}
 	}
 	if err := validatejsonProjectIdentityTransport(body); err != nil {
@@ -741,6 +1238,7 @@ func DecodeProjectIdentity(data []byte) (out *ProjectIdentity, err error) {
 			Directory: *body.Directory,
 			Owner:     *body.Owner,
 			Build:     body.Build,
+			Version:   body.Version,
 		}
 	}
 	return out, nil
@@ -760,7 +1258,6 @@ func EncodeProjectStatus(in *ProjectStatus) ([]byte, error) {
 			ProjectName: &in.ProjectName,
 			Directory:   &in.Directory,
 			Team:        &in.Team,
-			HerdrMode:   &in.HerdrMode,
 			Stage:       &in.Stage,
 			ChangeID:    &in.ChangeID,
 			ChangeTitle: &in.ChangeTitle,
@@ -806,7 +1303,6 @@ func ValidateProjectStatusValue(in *ProjectStatus) error {
 			ProjectName: &in.ProjectName,
 			Directory:   &in.Directory,
 			Team:        &in.Team,
-			HerdrMode:   &in.HerdrMode,
 			Stage:       &in.Stage,
 			ChangeID:    &in.ChangeID,
 			ChangeTitle: &in.ChangeTitle,
@@ -856,7 +1352,6 @@ func DecodeProjectStatus(data []byte) (out *ProjectStatus, err error) {
 			ProjectName: *body.ProjectName,
 			Directory:   *body.Directory,
 			Team:        *body.Team,
-			HerdrMode:   *body.HerdrMode,
 			Stage:       *body.Stage,
 			ChangeID:    *body.ChangeID,
 			ChangeTitle: *body.ChangeTitle,
@@ -885,10 +1380,8 @@ func EncodeProjectTeam(in *ProjectTeam) ([]byte, error) {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:      &in.Team,
-			Space:     &in.Space,
-			HerdrMode: &in.HerdrMode,
-			Step:      &in.Step,
+			Team: &in.Team,
+			Step: &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -927,10 +1420,8 @@ func ValidateProjectTeamValue(in *ProjectTeam) error {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:      &in.Team,
-			Space:     &in.Space,
-			HerdrMode: &in.HerdrMode,
-			Step:      &in.Step,
+			Team: &in.Team,
+			Step: &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -973,10 +1464,8 @@ func DecodeProjectTeam(data []byte) (out *ProjectTeam, err error) {
 	}
 	{
 		out = &ProjectTeam{
-			Team:      *body.Team,
-			Space:     *body.Space,
-			HerdrMode: *body.HerdrMode,
-			Step:      *body.Step,
+			Team: *body.Team,
+			Step: *body.Step,
 		}
 		out.Roles = make([]*ProjectTeamRole, len(body.Roles))
 		for i, val := range body.Roles {
@@ -1001,9 +1490,10 @@ func EncodeProjectTeamRole(in *ProjectTeamRole) ([]byte, error) {
 	var body *jsonProjectTeamRoleTransport
 	{
 		body = &jsonProjectTeamRoleTransport{
-			Role:    &in.Role,
-			Handle:  &in.Handle,
-			Running: &in.Running,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			Running:     &in.Running,
 		}
 	}
 	if err := validatejsonProjectTeamRoleTransport(body); err != nil {
@@ -1034,9 +1524,10 @@ func ValidateProjectTeamRoleValue(in *ProjectTeamRole) error {
 	var body *jsonProjectTeamRoleTransport
 	{
 		body = &jsonProjectTeamRoleTransport{
-			Role:    &in.Role,
-			Handle:  &in.Handle,
-			Running: &in.Running,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			Running:     &in.Running,
 		}
 	}
 	if err := validatejsonProjectTeamRoleTransport(body); err != nil {
@@ -1071,9 +1562,105 @@ func DecodeProjectTeamRole(data []byte) (out *ProjectTeamRole, err error) {
 	}
 	{
 		out = &ProjectTeamRole{
-			Role:    *body.Role,
-			Handle:  *body.Handle,
-			Running: *body.Running,
+			Role:        *body.Role,
+			Handle:      *body.Handle,
+			HasTerminal: *body.HasTerminal,
+			Running:     *body.Running,
+		}
+	}
+	return out, nil
+}
+
+// EncodeRoleAgentChoice turns a service value into JSON using the field names in the Goa design.
+func EncodeRoleAgentChoice(in *RoleAgentChoice) ([]byte, error) {
+	if err := checkRoleAgentChoiceValue(in); err != nil {
+		return nil, fmt.Errorf("encode RoleAgentChoice JSON: %w", err)
+	}
+	if err := validateRoleAgentChoiceOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+	var body *jsonRoleAgentChoiceTransport
+	{
+		body = &jsonRoleAgentChoiceTransport{
+			Client:   &in.Client,
+			Program:  &in.Program,
+			Model:    in.Model,
+			Thinking: in.Thinking,
+			Yolo:     &in.Yolo,
+		}
+	}
+	if err := validatejsonRoleAgentChoiceTransport(body); err != nil {
+		return nil, fmt.Errorf("validate RoleAgentChoice JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode RoleAgentChoice JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateRoleAgentChoiceValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateRoleAgentChoiceValue(in *RoleAgentChoice) error {
+	if err := checkRoleAgentChoiceValue(in); err != nil {
+		return fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+	if err := validateRoleAgentChoiceOriginal(in); err != nil {
+		return fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "RoleAgentChoice")
+	}
+
+	var body *jsonRoleAgentChoiceTransport
+	{
+		body = &jsonRoleAgentChoiceTransport{
+			Client:   &in.Client,
+			Program:  &in.Program,
+			Model:    in.Model,
+			Thinking: in.Thinking,
+			Yolo:     &in.Yolo,
+		}
+	}
+	if err := validatejsonRoleAgentChoiceTransport(body); err != nil {
+		return fmt.Errorf("validate RoleAgentChoice value: %w", err)
+	}
+	return nil
+}
+
+// DecodeRoleAgentChoice checks JSON field names from the Goa design and returns a service value.
+func DecodeRoleAgentChoice(data []byte) (out *RoleAgentChoice, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode RoleAgentChoice JSON: %w", err)
+	}
+	if err := validateProjectStatusJSONValue4("", root, ""); err != nil {
+		return out, fmt.Errorf("decode RoleAgentChoice JSON: %w", err)
+	}
+	var body *jsonRoleAgentChoiceTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode RoleAgentChoice JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode RoleAgentChoice JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode RoleAgentChoice JSON after first value: %w", err)
+	}
+	if err := validatejsonRoleAgentChoiceTransport(body); err != nil {
+		return out, fmt.Errorf("validate RoleAgentChoice JSON: %w", err)
+	}
+	{
+		out = &RoleAgentChoice{
+			Client:   *body.Client,
+			Program:  *body.Program,
+			Model:    body.Model,
+			Thinking: body.Thinking,
+			Yolo:     *body.Yolo,
 		}
 	}
 	return out, nil
@@ -1090,12 +1677,15 @@ func EncodeTeamRoleState(in *TeamRoleState) ([]byte, error) {
 	var body *jsonTeamRoleStateTransport
 	{
 		body = &jsonTeamRoleStateTransport{
-			Role:       &in.Role,
-			Handle:     &in.Handle,
-			State:      &in.State,
-			Attention:  &in.Attention,
-			Watcher:    &in.Watcher,
-			Assignment: &in.Assignment,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			State:       &in.State,
+			Attention:   &in.Attention,
+			Assignment:  &in.Assignment,
+		}
+		if in.Choice != nil {
+			body.Choice = encodeRoleAgentChoiceToRoleAgentChoiceTransport(in.Choice)
 		}
 	}
 	if err := validatejsonTeamRoleStateTransport(body); err != nil {
@@ -1126,12 +1716,15 @@ func ValidateTeamRoleStateValue(in *TeamRoleState) error {
 	var body *jsonTeamRoleStateTransport
 	{
 		body = &jsonTeamRoleStateTransport{
-			Role:       &in.Role,
-			Handle:     &in.Handle,
-			State:      &in.State,
-			Attention:  &in.Attention,
-			Watcher:    &in.Watcher,
-			Assignment: &in.Assignment,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			State:       &in.State,
+			Attention:   &in.Attention,
+			Assignment:  &in.Assignment,
+		}
+		if in.Choice != nil {
+			body.Choice = encodeRoleAgentChoiceToRoleAgentChoiceTransport(in.Choice)
 		}
 	}
 	if err := validatejsonTeamRoleStateTransport(body); err != nil {
@@ -1166,12 +1759,15 @@ func DecodeTeamRoleState(data []byte) (out *TeamRoleState, err error) {
 	}
 	{
 		out = &TeamRoleState{
-			Role:       *body.Role,
-			Handle:     *body.Handle,
-			State:      *body.State,
-			Attention:  *body.Attention,
-			Watcher:    *body.Watcher,
-			Assignment: *body.Assignment,
+			Role:        *body.Role,
+			Handle:      *body.Handle,
+			HasTerminal: *body.HasTerminal,
+			State:       *body.State,
+			Attention:   *body.Attention,
+			Assignment:  *body.Assignment,
+		}
+		if body.Choice != nil {
+			out.Choice = decodeRoleAgentChoiceTransportToRoleAgentChoice(body.Choice)
 		}
 	}
 	return out, nil
@@ -1263,11 +1859,122 @@ func DecodeTeamUnavailable(data []byte) (out *TeamUnavailable, err error) {
 	return out, nil
 }
 
+// EncodeUpdateStatusResult turns a service value into JSON using the field names in the Goa design.
+func EncodeUpdateStatusResult(in *UpdateStatusResult) ([]byte, error) {
+	if err := checkUpdateStatusResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode UpdateStatusResult JSON: %w", err)
+	}
+	if err := validateUpdateStatusResultOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate UpdateStatusResult value: %w", err)
+	}
+	var body *jsonUpdateStatusResultTransport
+	{
+		body = &jsonUpdateStatusResultTransport{
+			CurrentVersion:  &in.CurrentVersion,
+			LatestVersion:   &in.LatestVersion,
+			UpdateAvailable: &in.UpdateAvailable,
+			ReleaseURL:      &in.ReleaseURL,
+			CanAutoUpdate:   &in.CanAutoUpdate,
+			ManualCommand:   in.ManualCommand,
+		}
+	}
+	if err := validatejsonUpdateStatusResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate UpdateStatusResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode UpdateStatusResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateUpdateStatusResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateUpdateStatusResultValue(in *UpdateStatusResult) error {
+	if err := checkUpdateStatusResultValue(in); err != nil {
+		return fmt.Errorf("validate UpdateStatusResult value: %w", err)
+	}
+	if err := validateUpdateStatusResultOriginal(in); err != nil {
+		return fmt.Errorf("validate UpdateStatusResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "UpdateStatusResult")
+	}
+
+	var body *jsonUpdateStatusResultTransport
+	{
+		body = &jsonUpdateStatusResultTransport{
+			CurrentVersion:  &in.CurrentVersion,
+			LatestVersion:   &in.LatestVersion,
+			UpdateAvailable: &in.UpdateAvailable,
+			ReleaseURL:      &in.ReleaseURL,
+			CanAutoUpdate:   &in.CanAutoUpdate,
+			ManualCommand:   in.ManualCommand,
+		}
+	}
+	if err := validatejsonUpdateStatusResultTransport(body); err != nil {
+		return fmt.Errorf("validate UpdateStatusResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeUpdateStatusResult checks JSON field names from the Goa design and returns a service value.
+func DecodeUpdateStatusResult(data []byte) (out *UpdateStatusResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode UpdateStatusResult JSON: %w", err)
+	}
+	if err := validateUpdateStatusResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode UpdateStatusResult JSON: %w", err)
+	}
+	var body *jsonUpdateStatusResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode UpdateStatusResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode UpdateStatusResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode UpdateStatusResult JSON after first value: %w", err)
+	}
+	if err := validatejsonUpdateStatusResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate UpdateStatusResult JSON: %w", err)
+	}
+	{
+		out = &UpdateStatusResult{
+			CurrentVersion:  *body.CurrentVersion,
+			LatestVersion:   *body.LatestVersion,
+			UpdateAvailable: *body.UpdateAvailable,
+			ReleaseURL:      *body.ReleaseURL,
+			CanAutoUpdate:   *body.CanAutoUpdate,
+			ManualCommand:   body.ManualCommand,
+		}
+	}
+	return out, nil
+}
+
 func decodeProjectTeamRoleTransportToProjectTeamRole(v *jsonProjectTeamRoleTransport) *ProjectTeamRole {
 	res := &ProjectTeamRole{
-		Role:    *v.Role,
-		Handle:  *v.Handle,
-		Running: *v.Running,
+		Role:        *v.Role,
+		Handle:      *v.Handle,
+		HasTerminal: *v.HasTerminal,
+		Running:     *v.Running,
+	}
+
+	return res
+}
+
+func decodeRoleAgentChoiceTransportToRoleAgentChoice(v *jsonRoleAgentChoiceTransport) *RoleAgentChoice {
+	res := &RoleAgentChoice{
+		Client:   *v.Client,
+		Program:  *v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     *v.Yolo,
 	}
 
 	return res
@@ -1275,12 +1982,15 @@ func decodeProjectTeamRoleTransportToProjectTeamRole(v *jsonProjectTeamRoleTrans
 
 func decodeTeamRoleStateTransportToTeamRoleState(v *jsonTeamRoleStateTransport) *TeamRoleState {
 	res := &TeamRoleState{
-		Role:       *v.Role,
-		Handle:     *v.Handle,
-		State:      *v.State,
-		Attention:  *v.Attention,
-		Watcher:    *v.Watcher,
-		Assignment: *v.Assignment,
+		Role:        *v.Role,
+		Handle:      *v.Handle,
+		HasTerminal: *v.HasTerminal,
+		State:       *v.State,
+		Attention:   *v.Attention,
+		Assignment:  *v.Assignment,
+	}
+	if v.Choice != nil {
+		res.Choice = decodeRoleAgentChoiceTransportToRoleAgentChoice(v.Choice)
 	}
 
 	return res
@@ -1288,9 +1998,22 @@ func decodeTeamRoleStateTransportToTeamRoleState(v *jsonTeamRoleStateTransport) 
 
 func encodeProjectTeamRoleToProjectTeamRoleTransport(v *ProjectTeamRole) *jsonProjectTeamRoleTransport {
 	res := &jsonProjectTeamRoleTransport{
-		Role:    &v.Role,
-		Handle:  &v.Handle,
-		Running: &v.Running,
+		Role:        &v.Role,
+		Handle:      &v.Handle,
+		HasTerminal: &v.HasTerminal,
+		Running:     &v.Running,
+	}
+
+	return res
+}
+
+func encodeRoleAgentChoiceToRoleAgentChoiceTransport(v *RoleAgentChoice) *jsonRoleAgentChoiceTransport {
+	res := &jsonRoleAgentChoiceTransport{
+		Client:   &v.Client,
+		Program:  &v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     &v.Yolo,
 	}
 
 	return res
@@ -1298,15 +2021,138 @@ func encodeProjectTeamRoleToProjectTeamRoleTransport(v *ProjectTeamRole) *jsonPr
 
 func encodeTeamRoleStateToTeamRoleStateTransport(v *TeamRoleState) *jsonTeamRoleStateTransport {
 	res := &jsonTeamRoleStateTransport{
-		Role:       &v.Role,
-		Handle:     &v.Handle,
-		State:      &v.State,
-		Attention:  &v.Attention,
-		Watcher:    &v.Watcher,
-		Assignment: &v.Assignment,
+		Role:        &v.Role,
+		Handle:      &v.Handle,
+		HasTerminal: &v.HasTerminal,
+		State:       &v.State,
+		Attention:   &v.Attention,
+		Assignment:  &v.Assignment,
+	}
+	if v.Choice != nil {
+		res.Choice = encodeRoleAgentChoiceToRoleAgentChoiceTransport(v.Choice)
 	}
 
 	return res
+}
+
+// validateApplyUpdateResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateApplyUpdateResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "status":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "restarting when the new binary was installed and the server is re-executing in place; up_to_date when the running server already matches version.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Target release version with leading v (for example v0.5.1).",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"status",
+				"version",
+			})
+		}
+	}
+	return nil
+}
+
+// validateApplyUpdateResultJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateApplyUpdateResultJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "string", "null", description)
+	}
+	_, ok := value.(string)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "string", decodedJSONType(value), description)
+	}
+	return nil
+}
+
+// validateBrowserSessionResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateBrowserSessionResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "project_name":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Base name of the physical project folder, without its path, for this page session.",
+			); err != nil {
+				return err
+			}
+		case "session":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Bearer session credential stored in origin-scoped localStorage and sent in Authorization: Bearer.",
+			); err != nil {
+				return err
+			}
+		case "ui_build":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Base64 SHA-256 digest of the inline /views bundle served by this running server, allowing open tabs to detect UI changes across server restarts.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Version reported by this running highbay server (for example v0.5.0 or (devel)).",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"project_name",
+				"session",
+				"ui_build",
+				"version",
+			})
+		}
+	}
+	return nil
 }
 
 // validateProjectIdentityJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
@@ -1330,30 +2176,37 @@ func validateProjectIdentityJSONValue(path string, value any, description string
 	for _, key := range keys {
 		switch key {
 		case "build":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 of the hbay executable the server started from, read when it started; it tells any two builds apart, including two local builds of one commit. The CLI attaches only to its own build. Servers built before this field omit it, and hbay stop must still reach them, so it is not required.",
+				typed[key], "SHA-256 of the highbay executable the server started from, read when it started; it tells any two builds apart, including two local builds of one commit. The CLI attaches only to its own build. Servers built before this field omit it, and highbay stop must still reach them, so it is not required.",
 			); err != nil {
 				return err
 			}
 		case "directory":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Physical project folder.",
 			); err != nil {
 				return err
 			}
 		case "owner":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Immutable operating-system account identity.",
 			); err != nil {
 				return err
 			}
 		case "project_id":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Stable private project identifier.",
+			); err != nil {
+				return err
+			}
+		case "version":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Version reported by the running highbay executable (for example v0.5.0 or (devel)). Servers built before this field omit it so highbay stop and highbay update can still reach them.",
 			); err != nil {
 				return err
 			}
@@ -1363,24 +2216,9 @@ func validateProjectIdentityJSONValue(path string, value any, description string
 				"directory",
 				"owner",
 				"project_id",
+				"version",
 			})
 		}
-	}
-	return nil
-}
-
-// validateProjectIdentityJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateProjectIdentityJSONValue2(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "string", "null", description)
-	}
-	_, ok := value.(string)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "string", decodedJSONType(value), description)
 	}
 	return nil
 }
@@ -1406,42 +2244,35 @@ func validateProjectStatusJSONValue(path string, value any, description string) 
 	for _, key := range keys {
 		switch key {
 		case "attention":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Action currently needed, empty when none.",
 			); err != nil {
 				return err
 			}
 		case "change_id":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Current change identifier, empty when none exists.",
 			); err != nil {
 				return err
 			}
 		case "change_title":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Current change title, empty when none exists.",
 			); err != nil {
 				return err
 			}
 		case "directory":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Physical project folder.",
 			); err != nil {
 				return err
 			}
-		case "herdr_mode":
-			if err := validateProjectIdentityJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Current desktop attachment.",
-			); err != nil {
-				return err
-			}
 		case "project_name":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Physical project folder's base name.",
 			); err != nil {
@@ -1455,14 +2286,14 @@ func validateProjectStatusJSONValue(path string, value any, description string) 
 				return err
 			}
 		case "stage":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Current saved stage.",
 			); err != nil {
 				return err
 			}
 		case "team":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Stable project team name.",
 			); err != nil {
@@ -1474,7 +2305,6 @@ func validateProjectStatusJSONValue(path string, value any, description string) 
 				"change_id",
 				"change_title",
 				"directory",
-				"herdr_mode",
 				"project_name",
 				"roles",
 				"stage",
@@ -1533,44 +2363,51 @@ func validateProjectStatusJSONValue3(path string, value any, description string)
 	for _, key := range keys {
 		switch key {
 		case "assignment":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "unread when this role owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it (no build is open, the build was dropped, the test writer's tests are accepted, or a verification of the builder's build passed); unknown when the owner could not read assignments. The guide has no assignments.",
+				typed[key], "unread when this worker owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it; unknown when assignments could not be read. The guide has no assignments (no_work).",
 			); err != nil {
 				return err
 			}
 		case "attention":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds, or for 15 seconds while Chorus is not known to be reachable and so no reminder can arrive.",
+				typed[key], "Reported block kind when the role needs the user (for example permission, question, auth, or silent after 60 seconds without progress).",
+			); err != nil {
+				return err
+			}
+		case "choice":
+			if err := validateProjectStatusJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Configured coding-agent CLI selection for this role when saved.",
 			); err != nil {
 				return err
 			}
 		case "handle":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Registered Chorus handle.",
 			); err != nil {
 				return err
 			}
+		case "has_terminal":
+			if err := validateProjectStatusJSONValue5(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when this role has a managed or attached herdr-core terminal that can be opened in the browser terminal drawer.",
+			); err != nil {
+				return err
+			}
 		case "role":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Registered role.",
 			); err != nil {
 				return err
 			}
 		case "state":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Current terminal state; unknown means Herdr cannot establish it.",
-			); err != nil {
-				return err
-			}
-		case "watcher":
-			if err := validateProjectIdentityJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "held when Chorus reports a watcher, gone after its absence grace, unknown otherwise.",
+				typed[key], "Current role state; unknown means herdr-core and Chorus cannot establish it.",
 			); err != nil {
 				return err
 			}
@@ -1578,12 +2415,97 @@ func validateProjectStatusJSONValue3(path string, value any, description string)
 			return unknownJSONFieldError(path, key, []string{
 				"assignment",
 				"attention",
+				"choice",
 				"handle",
+				"has_terminal",
 				"role",
 				"state",
-				"watcher",
 			})
 		}
+	}
+	return nil
+}
+
+// validateProjectStatusJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProjectStatusJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "client":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Installed coding-agent client family.",
+			); err != nil {
+				return err
+			}
+		case "model":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional client-supported model.",
+			); err != nil {
+				return err
+			}
+		case "program":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Installed executable selected from list_team_agent_options.",
+			); err != nil {
+				return err
+			}
+		case "thinking":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional client-supported reasoning effort.",
+			); err != nil {
+				return err
+			}
+		case "yolo":
+			if err := validateProjectStatusJSONValue5(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether to enable this client's advertised unattended permission mode.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"client",
+				"model",
+				"program",
+				"thinking",
+				"yolo",
+			})
+		}
+	}
+	return nil
+}
+
+// validateProjectStatusJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateProjectStatusJSONValue5(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "boolean", "null", description)
+	}
+	_, ok := value.(bool)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "boolean", decodedJSONType(value), description)
 	}
 	return nil
 }
@@ -1608,36 +2530,22 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "herdr_mode":
-			if err := validateProjectIdentityJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether Herdr hosts this project, is available, or is unavailable.",
-			); err != nil {
-				return err
-			}
 		case "roles":
 			if err := validateProjectTeamJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "",
-			); err != nil {
-				return err
-			}
-		case "space":
-			if err := validateProjectIdentityJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Local Herdr space identifier, empty when Herdr is unavailable.",
+				typed[key], "Observed state of each registered project role.",
 			); err != nil {
 				return err
 			}
 		case "step":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "What the user does next for the prepared team.",
 			); err != nil {
 				return err
 			}
 		case "team":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Stable Chorus team name.",
 			); err != nil {
@@ -1645,9 +2553,7 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
-				"herdr_mode",
 				"roles",
-				"space",
 				"step",
 				"team",
 			})
@@ -1704,49 +2610,41 @@ func validateProjectTeamJSONValue3(path string, value any, description string) e
 	for _, key := range keys {
 		switch key {
 		case "handle":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Stable Chorus handle and Highbay actor identity.",
 			); err != nil {
 				return err
 			}
+		case "has_terminal":
+			if err := validateProjectStatusJSONValue5(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when this role is backed by a live or owned herdr-core (hc) terminal.",
+			); err != nil {
+				return err
+			}
 		case "role":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Trusted role.",
 			); err != nil {
 				return err
 			}
 		case "running":
-			if err := validateProjectTeamJSONValue4(
+			if err := validateProjectStatusJSONValue5(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The matching live terminal is not reported as an idle shell; missing foreground information counts as running.",
+				typed[key], "True when the role has a live hc agent terminal or active external Chorus presence.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"handle",
+				"has_terminal",
 				"role",
 				"running",
 			})
 		}
-	}
-	return nil
-}
-
-// validateProjectTeamJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
-func validateProjectTeamJSONValue4(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "boolean", "null", description)
-	}
-	_, ok := value.(bool)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "boolean", decodedJSONType(value), description)
 	}
 	return nil
 }
@@ -1772,14 +2670,14 @@ func validateTeamUnavailableJSONValue(path string, value any, description string
 	for _, key := range keys {
 		switch key {
 		case "cause":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "What could not be used: stopping (the server is shutting down), chorus (the managed Chorus server or its settings are unavailable), herdr (a Herdr command failed), saved_space (the project's saved Herdr space has an ID this version of Highbay no longer accepts and is still open), roster_folder (Herdr's launcher roster folder could not be written), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be read).",
+				typed[key], "What could not be used: stopping (the server is shutting down), chorus (the local Chorus server is unavailable), hc (herdr-core is unavailable or a terminal command failed), project_state (the project's private record or an agent credential could not be read or written), or role_folder (a role's working folder could not be prepared).",
 			); err != nil {
 				return err
 			}
 		case "name":
-			if err := validateProjectIdentityJSONValue2(
+			if err := validateApplyUpdateResultJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Error name.",
 			); err != nil {
@@ -1789,6 +2687,82 @@ func validateTeamUnavailableJSONValue(path string, value any, description string
 			return unknownJSONFieldError(path, key, []string{
 				"cause",
 				"name",
+			})
+		}
+	}
+	return nil
+}
+
+// validateUpdateStatusResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateUpdateStatusResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "can_auto_update":
+			if err := validateProjectStatusJSONValue5(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when this running server can install the release binary or Homebrew upgrade and restart in place.",
+			); err != nil {
+				return err
+			}
+		case "current_version":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Version reported by this running highbay server (for example v0.5.0 or (devel)).",
+			); err != nil {
+				return err
+			}
+		case "latest_version":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Newest stable Highbay release version published on GitHub (with leading v, for example v0.5.1).",
+			); err != nil {
+				return err
+			}
+		case "manual_command":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Shell command to update manually when can_auto_update is false (for example go install or npm install -g).",
+			); err != nil {
+				return err
+			}
+		case "release_url":
+			if err := validateApplyUpdateResultJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "HTTPS URL of the latest GitHub release notes.",
+			); err != nil {
+				return err
+			}
+		case "update_available":
+			if err := validateProjectStatusJSONValue5(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when latest_version is newer than current_version.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"can_auto_update",
+				"current_version",
+				"latest_version",
+				"manual_command",
+				"release_url",
+				"update_available",
 			})
 		}
 	}
@@ -1952,6 +2926,78 @@ func generatedJSONChildPath(path, key string, _ bool) string {
 	return path + "[" + strconv.Quote(key) + "]"
 }
 
+// checkApplyUpdateResultValue checks text and cycles before conversion.
+func checkApplyUpdateResultValue(in *ApplyUpdateResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkApplyUpdateResultApplyUpdateResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkApplyUpdateResultApplyUpdateResultValue checks one generated value on the active path.
+func checkApplyUpdateResultApplyUpdateResultValue(in *ApplyUpdateResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Status)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "status", false))
+		}
+		if !utf8.ValidString(string(in.Version)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
+		}
+	}
+	return nil
+}
+
+// checkBrowserSessionResultValue checks text and cycles before conversion.
+func checkBrowserSessionResultValue(in *BrowserSessionResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkBrowserSessionResultBrowserSessionResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkBrowserSessionResultBrowserSessionResultValue checks one generated value on the active path.
+func checkBrowserSessionResultBrowserSessionResultValue(in *BrowserSessionResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Session)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "session", false))
+		}
+		if !utf8.ValidString(string(in.ProjectName)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "project_name", false))
+		}
+		if !utf8.ValidString(string(in.Version)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
+		}
+		if !utf8.ValidString(string(in.UIBuild)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "ui_build", false))
+		}
+	}
+	return nil
+}
+
 // checkProjectIdentityValue checks text and cycles before conversion.
 func checkProjectIdentityValue(in *ProjectIdentity) error {
 	if in == nil {
@@ -1989,6 +3035,11 @@ func checkProjectIdentityProjectIdentityValue(in *ProjectIdentity, field string,
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "build", false))
 			}
 		}
+		if in.Version != nil {
+			if !utf8.ValidString(string(*in.Version)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "version", false))
+			}
+		}
 	}
 	return nil
 }
@@ -2024,9 +3075,6 @@ func checkProjectStatusProjectStatusValue(in *ProjectStatus, field string, activ
 		}
 		if !utf8.ValidString(string(in.Team)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
-		}
-		if !utf8.ValidString(string(in.HerdrMode)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
 		}
 		if !utf8.ValidString(string(in.Stage)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "stage", false))
@@ -2074,11 +3122,42 @@ func checkProjectStatusTeamRoleStateValue(in *TeamRoleState, field string, activ
 		if !utf8.ValidString(string(in.Attention)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "attention", false))
 		}
-		if !utf8.ValidString(string(in.Watcher)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "watcher", false))
-		}
 		if !utf8.ValidString(string(in.Assignment)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "assignment", false))
+		}
+		if err := checkProjectStatusRoleAgentChoiceValue(in.Choice, generatedJSONChildPath(field, "choice", false), active); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkProjectStatusRoleAgentChoiceValue checks one generated value on the active path.
+func checkProjectStatusRoleAgentChoiceValue(in *RoleAgentChoice, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Client)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "client", false))
+		}
+		if !utf8.ValidString(string(in.Program)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "program", false))
+		}
+		if in.Model != nil {
+			if !utf8.ValidString(string(*in.Model)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "model", false))
+			}
+		}
+		if in.Thinking != nil {
+			if !utf8.ValidString(string(*in.Thinking)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "thinking", false))
+			}
 		}
 	}
 	return nil
@@ -2110,18 +3189,12 @@ func checkProjectTeamProjectTeamValue(in *ProjectTeam, field string, active map[
 		if !utf8.ValidString(string(in.Team)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
 		}
-		if !utf8.ValidString(string(in.Space)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "space", false))
-		}
 		for index1, item1 := range in.Roles {
 			_ = index1
 			_ = item1
 			if err := checkProjectTeamProjectTeamRoleValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "roles", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
-		}
-		if !utf8.ValidString(string(in.HerdrMode)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
 		}
 		if !utf8.ValidString(string(in.Step)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "step", false))
@@ -2158,6 +3231,18 @@ func checkProjectTeamRoleValue(in *ProjectTeamRole) error {
 	}
 	active := make(map[any]bool)
 	if err := checkProjectTeamProjectTeamRoleValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRoleAgentChoiceValue checks text and cycles before conversion.
+func checkRoleAgentChoiceValue(in *RoleAgentChoice) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkProjectStatusRoleAgentChoiceValue(in, "$", active); err != nil {
 		return err
 	}
 	return nil
@@ -2203,6 +3288,47 @@ func checkTeamUnavailableTeamUnavailableValue(in *TeamUnavailable, field string,
 		}
 		if !utf8.ValidString(string(in.Cause)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "cause", false))
+		}
+	}
+	return nil
+}
+
+// checkUpdateStatusResultValue checks text and cycles before conversion.
+func checkUpdateStatusResultValue(in *UpdateStatusResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkUpdateStatusResultUpdateStatusResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkUpdateStatusResultUpdateStatusResultValue checks one generated value on the active path.
+func checkUpdateStatusResultUpdateStatusResultValue(in *UpdateStatusResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.CurrentVersion)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "current_version", false))
+		}
+		if !utf8.ValidString(string(in.LatestVersion)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "latest_version", false))
+		}
+		if !utf8.ValidString(string(in.ReleaseURL)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "release_url", false))
+		}
+		if in.ManualCommand != nil {
+			if !utf8.ValidString(string(*in.ManualCommand)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "manual_command", false))
+			}
 		}
 	}
 	return nil

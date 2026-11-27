@@ -24,10 +24,10 @@ not.
 4. **Out of scope.** A catalogue or console of cloud services, deploying
    or applying infrastructure, and an application builder for non-technical
    users.
-5. **Delivery.** The coding agents the user already has, working in
-   terminals Highbay starts, and a views page the project's Highbay server
-   serves to the user's browser, where the user agrees changes and approves
-   results under their own identity.
+5. **Delivery.** A browser workspace for working with the coding agents
+   the user already has. The user can start or attach agents, send messages,
+   and answer terminal prompts. They agree changes and approve results under
+   their own identity.
 
 ## Decisions
 
@@ -97,9 +97,8 @@ this step.
   does not use the method's own vocabulary.
 - **The user edits it first.** Before Highbay proposes architecture, the
   user can add, change and remove notes on the timeline. They do it on the
-  timeline itself or by saying it to the guide in the guide's terminal
-  pane. Both ways change the same timeline, and the architecture Highbay
-  proposes next follows the edited one.
+  timeline itself or by messaging the guide from **Conversation**. Both
+  update the timeline that Highbay uses to propose the architecture.
 - **Its flows become end-to-end tests.** A flow on the timeline is a path
   from what starts it to an outcome — for example, a customer asks for a
   refund over the limit, a manager approves it, and the refund is paid.
@@ -250,14 +249,16 @@ diagram.
 
 ### Delivered as a page in the browser
 
-- **Served by the project's Highbay server.** Running `hbay` opens the page
-  with a one-time link; the page keeps its session only while it is open.
+- **Served by the project's Highbay server.** Running `highbay` opens the page
+  with a one-time link. The browser stays signed in across reloads while the
+  project server is running.
 - **The page is the architecture workspace,** and the only place where a
   person agrees a change or approves a result. No agent holds the user's
   identity.
 - **State lives on the Highbay server.** A view can be rebuilt at any time
-  from what the server holds, so a reload or a restart loses only the
-  session, and the page updates itself when the server's state changes.
+  from what the server holds, and the page updates when server state changes.
+  An accepted in-place release update preserves the session. A separate
+  stop and start requires a new session.
 
 ## Open questions
 
@@ -271,6 +272,6 @@ diagram.
   linked to its test by name. How a step stays linked to the design
   elements that implement it is not decided.
 - **How editing instructions reach the guide.** The guide edits source
-  for Story and architecture changes, and the user talks to it in its
-  pane. Which diagram gestures the page offers, and how a gesture on the
-  page reaches the guide, are not decided.
+  for Story and architecture changes. The user can message the guide about
+  a selected diagram element or Story flow. Direct editing gestures remain
+  open.

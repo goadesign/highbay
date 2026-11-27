@@ -14,7 +14,7 @@ import (
 
 const (
 	// TestsEvaluator marks a test program the operator wrote: the evaluator
-	// stored with `hbay verification set`, or the one named on `hbay
+	// stored with `highbay verification set`, or the one named on `highbay
 	// verify`'s command line. It keeps the environment its caller has.
 	TestsEvaluator TestsSource = "evaluator"
 	// TestsWritten marks a test program agents on this machine wrote: the

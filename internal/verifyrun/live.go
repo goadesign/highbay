@@ -31,8 +31,8 @@ import (
 // A live target is a candidate commit an evaluator suite runs for interactive
 // CP3 prompt drafts. It lives no longer than the process that started it.
 //
-// LaunchLive, called by `hbay serve`, creates a directory under the live root
-// and starts `hbay verify-run live <dir> <build-cache-dir>` as the leader of a new process
+// LaunchLive, called by `highbay serve`, creates a directory under the live root
+// and starts `highbay verify-run live <dir> <build-cache-dir>` as the leader of a new process
 // group, with the read end of a control pipe on its descriptor 3 and TMPDIR
 // set inside the directory. The executor (Live) watches that pipe before it
 // does anything else, then runs verify.Prepare and the suite's --live mode in
@@ -282,7 +282,7 @@ func LaunchLive(
 	return p, nil
 }
 
-// Live runs as `hbay verify-run live <dir> <build-cache-dir>`, the target's process-group
+// Live runs as `highbay verify-run live <dir> <build-cache-dir>`, the target's process-group
 // leader. It starts watching its parent's control pipe before reading stdin,
 // then removes provider families so preparation receives no held setting.
 // Written tests receive a gateway: after preparation the executor applies

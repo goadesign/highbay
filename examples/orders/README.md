@@ -10,7 +10,7 @@
    - **Cursor pagination (`BoundedResult` + page cap + token budget):** `BoundedResult` declares the `returned`/`truncated`/`next_cursor` continuation contract on `list_orders` and `continue_orders`, `internal/orders/service.go` enforces the page limit (`ordersPageSize = 10`), and the evaluator's `within_token_budget` gate catches oversized tool responses.
    - **Human-in-the-loop pause/resume (`Confirmation`):** `request_refund` declares a design-time `Confirmation` gate that pauses the run until a manager holding `refunds:approve` scope approves or denies via `POST /runs/{run_id}/approval` (while customer tokens holding only `orders:chat` receive `403 Forbidden`).
    - **Bounded execution (`RunPolicy`):** Caps `orders.refund` at `MaxToolCalls(8)`, `MaxRecoveryTurns(2)`, and `TimeBudget("2m")`.
-3. **Verification & holdout redaction (`hbay verify` + `examples/orders-eval`):** The evaluator builds and runs `orders` and `orders-worker` as ordinary processes, routes LLM calls through an evaluator-owned gRPC model gateway, kills the worker mid-refund (`kill -9`) to prove payment idempotency, restarts the API server while a refund awaits manager approval, and enforces a hard token/cost budget that catches seeded payload bloat (`TestSeededPayloadBloatFailsTheBudget`). A hidden scenario, tagged `holdout`, is one whose name, checks and logs the builder (the coding agent that writes the change) never sees.
+3. **Verification & holdout redaction (`highbay verify` + `examples/orders-eval`):** The evaluator builds and runs `orders` and `orders-worker` as ordinary processes, routes LLM calls through an evaluator-owned gRPC model gateway, kills the worker mid-refund (`kill -9`) to prove payment idempotency, restarts the API server while a refund awaits manager approval, and enforces a hard token/cost budget that catches seeded payload bloat (`TestSeededPayloadBloatFailsTheBudget`). A hidden scenario, tagged `holdout`, is one whose name, checks and logs the builder (the coding agent that writes the change) never sees.
 
 ---
 
@@ -36,39 +36,35 @@ flowchart LR
 | [`internal/orders/`](internal/orders/service.go) | Authenticated HTTP service, server-side `tenant_id`/`customer_id` tool methods, `ordersPageSize = 10` pagination, manager approval gate (`POST /runs/{run_id}/approval`), and the live target's prompt operation (`PromptService`, `PUT /prompts/{prompt_id}` requiring the live key Highbay passes in `HIGHBAY_LIVE_TARGET_KEY`). |
 | [`internal/assistant/`](internal/assistant/) & [`internal/refundflow/`](internal/refundflow/) | Refund agent planner, runtime prompt override validation and store updates (`assistant.Prompts`), and Temporal refund workflow execution. |
 | [`internal/runstore/`](internal/runstore/) | SQLite-backed durable run, transcript, and pending-approval store owned by the Orders API. |
-| [`cmd/orders/`](cmd/orders/main.go) & [`cmd/orders-worker/`](cmd/orders-worker/main.go) | Public Orders API server and Refund worker binaries verified by `hbay verify`. |
+| [`cmd/orders/`](cmd/orders/main.go) & [`cmd/orders-worker/`](cmd/orders-worker/main.go) | Public Orders API server and Refund worker binaries verified by `highbay verify`. |
 
 ---
 
 ## 1. Run Unit Tests, Local Architecture Preview & Structural Diffs (`0` API Keys Needed)
 
-Run the platform's unit tests, Highbay's 0-token local architecture preview (`hbay preview`), and Highbay's structural Goa/Goa-AI design diff (`hbay diff`) from the repository root:
+Run the platform's unit tests, Highbay's 0-token local architecture preview (`highbay preview`), and Highbay's structural Goa/Goa-AI design diff (`highbay diff`) from the repository root:
 
 ```bash
 # Run the orders platform unit tests
 (cd examples/orders && go test -race ./...)
 
 # Inspect the compiled C4 topology, agent policies, and tool guardrails at 0 LLM tokens
-go run ./cmd/hbay preview -dir examples/orders
+go run ./cmd/highbay preview -dir examples/orders
 
 # Compare two Goa design modules structurally at 0 LLM tokens
-go run ./cmd/hbay diff --old-dir examples/orders --new-dir examples/orders
+go run ./cmd/highbay diff --old-dir examples/orders --new-dir examples/orders
 ```
 
 ---
 
-## 2. Run the Orders Project with Highbay (`hbay`)
+## 2. Run the Orders Project with Highbay (`highbay`)
 
 Here `examples/orders` is the project and Highbay runs a team of coding agents
-on it. You need macOS, Go, Git, Docker (the builder checks its work in Linux
-containers), Herdr (the terminal program the agents run in, one pane each),
-Chorus v0.11.0 or newer (the service the agents message each other through,
-whose dialog starts them) and a coding agent the Chorus dialog can start for
-each role; [the reference](../../docs/REFERENCE.md#prerequisites) lists them
-with their install commands. Verification also needs the Temporal CLI
-(`brew install temporal`): the Orders evaluator suite starts a local Temporal
-server for its scenarios. Install `hbay` from this checkout first
-(`go install ./cmd/hbay` from the repository root).
+on it. Follow the [Highbay installation guide](../../README.md) for Go, Git,
+Docker, Herdr Core, Chorus, and a coding agent for each role. Docker runs the
+builder's Linux checks. Verification also needs the Temporal CLI
+(`brew install temporal`) because the Orders evaluator starts a local
+Temporal server for its scenarios.
 
 In this project no test writer writes tests for each change. (In a project
 without stored verification settings, a build also adds the test writer: an
@@ -80,7 +76,7 @@ stores promotion settings, which say where the binaries you will deploy are
 published, so that approval also checks those binaries. Approval needs no
 promotion settings; this project stores them to show that extra check. Both
 files stay outside the project; the reference describes their fields under
-[`hbay verification` and `hbay promotion`](../../docs/REFERENCE.md#hbay-verification-and-hbay-promotion).
+[`highbay verification` and `highbay promotion`](../../docs/REFERENCE.md#highbay-verification-and-highbay-promotion).
 From the repository root:
 
 ```bash
@@ -112,36 +108,35 @@ EOF
 
 (
   cd examples/orders
-  hbay verification set "$WORK_DIR/verification.json"
-  hbay promotion set "$WORK_DIR/promotion.json"
-  hbay
+  highbay verification set "$WORK_DIR/verification.json"
+  highbay promotion set "$WORK_DIR/promotion.json"
+  highbay up
+  highbay
 )
 ```
 
 The subshell leaves your shell in the repository root for the next sections.
-`hbay` starts the project's Highbay server in its own Herdr terminal, starts
-Chorus and the Herdr app when they are not running, and opens the Chorus
-dialog in Herdr, where you choose the agent app that plays the guide: the
-agent you talk to, which writes the Story (a Go description of the business's
-flows) and proposes changes. It prints `Team <name>.` and your next step,
-opens the views page in your browser, then prints
-`Highbay is running for <folder> at <address>`. The server reads the stored
-settings when it starts; after changing them, run `hbay stop`, then `hbay`,
-in `examples/orders`.
+`highbay up` prepares Highbay and starts its companion services.
+`highbay` starts or attaches to the project's Highbay server and opens its
+views page in your browser. Choose the coding agent that will be your guide.
+The guide is the agent you talk to about changes and works with you to write
+the Story, a Go description of the business's flows. The CLI confirms the
+project's folder and local server address. After changing stored verification
+or promotion settings, run `highbay stop` and then `highbay` in
+`examples/orders` to restart the server with those settings.
 
 One change then goes like this:
 
-1. In the guide's pane, describe the change, for example "Card refunds above
-   $100 need a second manager". The guide writes the design change in its
-   own draft, the folder `.highbay-draft` that Highbay makes inside
-   `examples/orders`, never in your files. Then it proposes a Change Card:
-   the saved record of the request, its open questions, and the examples
+1. In the views page, describe a change to the guide. For example, ask for a
+   second manager to approve card refunds above $100. The guide writes the
+   design change in `.highbay-draft` inside `examples/orders`. It proposes a
+   Change Card, the saved record of the request, its open questions, and the examples
    that become checks. It appears on the views page.
 2. On the views page, answer the card's questions and confirm it. Only you
    can. The card's `request_revision` identifies the revision you agreed.
-3. Press **Build this change**. Because this project has stored verification
-   settings, the build adds only the builder, the agent that writes the
-   code; no test writer is used. Choose its agent app in the Chorus dialog.
+3. Choose the builder's coding agent on the views page, then press
+   **Build this change**. The builder writes the code, and the stored
+   verification settings supply the tests.
    The builder works in its own working copy of this repository: the folder
    `.highbay-build` that Highbay makes inside `examples/orders`, on the branch
    `highbay/build-<n>`, where `n` is the build's number. Your checkout and
@@ -170,7 +165,7 @@ One change then goes like this:
    the run's Proof view shows, into the release folder that the promotion
    settings name, in a folder named after the commit, or remove the promotion
    settings". Publish them and press the button again, or remove the promotion
-   settings (`hbay promotion remove`, then `hbay stop` and `hbay`) to approve
+   settings (`highbay promotion remove`, then `highbay stop` and `highbay`) to approve
    without that check.
 
    The approval names the builder's commit and the tests commit, here the
@@ -228,15 +223,15 @@ The same steps run as an automated test against the committed `HEAD` from
 the repository root (it needs the `temporal` CLI and macOS):
 
 ```bash
-go test -race -count=1 -tags e2e -run TestOrdersLiveCopyAppliesADraftThroughTheProjectServer ./cmd/hbay
+go test -race -count=1 -tags e2e -run TestOrdersLiveCopyAppliesADraftThroughTheProjectServer ./cmd/highbay
 ```
 
-## 4. Run End-to-End Verification by Hand (`hbay verify`)
+## 4. Run End-to-End Verification by Hand (`highbay verify`)
 
-`hbay verify` and `hbay approve` are operator tools: they run the same
+`highbay verify` and `highbay approve` are operator tools: they run the same
 verification and approval check from a shell, without a server or a team.
 
-`hbay verify` checks out the exact committed `CandidateCommit` and `SuiteCommit` (uncommitted working-tree edits are never tested), builds `orders` and `orders-worker` into `WorkDir/candidate-bin/`, runs the `orders_acceptance` suite in [`examples/orders-eval`](../orders-eval/design/suite.go) (`WorkDir/suite-bin/suite`), and writes the cryptographically bound `verify.Report` JSON:
+`highbay verify` checks out the exact committed `CandidateCommit` and `SuiteCommit` (uncommitted working-tree edits are never tested), builds `orders` and `orders-worker` into `WorkDir/candidate-bin/`, runs the `orders_acceptance` suite in [`examples/orders-eval`](../orders-eval/design/suite.go) (`WorkDir/suite-bin/suite`), and writes the cryptographically bound `verify.Report` JSON:
 
 | Scenario (`orders_acceptance`) | Tag | What It Proves |
 | :--- | :--- | :--- |
@@ -253,7 +248,7 @@ COMMIT="$(git rev-parse HEAD)"
 VERIFY_DIR="$(mktemp -d)"
 
 # Full operator/evaluator view (includes holdout scenario details)
-go run ./cmd/hbay verify \
+go run ./cmd/highbay verify \
   -candidate-repo . \
   -candidate-commit "$COMMIT" \
   -candidate-module examples/orders \
@@ -272,7 +267,7 @@ go run ./cmd/hbay verify \
 The **builder-redacted report** (`Report.ForBuilders()`) is the default. The explicit `-builder-view` below also requests it:
 
 ```bash
-go run ./cmd/hbay verify \
+go run ./cmd/highbay verify \
   -candidate-repo . \
   -candidate-commit "$COMMIT" \
   -candidate-module examples/orders \
@@ -290,14 +285,14 @@ go run ./cmd/hbay verify \
 
 By default, stdout prints `Report.ForBuilders()` where the `"holdout"` scenario is redacted to `"id": "holdout-1"` with all scenario inputs, declarations, checks, and failure logs stripped. In either view, a run that stops with a passing partial report or no report still prints raw operator diagnostics to stderr; do not share those diagnostics with builder agents. *(Note: in this public reference repo, `examples/orders-eval` is checked in alongside `examples/orders` to demonstrate the mechanism; in production, real hidden scenarios require keeping the evaluator suite repository (`-suite-repo`), `-work-dir`, and `-report-dir` unreadable to builder agents, since `ForBuilders()` redacts the report JSON while workspace boundaries protect the suite source and raw evidence on disk. The builder's programs run with your file access, so while a run executes they could read the suite's files on this machine.)*
 
-Once `hbay verify` writes the full report to `"$VERIFY_DIR/reports/<digest>.json"`, run `hbay approve` (`verify.Approve`) to re-derive the report from its raw evidence and verify that the candidate commit, confirmed `request_revision`, evaluator suite, environment, and measured candidate binary SHA-256 digests match the change being promoted:
+Once `highbay verify` writes the full report to `"$VERIFY_DIR/reports/<digest>.json"`, run `highbay approve` (`verify.Approve`) to re-derive the report from its raw evidence and verify that the candidate commit, confirmed `request_revision`, evaluator suite, environment, and measured candidate binary SHA-256 digests match the change being promoted:
 
 ```bash
 REPORT_FILE="$(ls "$VERIFY_DIR/reports/"*.json | head -n 1)"
 ORDERS_SHA="$(shasum -a 256 "$VERIFY_DIR/work/candidate-bin/orders" | awk '{print $1}')"
 WORKER_SHA="$(shasum -a 256 "$VERIFY_DIR/work/candidate-bin/orders-worker" | awk '{print $1}')"
 
-go run ./cmd/hbay approve \
+go run ./cmd/highbay approve \
   -report "$REPORT_FILE" \
   -candidate-commit "$COMMIT" \
   -request-revision rev-orders-demo \

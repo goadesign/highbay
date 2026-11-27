@@ -21,7 +21,7 @@ import (
 
 const (
 	// TestModuleDir is the folder, inside a service module, that holds
-	// Highbay's test module: hbay init makes the module <service module>/eval
+	// Highbay's test module: highbay init makes the module <service module>/eval
 	// there.
 	TestModuleDir = "eval"
 	// AcceptancePackage is the folder, inside a Highbay test module, of the

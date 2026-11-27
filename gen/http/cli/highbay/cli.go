@@ -24,8 +24,8 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
-		"project (identity|ensure-team|attach-guide|status|stop|browser-link|exchange-browser-link)",
-		"highbay (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|show-team-pane|start-team-agents|list-team-agent-options|dismiss-team-notice|open-views|merge-change|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|wait-for-builder-assignment|get-builder-assignment|list-test-writer-assignments|wait-for-test-writer-assignment|get-test-writer-assignment|report-tests-finished|review-verification)",
+		"project (identity|ensure-team|attach-guide|status|stop|browser-link|exchange-browser-link|get-browser-session|get-update-status|apply-update)",
+		"highbay (golden-path|propose-change|revise-change|confirm-intent|get-change|decline-revision|preview-architecture|draft-override|start-live-target|stop-live-target|get-live-target|verify-change|get-verification|list-verifications|approve-merge|diff|configure-model|get-model-connection|hand-over-model-settings|init-project|generate-code|check-project|update-dependencies|read-check-output|list-traces|refresh-story|get-story-refresh|update-draft|get-team|get-team-conversation|send-team-message|start-team-agents|interrupt-team-role|stop-team-role|restart-team-role|create-terminal-ticket|attach-role-terminal|list-team-agent-options|dismiss-team-notice|open-views|merge-change|list-changes|wait-for-changes|start-build|drop-build|get-build|get-test-findings|list-builder-assignments|wait-for-builder-assignment|get-builder-assignment|list-test-writer-assignments|wait-for-test-writer-assignment|get-test-writer-assignment|report-tests-finished|review-verification)",
 	}
 }
 
@@ -63,6 +63,8 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
+	dialer goahttp.Dialer,
+	highbayConfigurer *highbayc.ConnConfigurer,
 ) (goa.Endpoint, any, error) {
 	var (
 		projectFlags = flag.NewFlagSet("project", flag.ContinueOnError)
@@ -82,6 +84,13 @@ func ParseEndpoint(
 
 		projectExchangeBrowserLinkFlags    = flag.NewFlagSet("exchange-browser-link", flag.ExitOnError)
 		projectExchangeBrowserLinkBodyFlag = new(cliStringFlag)
+
+		projectGetBrowserSessionFlags = flag.NewFlagSet("get-browser-session", flag.ExitOnError)
+
+		projectGetUpdateStatusFlags = flag.NewFlagSet("get-update-status", flag.ExitOnError)
+
+		projectApplyUpdateFlags    = flag.NewFlagSet("apply-update", flag.ExitOnError)
+		projectApplyUpdateBodyFlag = new(cliStringFlag)
 
 		highbayFlags = flag.NewFlagSet("highbay", flag.ContinueOnError)
 
@@ -165,11 +174,33 @@ func ParseEndpoint(
 
 		highbayGetTeamFlags = flag.NewFlagSet("get-team", flag.ExitOnError)
 
-		highbayShowTeamPaneFlags    = flag.NewFlagSet("show-team-pane", flag.ExitOnError)
-		highbayShowTeamPaneBodyFlag = new(cliStringFlag)
+		highbayGetTeamConversationFlags = flag.NewFlagSet("get-team-conversation", flag.ExitOnError)
+
+		highbaySendTeamMessageFlags    = flag.NewFlagSet("send-team-message", flag.ExitOnError)
+		highbaySendTeamMessageBodyFlag = new(cliStringFlag)
 
 		highbayStartTeamAgentsFlags    = flag.NewFlagSet("start-team-agents", flag.ExitOnError)
 		highbayStartTeamAgentsBodyFlag = new(cliStringFlag)
+
+		highbayInterruptTeamRoleFlags    = flag.NewFlagSet("interrupt-team-role", flag.ExitOnError)
+		highbayInterruptTeamRoleRoleFlag = new(cliStringFlag)
+
+		highbayStopTeamRoleFlags    = flag.NewFlagSet("stop-team-role", flag.ExitOnError)
+		highbayStopTeamRoleRoleFlag = new(cliStringFlag)
+
+		highbayRestartTeamRoleFlags    = flag.NewFlagSet("restart-team-role", flag.ExitOnError)
+		highbayRestartTeamRoleBodyFlag = new(cliStringFlag)
+		highbayRestartTeamRoleRoleFlag = new(cliStringFlag)
+
+		highbayCreateTerminalTicketFlags    = flag.NewFlagSet("create-terminal-ticket", flag.ExitOnError)
+		highbayCreateTerminalTicketRoleFlag = new(cliStringFlag)
+
+		highbayAttachRoleTerminalFlags       = flag.NewFlagSet("attach-role-terminal", flag.ExitOnError)
+		highbayAttachRoleTerminalRoleFlag    = new(cliStringFlag)
+		highbayAttachRoleTerminalTicketFlag  = new(cliStringFlag)
+		highbayAttachRoleTerminalColsFlag    = highbayAttachRoleTerminalFlags.String("cols", "100", "")
+		highbayAttachRoleTerminalRowsFlag    = highbayAttachRoleTerminalFlags.String("rows", "30", "")
+		highbayAttachRoleTerminalObserveFlag = highbayAttachRoleTerminalFlags.String("observe", "false", "")
 
 		highbayListTeamAgentOptionsFlags = flag.NewFlagSet("list-team-agent-options", flag.ExitOnError)
 
@@ -226,6 +257,7 @@ func ParseEndpoint(
 	)
 	projectAttachGuideFlags.Var(projectAttachGuideBodyFlag, "body", "")
 	projectExchangeBrowserLinkFlags.Var(projectExchangeBrowserLinkBodyFlag, "body", "")
+	projectApplyUpdateFlags.Var(projectApplyUpdateBodyFlag, "body", "")
 	highbayProposeChangeFlags.Var(highbayProposeChangeBodyFlag, "body", "")
 	highbayReviseChangeFlags.Var(highbayReviseChangeBodyFlag, "body", "")
 	highbayConfirmIntentFlags.Var(highbayConfirmIntentBodyFlag, "body", "")
@@ -246,8 +278,15 @@ func ParseEndpoint(
 	highbayGenerateCodeFlags.Var(highbayGenerateCodeBodyFlag, "body", "")
 	highbayReadCheckOutputFlags.Var(highbayReadCheckOutputBodyFlag, "body", "")
 	highbayListTracesFlags.Var(highbayListTracesCursorFlag, "cursor", "")
-	highbayShowTeamPaneFlags.Var(highbayShowTeamPaneBodyFlag, "body", "")
+	highbaySendTeamMessageFlags.Var(highbaySendTeamMessageBodyFlag, "body", "")
 	highbayStartTeamAgentsFlags.Var(highbayStartTeamAgentsBodyFlag, "body", "")
+	highbayInterruptTeamRoleFlags.Var(highbayInterruptTeamRoleRoleFlag, "role", "Registered role to interrupt.")
+	highbayStopTeamRoleFlags.Var(highbayStopTeamRoleRoleFlag, "role", "Registered role to stop.")
+	highbayRestartTeamRoleFlags.Var(highbayRestartTeamRoleBodyFlag, "body", "")
+	highbayRestartTeamRoleFlags.Var(highbayRestartTeamRoleRoleFlag, "role", "Registered role whose managed herdr-core terminal is being restarted.")
+	highbayCreateTerminalTicketFlags.Var(highbayCreateTerminalTicketRoleFlag, "role", "Registered role whose terminal drawer is opening.")
+	highbayAttachRoleTerminalFlags.Var(highbayAttachRoleTerminalRoleFlag, "role", "Registered role whose herdr-core terminal is being attached.")
+	highbayAttachRoleTerminalFlags.Var(highbayAttachRoleTerminalTicketFlag, "ticket", "")
 	highbayDismissTeamNoticeFlags.Var(highbayDismissTeamNoticeBodyFlag, "body", "")
 	highbayMergeChangeFlags.Var(highbayMergeChangeBodyFlag, "body", "")
 	highbayMergeChangeFlags.Var(highbayMergeChangeChangeIDFlag, "change-id", "Approved change identifier.")
@@ -274,6 +313,9 @@ func ParseEndpoint(
 	projectStopFlags.Usage = projectStopUsage
 	projectBrowserLinkFlags.Usage = projectBrowserLinkUsage
 	projectExchangeBrowserLinkFlags.Usage = projectExchangeBrowserLinkUsage
+	projectGetBrowserSessionFlags.Usage = projectGetBrowserSessionUsage
+	projectGetUpdateStatusFlags.Usage = projectGetUpdateStatusUsage
+	projectApplyUpdateFlags.Usage = projectApplyUpdateUsage
 
 	highbayFlags.Usage = highbayUsage
 	highbayGoldenPathFlags.Usage = highbayGoldenPathUsage
@@ -305,8 +347,14 @@ func ParseEndpoint(
 	highbayGetStoryRefreshFlags.Usage = highbayGetStoryRefreshUsage
 	highbayUpdateDraftFlags.Usage = highbayUpdateDraftUsage
 	highbayGetTeamFlags.Usage = highbayGetTeamUsage
-	highbayShowTeamPaneFlags.Usage = highbayShowTeamPaneUsage
+	highbayGetTeamConversationFlags.Usage = highbayGetTeamConversationUsage
+	highbaySendTeamMessageFlags.Usage = highbaySendTeamMessageUsage
 	highbayStartTeamAgentsFlags.Usage = highbayStartTeamAgentsUsage
+	highbayInterruptTeamRoleFlags.Usage = highbayInterruptTeamRoleUsage
+	highbayStopTeamRoleFlags.Usage = highbayStopTeamRoleUsage
+	highbayRestartTeamRoleFlags.Usage = highbayRestartTeamRoleUsage
+	highbayCreateTerminalTicketFlags.Usage = highbayCreateTerminalTicketUsage
+	highbayAttachRoleTerminalFlags.Usage = highbayAttachRoleTerminalUsage
 	highbayListTeamAgentOptionsFlags.Usage = highbayListTeamAgentOptionsUsage
 	highbayDismissTeamNoticeFlags.Usage = highbayDismissTeamNoticeUsage
 	highbayOpenViewsFlags.Usage = highbayOpenViewsUsage
@@ -382,6 +430,15 @@ func ParseEndpoint(
 
 			case "exchange-browser-link":
 				epf = projectExchangeBrowserLinkFlags
+
+			case "get-browser-session":
+				epf = projectGetBrowserSessionFlags
+
+			case "get-update-status":
+				epf = projectGetUpdateStatusFlags
+
+			case "apply-update":
+				epf = projectApplyUpdateFlags
 
 			}
 
@@ -474,11 +531,29 @@ func ParseEndpoint(
 			case "get-team":
 				epf = highbayGetTeamFlags
 
-			case "show-team-pane":
-				epf = highbayShowTeamPaneFlags
+			case "get-team-conversation":
+				epf = highbayGetTeamConversationFlags
+
+			case "send-team-message":
+				epf = highbaySendTeamMessageFlags
 
 			case "start-team-agents":
 				epf = highbayStartTeamAgentsFlags
+
+			case "interrupt-team-role":
+				epf = highbayInterruptTeamRoleFlags
+
+			case "stop-team-role":
+				epf = highbayStopTeamRoleFlags
+
+			case "restart-team-role":
+				epf = highbayRestartTeamRoleFlags
+
+			case "create-terminal-ticket":
+				epf = highbayCreateTerminalTicketFlags
+
+			case "attach-role-terminal":
+				epf = highbayAttachRoleTerminalFlags
 
 			case "list-team-agent-options":
 				epf = highbayListTeamAgentOptionsFlags
@@ -575,9 +650,16 @@ func ParseEndpoint(
 			case "exchange-browser-link":
 				endpoint = c.ExchangeBrowserLink()
 				data, err = projectc.BuildExchangeBrowserLinkPayload(projectExchangeBrowserLinkBodyFlag.value)
+			case "get-browser-session":
+				endpoint = c.GetBrowserSession()
+			case "get-update-status":
+				endpoint = c.GetUpdateStatus()
+			case "apply-update":
+				endpoint = c.ApplyUpdate()
+				data, err = projectc.BuildApplyUpdatePayload(projectApplyUpdateBodyFlag.value)
 			}
 		case "highbay":
-			c := highbayc.NewClient(scheme, host, doer, enc, dec, restore)
+			c := highbayc.NewClient(scheme, host, doer, enc, dec, restore, dialer, highbayConfigurer)
 			switch epn {
 			case "golden-path":
 				endpoint = c.GoldenPath()
@@ -656,12 +738,29 @@ func ParseEndpoint(
 				endpoint = c.UpdateDraft()
 			case "get-team":
 				endpoint = c.GetTeam()
-			case "show-team-pane":
-				endpoint = c.ShowTeamPane()
-				data, err = highbayc.BuildShowTeamPanePayload(highbayShowTeamPaneBodyFlag.value)
+			case "get-team-conversation":
+				endpoint = c.GetTeamConversation()
+			case "send-team-message":
+				endpoint = c.SendTeamMessage()
+				data, err = highbayc.BuildSendTeamMessagePayload(highbaySendTeamMessageBodyFlag.value)
 			case "start-team-agents":
 				endpoint = c.StartTeamAgents()
 				data, err = highbayc.BuildStartTeamAgentsPayload(highbayStartTeamAgentsBodyFlag.value)
+			case "interrupt-team-role":
+				endpoint = c.InterruptTeamRole()
+				data, err = highbayc.BuildInterruptTeamRolePayload(highbayInterruptTeamRoleRoleFlag.value)
+			case "stop-team-role":
+				endpoint = c.StopTeamRole()
+				data, err = highbayc.BuildStopTeamRolePayload(highbayStopTeamRoleRoleFlag.value)
+			case "restart-team-role":
+				endpoint = c.RestartTeamRole()
+				data, err = highbayc.BuildRestartTeamRolePayload(highbayRestartTeamRoleBodyFlag.value, highbayRestartTeamRoleRoleFlag.value)
+			case "create-terminal-ticket":
+				endpoint = c.CreateTerminalTicket()
+				data, err = highbayc.BuildCreateTerminalTicketPayload(highbayCreateTerminalTicketRoleFlag.value)
+			case "attach-role-terminal":
+				endpoint = c.AttachRoleTerminal()
+				data, err = highbayc.BuildAttachRoleTerminalPayload(highbayAttachRoleTerminalRoleFlag.value, highbayAttachRoleTerminalTicketFlag.value, *highbayAttachRoleTerminalColsFlag, *highbayAttachRoleTerminalRowsFlag, *highbayAttachRoleTerminalObserveFlag)
 			case "list-team-agent-options":
 				endpoint = c.ListTeamAgentOptions()
 			case "dismiss-team-notice":
@@ -723,16 +822,19 @@ func ParseEndpoint(
 
 // projectUsage displays the usage of the project command and its subcommands.
 func projectUsage() {
-	fmt.Fprintln(os.Stderr, `Owns one local project's server identity, agent credentials, and one-use browser access. Management credentials last for one listening server and never authorize application decisions; besides this service, they may only hand over the model provider request settings of the shell running hbay (the highbay service's hand_over_model_settings). This service is not exposed as agent tools.`)
+	fmt.Fprintln(os.Stderr, `Owns one local project's server identity, agent credentials, self-update lifecycle, and origin-scoped browser session. Management credentials last for one listening server and never authorize application decisions; besides this service, they may only hand over the model provider request settings of the shell running highbay (the highbay service's hand_over_model_settings). This service is not exposed as agent tools.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] project COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    identity: The CLI checks the answering server reports its expected project identity using the current server-lifetime management credential.`)
-	fmt.Fprintln(os.Stderr, `    ensure-team: Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.`)
-	fmt.Fprintln(os.Stderr, `    attach-guide: Attach the invoking coding agent as this project's guide. A live Herdr terminal is adopted only when session lineage, model pane, local project directory, client family and labels match. Omit terminal identity outside Herdr. Never opens a launcher.`)
-	fmt.Fprintln(os.Stderr, `    status: Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.`)
+	fmt.Fprintln(os.Stderr, `    identity: The CLI checks that the answering server reports its expected project identity using the current server-lifetime management credential.`)
+	fmt.Fprintln(os.Stderr, `    ensure-team: Read existing project team metadata with the management credential. Creates no team, credential, or agent. This management operation is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `    attach-guide: Attach the invoking coding agent session as this project's guide. When the invoking session runs inside a live herdr-core (hc) terminal in the project folder, Highbay labels that terminal for team supervision and Chorus turn-boundary wakes; external IDE sessions register without a managed terminal.`)
+	fmt.Fprintln(os.Stderr, `    status: Read existing project, saved change stage, and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.`)
 	fmt.Fprintln(os.Stderr, `    stop: The CLI requests ordered server shutdown. Before its listener closes, the server revokes management access and withdraws its running record; an authorized stop response can finish.`)
 	fmt.Fprintln(os.Stderr, `    browser-link: The CLI mints a short-lived single-use browser link. The URL is the only credential allowed in a browser-launch command line.`)
-	fmt.Fprintln(os.Stderr, `    exchange-browser-link: The browser exchanges the single-use link once for an in-memory user session. The session is never a cookie or stored on disk and is sent only to this server address.`)
+	fmt.Fprintln(os.Stderr, `    exchange-browser-link: The browser exchanges a single-use launch link once for an origin-scoped Bearer session credential and project folder name.`)
+	fmt.Fprintln(os.Stderr, `    get-browser-session: Validate an existing origin-scoped Bearer browser session credential across page reloads and sibling tabs and return its project folder name, server version, and UI bundle digest.`)
+	fmt.Fprintln(os.Stderr, `    get-update-status: Check GitHub Releases for a newer stable Highbay version and report whether this running server can self-update and restart in place.`)
+	fmt.Fprintln(os.Stderr, `    apply-update: Install the exact approved Highbay release version (via Homebrew or SHA-256-verified release archive), refresh companions and global MCP registrations, and re-execute highbay serve in place while preserving the active browser session and in-memory model settings.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s project COMMAND --help\n", os.Args[0])
@@ -744,7 +846,7 @@ func projectIdentityUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `The CLI checks the answering server reports its expected project identity using the current server-lifetime management credential.`)
+	fmt.Fprintln(os.Stderr, `The CLI checks that the answering server reports its expected project identity using the current server-lifetime management credential.`)
 
 	// Flags list
 
@@ -760,7 +862,7 @@ func projectEnsureTeamUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read existing project team metadata with the management credential. Creates no team, credential, space, roster or agent and opens no window. This management operation is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `Read existing project team metadata with the management credential. Creates no team, credential, or agent. This management operation is never an MCP tool.`)
 
 	// Flags list
 
@@ -777,7 +879,7 @@ func projectAttachGuideUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Attach the invoking coding agent as this project's guide. A live Herdr terminal is adopted only when session lineage, model pane, local project directory, client family and labels match. Omit terminal identity outside Herdr. Never opens a launcher.`)
+	fmt.Fprintln(os.Stderr, `Attach the invoking coding agent session as this project's guide. When the invoking session runs inside a live herdr-core (hc) terminal in the project folder, Highbay labels that terminal for team supervision and Chorus turn-boundary wakes; external IDE sessions register without a managed terminal.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -794,7 +896,7 @@ func projectStatusUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read existing project, saved change stage and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.`)
+	fmt.Fprintln(os.Stderr, `Read existing project, saved change stage, and observed role state. Creates nothing and starts no agent. Merge status uses the build owner's read-only Git checks, including a manual merge into the project branch.`)
 
 	// Flags list
 
@@ -843,7 +945,7 @@ func projectExchangeBrowserLinkUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `The browser exchanges the single-use link once for an in-memory user session. The session is never a cookie or stored on disk and is sent only to this server address.`)
+	fmt.Fprintln(os.Stderr, `The browser exchanges a single-use launch link once for an origin-scoped Bearer session credential and project folder name.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -853,9 +955,59 @@ func projectExchangeBrowserLinkUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project exchange-browser-link --body '{\n      \"link\": \"l7\"\n   }'")
 }
 
+func projectGetBrowserSessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] project get-browser-session", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Validate an existing origin-scoped Bearer browser session credential across page reloads and sibling tabs and return its project folder name, server version, and UI bundle digest.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project get-browser-session")
+}
+
+func projectGetUpdateStatusUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] project get-update-status", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Check GitHub Releases for a newer stable Highbay version and report whether this running server can self-update and restart in place.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project get-update-status")
+}
+
+func projectApplyUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] project apply-update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Install the exact approved Highbay release version (via Homebrew or SHA-256-verified release archive), refresh companions and global MCP registrations, and re-execute highbay serve in place while preserving the active browser session and in-memory model settings.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "project apply-update --body '{\n      \"version\": \"m9\"\n   }'")
+}
+
 // highbayUsage displays the usage of the highbay command and its subcommands.
 func highbayUsage() {
-	fmt.Fprintln(os.Stderr, `Highbay MCP software factory control plane.`)
+	fmt.Fprintln(os.Stderr, `Owns Highbay's software factory lifecycle across Checkpoint 1 intent and Story Change Cards, Checkpoint 2 C4 architecture and guardrail previews, Checkpoint 3 live target prompt overrides, Checkpoint 4 verification runs, Checkpoint 5 promotion approvals and merges, and the browser workspace's team conversation and terminal controls.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] highbay COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    golden-path: Serve the Highbay Golden Path architecture playbook for Goa-AI agentic platforms, followed by the decision component catalog for the optional ui_composition of a propose_change or revise_change analysis.`)
@@ -864,19 +1016,19 @@ func highbayUsage() {
 	fmt.Fprintln(os.Stderr, `    confirm-intent: Confirm or refine a Checkpoint 1 Change Card with the complete ambiguity answers and example table, or adopt the revision the guide proposed beside a confirmed card. Only the user's browser session calls it, from the views page; the guide revises with revise_change and never confirms. Naming the proposed revision's request_revision adopts it: its questions are answered, it becomes the confirmed revision in force under a new request_revision with no approval, and the proposal is gone. While a proposal waits, refining the confirmed revision is refused: adopt or decline the proposal first. Otherwise the request names the card's request_revision: changed answers or examples produce a new request_revision; unchanged ones return the card as it is, with a saved approval returned in approval only while its suite_commit is still the tests' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target's current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate's binaries. A decision that no option expresses goes to the guide, which records it with revise_change; the user then confirms the resulting revision. The same holds for an option the draft does not implement: when a question names its draft_option, any other answer is refused until the guide has revised the change so the design, Story, examples and preserved behaviors implement it.`)
 	fmt.Fprintln(os.Stderr, `    get-change: Return the current Change Card, including its request_revision, to its owner, for example after confirm_intent or revise_change refused an edit made against an older revision. The card's fields describe the revision in force; a revision the guide proposed beside a confirmed card is returned in proposed_revision while it waits. Reading never confirms or changes the card. A recorded approval is returned in approval only while its suite_commit is still the tests' commit chosen for this revision and either no promotion target is configured or its binary digests still match the promotion target's current binaries, or in unverified_approval when a promotion target is configured and cannot measure the candidate's binaries.`)
 	fmt.Fprintln(os.Stderr, `    decline-revision: Decline the revision the guide proposed beside a confirmed Checkpoint 1 Change Card. The proposal is removed and the confirmed revision in force stays exactly as it was, with its answers, confirmation, approval, Stories and design source. Only the user may decline; the guide replaces a proposal by revising again. The result is the change as get_change returns it.`)
-	fmt.Fprintln(os.Stderr, `    preview-architecture: Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with hbay preview -dir <draft_folder>.`)
+	fmt.Fprintln(os.Stderr, `    preview-architecture: Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with highbay preview -dir <draft_folder>.`)
 	fmt.Fprintln(os.Stderr, `    draft-override: Apply a Fast Draft Mode prompt override on the live target start_live_target runs, or reject a compiled-rule prompt hack. Highbay changes prompts only in a live target it built and started itself, so a prompt_template override with no live target running is refused with no_live_target. A rejected update leaves the target's text unchanged; update_not_confirmed means the target may or may not have applied it.`)
 	fmt.Fprintln(os.Stderr, `    start-live-target: Build the candidate commit for the owner's confirmed change and bind draft_override to this server's one live target. Stored verification settings use the operator's evaluator and need no build. Otherwise the change's current revision must have a build with accepted tests: the candidate programs come from candidate_commit and the test program from the accepted tests commit. Written tests require a chosen model; with a direct provider the executor serves an executor-owned loopback model gateway and passes no provider setting to the program. That gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. Card, tests, model and plan refusals preserve the running target. After those checks a replacement stops the old target and discards its drafts, even if the new startup fails. A target that ends unexpectedly is reported as ended after confirmed cleanup; a server restart leaves none.`)
 	fmt.Fprintln(os.Stderr, `    stop-live-target: Stop this server's live CP3 target, if one runs, and unbind draft_override from it. Stopping when none runs is not an error.`)
 	fmt.Fprintln(os.Stderr, `    get-live-target: Report this server's live target: none; starting, with the commit being built; running, with its commit, its address, when it became ready and, for each prompt whose draft it accepted, the prompt identifier, the version in force and when it was accepted; ended after an unexpected ending with confirmed cleanup, or not confirmed stopped, with what to do next. Prompt text is never returned. It changes nothing and saves nothing: an ended observation lasts until explicit stop, an accepted replacement, or server restart.`)
-	fmt.Fprintln(os.Stderr, `    verify-change: Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with hbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.`)
+	fmt.Fprintln(os.Stderr, `    verify-change: Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with highbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.`)
 	fmt.Fprintln(os.Stderr, `    get-verification: Return the current state of a verification run to the owner who started it: running, completed with the builder view of its report, or not completed with where it stopped, and where its tests came from. A run keeps the Change Card revision it was started for. The test writer reads only the runs of a change it has an assignment for.`)
 	fmt.Fprintln(os.Stderr, `    list-verifications: Return all Checkpoint 4 verification runs started by the owner for a Change Card, ordered newest first by accepted_at (tie-broken by run_id), with each run's current state, the Change Card revision it was started for and where its tests came from. Works whether the Change Card is currently confirmed or in needs_confirmation after a later revision. The test writer lists only the runs of a change it has an assignment for.`)
-	fmt.Fprintln(os.Stderr, `    approve-merge: Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with hbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.`)
+	fmt.Fprintln(os.Stderr, `    approve-merge: Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with highbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.`)
 	fmt.Fprintln(os.Stderr, `    diff: Compare evaluated Goa designs and go.mod directives without emitting a blanket compatibility verdict.`)
-	fmt.Fprintln(os.Stderr, `    configure-model: Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the hbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.`)
+	fmt.Fprintln(os.Stderr, `    configure-model: Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the highbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.`)
 	fmt.Fprintln(os.Stderr, `    get-model-connection: Report the model choice live targets started afterwards receive: none, a direct provider and model name, or a model gateway address. It starts as none. While no model is chosen, a hand_over_model_settings call that holds a provider's settings selects that provider's default model; every accepted configure_model call replaces the choice. It never returns an API key or any other setting value, and it changes nothing. Verification runs do not use this choice.`)
-	fmt.Fprintln(os.Stderr, `    hand-over-model-settings: The hbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the hbay command's management credential may call this operation; it is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `    hand-over-model-settings: The highbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the highbay command's management credential may call this operation; it is never an MCP tool.`)
 	fmt.Fprintln(os.Stderr, `    init-project: Initialize a new Highbay starter project directory inside the server's bound workspace, generating the candidate Go module, Goa and Goa-AI code, and the eval/ verification harness, creating the initial Git commit, and switching the server's active workspace to that project. The project is blank (a service with no methods and one test that the program starts) unless worked_example is true, which creates Highbay's price-answering worked example instead. When the request includes a progressToken, the tool sends MCP progress updates as starter generation/tests, initial commit creation, and publication start.`)
 	fmt.Fprintln(os.Stderr, `    generate-code: Write the open build's agreed design into the builder's working folder and regenerate its code. Highbay replaces, creates or removes the Go files under the builder's design/ so that design/ holds exactly the build's design source (never a test file or testdata; a linked design/ is refused), then compares each module the design imports with the go.mod the revision was made from: when the builder's go.mod lacks a module or requires an older version, the call names go get <module>@<version> and go mod tidy, prefixed GOWORK=off when the assignment's gowork_off is true, writes design/ and generates nothing until they are run. A differing replace directive for a module the design imports is also named, including the saved replacement line or the fact that none was saved, so the builder corrects go.mod before calling again. Otherwise it compiles and runs the design as an ordinary process with the user's file and network access and atomically replaces gen/, preserving top-level user files and leaving go.mod and go.sum unchanged. With target eval it regenerates the working folder's eval/ module from its own design. Return the written paths and warnings; a warning after gen/ publication still means generation succeeded. It compiles the design only; it does not build the application or run tests.`)
 	fmt.Fprintln(os.Stderr, `    check-project: Copy the builder's working folder's live files (uncommitted edits included) into a protected per-operation copy and run go test ./... for every Go module in it (without stored verification settings, leaving out the starter test module whose tests the test writer writes, and saying so), each in a Linux container with no network. Nothing in the working folder changes. Returns passed and a bounded message; read the full output with read_check_output. It reads only the builder's working copy, never the project folder. It refuses as generate_code does when no build is open, the build was dropped, the assignment was not read since the build started, or the copy is off its branch.`)
@@ -886,12 +1038,18 @@ func highbayUsage() {
 	fmt.Fprintln(os.Stderr, `    refresh-story: Read the guide's draft, .highbay-draft in the project folder: its go.mod, go.sum and the Go files under design/ in gofmt form, never the rest of the project. When the draft is missing, Highbay makes it first, from the newest design a Change Card holds whose versions are all on the draft's made-from list, with the project's go.mod and go.sum, or else from the project folder; after the user dropped a build, it makes the draft again from the project folder and says so in message until a revision is saved. Compute the canonical snapshot_digest and start or reuse the project owner's in-memory Story refresh operation, which every caller acting for the owner reads; it is reused only while the draft and its made-from list are unchanged. Return promptly with op_id, state, snapshot_digest and draft_folder while evaluation continues on a server-owned context that survives client disconnects. A succeeded operation keeps the design, Stories, architecture, the draft's go.mod and the made-from list it read; propose_change and revise_change save them with the revision. A design file Go cannot parse, or one that imports a package of the project outside design/, is refused with its file and line.`)
 	fmt.Fprintln(os.Stderr, `    get-story-refresh: Return the project owner's current in-memory Story refresh operation for the guide's draft, the same one for every caller acting for the owner: op_id, state (none, running, succeeded, or failed), snapshot_digest, draft_folder, and the evaluated stories (empty when the design does not load the Story module) or a failure diagnostic. When no refresh has been run yet in this server process for the guide's draft, state is none with the intended draft_folder and a message instructing the caller to run refresh_story; this read succeeds before a go.mod or draft folder exists.`)
 	fmt.Fprintln(os.Stderr, `    update-draft: The guide brings design changes made outside Highbay into its draft, before drafting a new change and when told a design file changed in the project folder. Under the draft's lock Highbay compares each design file's draft and live versions over a recorded base. The history base is the latest recorded version present in the project's committed history since the draft's start, or the starting folder version when that history supplies none. The comparison base is whichever of that history base and the outside version the draft last took was recorded later; with no previous take, it is the history base. A live version equal to the comparison base brings nothing. If the project's committed history gained a recorded version since the last take, Highbay takes and reports the live version without merging it. Otherwise an outside change is taken when the draft did not change that file, merged with git merge-file when both changed it, and listed to correct when both changed the same lines or one side removed what the other changed. A draft file Go cannot parse, and a module the project's go.mod requires at another version or with another replace directive than the draft's, are listed to correct; Highbay does not merge go.mod. Each listed file names the folder that holds it: the guide corrects a file of its draft, while a design file or go.mod of the project folder that cannot be parsed is the user's to correct there and the guide never edits it. When the project's commit, the draft, the project's files or the draft's made-from list change while Highbay prepares the update, Highbay brings nothing and answers conflict, and the guide calls update_draft again. Highbay records an interrupted update so a later call can finish it without merging its result again; if the guide changed the file in between, the file is listed to correct. An uncommitted revert to an older version may bring nothing; when a build reports design_changed_outside for an uncommitted design change, the user commits the change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change. Otherwise call refresh_story after this update. Takes no input.`)
-	fmt.Fprintln(os.Stderr, `    get-team: Read the project team's registered roles and current terminal, watcher and unread-assignment facts. Reading creates nothing and marks no assignment read. Only the user's browser session may call it. wait_for_changes covers this snapshot as well as the change list.`)
-	fmt.Fprintln(os.Stderr, `    show-team-pane: Raise the Herdr window, show this project's space and tab, and focus the requested registered role's pane, only at the user's request. Any open Herdr dialog prevents all window changes. Fresh project, handle and space labels must still identify the pane.`)
-	fmt.Fprintln(os.Stderr, `    start-team-agents: Start missing project agents using explicit choices, otherwise saved choices and installed cross-family defaults. Never replace a running guide. Only the user may call it. Workers run in Herdr when available, otherwise as finite server-owned headless processes. Opens no launcher.`)
+	fmt.Fprintln(os.Stderr, `    get-team: Read the project team's registered roles and current herdr-core terminal, Chorus liveness, and unread-assignment facts. Reading creates nothing and marks no assignment read. Only the user's browser session may call it; wait_for_changes covers this snapshot.`)
+	fmt.Fprintln(os.Stderr, `    get-team-conversation: Read the project's Chorus conversation messages and active pin for the browser workspace's Conversation Rail. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.`)
+	fmt.Fprintln(os.Stderr, `    send-team-message: Post a message from the user in the browser workspace to the project's Chorus channel (mentioning the target role when directed). If the message targets guide or team and no guide is currently active, Highbay starts a managed guide terminal in herdr-core first so the user never leaves the browser.`)
+	fmt.Fprintln(os.Stderr, `    start-team-agents: Start missing project agents in herdr-core using explicit choices, otherwise saved choices and installed cross-family defaults. Never replaces a running guide. Only the user's browser session may call it.`)
+	fmt.Fprintln(os.Stderr, `    interrupt-team-role: Send an interrupt signal (SIGINT / Ctrl-C) to a running role's herdr-core terminal at the user's request.`)
+	fmt.Fprintln(os.Stderr, `    stop-team-role: Terminate and remove a role's managed herdr-core terminal at the user's request so it can be restarted cleanly.`)
+	fmt.Fprintln(os.Stderr, `    restart-team-role: Atomically stop and remove a role's existing managed herdr-core terminal (when present) and launch a fresh managed herdr-core terminal for that role using the supplied choice, saved choice, or installed default. External non-managed sessions are never replaced.`)
+	fmt.Fprintln(os.Stderr, `    create-terminal-ticket: Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser terminal drawer to a role's herdr-core terminal.`)
+	fmt.Fprintln(os.Stderr, `    attach-role-terminal: Upgrade to a bidirectional WebSocket attached to a role's live herdr-core PTY with 256 KiB credit flow control.`)
 	fmt.Fprintln(os.Stderr, `    list-team-agent-options: Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.`)
 	fmt.Fprintln(os.Stderr, `    dismiss-team-notice: Save the user's dismissal of one project notice without changing agent capability or startup behavior.`)
-	fmt.Fprintln(os.Stderr, `    open-views: Open a fresh project views session at the user's request. The project owner mints and opens the private link; no browser credential is returned to the caller.`)
+	fmt.Fprintln(os.Stderr, `    open-views: Open Highbay's browser workspace at the user's request and return the project's Chorus team, #channel, and guide handle. The project owner mints and opens the private browser link locally; no browser credential is returned to the caller.`)
 	fmt.Fprintln(os.Stderr, `    merge-change: Merge the user's current live-approved candidate and accepted tests into the clean checked-out local project branch. Rechecks approval, report and build identity before mutation. On failure restores the original branch and tracked state while preserving untracked files. After success stops only the merged build's workers. Repeating the exact already-taken approval is safe.`)
 	fmt.Fprintln(os.Stderr, `    list-changes: List the owner's saved Change Cards for this project, most recently saved first, with each card's summary, status, the request_revision in force, the request_revision of a revision the guide proposed beside a confirmed card while it waits for the user, the state of its most recently accepted verification run and whether its revision and selected tests are current, and when it was last saved, and say whether this server can record approvals. The views page opens on this list; agents use it to find a change_id. Reading changes nothing.`)
 	fmt.Fprintln(os.Stderr, `    wait-for-changes: Return the current change list's version as soon as it differs from since, the version of the list the caller last read, or after a bounded wait of a few seconds when nothing changed. The version also changes when a card's get_build view changes (including the builder's branch head_commit or latest check), the owner's Story evaluation starts, finishes or is replaced, or a public fact in get_team or get_live_target changes. The views page keeps one such read open and, only when the version changed, calls list_changes again and, while it shows the Story, get_story_refresh. Each call is traced but never saved in the diagnostics history list_traces reads, so an open page does not push real operations out of view.`)
@@ -1025,7 +1183,7 @@ func highbayPreviewArchitectureUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with hbay preview -dir <draft_folder>.`)
+	fmt.Fprintln(os.Stderr, `Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with highbay preview -dir <draft_folder>.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1112,7 +1270,7 @@ func highbayVerifyChangeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with hbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.`)
+	fmt.Fprintln(os.Stderr, `Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with highbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1167,7 +1325,7 @@ func highbayApproveMergeUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with hbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.`)
+	fmt.Fprintln(os.Stderr, `Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with highbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1203,7 +1361,7 @@ func highbayConfigureModelUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the hbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.`)
+	fmt.Fprintln(os.Stderr, `Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the highbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1237,7 +1395,7 @@ func highbayHandOverModelSettingsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `The hbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the hbay command's management credential may call this operation; it is never an MCP tool.`)
+	fmt.Fprintln(os.Stderr, `The highbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the highbay command's management credential may call this operation; it is never an MCP tool.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1410,7 +1568,7 @@ func highbayGetTeamUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read the project team's registered roles and current terminal, watcher and unread-assignment facts. Reading creates nothing and marks no assignment read. Only the user's browser session may call it. wait_for_changes covers this snapshot as well as the change list.`)
+	fmt.Fprintln(os.Stderr, `Read the project team's registered roles and current herdr-core terminal, Chorus liveness, and unread-assignment facts. Reading creates nothing and marks no assignment read. Only the user's browser session may call it; wait_for_changes covers this snapshot.`)
 
 	// Flags list
 
@@ -1419,22 +1577,38 @@ func highbayGetTeamUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay get-team")
 }
 
-func highbayShowTeamPaneUsage() {
+func highbayGetTeamConversationUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] highbay show-team-pane", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay get-team-conversation", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the project's Chorus conversation messages and active pin for the browser workspace's Conversation Rail. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay get-team-conversation")
+}
+
+func highbaySendTeamMessageUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay send-team-message", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Raise the Herdr window, show this project's space and tab, and focus the requested registered role's pane, only at the user's request. Any open Herdr dialog prevents all window changes. Fresh project, handle and space labels must still identify the pane.`)
+	fmt.Fprintln(os.Stderr, `Post a message from the user in the browser workspace to the project's Chorus channel (mentioning the target role when directed). If the message targets guide or team and no guide is currently active, Highbay starts a managed guide terminal in herdr-core first so the user never leaves the browser.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay show-team-pane --body '{\n      \"role\": \"guide\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay send-team-message --body '{\n      \"context\": {\n         \"type\": \"architecture_element\",\n         \"value\": {\n            \"change_id\": \"Dolores molestiae.\",\n            \"element_id\": \"wm1\",\n            \"element_name\": \"u\"\n         }\n      },\n      \"guide_choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      },\n      \"reply_to\": 8303348737552024948,\n      \"text\": \"n9\",\n      \"to\": \"team\"\n   }'")
 }
 
 func highbayStartTeamAgentsUsage() {
@@ -1445,7 +1619,7 @@ func highbayStartTeamAgentsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Start missing project agents using explicit choices, otherwise saved choices and installed cross-family defaults. Never replace a running guide. Only the user may call it. Workers run in Herdr when available, otherwise as finite server-owned headless processes. Opens no launcher.`)
+	fmt.Fprintln(os.Stderr, `Start missing project agents in herdr-core using explicit choices, otherwise saved choices and installed cross-family defaults. Never replaces a running guide. Only the user's browser session may call it.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -1453,6 +1627,106 @@ func highbayStartTeamAgentsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay start-team-agents --body '{\n      \"choices\": {\n         \"test_writer\": {\n            \"client\": \"gemini\",\n            \"model\": \"Et voluptates occaecati consequatur eos.\",\n            \"program\": \"f\",\n            \"thinking\": \"Sapiente vero ut impedit.\",\n            \"yolo\": true\n         }\n      }\n   }'")
+}
+
+func highbayInterruptTeamRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay interrupt-team-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -role STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Send an interrupt signal (SIGINT / Ctrl-C) to a running role's herdr-core terminal at the user's request.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role to interrupt.`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay interrupt-team-role --role \"guide\"")
+}
+
+func highbayStopTeamRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay stop-team-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -role STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Terminate and remove a role's managed herdr-core terminal at the user's request so it can be restarted cleanly.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role to stop.`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay stop-team-role --role \"guide\"")
+}
+
+func highbayRestartTeamRoleUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay restart-team-role", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -role STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Atomically stop and remove a role's existing managed herdr-core terminal (when present) and launch a fresh managed herdr-core terminal for that role using the supplied choice, saved choice, or installed default. External non-managed sessions are never replaced.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role whose managed herdr-core terminal is being restarted.`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay restart-team-role --body '{\n      \"choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      }\n   }' --role \"guide\"")
+}
+
+func highbayCreateTerminalTicketUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay create-terminal-ticket", os.Args[0])
+	fmt.Fprint(os.Stderr, " -role STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser terminal drawer to a role's herdr-core terminal.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role whose terminal drawer is opening.`)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay create-terminal-ticket --role \"test_writer\"")
+}
+
+func highbayAttachRoleTerminalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] highbay attach-role-terminal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -role STRING")
+	fmt.Fprint(os.Stderr, " -ticket STRING")
+	fmt.Fprint(os.Stderr, " -cols INT")
+	fmt.Fprint(os.Stderr, " -rows INT")
+	fmt.Fprint(os.Stderr, " -observe BOOL")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Upgrade to a bidirectional WebSocket attached to a role's live herdr-core PTY with 256 KiB credit flow control.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role whose herdr-core terminal is being attached.`)
+	fmt.Fprintln(os.Stderr, `    -ticket STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cols INT: `)
+	fmt.Fprintln(os.Stderr, `    -rows INT: `)
+	fmt.Fprintln(os.Stderr, `    -observe BOOL: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay attach-role-terminal --role \"guide\" --ticket \"e7j\" --cols 195 --rows 130 --observe false")
 }
 
 func highbayListTeamAgentOptionsUsage() {
@@ -1486,7 +1760,7 @@ func highbayDismissTeamNoticeUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay dismiss-team-notice --body '{\n      \"notice\": \"outside_herdr\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay dismiss-team-notice --body '{\n      \"notice\": \"single_agent_family\"\n   }'")
 }
 
 func highbayOpenViewsUsage() {
@@ -1496,7 +1770,7 @@ func highbayOpenViewsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Open a fresh project views session at the user's request. The project owner mints and opens the private link; no browser credential is returned to the caller.`)
+	fmt.Fprintln(os.Stderr, `Open Highbay's browser workspace at the user's request and return the project's Chorus team, #channel, and guide handle. The project owner mints and opens the private browser link locally; no browser credential is returned to the caller.`)
 
 	// Flags list
 

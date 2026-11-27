@@ -26,6 +26,9 @@ type Server struct {
 	Stop                http.Handler
 	BrowserLink         http.Handler
 	ExchangeBrowserLink http.Handler
+	GetBrowserSession   http.Handler
+	GetUpdateStatus     http.Handler
+	ApplyUpdate         http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -62,6 +65,9 @@ func New(
 			{"Stop", "POST", "/project/stop"},
 			{"BrowserLink", "POST", "/project/browser-link"},
 			{"ExchangeBrowserLink", "POST", "/project/browser-session"},
+			{"GetBrowserSession", "GET", "/project/browser-session"},
+			{"GetUpdateStatus", "GET", "/project/update"},
+			{"ApplyUpdate", "POST", "/project/update"},
 		},
 		Identity:            NewIdentityHandler(e.Identity, mux, decoder, encoder, errhandler, formatter),
 		EnsureTeam:          NewEnsureTeamHandler(e.EnsureTeam, mux, decoder, encoder, errhandler, formatter),
@@ -70,6 +76,9 @@ func New(
 		Stop:                NewStopHandler(e.Stop, mux, decoder, encoder, errhandler, formatter),
 		BrowserLink:         NewBrowserLinkHandler(e.BrowserLink, mux, decoder, encoder, errhandler, formatter),
 		ExchangeBrowserLink: NewExchangeBrowserLinkHandler(e.ExchangeBrowserLink, mux, decoder, encoder, errhandler, formatter),
+		GetBrowserSession:   NewGetBrowserSessionHandler(e.GetBrowserSession, mux, decoder, encoder, errhandler, formatter),
+		GetUpdateStatus:     NewGetUpdateStatusHandler(e.GetUpdateStatus, mux, decoder, encoder, errhandler, formatter),
+		ApplyUpdate:         NewApplyUpdateHandler(e.ApplyUpdate, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -85,6 +94,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Stop = m(s.Stop)
 	s.BrowserLink = m(s.BrowserLink)
 	s.ExchangeBrowserLink = m(s.ExchangeBrowserLink)
+	s.GetBrowserSession = m(s.GetBrowserSession)
+	s.GetUpdateStatus = m(s.GetUpdateStatus)
+	s.ApplyUpdate = m(s.ApplyUpdate)
 }
 
 // MethodNames returns the methods served.
@@ -99,6 +111,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountStopHandler(mux, h.Stop)
 	MountBrowserLinkHandler(mux, h.BrowserLink)
 	MountExchangeBrowserLinkHandler(mux, h.ExchangeBrowserLink)
+	MountGetBrowserSessionHandler(mux, h.GetBrowserSession)
+	MountGetUpdateStatusHandler(mux, h.GetUpdateStatus)
+	MountApplyUpdateHandler(mux, h.ApplyUpdate)
 }
 
 // Mount configures the mux to serve the project endpoints.
@@ -419,6 +434,151 @@ func NewExchangeBrowserLinkHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "exchange_browser_link")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetBrowserSessionHandler configures the mux to serve the "project"
+// service "get_browser_session" endpoint.
+func MountGetBrowserSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/project/browser-session", f)
+}
+
+// NewGetBrowserSessionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "project" service "get_browser_session" endpoint.
+func NewGetBrowserSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeGetBrowserSessionResponse(encoder)
+		encodeError    = EncodeGetBrowserSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "get_browser_session")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUpdateStatusHandler configures the mux to serve the "project"
+// service "get_update_status" endpoint.
+func MountGetUpdateStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/project/update", f)
+}
+
+// NewGetUpdateStatusHandler creates a HTTP handler which loads the HTTP
+// request and calls the "project" service "get_update_status" endpoint.
+func NewGetUpdateStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeGetUpdateStatusResponse(encoder)
+		encodeError    = EncodeGetUpdateStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "get_update_status")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountApplyUpdateHandler configures the mux to serve the "project" service
+// "apply_update" endpoint.
+func MountApplyUpdateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/project/update", f)
+}
+
+// NewApplyUpdateHandler creates a HTTP handler which loads the HTTP request
+// and calls the "project" service "apply_update" endpoint.
+func NewApplyUpdateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeApplyUpdateRequest(mux, decoder)
+		encodeResponse = EncodeApplyUpdateResponse(encoder)
+		encodeError    = EncodeApplyUpdateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "apply_update")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "project")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -256,9 +256,7 @@ func TestViewsPageFollowsRealTestReports(t *testing.T) {
 	}
 	requirePageTools(t)
 	repo, project := productionBuildProject(t, ".", pageReportModule(t))
-	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
-		Team: "shop", Roles: []*genhighbay.TeamRoleState{},
-	}}
+	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{Team: "shop"}}
 	// Written-test runs make the project verify with the tests a build
 	// accepts, so the build uses a test writer; without them the page harness
 	// stores verification settings and the build would use none.

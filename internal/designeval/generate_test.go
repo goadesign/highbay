@@ -50,7 +50,7 @@ func TestGenerateReturnsWhatGoaGenWrites(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "gen/orders/service.go")
 	assert.Contains(t, string(out["gen/goa.json"]), "goa_version", "the gen command's version file is included")
-	assert.Contains(t, string(out["gen/orders/service.go"]), "$ hbay gen", "headers name the command that generated them")
+	assert.Contains(t, string(out["gen/orders/service.go"]), "$ highbay gen", "headers name the command that generated them")
 	for p := range out {
 		assert.True(t, strings.HasPrefix(p, "gen/") || p == "AGENTS_QUICKSTART.md", p)
 	}
@@ -804,7 +804,7 @@ func starterEvalModule(t *testing.T) (map[string]string, map[string]string, map[
 // internal/scaffold/templates/example/eval for module example.com/shop/eval, tidies
 // the module against Highbay's own dependency versions, and returns both the
 // generator input snapshot (go.mod, go.sum, design/design.go and the
-// acceptance package, as hbay init generates with it) and the complete
+// acceptance package, as highbay init generates with it) and the complete
 // hand-written module tree (acceptance/ and scripted/), plus the initial
 // generation. The module's program,
 // gen/cmd/shop-evals, comes from the generator.

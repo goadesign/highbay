@@ -2,7 +2,7 @@
 // into a per-operation directory and run go test ./... for every builder-owned
 // workspace module in Linux containers (leaving out the starter test module
 // eval when the project's tests belong to the test writer), after downloading
-// dependencies against a read-only copy. hbay serve binds the workspace and
+// dependencies against a read-only copy. highbay serve binds the workspace and
 // creates and locks the operation's directory; the check helper process
 // (check_helper.go) then owns that directory, its containers and its output
 // until it exits.
@@ -40,7 +40,7 @@ import (
 type (
 	// checkOperation is one check_project or update_dependencies operation:
 	// its private directory, the live source it reads and writes, its engine
-	// and the containers it starts. hbay serve fills the live-source fields
+	// and the containers it starts. highbay serve fills the live-source fields
 	// when it binds the workspace; the check helper owns the rest. Only one
 	// goroutine uses it.
 	checkOperation struct {
@@ -349,7 +349,7 @@ func (op *checkOperation) checkProject(ctx context.Context) (*genhighbay.CheckPr
 	}, nil
 }
 
-// start prepares the operation directory hbay serve created and locked:
+// start prepares the operation directory highbay serve created and locked:
 // the copy, module cache and Docker configuration directories, the output
 // capture, the copy of the live grant, and the engine with its image. Errors
 // are the caller-facing errors; once the output exists they come from
@@ -838,7 +838,7 @@ func endCheckSpan(span trace.Span, err error) {
 }
 
 // checkTracer returns a tracer from the provider of the span in ctx, so a
-// check helper's spans join the trace hbay serve passed it, and code run
+// check helper's spans join the trace highbay serve passed it, and code run
 // without a span records nothing.
 func checkTracer(ctx context.Context) trace.Tracer {
 	return trace.SpanFromContext(ctx).TracerProvider().Tracer("highbay/controlplane")

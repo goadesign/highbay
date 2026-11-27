@@ -1559,7 +1559,7 @@ var approveMergePayloadFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("report_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the CP4 verification report written by hbay verify (64 lowercase hex characters).",
+		Description: "SHA-256 digest of the CP4 verification report written by highbay verify (64 lowercase hex characters).",
 	},
 }
 var approveMergeResultFields = []tools.FieldMetadata{
@@ -1953,7 +1953,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -2065,7 +2065,7 @@ var approveMergeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -2451,7 +2451,7 @@ var checkProjectResultFields = []tools.FieldMetadata{
 var configureModelPayloadFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "Selects either a direct model provider and model name (whose request settings the hbay command handed to the project server) or a running goa-ai model gateway address.",
+		Description: "Selects either a direct model provider and model name (whose request settings the highbay command handed to the project server) or a running goa-ai model gateway address.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("provider")},
@@ -2942,7 +2942,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -3054,7 +3054,7 @@ var confirmIntentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -3818,7 +3818,7 @@ var declineRevisionResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -3930,7 +3930,7 @@ var declineRevisionResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -4670,7 +4670,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("test_writer"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -5334,7 +5334,7 @@ var getBuildResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("taking"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("build"), tools.FixedField("state")},
@@ -5535,7 +5535,7 @@ var getBuilderAssignmentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("written_tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("written_tests"), tools.FixedField("state")},
@@ -6011,7 +6011,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -6123,7 +6123,7 @@ var getChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -6972,7 +6972,7 @@ var getTestWriterAssignmentPayloadFields = []tools.FieldMetadata{
 var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
 	{
 		JSONType:    "object",
-		Description: "The test writer's assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user's confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Highbay writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module's design, the test writer reports to have it generated again or runs hbay gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Highbay's check of each report is the judge.",
+		Description: "The test writer's assignment for one build: write the required tests for the Story as agreed at the built revision, in the test module (eval/) of the working folder, and make them hold the service to the user's confirmed answers, confirmation examples and preserved behaviors of that revision, which the assignment carries exactly as confirmed. Highbay writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the module at each read that marks the assignment read and again at each report; the test writer leaves that file as it is. After changing the module's design, the test writer reports to have it generated again or runs highbay gen -dir eval in the working folder first; regenerating keeps the required tests. go build ./... in eval/ checks the work before a report, and Highbay's check of each report is the judge.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("change_id")},
@@ -7014,7 +7014,7 @@ var getTestWriterAssignmentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -7588,7 +7588,7 @@ var getVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
@@ -7712,7 +7712,7 @@ var getVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("report_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.",
+		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
@@ -8067,7 +8067,7 @@ var listBuilderAssignmentsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
@@ -8214,12 +8214,12 @@ var listChangesResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("version")},
 		JSONType:    "string",
-		Description: "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
+		Description: "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, get_team_conversation, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval_available")},
 		JSONType:    "boolean",
-		Description: "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server hbay starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
+		Description: "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server highbay starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("initializing_phase")},
@@ -8292,7 +8292,7 @@ var listTestWriterAssignmentsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -8648,7 +8648,7 @@ var listVerificationsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("test_source"), tools.FixedField("source")},
@@ -8772,7 +8772,7 @@ var listVerificationsResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("report_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.",
+		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("runs"), tools.DynamicField{}, tools.FixedField("state"), tools.FixedField("type")},
@@ -9030,7 +9030,8 @@ var openViewsPayloadFields = []tools.FieldMetadata{
 }
 var openViewsResultFields = []tools.FieldMetadata{
 	{
-		JSONType: "object",
+		JSONType:    "object",
+		Description: "Result of opening Highbay's browser workspace, including the project's Chorus team, channel, and guide handle so an attached guide session can join Chorus in one step.",
 	},
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("opened")},
@@ -9041,6 +9042,21 @@ var openViewsResultFields = []tools.FieldMetadata{
 		Path:        []tools.FieldPathSegment{tools.FixedField("message")},
 		JSONType:    "string",
 		Description: "Safe handoff result without a URL or credential.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("team")},
+		JSONType:    "string",
+		Description: "Stable Chorus swarm name for this project.",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("channel")},
+		JSONType:    "string",
+		Description: "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).",
+	},
+	{
+		Path:        []tools.FieldPathSegment{tools.FixedField("handle")},
+		JSONType:    "string",
+		Description: "Registered Chorus handle for this project's guide (empty when no guide is registered yet).",
 	},
 }
 var previewArchitecturePayloadFields = []tools.FieldMetadata{
@@ -9797,7 +9813,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -9909,7 +9925,7 @@ var proposeChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -10629,7 +10645,7 @@ var reportTestsFinishedResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -11966,7 +11982,7 @@ var reviewVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
@@ -12172,7 +12188,7 @@ var reviewVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("review"), tools.FixedField("approval"), tools.FixedField("state")},
@@ -12296,7 +12312,7 @@ var reviewVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
@@ -12420,7 +12436,7 @@ var reviewVerificationResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("report_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.",
+		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
@@ -13193,7 +13209,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -13305,7 +13321,7 @@ var reviseChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("unverified_approval"), tools.FixedField("approval"), tools.FixedField("test_source"), tools.FixedField("source")},
@@ -13894,7 +13910,7 @@ var verifyChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("test_source")},
 		JSONType:    "object",
-		Description: "The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.",
+		Description: "The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("test_source"), tools.FixedField("source")},
@@ -14018,7 +14034,7 @@ var verifyChangeResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("value"), tools.FixedField("report"), tools.FixedField("report_digest")},
 		JSONType:    "string",
-		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.",
+		Description: "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("state"), tools.FixedField("type")},
@@ -14331,7 +14347,7 @@ var waitForBuilderAssignmentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("written_tests"), tools.FixedField("state")},
@@ -14475,7 +14491,7 @@ var waitForTestWriterAssignmentResultFields = []tools.FieldMetadata{
 	{
 		Path:        []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests")},
 		JSONType:    "object",
-		Description: "No test writer is used: the project verifies with the evaluator stored with hbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
+		Description: "No test writer is used: the project verifies with the evaluator stored with highbay verification set. Every read of a build in such a project shows this, whatever the build recorded.",
 		Branches: []tools.UnionBranch{
 			tools.TaggedUnionBranch{
 				Discriminator: []tools.FieldPathSegment{tools.FixedField("assignments"), tools.DynamicField{}, tools.FixedField("progress"), tools.FixedField("tests"), tools.FixedField("state")},
@@ -20756,6 +20772,9 @@ func MarshalOpenViewsResult(v *OpenViewsResult) ([]byte, error) {
 	out = &toolhttp.OpenViewsResultTransport{
 		Opened:  &in.Opened,
 		Message: &in.Message,
+		Team:    &in.Team,
+		Channel: &in.Channel,
+		Handle:  &in.Handle,
 	}
 	return json.Marshal(out)
 }
@@ -20783,6 +20802,9 @@ func UnmarshalOpenViewsResult(data []byte) (*OpenViewsResult, error) {
 	out = &OpenViewsResult{
 		Opened:  *in.Opened,
 		Message: *in.Message,
+		Team:    *in.Team,
+		Channel: *in.Channel,
+		Handle:  *in.Handle,
 	}
 	return out, nil
 }
@@ -26752,7 +26774,7 @@ func validateVerifyChangeResultBuilderVerificationReportTransportJSONValue(path 
 		case "report_digest":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.",
+				typed[key], "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.",
 			); err != nil {
 				return err
 			}
@@ -27240,7 +27262,7 @@ func validateApproveMergePayloadJSONValue(path string, value any, description st
 		case "report_digest":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the CP4 verification report written by hbay verify (64 lowercase hex characters).",
+				typed[key], "SHA-256 digest of the CP4 verification report written by highbay verify (64 lowercase hex characters).",
 			); err != nil {
 				return err
 			}
@@ -28434,6 +28456,20 @@ func validateOpenViewsResultJSONValue(path string, value any, description string
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "channel":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).",
+			); err != nil {
+				return err
+			}
+		case "handle":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Registered Chorus handle for this project's guide (empty when no guide is registered yet).",
+			); err != nil {
+				return err
+			}
 		case "message":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
@@ -28448,10 +28484,20 @@ func validateOpenViewsResultJSONValue(path string, value any, description string
 			); err != nil {
 				return err
 			}
+		case "team":
+			if err := validateStringJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stable Chorus swarm name for this project.",
+			); err != nil {
+				return err
+			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"channel",
+				"handle",
 				"message",
 				"opened",
+				"team",
 			})
 		}
 	}
@@ -28481,7 +28527,7 @@ func validateListChangesResultJSONValue(path string, value any, description stri
 		case "approval_available":
 			if err := validateBooleanJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server hbay starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
+				typed[key], "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server highbay starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
 			); err != nil {
 				return err
 			}
@@ -28509,7 +28555,7 @@ func validateListChangesResultJSONValue(path string, value any, description stri
 		case "version":
 			if err := validateStringJSONValue(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
+				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, get_team_conversation, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 			); err != nil {
 				return err
 			}

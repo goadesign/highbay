@@ -403,10 +403,10 @@ func TestInitProjectDerivesDefaultModulePath(t *testing.T) {
 }
 
 // TestInitProjectWithoutAVersionNamesTheRestart checks the refusal of a server
-// started from a hbay build without a module version. The server keeps that
-// version until it stops, and a new hbay refuses to attach to an older server,
+// started from a highbay build without a module version. The server keeps that
+// version until it stops, and a new highbay refuses to attach to an older server,
 // so the step must stop the server and restart the coding agent before the
-// retry; the guide cannot pass hbay init's -highbay-version flag.
+// retry; the guide cannot pass highbay init's -highbay-version flag.
 func TestInitProjectWithoutAVersionNamesTheRestart(t *testing.T) {
 	opts := inPlaceInitOptions(t)
 	opts.HighbayVersion = ""
@@ -419,9 +419,9 @@ func TestInitProjectWithoutAVersionNamesTheRestart(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	assert.Equal(t, "not_implemented", refusal.Name)
 	for _, step := range []string{
-		"install hbay from a tagged or pseudo-versioned module release",
-		"stop this project's server with hbay stop in the project folder",
-		"restart your coding agent so its Highbay connection starts the new hbay",
+		"install highbay from a tagged or pseudo-versioned module release",
+		"stop this project's server with highbay stop in the project folder",
+		"restart your coding agent so its Highbay connection starts the new highbay",
 		"then call init_project again",
 	} {
 		assert.Contains(t, refusal.Message, step)

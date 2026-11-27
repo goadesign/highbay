@@ -144,57 +144,13 @@ page.close();
 	}
 }
 
-// TestViewsPageHeadlessNeedsPermissionAndSeparateConsent tests the user-facing
-// permission boundary for both switch-capable clients and configured permissions.
-func TestViewsPageHeadlessNeedsPermissionAndSeparateConsent(t *testing.T) {
-	for _, openCode := range []bool{false, true} {
-		t.Run(map[bool]string{false: "YOLO switches", true: "configured permissions"}[openCode], func(t *testing.T) {
-			snapshot := pageTeamSnapshot("working")
-			snapshot.HerdrMode = "unavailable"
-			f := &teamServiceFixture{snapshot: snapshot}
-			if openCode {
-				f.options = func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
-					return []*genhighbay.InstalledAgentOption{{Client: "opencode", Program: "/fixture/opencode", Title: "OpenCode", Models: []string{}, Efforts: []string{}, ModelSupported: true, HeadlessSupported: true}}, nil
-				}
-			}
-			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
-			buildableChange(t, cp, "chg-background")
-			ps := startPageServer(t, cp)
-			runPageScript(t, ps, map[string]any{"openCode": openCode}, `
-const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-build-agents-background-consent") && page.$("#highbay-build-agents-builder-client").value, "background picker did not settle");
-expect(page.$("#highbay-build-start").disabled && !page.$("#highbay-build-agents-background-consent").checked, "headless mode implicitly granted background consent");
-if (input.openCode) {
-  expect(!page.$("#highbay-build-agents-builder-yolo") && page.text("#highbay-build-agents-builder").includes("configured permissions"), "OpenCode invented a YOLO switch");
-} else {
-  for (const role of ["builder", "test_writer"]) page.$("#highbay-build-agents-" + role + "-yolo").click();
-  expect(page.$("#highbay-build-start").disabled, "permission switches were treated as background consent");
-}
-page.$("#highbay-build-agents-background-consent").click();
-await until(() => !page.$("#highbay-build-start").disabled, "explicit consent and valid permissions did not enable background workers");
-page.$("#highbay-build-start").click();
-await until(() => page.sent("POST", "/changes/chg-background/build").length === 1, "background Build did not submit");
-const choices = page.sent("POST", "/changes/chg-background/build")[0].body.choices;
-expect(choices.builder.yolo === !input.openCode && choices.test_writer.yolo === !input.openCode, "permission choice did not match actual supported switches");
-expect(page.sent("POST", "/team/agents").length === 0, "picker mounted a separate worker launch");
-page.close();
-`)
-		})
-	}
-}
-
 // TestViewsPageRecommendationsDismissOnlyAfterSave exercises the generated
 // dismissal API and failed-save recovery without starting workers.
 func TestViewsPageRecommendationsDismissOnlyAfterSave(t *testing.T) {
-	for _, notice := range []string{"single_agent_family", "outside_herdr", "herdr_unavailable"} {
+	// single_agent_family is the only notice the design declares.
+	for _, notice := range []string{"single_agent_family"} {
 		t.Run(notice, func(t *testing.T) {
-			snapshot := pageTeamSnapshot("working")
-			if notice == "outside_herdr" {
-				snapshot.HerdrMode = "available"
-			} else if notice == "herdr_unavailable" {
-				snapshot.HerdrMode = "unavailable"
-			}
-			f := &teamServiceFixture{snapshot: snapshot, options: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
+			f := &teamServiceFixture{snapshot: pageTeamSnapshot("working"), options: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 				return fixtureAgentOptions()[:1], nil
 			}}
 			cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})

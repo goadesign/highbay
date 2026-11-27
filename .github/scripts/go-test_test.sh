@@ -21,12 +21,12 @@ printf 'package plain\n' > "$fixture/plain/source_test.go"
 printf '%s\n' github.com/goadesign/highbay/external github.com/goadesign/highbay/owned \
   github.com/goadesign/highbay/uncovered > "$fixture/.github/race-packages.txt"
 
-# Only test execution is recorded; go list uses the actual selected toolchain.
+# Only test execution is recorded; go list and go env use the actual selected toolchain.
 cat > "$scratch/bin/go" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "$1" = list ]; then
-  if [ "${WRAPPER_TEST_LIST_FAILURE:-}" = true ]; then
+if [ "$1" = list ] || [ "$1" = env ]; then
+  if [ "$1" = list ] && [ "${WRAPPER_TEST_LIST_FAILURE:-}" = true ]; then
     printf '%s\n' github.com/goadesign/highbay/plain
     printf '%s\n' 'fixture metadata failure' >&2
     exit 23
@@ -34,6 +34,9 @@ if [ "$1" = list ]; then
   exec "$WRAPPER_TEST_GO" "$@"
 fi
 printf '%s\0' "$@" >> "$WRAPPER_TEST_CALLS"
+if [ -n "${WRAPPER_TEST_BUILD_CACHE_LOG:-}" ]; then
+  printf '%s\n' "${HIGHBAY_TEST_BUILD_CACHE:-}" >> "$WRAPPER_TEST_BUILD_CACHE_LOG"
+fi
 printf '\n' >> "$WRAPPER_TEST_CALLS"
 SH
 chmod 700 "$scratch/bin/go"
@@ -42,7 +45,12 @@ export GITHUB_WORKSPACE="$fixture" PATH="$scratch/bin:$PATH" GOWORK=off GOTOOLCH
 cd "$fixture"
 
 # Listed testless packages build once plain; internal and external tests race.
+export WRAPPER_TEST_BUILD_CACHE_LOG="$scratch/build-caches"
+unset HIGHBAY_TEST_BUILD_CACHE
 bash "$repository/.github/scripts/go-test.sh" -short -count=1 -run '^Test(One|Two)$' -- ./...
+expected_gocache=$("$go_binary" env GOCACHE)
+grep -Fxq -- "$expected_gocache" "$WRAPPER_TEST_BUILD_CACHE_LOG"
+unset WRAPPER_TEST_BUILD_CACHE_LOG
 {
   printf '%s\0' test -short -count=1 -run '^Test(One|Two)$' \
     github.com/goadesign/highbay/plain github.com/goadesign/highbay/uncovered

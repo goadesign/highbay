@@ -82,7 +82,7 @@ export function MergedBranchVerification({
   const suiteModule = storedEvaluator ? "REPLACE_WITH_SUITE_MODULE" : "eval";
   const suiteCommand = storedEvaluator ? "REPLACE_WITH_SUITE_COMMAND" : "./gen/cmd/SERVICE-evals";
   const command = 'VERIFY_DIR="$(mktemp -d)" &&\n' + [
-    "hbay verify",
+    "highbay verify",
     "-candidate-repo . -candidate-commit " + candidate,
     "-candidate-module " + shellWord(candidateModule) + " -binary " + shellWord(binary),
     "-suite-repo " + shellWord(suiteRepo) + " -suite-commit " + suite,
@@ -98,7 +98,7 @@ export function MergedBranchVerification({
       : "Check out the merged branch and run from its repository root. This template checks that branch's current commit."}
       {" The command creates a separate verification report."}</p>
     <p>{storedEvaluator
-      ? <>Use the settings shown by <code>hbay verification show</code> to fill in the evaluator and candidate fields. Include a <code>-binary</code> flag for each candidate binary.</>
+      ? <>Use the settings shown by <code>highbay verification show</code> to fill in the evaluator and candidate fields. Include a <code>-binary</code> flag for each candidate binary.</>
       : <>Replace <code>SERVICE</code> with your service name. Adjust the module paths if your project or tests are outside the default directories.</>}</p>
     <p>{approvedSuite ? "The suite commit comes from the saved approval."
       : suiteCommit !== null ? "The suite commit identifies the currently accepted tests for this build."

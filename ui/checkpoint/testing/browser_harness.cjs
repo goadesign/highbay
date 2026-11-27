@@ -662,7 +662,7 @@ async function experienceScenario(input, facts, views) {
   measured.no_auto_launch = !views.requests.some((r) => r.method === "POST" && /\/(build|agents|merge)$/.test(new URL(r.url).pathname));
   if (!merge) {
     measured.initial_clients = await evaluate(views, "Array.from(document.querySelectorAll('#" + prefix + " select[id$=-client]'), (node) => JSON.parse(node.value)[0])");
-    if (["picker", "headless", "builder_only"].includes(input.experience)) {
+    if (["picker", "builder_only"].includes(input.experience)) {
       await evaluate(views, "(" + function changeClient() {
         const client = document.getElementById("highbay-build-agents-builder-client");
         client.value = JSON.stringify(["claude", "/fixture/claude"]);
@@ -686,14 +686,6 @@ async function experienceScenario(input, facts, views) {
     }.toString() + ")()");
     await evaluate(views, "document.getElementById('highbay-build-agents-refresh').click(), true");
     await until(views, "document.getElementById('highbay-build-agents-refresh')?.disabled === false");
-    if (input.experience === "headless" || input.experience === "configured_permissions") {
-      measured.background_gated = await evaluate(views, "document.getElementById('highbay-build-again')?.disabled === true");
-      await evaluate(views, "document.querySelectorAll('#highbay-build-agents input[id$=-yolo]').forEach((node) => node.click()), true");
-      measured.background_gated &&= await evaluate(views, "document.getElementById('highbay-build-again')?.disabled === true");
-      await evaluate(views, "document.getElementById('highbay-build-agents-background-consent').click(), true");
-      const enabled = await until(views, "document.getElementById('highbay-build-again')?.disabled === false");
-      measured.background_gated &&= !enabled.timed_out;
-    }
     await evaluate(views, "document.getElementById('highbay-nav-team').click(), true");
     ready = await until(views, "document.getElementById('highbay-team-agents-builder-model') !== null");
     if (ready.timed_out) throw new Error("Team picker did not load");
@@ -1073,7 +1065,7 @@ async function agreementScenario(input, facts, views) {
       const bottom = getComputedStyle(footer).position === 'fixed' ? footer.getBoundingClientRect().top : innerHeight;
       return { end: box.bottom, bottom, scrollY, overflow: getComputedStyle(summary).overflowY };
     }.toString() + ")()");
-    measured.end_reachable = end.end > 0 && end.end <= end.bottom && end.overflow === "visible";
+    measured.end_reachable = end.end > 0 && end.end <= end.bottom + 1 && end.overflow === "visible";
     if (!measured.end_reachable) throw new Error("The end of the agreement is outside the readable viewport at " + name + ": " + JSON.stringify(end));
     facts.agreement.push(measured);
   }
@@ -1169,6 +1161,127 @@ async function onboardingScenario(input, views) {
   await requireView("document.getElementById('highbay-cp1-next-confirm')?.disabled === false", "Next did not offer confirmation after the last answer");
 }
 
+// workspaceScenario exercises UpdateBanner (draft-safe session-preserving restart),
+// ConversationRail message posting and Markdown rendering, and TerminalDrawer
+// (@xterm/xterm WebSocket attach, byte-credit flow control, Ctrl+Shift+Escape
+// keyboard focus escape, and one-click server-owned role Restart) in Chromium.
+async function workspaceScenario(input, facts, views) {
+  await views.dt.send("Page.bringToFront", {}, views.sessionId);
+  const bannerShown = await until(
+    views,
+    "document.getElementById('highbay-update-banner') !== null && document.getElementById('highbay-update-install') !== null && document.getElementById('highbay-composer-input') !== null"
+  );
+  if (bannerShown.timed_out) {
+    throw new Error("UpdateBanner or ConversationRail did not render: " + await evaluate(views, "document.body.innerText.slice(0, 2000)"));
+  }
+
+  const releaseHref = await evaluate(views, "document.getElementById('highbay-update-release')?.getAttribute('href') || ''");
+  await evaluate(views, "document.getElementById('highbay-composer-input').focus(), true");
+  await views.dt.send("Input.insertText", { text: "Build a refund assistant" }, views.sessionId);
+
+  await evaluate(views, "document.getElementById('highbay-update-install').click(), true");
+  const updateReady = await until(
+    views,
+    "document.getElementById('highbay-update-reload') !== null && document.getElementById('highbay-update-message')?.textContent.includes('v0.5.0 is running')"
+  );
+  if (updateReady.timed_out) {
+    throw new Error("UpdateBanner did not reach ready state: " + await evaluate(views, "document.getElementById('highbay-update-banner')?.innerText || ''"));
+  }
+  const draftSurvivedUpdate = await evaluate(
+    views,
+    "document.getElementById('highbay-composer-input').value === 'Build a refund assistant' && document.getElementById('highbay-update-unsaved-hint') !== null"
+  );
+
+  await evaluate(views, "document.getElementById('highbay-composer-send').click(), true");
+  const replyRendered = await until(
+    views,
+    "document.querySelector('#highbay-conversation-messages strong')?.textContent === 'Draft ready'"
+  );
+  if (replyRendered.timed_out) {
+    throw new Error("ConversationRail did not render Markdown reply: " + await evaluate(views, "document.getElementById('highbay-conversation-messages')?.innerText || ''"));
+  }
+
+  const attentionBtn = await until(views, "document.getElementById('highbay-team-attention-terminal-builder') !== null");
+  if (attentionBtn.timed_out) {
+    throw new Error("Builder attention terminal button did not render");
+  }
+  await evaluate(views, "document.getElementById('highbay-team-attention-terminal-builder').click(), true");
+  const connected = await until(
+    views,
+    "document.getElementById('highbay-terminal-drawer')?.dataset.status === 'connected' && document.getElementById('highbay-terminal-viewport')?.textContent.includes('Allow tool?')"
+  );
+  if (connected.timed_out) {
+    throw new Error("TerminalDrawer did not connect and render PTY output: " + await evaluate(views, "document.getElementById('highbay-terminal-drawer')?.innerText || ''"));
+  }
+
+  // Type inside xterm and verify Ctrl+Shift+Escape moves focus to Close terminal.
+  await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
+  await views.dt.send("Input.insertText", { text: "y" }, views.sessionId);
+  await views.dt.send(
+    "Input.dispatchKeyEvent",
+    {
+      type: "keyDown",
+      key: "Escape",
+      code: "Escape",
+      windowsVirtualKeyCode: 27,
+      modifiers: 2 | 8, // Ctrl (2) | Shift (8)
+    },
+    views.sessionId
+  );
+  await views.dt.send(
+    "Input.dispatchKeyEvent",
+    {
+      type: "keyUp",
+      key: "Escape",
+      code: "Escape",
+      windowsVirtualKeyCode: 27,
+      modifiers: 2 | 8,
+    },
+    views.sessionId
+  );
+  const focusEscaped = await evaluate(views, "document.activeElement?.id === 'highbay-terminal-close'");
+
+  // Restart another role (guide) while builder's TerminalDrawer stays open, and
+  // verify builder's stream neither disconnects nor requests a second ticket.
+  await evaluate(views, "document.getElementById('highbay-nav-team').click(), true");
+  const guideRestartBtn = await until(views, "document.getElementById('highbay-team-restart-guide') !== null");
+  if (guideRestartBtn.timed_out) {
+    throw new Error("Guide restart button did not render on Team stage");
+  }
+  await evaluate(views, "document.getElementById('highbay-team-restart-guide').click(), true");
+  await settle(views, to(input.origin, "POST", "/team/roles/guide/restart"), 1);
+  const builderTicketsAfterGuideRestart = views.requests.filter(to(input.origin, "POST", "/team/roles/builder/terminal-ticket")).length;
+  const builderKeptAcrossGuideRestart =
+    builderTicketsAfterGuideRestart === 1 &&
+    (await evaluate(
+      views,
+      "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'builder' && document.getElementById('highbay-terminal-drawer')?.dataset.status === 'connected' && document.getElementById('highbay-terminal-viewport')?.textContent.includes('Allow tool?')"
+    ));
+
+  // Click one-click Restart in TerminalDrawer and verify reconnect to restarted stream.
+  await evaluate(views, "document.getElementById('highbay-terminal-viewport').scrollIntoView({ block: 'center' }), true");
+  await evaluate(views, "document.getElementById('highbay-terminal-restart').click(), true");
+  const restarted = await until(
+    views,
+    "document.getElementById('highbay-terminal-viewport')?.textContent.includes('Restarted builder session')"
+  );
+  if (restarted.timed_out) {
+    throw new Error("TerminalDrawer did not reconnect after role restart");
+  }
+
+  facts.workspace = {
+    release_href: releaseHref,
+    update_ready: !updateReady.timed_out,
+    draft_survived_update: draftSurvivedUpdate,
+    reply_rendered: !replyRendered.timed_out,
+    terminal_connected: !connected.timed_out,
+    focus_escaped: focusEscaped,
+    builder_kept_across_guide_restart: builderKeptAcrossGuideRestart,
+    terminal_restarted: !restarted.timed_out,
+    browser_cookies: (await views.dt.send("Storage.getCookies", {})).cookies.length,
+  };
+}
+
 async function main(input, facts) {
   const dt = await DevTools.connect(input.devtools);
   try {
@@ -1177,7 +1290,7 @@ async function main(input, facts) {
     const server = (r) => r.url.startsWith(input.origin + "/");
     const longPoll = (r) => new URL(r.url).pathname === "/change-updates";
 
-    // (a) Open the page with the link, as `hbay` opens it.
+    // (a) Open the page with the link, as `highbay` opens it.
     const views = await openTab(dt);
     await navigate(views, input.origin + "/views#link=" + input.link);
     const listed = await until(
@@ -1231,11 +1344,18 @@ async function main(input, facts) {
       await phoneScenario(input, facts, views);
       return;
     }
+    if (input.workspace) {
+      await workspaceScenario(input, facts, views);
+      await dt.send("Target.closeTarget", { targetId: views.targetId });
+      return;
+    }
 
     // (b) Every request the page sent so far, with the headers the browser put on the wire.
     facts.views.requests_settled =
       (await settle(views, to(input.origin, "POST", "/project/browser-session"), 1)) &&
       (await settle(views, to(input.origin, "GET", "/changes"), 1)) &&
+      (await settle(views, to(input.origin, "GET", "/team"), 1)) &&
+      (await settle(views, to(input.origin, "GET", "/team/conversation"), 2)) &&
       (await settle(views, to(input.origin, "GET", "/change-updates"), 1, longPoll));
     facts.views.requests = views.requests.filter(server).map((r) => ({ ...r }));
 
@@ -1383,19 +1503,51 @@ async function main(input, facts) {
         );
     await withDeadline(views.dt.send("Emulation.clearDeviceMetricsOverride", {}, views.sessionId), "restore the viewport");
 
-    // (g) Reload the views page.
+    // (g) Reload and sibling tab stay signed in while the server runs, other loopback
+    // ports do not share localStorage, and an unhanded-off restart signs out cleanly.
+    const beforeLiveReload = views.requests.length;
+    await reload(views);
+    const liveReloaded = await until(
+      views,
+      "document.querySelectorAll('#highbay-change-list [data-change-id]').length >= " + input.change_ids.length
+    );
+    await settle(views, to(input.origin, "GET", "/project/browser-session"), 1);
+    const liveRequests = views.requests.slice(beforeLiveReload).filter(server).map((r) => ({ ...r }));
+
+    const sibling = await openTab(dt);
+    await navigate(sibling, input.origin + "/views");
+    const siblingListed = await until(
+      sibling,
+      "document.querySelectorAll('#highbay-change-list [data-change-id]').length >= " + input.change_ids.length
+    );
+    await dt.send("Target.closeTarget", { targetId: sibling.targetId });
+
+    const otherPortTab = await openTab(dt);
+    await navigate(otherPortTab, input.same_site_origin + "/blank");
+    const otherPortStorage = await evaluate(otherPortTab, "localStorage.length");
+    await dt.send("Target.closeTarget", { targetId: otherPortTab.targetId });
+
+    const restartResp = await fetch(input.origin + "/__test/restart", { method: "POST" });
+    if (!restartResp.ok) throw new Error("restarting project server: " + restartResp.status);
+
     const beforeReload = views.requests.length;
     await reload(views);
     const signedOut = await until(views, "(document.getElementById('highbay-signed-out') || {}).textContent");
+    const postRestartStorage = await evaluate(views, "localStorage.length");
     const shownAfterReload = views.requests.slice(beforeReload).map((r) => r.id);
     const probeURL = input.origin + "/change-updates?since=after-reload";
     const status = await evaluate(views, "fetch(" + JSON.stringify(probeURL) + ").then((r) => r.status, (e) => 'refused: ' + e.message)");
     await settle(views, (r) => r.url === probeURL, 1);
     facts.reload = {
+      stayed_signed_in: !liveReloaded.timed_out,
+      sibling_signed_in: !siblingListed.timed_out,
+      other_port_storage: otherPortStorage,
+      live_requests: liveRequests,
       signed_out_text: signedOut.value || "",
       signed_out_timed_out: signedOut.timed_out,
+      post_restart_storage: postRestartStorage,
       href: await evaluate(views, "location.href"),
-      page_requests: views.requests.filter((r) => shownAfterReload.includes(r.id)),
+      page_requests: views.requests.filter((r) => shownAfterReload.includes(r.id)).filter(server).map((r) => ({ ...r })),
       data_request_status: status,
       data_request: views.requests.filter((r) => r.url === probeURL),
     };

@@ -289,7 +289,7 @@ func TestBuilderCopyCheckBusyHTTPMCP(t *testing.T) {
 	require.NoError(t, err)
 	doer := generationDoer{client: srv.Client()}
 	httpTransport := genhighbayclient.NewClient(origin.Scheme, origin.Host,
-		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+		doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 	client := &genhighbay.Client{
 		CheckProjectEndpoint: httpTransport.CheckProject(), UpdateDependenciesEndpoint: httpTransport.UpdateDependencies(),
 		GenerateCodeEndpoint: httpTransport.GenerateCode(),

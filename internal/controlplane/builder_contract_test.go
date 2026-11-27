@@ -97,7 +97,7 @@ func TestBuilderCopyRefusalsRoundTripThroughHTTP(t *testing.T) {
 				}))
 			defer server.Close()
 			client := genclient.NewClient("http", strings.TrimPrefix(server.URL, "http://"),
-				server.Client(), goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+				server.Client(), goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 			switch tc.operation {
 			case "start":
 				_, err = client.StartBuild()(t.Context(), &genhighbay.StartBuildPayload{

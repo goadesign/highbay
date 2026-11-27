@@ -1,13 +1,13 @@
-// Package scaffold creates a new Highbay starter project for `hbay init` and
+// Package scaffold creates a new Highbay starter project for `highbay init` and
 // the init_project tool: a Goa / Goa-AI service module and the evaluator suite
-// that `hbay verify` runs against it. By default the project is blank: a
+// that `highbay verify` runs against it. By default the project is blank: a
 // service with no methods, a Story with no flows, and one scenario that checks
 // the program starts and listens. With Options.Example it is a worked example
 // instead, whose helper agent prices items through a tool.
 //
 // Init builds the whole project in the operator-provided work directory,
 // running `go mod tidy` in each module and generating its code with a
-// Generator (Highbay's Goa generator, the one `hbay gen` uses), and
+// Generator (Highbay's Goa generator, the one `highbay gen` uses), and
 // renames the staging directory to the target only when every step
 // succeeded. A failed or canceled step removes the staging directory, so the
 // target is never left half-written. When child cleanup cannot be confirmed,
@@ -441,7 +441,7 @@ func prepare(ctx context.Context, o Options, run Runner, gen Generator, commitRe
 	}
 	if _, err := os.Lstat(target); err == nil {
 		return "", nil, "", fmt.Errorf(
-			"%s already exists; hbay init only creates a new directory (pass a new path such as -dir %s, or change to the parent directory and remove an empty directory first)",
+			"%s already exists; highbay init only creates a new directory (pass a new path such as -dir %s, or change to the parent directory and remove an empty directory first)",
 			target,
 			filepath.Join(target, d.Name),
 		)

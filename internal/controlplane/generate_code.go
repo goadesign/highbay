@@ -1,5 +1,5 @@
 // This file regenerates the application or public local eval/ module through
-// the server's held workspace and the same publisher used by hbay gen.
+// the server's held workspace and the same publisher used by highbay gen.
 package controlplane
 
 import (

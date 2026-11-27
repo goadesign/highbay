@@ -45,13 +45,13 @@ func TestPlaybookLeavesConfirmationToTheUser(t *testing.T) {
 
 // TestPlaybookRegeneratesWithHighbayGenAndKeepsTheGRPCRoute verifies that the
 // playbook's executable regeneration step, which the highbay://golden-path
-// resource carries, names hbay gen, and that the module-pinned
-// goa gen route remains for gRPC designs hbay gen refuses.
+// resource carries, names highbay gen, and that the module-pinned
+// goa gen route remains for gRPC designs highbay gen refuses.
 func TestPlaybookRegeneratesWithHighbayGenAndKeepsTheGRPCRoute(t *testing.T) {
 	t.Parallel()
 
 	md := ResourceMarkdown()
-	assert.Contains(t, md, "hbay gen -dir")
+	assert.Contains(t, md, "highbay gen -dir")
 	assert.Contains(t, md, "gRPC")
 	assert.Contains(t, md, "go run goa.design/goa/v3/cmd/goa gen")
 }

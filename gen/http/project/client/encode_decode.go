@@ -686,7 +686,7 @@ func DecodeExchangeBrowserLinkResponse(decoder func(*http.Response) goahttp.Deco
 			if err != nil {
 				return nil, goahttp.ErrValidationError("project", "exchange_browser_link", err)
 			}
-			res := NewExchangeBrowserLinkResultCreated(&body)
+			res := NewExchangeBrowserLinkBrowserSessionResultCreated(&body)
 			return res, nil
 		case http.StatusForbidden:
 			var (
@@ -726,14 +726,379 @@ func DecodeExchangeBrowserLinkResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGetBrowserSessionRequest instantiates a HTTP request object with method
+// and path set to call the "project" service "get_browser_session" endpoint
+func (c *Client) BuildGetBrowserSessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetBrowserSessionProjectPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("project", "get_browser_session", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeGetBrowserSessionResponse returns a decoder for responses returned by
+// the project get_browser_session endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetBrowserSessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - error: internal error
+func DecodeGetBrowserSessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_browser_session", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("project", "get_browser_session", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetBrowserSessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_browser_session", err)
+			}
+			err = ValidateGetBrowserSessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_browser_session", err)
+			}
+			res := NewGetBrowserSessionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetBrowserSessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_browser_session", err)
+			}
+			err = ValidateGetBrowserSessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_browser_session", err)
+			}
+			return nil, NewGetBrowserSessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetBrowserSessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_browser_session", err)
+			}
+			err = ValidateGetBrowserSessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_browser_session", err)
+			}
+			return nil, NewGetBrowserSessionForbidden(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetBrowserSessionUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_browser_session", err)
+			}
+			err = ValidateGetBrowserSessionUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_browser_session", err)
+			}
+			return nil, NewGetBrowserSessionUnprocessable(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_browser_session", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("project", "get_browser_session", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetUpdateStatusRequest instantiates a HTTP request object with method
+// and path set to call the "project" service "get_update_status" endpoint
+func (c *Client) BuildGetUpdateStatusRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetUpdateStatusProjectPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("project", "get_update_status", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeGetUpdateStatusResponse returns a decoder for responses returned by
+// the project get_update_status endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetUpdateStatusResponse may return the following errors:
+//   - "release_unavailable" (type *goa.ServiceError): http.StatusBadGateway
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - error: internal error
+func DecodeGetUpdateStatusResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_update_status", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("project", "get_update_status", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetUpdateStatusResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_update_status", err)
+			}
+			err = ValidateGetUpdateStatusResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_update_status", err)
+			}
+			res := NewGetUpdateStatusResultOK(&body)
+			return res, nil
+		case http.StatusBadGateway:
+			var (
+				body GetUpdateStatusReleaseUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_update_status", err)
+			}
+			err = ValidateGetUpdateStatusReleaseUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_update_status", err)
+			}
+			return nil, NewGetUpdateStatusReleaseUnavailable(&body)
+		case http.StatusForbidden:
+			var (
+				body GetUpdateStatusForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_update_status", err)
+			}
+			err = ValidateGetUpdateStatusForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_update_status", err)
+			}
+			return nil, NewGetUpdateStatusForbidden(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetUpdateStatusUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_update_status", err)
+			}
+			err = ValidateGetUpdateStatusUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "get_update_status", err)
+			}
+			return nil, NewGetUpdateStatusUnprocessable(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "get_update_status", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("project", "get_update_status", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildApplyUpdateRequest instantiates a HTTP request object with method and
+// path set to call the "project" service "apply_update" endpoint
+func (c *Client) BuildApplyUpdateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ApplyUpdateProjectPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("project", "apply_update", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeApplyUpdateRequest returns an encoder for requests sent to the project
+// apply_update server.
+func EncodeApplyUpdateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*project.ApplyUpdatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("project", "apply_update", "*project.ApplyUpdatePayload", v)
+		}
+		body := NewApplyUpdateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("project", "apply_update", err)
+		}
+		return nil
+	}
+}
+
+// DecodeApplyUpdateResponse returns a decoder for responses returned by the
+// project apply_update endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeApplyUpdateResponse may return the following errors:
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "release_unavailable" (type *goa.ServiceError): http.StatusBadGateway
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "unprocessable" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - error: internal error
+func DecodeApplyUpdateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("project", "apply_update", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ApplyUpdateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			err = ValidateApplyUpdateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "apply_update", err)
+			}
+			res := NewApplyUpdateResultOK(&body)
+			return res, nil
+		case http.StatusConflict:
+			var (
+				body ApplyUpdateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			err = ValidateApplyUpdateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "apply_update", err)
+			}
+			return nil, NewApplyUpdateConflict(&body)
+		case http.StatusBadGateway:
+			var (
+				body ApplyUpdateReleaseUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			err = ValidateApplyUpdateReleaseUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "apply_update", err)
+			}
+			return nil, NewApplyUpdateReleaseUnavailable(&body)
+		case http.StatusForbidden:
+			var (
+				body ApplyUpdateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			err = ValidateApplyUpdateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "apply_update", err)
+			}
+			return nil, NewApplyUpdateForbidden(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ApplyUpdateUnprocessableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			err = ValidateApplyUpdateUnprocessableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("project", "apply_update", err)
+			}
+			return nil, NewApplyUpdateUnprocessable(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("project", "apply_update", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("project", "apply_update", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalProjectTeamRoleResponseBodyToProjectProjectTeamRole builds a value
 // of type *project.ProjectTeamRole from a value of type
 // *ProjectTeamRoleResponseBody.
 func unmarshalProjectTeamRoleResponseBodyToProjectProjectTeamRole(v *ProjectTeamRoleResponseBody) *project.ProjectTeamRole {
 	res := &project.ProjectTeamRole{
-		Role:    *v.Role,
-		Handle:  *v.Handle,
-		Running: *v.Running,
+		Role:        *v.Role,
+		Handle:      *v.Handle,
+		HasTerminal: *v.HasTerminal,
+		Running:     *v.Running,
 	}
 
 	return res
@@ -743,12 +1108,30 @@ func unmarshalProjectTeamRoleResponseBodyToProjectProjectTeamRole(v *ProjectTeam
 // type *project.TeamRoleState from a value of type *TeamRoleStateResponseBody.
 func unmarshalTeamRoleStateResponseBodyToProjectTeamRoleState(v *TeamRoleStateResponseBody) *project.TeamRoleState {
 	res := &project.TeamRoleState{
-		Role:       *v.Role,
-		Handle:     *v.Handle,
-		State:      *v.State,
-		Attention:  *v.Attention,
-		Watcher:    *v.Watcher,
-		Assignment: *v.Assignment,
+		Role:        *v.Role,
+		Handle:      *v.Handle,
+		HasTerminal: *v.HasTerminal,
+		State:       *v.State,
+		Attention:   *v.Attention,
+		Assignment:  *v.Assignment,
+	}
+	if v.Choice != nil {
+		res.Choice = unmarshalRoleAgentChoiceResponseBodyToProjectRoleAgentChoice(v.Choice)
+	}
+
+	return res
+}
+
+// unmarshalRoleAgentChoiceResponseBodyToProjectRoleAgentChoice builds a value
+// of type *project.RoleAgentChoice from a value of type
+// *RoleAgentChoiceResponseBody.
+func unmarshalRoleAgentChoiceResponseBodyToProjectRoleAgentChoice(v *RoleAgentChoiceResponseBody) *project.RoleAgentChoice {
+	res := &project.RoleAgentChoice{
+		Client:   *v.Client,
+		Program:  *v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     *v.Yolo,
 	}
 
 	return res

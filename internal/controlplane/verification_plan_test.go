@@ -358,7 +358,7 @@ func planServer(t *testing.T, workspace string) *ControlPlane {
 	})
 }
 
-// writeStarterAt writes the files the plan reads from a starter `hbay init`
+// writeStarterAt writes the files the plan reads from a starter `highbay init`
 // made for modulePath in dir: both go.mod files, the service's command and
 // the tests' generated entry point.
 func writeStarterAt(t *testing.T, dir, modulePath string) {

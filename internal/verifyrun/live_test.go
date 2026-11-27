@@ -181,7 +181,7 @@ func fakeSuiteLive() int {
 	return 0
 }
 
-// liveHost acts as `hbay serve`: it starts a live target under root, prints
+// liveHost acts as `highbay serve`: it starts a live target under root, prints
 // liveHostReady and the target's group once ready, and then blocks until it
 // is killed. A start error is printed and ends it.
 func liveHost(root string) int {

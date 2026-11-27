@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -64,7 +63,7 @@ func TestBuildStartAdmissionOwnsCancellation(t *testing.T) {
 // TestBuildTeamOutcomeUsesTypedConditions keeps peer-authored messages out of
 // every warning and returns the original team result when admission succeeds.
 func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
-	team := &genhighbay.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture team is ready for its assignment.", Roles: []*genhighbay.ProjectTeamRole{}}
+	team := &genhighbay.ProjectTeam{Team: "team", Step: "The fixture team is ready for its assignment.", Roles: []*genhighbay.ProjectTeamRole{}}
 	private := "private external reply"
 	cases := []struct {
 		name string
@@ -72,8 +71,6 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 		kind genhighbay.TeamKind
 	}{
 		{name: "ready", kind: genhighbay.TeamKindReady},
-		{name: "window busy", err: genhighbay.MakeWindowBusy(errors.New(private)), kind: genhighbay.TeamKindWindowBusy},
-		{name: "ambiguous", err: fmt.Errorf("%s: %w", private, &TeamSpaceConflict{Count: 3}), kind: genhighbay.TeamKindAmbiguousSpace},
 		{name: "unavailable", err: genhighbay.MakeTeamUnavailable(errors.New(private)), kind: genhighbay.TeamKindUnavailable},
 		{name: "unexpected failure", err: errors.New(private), kind: genhighbay.TeamKindUnavailable},
 	}
@@ -85,21 +82,9 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 				assert.Same(t, team, ready)
 				assert.Equal(t, team.Step, ready.Step, "the ready wrapper preserves the owner's instruction")
 			}
-			var step genhighbay.BuildStartStep
-			if busy, ok := outcome.AsWindowBusy(); ok {
-				step = busy.Step
-			}
-			if ambiguous, ok := outcome.AsAmbiguousSpace(); ok {
-				assert.Equal(t, 3, ambiguous.Count)
-				assert.Equal(t, "Close the duplicate Herdr spaces, then start the agents.", string(ambiguous.Step))
-				step = ambiguous.Step
-			}
 			if unavailable, ok := outcome.AsUnavailable(); ok {
-				step = unavailable.Step
-			}
-			if tc.err != nil {
-				assert.True(t, boundedText(string(step), maxCheckStep))
-				assert.NotContains(t, string(step), private)
+				assert.True(t, boundedText(string(unavailable.Step), maxCheckStep))
+				assert.NotContains(t, string(unavailable.Step), private)
 			}
 		})
 	}
@@ -108,19 +93,26 @@ func TestBuildTeamOutcomeUsesTypedConditions(t *testing.T) {
 // TestBuildTeamOutcomeGivesEachCauseItsStep gives start_build the team failure
 // the project owner returns, a team_unavailable error whose cause is the typed
 // failure, and checks that each cause gets its own repair before the step to
-// start the team agents for the saved build, not one Herdr check for all. An
-// error without a typed cause asks for that retry alone. No step tells the
-// user to type hbay, which neither prints a team step nor starts agents.
+// start the team agents for the saved build. An error without a typed cause,
+// and a cause this version does not know, asks for that retry alone. Running highbay
+// starts no agents, so only the stopping step names it, as the way to start
+// the server again before the retry.
 func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
-	for _, tc := range []struct{ name, cause, repair string }{
-		{name: "stopping", cause: "stopping", repair: "Ask your coding agent to open Highbay views, or choose Start Highbay in the Herdr companion; either starts the server again and opens a fresh page"},
-		{name: "herdr", cause: "herdr", repair: "Open the Herdr app"},
-		{name: "chorus", cause: "chorus", repair: "Run chorus up"},
-		{name: "saved space", cause: "saved_space", repair: "This project's saved Herdr space has an ID this version of Highbay no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Highbay will prepare a replacement space."},
-		{name: "roster folder", cause: "roster_folder", repair: "Make data/chorus-launcher/rosters"},
+	const generic = "The project team could not be prepared. Use Team → Start workers on the views page " +
+		"to start the team agents for this saved build."
+	for _, tc := range []struct {
+		name, cause string
+		// repair is text the step must contain; an unknown cause and an
+		// absent cause must equal generic instead.
+		repair string
+	}{
+		{name: "stopping", cause: "stopping", repair: "Run highbay in the project folder, or ask your coding agent to open Highbay views; either starts the server again and opens a fresh page"},
+		{name: "chorus", cause: "chorus", repair: "Run chorus up (or chorus status to see the error)"},
+		{name: "herdr-core", cause: "hc", repair: "Run hc server status to see the error (highbay up installs and starts it)"},
 		{name: "project state", cause: "project_state", repair: "Make sure this account can read and write this project's Highbay state (under highbay/operator in your user configuration folder) and restore anything missing or damaged there from a backup"},
 		{name: "role folder", cause: "role_folder", repair: "Make sure this account can open the project folder and its build working folders"},
-		{name: "no typed cause", repair: "The project team could not be prepared. Use Team → Start workers on the views page"},
+		{name: "a cause this version does not know", cause: "unknown_cause"},
+		{name: "no typed cause"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := error(genhighbay.MakeTeamUnavailable(errors.New("private external reply")))
@@ -132,13 +124,19 @@ func TestBuildTeamOutcomeGivesEachCauseItsStep(t *testing.T) {
 			unavailable, ok := buildTeamOutcome(nil, err).AsUnavailable()
 			require.True(t, ok)
 			step := string(unavailable.Step)
-			assert.Contains(t, step, tc.repair)
-			if tc.cause != "saved_space" {
-				assert.True(t, strings.HasSuffix(step, "the team agents for this saved build."), step)
+			if tc.repair == "" {
+				assert.Equal(t, generic, step)
+			} else {
+				assert.Contains(t, step, tc.repair)
+				assert.NotContains(t, step, "The project team could not be prepared.")
 			}
-			assert.NotContains(t, step, "Check that Herdr is available")
-			assert.NotContains(t, strings.ToLower(step), "run hbay")
+			assert.True(t, strings.HasSuffix(step, "the team agents for this saved build."), step)
+			if tc.cause != "stopping" {
+				assert.NotContains(t, strings.ToLower(step), "run highbay")
+			}
+			assert.NotContains(t, step, "Herdr")
 			assert.NotContains(t, step, "private external reply")
+			assert.NotContains(t, step, "the views page's step")
 			assert.True(t, boundedText(step, maxCheckStep), "the step fits the contract")
 		})
 	}

@@ -6,16 +6,23 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+// OpenViewsResult returns the browser handoff outcome and the project's Chorus coordinates.
+var OpenViewsResult = Type("OpenViewsResult", func() {
+	Description("Result of opening Highbay's browser workspace, including the project's Chorus team, channel, and guide handle so an attached guide session can join Chorus in one step.")
+	Attribute("opened", Boolean, "Whether the browser opener completed successfully.")
+	Attribute("message", String, "Safe handoff result without a URL or credential.")
+	Attribute("team", String, "Stable Chorus swarm name for this project.")
+	Attribute("channel", String, "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).")
+	Attribute("handle", String, "Registered Chorus handle for this project's guide (empty when no guide is registered yet).")
+	Required("opened", "message", "team", "channel", "handle")
+})
+
 // agentWorkflowMethods keeps browser credentials inside their project owner.
 func agentWorkflowMethods() {
 	Method("open_views", func() {
-		Description("Open a fresh project views session at the user's request. The project owner mints and opens the private link; no browser credential is returned to the caller.")
-		Result(func() {
-			Attribute("opened", Boolean, "Whether the browser opener completed successfully.")
-			Attribute("message", String, "Safe handoff result without a URL or credential.")
-			Required("opened", "message")
-		})
-		Tool("open_views", "Open Highbay's views page for the user to agree, build, check and approve changes. The browser session stays private; no link is returned.")
+		Description("Open Highbay's browser workspace at the user's request and return the project's Chorus team, #channel, and guide handle. The project owner mints and opens the private browser link locally; no browser credential is returned to the caller.")
+		Result(OpenViewsResult)
+		Tool("open_views", "Open Highbay's browser workspace for the user and return team, channel, and handle so you can join the project's Chorus channel immediately. No browser URL or credential is returned.")
 		HTTP(func() { POST("/views/open"); Response(StatusOK) })
 	})
 	Method("merge_change", func() {

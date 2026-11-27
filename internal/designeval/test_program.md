@@ -14,7 +14,7 @@ After you change `design/`, generate this module again. When a build runs with a
 test writer (without stored verification settings), this module belongs to the
 test writer, and Highbay regenerates its `gen/` at build start and on each report:
 the test writer reports with `report_tests_finished` to have Highbay generate it
-again or runs `hbay gen -dir eval` in its
+again or runs `highbay gen -dir eval` in its
 working folder first. Outside such a build, the builder calls `generate_code`
 with `target: "eval"`.
 {{- if .StoryTests }}

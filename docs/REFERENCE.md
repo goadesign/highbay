@@ -13,9 +13,9 @@ an operation, who may call it, what it returns and how it refuses.
 | Term | Meaning |
 | :--- | :--- |
 | **The user** | The person who describes the goal to the guide. Only the user confirms a change, starts a build, approves a result and requests a merge, on the views page: the page the server serves to the user's browser, which the README and How Highbay Works call the page. |
-| **The server** | The project's Highbay server: one per project folder, started by the guide's first Highbay call or by `hbay`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
-| **Herdr** | An optional workspace in which the server and agents can run in separate terminals. Its core service is the Herdr core (the commands `herdr-core` and `hc`); its window is the Herdr app (`herdr-app`). A *Herdr space* is the set of tabs that holds one project's terminals. |
-| **Chorus** | The service that launches the project's agent panes in Herdr and carries their messages. The *roster* describes the roles whose panes it can launch. An agent's *watcher* is its background wait for Chorus messages. |
+| **The server** | The project's Highbay server: one per project folder, started by the guide's first Highbay call or by `highbay`. It keeps the Change Cards, builds, verification runs and approvals, and it serves the operations below over HTTP and MCP. |
+| **Herdr Core** | The local terminal runtime. Highbay uses `hc` to run the agents and displays their terminals in the browser. |
+| **Chorus** | The local service that carries messages between you and the agents. `chorus watch` waits for the agent's next message. |
 | **The guide** | The agent the user talks to. It writes the Story and proposes and revises changes. |
 | **The builder** | The agent that writes the application's code, tries prompt wording on a live target and asks the server to verify its commit. |
 | **The test writer** | The agent that writes one test per finished flow, in its own working copy of the project, and reports when they are finished. |
@@ -30,7 +30,7 @@ an operation, who may call it, what it returns and how it refuses.
 | **Evaluator** | A test program that follows the [evaluator suite command contract](#evaluator-suite-command-contract): it declares its scenarios, runs them against the application's binaries and prints a report. Highbay generates the evaluator of a Highbay test module, such as the one the test writer works in, from that module's tests; stored verification settings name an evaluator the user maintains. |
 | **Scenario** | One named test in an evaluator, such as `starts_and_listens`. A report gives each scenario's outcome: passed, failed, not run or a harness error. |
 | **Tests commit** | The commit at which Highbay accepted a build's tests, or the evaluator commit named in stored verification settings. Verification runs those tests. |
-| **Stored verification settings** | An evaluator the user stores with `hbay verification set`. With them, every change verifies with that evaluator and builds add no test writer. |
+| **Stored verification settings** | An evaluator the user stores with `highbay verification set`. With them, every change verifies with that evaluator and builds add no test writer. |
 | **Live target** | A running copy of the application, built from a commit by the server, on which the builder tries prompt wording. Highbay never changes an application the user runs or deployed. |
 | **Hidden scenario** | A scenario whose name, inputs, checks and logs are never shown to the builder. An evaluator marks it with the tag `holdout`; the builder sees it only as `holdout-N`. Tests written by the test writer may not use the tag. |
 | **Run directory** | The private folder that holds one verification run: its request, its state, its report digest and its full output (`executor.log`). |
@@ -45,17 +45,16 @@ an operation, who may call it, what it returns and how it refuses.
 | --- | --- | --- |
 | **macOS or Linux** | Highbay runs the code the agents write (the design at each refresh, candidate builds, the candidate service, test listing, and the test program) as ordinary processes with your file and network access. Verification gives the test writer's accepted test program only `PATH` and `TMPDIR`; a live target also gives it a target key and a model gateway, without provider settings (see [`verify_change`](#verify_change) and [`start_live_target`](#start_live_target)). With stored verification settings, the operator's evaluator receives provider settings. Running as you, these programs can still read keys your other programs hold. `check_project` runs the project's tests in Linux containers (see **Docker** below). | — |
 
-| **Go 1.27.3 or later** | `hbay` is a Go program, and the project's checks use Go. Highbay runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
-| **Highbay** | The command itself. | From the root of the checkout whose README you are reading, run `go install ./cmd/hbay`; see [Install](../README.md#install). `go install github.com/goadesign/highbay/cmd/hbay@latest` installs the latest module version available to Go, which may be older than this README and lack commands described here. When installing that version, follow its README. |
-| **Herdr core** (`herdr-core` and `hc`) | Optional. With `hc` available, the project server starts in a Herdr terminal. | `curl -fsSL https://releases.herdr.dev/core/install.sh \| sh` ([herdr.dev/core](https://herdr.dev/core/)) |
-| **Herdr app** (`herdr-app`) | Optional. With Herdr core, the app shows the team's panes. | `curl -fsSL https://releases.herdr.dev/app/install.sh \| sh` ([herdr.dev](https://herdr.dev/)) |
-| **Chorus v0.14.0 or later** | Pane launch and agent messaging for a Herdr team. Background workers can run without Chorus. | `curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh \| sh`; update with `chorus update -yes` |
-| **A coding agent** | Run `hbay up` once to register the integration with detected clients. One installed family can fill both worker roles. Background workers need a supported CLI and explicit non-interactive permission. | — |
+| **Go 1.27.3 or later** | `highbay` is a Go program, and the project's checks use Go. Highbay runs Goa with each module's own versions, so no `goa` binary is needed. | [go.dev/dl](https://go.dev/dl/) |
+| **Highbay** | The `highbay` command. | [Install](../README.md#install) lists Homebrew, npm, shell, and Go installation. |
+| **Herdr Core 0.1.22 or later** (`hc`) | Runs the agents' interactive terminals. | `highbay up` verifies and installs it if needed. |
+| **Chorus 1.2.0 or later** | Carries project messages and handles the guarded wake for an agent's terminal. | Installed by Homebrew or npm with Highbay. `highbay up` installs it if needed. |
+| **A coding agent** | The guide helps you plan a change. One installed agent family can also fill both worker roles. | Run `highbay up` to register Highbay with installed clients. |
 | **Git 2.45 or newer**, with a name and address | Startup requires support for `--no-lazy-fetch`, so Highbay's Git reads do not download missing objects. Every build needs the project in a Git repository with a first commit and a Git name and address, with or without stored verification settings, and so does verification, which needs the build. Without stored verification settings, live targets need the repository too. Highbay records accepted tests, and any uncommitted files a working copy holds when it joins a new build, as commits under your Git identity. | Install Git 2.45 or newer on `PATH`; `git config --global user.name …` and `user.email …` configure its identity. |
 | **Docker** (Docker Desktop, or another local engine on a `unix://` socket) | `check_project` and `update_dependencies` run Go in Linux containers. The first check pulls `golang:1.27.3`. | [docker.com](https://www.docker.com/) |
-| **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Highbay verifies the Orders project or starts a live target of it, when `hbay verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/hbay`). | `brew install temporal` |
+| **Temporal CLI** | Only to run the Orders evaluator, which starts a local Temporal server for its scenarios: when Highbay verifies the Orders project or starts a live target of it, when `highbay verify` runs that evaluator, and in the full-suite tests that run it (the `examples/orders` acceptance suite and the `e2e` tests of `./internal/verify` and `./cmd/highbay`). | `brew install temporal` |
 
-Before creating state, `hbay` checks for the browser opener (`open` on macOS
+Before creating state, `highbay` checks for the browser opener (`open` on macOS
 or `xdg-open` on Linux) and probes Git with `git --no-lazy-fetch version`.
 `--print-link` skips the opener check. Git 2.45 introduced the required
 option. Builds with the option backported also work. A refusal names the
@@ -65,48 +64,93 @@ missing opener or Git capability.
 
 ## Terminal and browser automation
 
-The ordinary journey starts in your coding agent with `/highbay` (`$highbay`
-in Codex) after one-time [`hbay up`](#hbay-up). These terminal entrypoints
-remain available for operators and automation.
+After one-time [`highbay up`](#highbay-up), run `highbay` in a project folder to
+open the browser workspace. If a coding agent is already open in the folder,
+invoke `/highbay` (`$highbay` in Codex) to attach that session.
 
-Run `hbay --print-link` in the project folder to start or attach and receive
+Run `highbay --print-link` in the project folder to start or attach and receive
 one JSON object on stdout, `{ "url": "...", "expires_at": "..." }`. Startup
 notices and the server address go to stderr. The command takes no additional
 arguments. Open the URL in a browser you control. The first exchange within
 two minutes grants user-page access, so keep the URL out of shared logs.
-Repeat the command after use, expiry or page reload. A startup, authentication
+Run the command again if you need a fresh session after the link has been used or expired. A startup, authentication
 or link validation error exits nonzero without printing a link.
 
 The guide can call [`open_views`](#open_views) to open a new session for the
-user. Use [`hbay status`](#hbay-status) to read the project's current stage and
+user. Use [`highbay status`](#highbay-status) to read the project's current stage and
 roles without opening a session. The [team API](#team-supervision) exposes
 installed agent options and accepts explicit launch choices.
 
 ## Commands
 
-`hbay help`, `hbay -h` and `hbay --help` print the command list to standard
-output and exit 0. `hbay help <command>` and `hbay <command> -h` print that
+`highbay help`, `highbay -h` and `highbay --help` print the command list to standard
+output and exit 0. `highbay help <command>` and `highbay <command> -h` print that
 command's flags to standard error and exit 0. Every command refuses
-unexpected positional arguments: `hbay stop` with `hbay: stop takes no
-arguments`, `hbay verification` and `hbay promotion` with their usage line
-(`hbay: usage: hbay verification set <file> | show | remove`), and the
-others with `hbay: unexpected arguments [...]`. An unknown command, such as
-`hbay build`, answers `hbay: unknown command "build"; run "hbay help" to
+unexpected positional arguments: `highbay stop` with `highbay: stop takes no
+arguments`, `highbay verification` and `highbay promotion` with their usage line
+(`highbay: usage: highbay verification set <file> | show | remove`), and the
+others with `highbay: unexpected arguments [...]`. An unknown command, such as
+`highbay build`, answers `highbay: unknown command "build"; run "highbay help" to
 list the commands`.
 
-### `hbay up`
+<a id="hbay-up"></a>
+### `highbay up`
 
-Run once after installing Highbay. It performs [`hbay setup -global`](#hbay-setup--global),
-then starts Chorus if installed. Missing Chorus is reported and does not
-prevent setup; without it, agents have no Chorus messaging. `HIGHBAY_NO_SETUP=1`
-skips registration and only starts Chorus when present. This command does
-not start a project server.
+Run once after installing Highbay. It checks Go, Git, and Docker and installs
+missing or incompatible Herdr Core and Chorus with your permission. In a
+terminal, press Enter to accept the `[Y/n]` prompt. In a non-interactive
+session, run `highbay up --yes` to authorize installation. Homebrew manages
+updates for formulae it distributes (such as Chorus). Standalone companion
+downloads verify the publisher's release checksums (and macOS Developer ID
+signature for Herdr Core) before replacing an executable.
 
-After setup, open your project folder in a coding agent and invoke `/highbay`
-(`$highbay` in Codex). Reload its MCP configuration or start a new session if
-Highbay is not yet listed.
+The command then runs [`highbay setup -global`](#highbay-setup--global) and starts
+the companion services. Run `highbay` in a project folder to open the workspace.
+If you added a coding agent, rerun `highbay up` and reload the client.
 
-### `hbay setup -global`
+| Setting | Effect |
+| --- | --- |
+| `HIGHBAY_NO_DEPS=1` | Skip dependency checks and installation. |
+| `HIGHBAY_NO_SETUP=1` | Skip global coding agent registration. |
+| `HIGHBAY_NO_START=1` | Finish after checking and installing dependencies, before global registration or service startup. |
+| `HIGHBAY_VERSION` | Select the shell installer's stable release tag. The installer defaults to the latest release. |
+| `HIGHBAY_INSTALL_DIR` | Choose the shell installer's absolute binary directory. The default is `~/.local/bin`. |
+
+The shell installer verifies and installs `highbay`, then runs `highbay up --yes`
+using those settings. npm selects the binary release matching the package
+version and puts the packaged Chorus executable on the command's `PATH`.
+
+### `highbay update`
+
+Checks the installed binary and any running server for the current project.
+The command reports an available release, a restart needed to use an
+already installed release, or the current version. It asks you to confirm
+the selected release before installing it.
+
+| Option | Effect |
+| --- | --- |
+| `-check` | Report the available release or restart and exit before installation. |
+| `-yes` or `-y` | Approve the selected release without a prompt. |
+| `-version X.Y.Z` | Select an exact stable release. Cannot be combined with `-check`. |
+
+Homebrew installs update through Homebrew. If its tap offers a different
+version, Highbay asks you to check again. For direct installs, Highbay
+checks the archive's SHA-256 and the staged executable's version before
+replacing the installed binary. Concurrent updates on the same binary
+serialize. A request for a version older than the one installed is refused.
+
+npm installations update through npm or npx so their launcher and
+dependencies stay in sync. For source builds and Go pseudo-versions, the
+command prints the Go installation command. The browser shows the same
+manual instruction when applicable.
+
+When the project server is running, the command waits for it to report the
+approved version. The browser's **Update & Restart** button also targets
+the displayed release. The page waits for the restarted server and offers
+**Reload** when new assets are ready. You can finish editing before reloading.
+
+<a id="hbay-setup--global"></a>
+### `highbay setup -global`
 
 Registers the installed executable as the global `highbay` MCP server with
 `args: ["stdio"]`, and installs `/highbay` in client and shared skill folders.
@@ -120,23 +164,14 @@ supported CLI executables, so adding a client later requires setup again.
 Setup preserves other servers and settings. An unchanged registration is
 left alone. Invalid or unsupported configuration stops setup and names the
 file; some errors, such as JSON parse failures, include no recovery step.
-`hbay up` adds advice to fix that file and rerun setup or explicitly skip it.
+`highbay up` adds advice to fix that file and rerun setup or explicitly skip it.
 Earlier successful file writes remain. Run the installed
 binary: a temporary `go run` executable cannot be registered for later use.
 Without `-global`, setup explains the flag and writes nothing. Unlike
-`hbay up`, this command starts no Chorus server.
+`highbay up`, this command starts no Chorus server.
 
-Open Herdr once before setup so it creates its configuration folder. Setup
-skips companion installation if that folder does not exist. When it exists,
-setup installs the Highbay floating companion in `mods/highbay/`. It shows the current project stage and role attention,
-focuses live panes, and offers **Open Highbay Window**; focusing a pane or opening the window dismisses the companion overlay, while a failed open keeps it visible with the error. It reads project status and
-holds no Highbay browser-session credential. It does not change Herdr's shipped
-workspace layout. On macOS, setup adds `cmd-alt-shift-h` to the global section
-of Herdr's `keys.json` when that shortcut is free. Existing bindings are
-preserved; a missing or read-only file is reported and left alone. Adding
-the shortcut makes Herdr treat `keys.json` as user-owned on later upgrades.
-
-### `hbay stdio`
+<a id="hbay-stdio"></a>
+### `highbay stdio`
 
 The MCP entrypoint installed in coding-agent configuration. It reads
 newline-delimited JSON-RPC from stdin and writes only protocol responses to
@@ -147,17 +182,17 @@ Initialization, ping and tool/resource discovery work without creating
 project state or starting a server. A guide's first tool call or resource
 read starts or attaches to the project's server, hands over allowlisted
 provider settings from its environment, and attaches the current session as
-the guide. In Herdr, a compatible live model pane can be adopted in place.
-The guide calls [`open_views`](#open_views) to open the page without receiving
-a browser credential.
+the guide. A matching Herdr Core terminal becomes available in the browser.
+The guide calls [`open_views`](#open_views) to open the page and find the
+Chorus team and channel.
 
 Setup does not populate provider settings in the MCP registration; for Codex,
 setup adds `HC_TERMINAL_ID` to `mcp_servers.highbay.env_vars` so direct CLI
-spawns can forward the Herdr terminal identifier. `hbay stdio` uses the
+spawns can forward the Herdr terminal identifier. `highbay stdio` uses the
 environment and direct OS process lineage observed at bind time (omitting
 inherited daemon terminal IDs and lineage when spawned by `codex app-server`,
-which leaves shared-daemon sessions external) to attempt live Herdr adoption.
-Bare `hbay` remains the operator path for handing over settings from a known
+which leaves shared-daemon sessions external) to identify an attached Herdr Core terminal.
+Bare `highbay` remains the operator path for handing over settings from a known
 shell environment.
 
 The physical working folder determines the role. A folder inside
@@ -169,46 +204,46 @@ build requirements. A binding failure never starts a server or falls back
 to guide access.
 
 <a id="highbay-serve"></a>
-### `hbay` and `hbay stop`
+<a id="hbay-and-hbay-stop"></a>
+### `highbay` and `highbay stop`
 
-Run `hbay` in a project folder to start or attach to its server and open a
+Run `highbay` in a project folder to start or attach to its server and open a
 fresh views page. It prints the folder and server address after opening the
 browser. The first start also prints
 `Started a Highbay project for this folder. Moving or renaming this folder starts a new project.`
-Running `hbay` leaves agent startup to [the team operations](#team-supervision).
+The first message to the guide starts one when needed. See [team operations](#team-supervision).
 If opening the page fails, the command reports `open project views: …` and
 the server stays running.
 
 <a id="model-provider-settings"></a>
 
 **Model provider settings.** Once the server answers for the project,
-`hbay` hands it the request settings of each model provider whose key is set
+`highbay` hands it the request settings of each model provider whose key is set
 in the current shell ([`hand_over_model_settings`](#hand_over_model_settings)).
 It prints one line with the settings' names, for example
 
 ```text
-Model settings held by the project server: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (from this shell); not sent: ANTHROPIC_ADMIN_KEY. Live targets use anthropic/claude-sonnet-4-6; change it on the views page. hbay stop makes the project server forget them.
+Model settings held by the project server: ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL (from this shell); not sent: ANTHROPIC_ADMIN_KEY. Live targets use anthropic/claude-sonnet-4-6; change it on the views page. highbay stop makes the project server forget them.
 ```
 
-A shell without a key sends nothing and keeps what an earlier `hbay` handed
-over, marked `(from an earlier hbay)`. A family variable without its key is
+A shell without a key sends nothing and keeps what an earlier `highbay` handed
+over, marked `(from an earlier highbay)`. A family variable without its key is
 named as not sent, such as `ANTHROPIC_BASE_URL (ANTHROPIC_API_KEY is not
 set)`. With nothing held and nothing left unsent, no line prints. A refused
-hand-over stops `hbay` before opening the page; a value longer than 4,096
+hand-over stops `highbay` before opening the page; a value longer than 4,096
 characters is refused with that limit named.
 
-`hbay` leaves its own environment unchanged and gives it unchanged to
-Herdr's programs (`hc`, `herdr-app`). When `hbay` is what starts the Herdr
-core, the core keeps that shell's environment, provider variables included,
+`highbay` leaves its own environment unchanged and gives it unchanged to
+Herdr Core (`hc`). When `highbay` starts Herdr Core, the core keeps that shell's environment, provider variables included,
 for as long as it runs, and every terminal it opens inherits it, the agents'
-included, exactly as if you had started Herdr in that shell; `hbay stop` does
+included, exactly as if you had started Herdr in that shell; `highbay stop` does
 not change that. Chorus and the browser opener receive the environment
 without any `ANTHROPIC_` or `OPENAI_` variable. Programs you started from that
 shell keep what they inherited.
 
 <a id="idle-shell"></a>
 
-**Idle shell detection.** Highbay treats a pane's foreground program as an *idle
+**Idle shell detection.** Highbay treats a terminal's foreground program as an *idle
 shell* when both hold:
 
 - Its executable name, with leading dashes removed, is `sh`, `bash`, `zsh`,
@@ -217,14 +252,14 @@ shell* when both hold:
 - Neither of the first two arguments after the program is `-c` or a
   single-dash flag group containing `c`, such as `-lic`.
 
-A shell started with such a command flag counts as running. A live pane that
+A shell started with such a command flag counts as running. A live terminal that
 reports no foreground program also counts as running.
 
 <a id="project-state-folder"></a>
 
 **The project and its state folder.** A project is a folder, with or without
 Git. Highbay resolves symlinks in the path and uses the nearest project record
-in that folder or its parents, so running `hbay` inside a project the guide
+in that folder or its parents, so running `highbay` inside a project the guide
 created with `init_project` finds the original project. Moving or renaming the
 folder starts a different, empty project. Each project's private state lives
 outside the folder, in
@@ -263,14 +298,14 @@ the selected source would not produce; the binary digest does not authenticate
 that correspondence. Deleting
 this cache forces recompilation but does not authenticate the other inputs.
 
-Before starting the server or accepting `hbay verification set` or
-`hbay promotion set`, Highbay asks Git for the project's enclosing working tree
+Before starting the server or accepting `highbay verification set` or
+`highbay promotion set`, Highbay asks Git for the project's enclosing working tree
 so private files stay outside it. Each read has a 30-second allowance. A read
 that times out stops the operation, names `git rev-parse --show-toplevel`, and
 asks you to check that Git can read the workspace before retrying the command.
 A folder without a Git repository remains a valid project folder.
 
-The command passes the discovered state folder to `hbay serve -state <dir>`.
+The command passes the discovered state folder to `highbay serve -state <dir>`.
 The foreground command also accepts this explicit state folder. A server
 started in Herdr inherits the Herdr core's environment. For example, Docker
 settings for that server must be available to the core. The detached process
@@ -282,7 +317,7 @@ The server refuses a state folder that is not private to your account, holds no 
 belongs to another project folder, lies inside the project folder, or is not
 named by its physical path.
 
-When `hbay`, `hbay stop`, a settings command or a coding agent's first Highbay
+When `highbay`, `highbay stop`, a settings command or a coding agent's first Highbay
 tool call cannot use a project's record or state folder, the error names them
 and the repair; then try again the same way. `<record>` is the
 `project.json` in the project's state folder, and the folder that holds
@@ -299,10 +334,10 @@ every project's state folder is `<UserConfigDir>/highbay/operator`:
 **Starting, attaching and failures.** A start lock serializes simultaneous
 commands. A running server is attached to only after it proves the project's
 identity and reports the build it started from, the SHA-256 of its
-executable, which must be that of the `hbay` attaching. A server another
-build started, such as the one still running after a new `hbay` is
-installed, is refused with `hbay: this project's server was started by
-another build of hbay; run hbay stop, then hbay`; `hbay stop` stops a
+executable, which must be that of the `highbay` attaching. A server another
+build started, such as the one still running after a new `highbay` is
+installed, is refused with `highbay: this project's server was started by
+another build of highbay; run highbay stop, then highbay`; `highbay stop` stops a
 server of any build. A record left by a server that died is stale and is
 removed by the next start. With `hc` available, the server runs in its own
 Herdr terminal labeled `highbay_project=<project id>`. Without `hc`, it runs
@@ -311,25 +346,25 @@ as a detached background process and sends its output to the private
 The output shows the address, the Change Card folder and the checkpoint
 status. The `CP4` line names the verification test source.
 
-Before starting the server, `hbay` checks that the saved port is
-free. When it is taken, `hbay` starts nothing and names what holds it: the
+Before starting the server, `highbay` checks that the saved port is
+free. When it is taken, `highbay` starts nothing and names what holds it: the
 running server of another Highbay project that saved the same port, with
-`hbay: project port 52011 is held by the Highbay server of the project in
+`highbay: project port 52011 is held by the Highbay server of the project in
 <folder>, which saved the same port, so only one of the two can run at a
-time; no server was started; run hbay stop in that folder, then run hbay
-here`, or otherwise another program, with `hbay: another program is
+time; no server was started; run highbay stop in that folder, then run highbay
+here`, or otherwise another program, with `highbay: another program is
 listening on 127.0.0.1:52011, the address saved for this project; no server
-was started; stop that program, then run hbay (lsof -nP -iTCP:52011
+was started; stop that program, then run highbay (lsof -nP -iTCP:52011
 -sTCP:LISTEN names it)`. When the server's terminal ends before the server
 answers, for example because it cannot read its stored settings, or because
-another program took the port after that check, `hbay` reads what that
+another program took the port after that check, `highbay` reads what that
 terminal printed, removes the terminal, and shows the last lines (at most 20
 lines and 4 KiB, with control characters removed). For a detached server that
 exits before answering, it reads the startup log within the same bounds.
 
 ```text
-hbay: the project server stopped while starting, and its last lines were:
-  hbay: project port 52011 is occupied: listen tcp 127.0.0.1:52011: bind: address already in use; stop the program listening on it, then run hbay
+highbay: the project server stopped while starting, and its last lines were:
+  highbay: project port 52011 is occupied: listen tcp 127.0.0.1:52011: bind: address already in use; stop the program listening on it, then run highbay
 ```
 
 If those lines cannot be read, the error says so and keeps the original
@@ -338,24 +373,25 @@ terminal or background process. The error identifies the launch so you can
 read its output. A taken port leaves the saved port and credentials
 in place.
 
-**`hbay stop`.** Asks the server to shut down in order and waits until it has
+**`highbay stop`.** Asks the server to shut down in order and waits until it has
 released the project, then prints `Highbay stopped.`, or `Highbay is stopped.`
 when no server was running. Before its listener closes, the server revokes its
-management credential and withdraws its running record. It drains its background
-workers before releasing the project. Interrupt,
-termination and hangup signals cause the same shutdown. A killed server is
-recovered by the next `hbay`.
+management credential and withdraws its running record. Agent terminals
+belong to Herdr Core and can continue after the server stops. To end a managed
+agent, use **Stop** for its role in Team before stopping Highbay. Interrupt,
+termination and hangup signals cause the same server shutdown. A killed
+server is recovered by the next `highbay`.
 
 **Credentials and browser access.** Each server creates a management
 credential in memory and publishes it in its private running record after
-binding its port; `hbay` and `hbay stop` read it there for each request,
+binding its port; `highbay` and `highbay stop` read it there for each request,
 use the literal local address without a proxy, and refuse redirects.
 Management can check identity and status, read team metadata, attach a guide,
 stop the server, mint a browser link and hand over the shell's model provider
 settings. Application decisions use the browser session. Agent credentials
 survive restarts and are removed with their agent.
 
-`hbay` opens only the saved views address with a single-use link in the
+`highbay` opens only the saved views address with a single-use link in the
 address fragment. The link expires after two minutes and is exchanged once
 for a browser session (see [Views page](#views-page)). Every response
 disables MIME sniffing, and every request must use the saved host and, when
@@ -363,20 +399,21 @@ present, the server's own origin.
 
 All processes run as the same operating system account. File permissions keep
 other accounts out, not other programs of that account: a deliberate program
-could read another role's credential or run `hbay` to obtain a browser link.
+could read another role's credential or run `highbay` to obtain a browser link.
 The roles are a separation of duties, not isolation from a malicious agent.
 
-### `hbay status`
+<a id="hbay-status"></a>
+### `highbay status`
 
-Run `hbay status` in the project folder or one of its subfolders.
-`hbay status --json` prints `{"running":false}` when the folder has no saved
+Run `highbay status` in the project folder or one of its subfolders.
+`highbay status --json` prints `{"running":false}` when the folder has no saved
 project or its server is stopped. It creates no project state or server.
 If a server holds the project, the command authenticates and verifies its
 project ID, directory and owner. It can read a compatible server started by
 a different build. An identity or status error is reported as an error.
 
 When running, the response includes `running: true`, `project_name`,
-`directory`, `team`, `herdr_mode`, `stage`, `change_id`, `change_title`,
+`directory`, `team`, `stage`, `change_id`, `change_title`,
 `attention` and `roles`. Stages are `describe`, `agree`, `build`, `check`,
 `approve` and `merged`. The change fields are empty when there is no
 selected change. Roles use the same fields as [`get_team`](#get_team).
@@ -384,19 +421,20 @@ selected change. Roles use the same fields as [`get_team`](#get_team).
 #### Project management status
 
 The management-only `GET /project/status` uses the same response fields as
-[`hbay status`](#hbay-status) without the CLI's `running` flag. It can
+[`highbay status`](#highbay-status) without the CLI's `running` flag. It can
 consult Git to establish whether the open build was taken by the project
 branch, including a manual merge. A status read never starts or stops agents.
 
-### `hbay init`
+<a id="hbay-init"></a>
+### `highbay init`
 
 Creates a starter project in `<dir>`: a Goa and Goa-AI service with a
 `goa.design/model` architecture, and a test module in `<dir>/eval`. The
 project is blank unless `-example` asks for Highbay's worked example. It
 resolves dependencies, generates each module's code with the generator
-[`hbay gen`](#hbay-gen) uses, runs `go vet ./...` and
+[`highbay gen`](#highbay-gen) uses, runs `go vet ./...` and
 `go test ./...` in both modules, and prints the commands that make the first
-commit and start `hbay` in the project. It builds the project in protected
+commit and start `highbay` in the project. It builds the project in protected
 temporary storage on the destination's file system and moves it to `<dir>` in
 one step only when everything succeeded; a failure or interrupt leaves `<dir>`
 absent, and it never replaces an existing entry.
@@ -407,7 +445,7 @@ absent, and it never replaces an existing entry.
   identifier (`^[a-z][a-z0-9]*$`, not a Go keyword or `main`).
 - `-highbay-version <version>`: the exact semantic version of
   `github.com/goadesign/highbay` that `eval/go.mod` requires. It defaults to the
-  version the `hbay` binary was built from and is required for a `(devel)` or
+  version the `highbay` binary was built from and is required for a `(devel)` or
   `+dirty` build; `latest` and branch names are refused.
 - `-example`: create Highbay's worked example instead of the blank project.
 
@@ -442,7 +480,8 @@ requires, which the method `PricesCookie` of `eval/acceptance` implements.
 The module runs these scenarios against a scripted model (`eval/scripted`)
 and implements the live target prompt contract.
 
-### `hbay verification` and `hbay promotion`
+<a id="hbay-verification-and-hbay-promotion"></a>
+### `highbay verification` and `highbay promotion`
 
 Each takes `set <file>`, `show` or `remove` and works with or without a
 running server. `set` reads a JSON file outside the project folder and its
@@ -450,8 +489,8 @@ Git working tree, refuses unknown fields and trailing data, resolves relative
 paths against the file's folder, and stores a private copy; a refused file
 leaves the earlier settings in place. `show` prints the stored settings;
 `remove` deletes them. The server reads them when it starts, so a change takes
-effect after `hbay stop` and `hbay`. `hbay help verification` and
-`hbay help promotion` print each format's fields and a minimal valid file.
+effect after `highbay stop` and `highbay`. `highbay help verification` and
+`highbay help promotion` print each format's fields and a minimal valid file.
 
 **Verification settings** name an evaluator Highbay runs instead of tests
 written by the test writer:
@@ -489,11 +528,12 @@ the approval error panel repeats it. Without promotion settings, an approval
 records no release binaries. A stored file the server cannot accept, such
 as one with any other field (`suite_id`), stops the server while it starts;
 the shown error ends by naming
-`hbay promotion show` to see the settings, `hbay promotion set <file>` to
-store them again and `hbay promotion remove` to remove them, then `hbay`.
+`highbay promotion show` to see the settings, `highbay promotion set <file>` to
+store them again and `highbay promotion remove` to remove them, then `highbay`.
 Approval never merges or deploys.
 
-### `hbay preview`
+<a id="hbay-preview"></a>
+### `highbay preview`
 
 Reads a design module into a snapshot (`go.mod`, `go.sum` and non-test `.go`
 files, never following symlinks; run `go mod tidy` first if `go.sum` is
@@ -502,7 +542,7 @@ indented JSON to standard output: `system_name`, `declarations`, C4
 `containers` and `edges`, `agent_policies`, `tools`, and `stories` when the
 design declares Stories. Then it writes one
 summary line to standard error, such as
-`hbay: "orders": 3 container(s), 2 boundary edge(s), 1 agent policy(s), 4 tool contract(s)`.
+`highbay: "orders": 3 container(s), 2 boundary edge(s), 1 agent policy(s), 4 tool contract(s)`.
 It needs no server, no Change Card and no model key. Interrupt and termination
 signals cancel it; it removes its temporary folders before exiting, or names
 one it could not remove.
@@ -510,9 +550,10 @@ one it could not remove.
 - `-dir <path>`: the module's root, holding `go.mod`, `go.sum` and `design/`
   (default `.`).
 
-### `hbay diff`
+<a id="hbay-diff"></a>
+### `highbay diff`
 
-Evaluates two design modules, as `hbay preview` does, at their own
+Evaluates two design modules, as `highbay preview` does, at their own
 dependency versions, and prints the structural `DiffResult` as JSON:
 declarations added, removed and changed, dependency version changes and a
 summary. It gives no compatibility verdict.
@@ -520,7 +561,8 @@ summary. It gives no compatibility verdict.
 - `--old-dir <path>`: the earlier module *(required)*.
 - `--new-dir <path>`: the later module *(required)*.
 
-### `hbay gen`
+<a id="hbay-gen"></a>
+### `highbay gen`
 
 Regenerates a design module's `gen/` from its `design/` and
 replaces `gen/` in one atomic rename, so `gen/` is never missing or
@@ -546,14 +588,15 @@ Generation needs `goa.design/goa/v3` `v3.35.1-0.20261103205041-35e789e8f9b1`
 or later; with an older Goa the build fails and the error names the Goa
 version in use. The named-section rewrite of `AGENTS_QUICKSTART.md` needs
 `goa.design/goa-ai` `v0.90.1-0.20261110011046-f32bd628f2bf` or later. A design
-with gRPC transports is refused, because `hbay gen` runs Goa's generator
+with gRPC transports is refused, because `highbay gen` runs Goa's generator
 without protoc; generate it with the module's own `go run goa.design/goa/v3/cmd/goa gen`.
 `generate_code` writes the same files. A Highbay test module's Story table,
 `design/story_tests.go`, is a source file of its design, so regenerating the
 module keeps the tests the table requires (see
 [builds and assignments](#builds-and-assignments)).
 
-### `hbay verify`
+<a id="hbay-verify"></a>
+### `highbay verify`
 
 An operator tool that checks a commit without a server. It clones the
 committed application and evaluator into a private work folder, builds the
@@ -564,11 +607,11 @@ the evaluator with the caller's shell environment unchanged (unlike
 prints the builder view of the report (hidden scenarios shown only as
 `holdout-N`) to standard output. Then it writes one summary line to standard
 error, such as
-`hbay: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
+`highbay: verification report did not pass: 1/3 scenarios passed; failed: 1, not run: 1, harness errors: 0; not passing: "refund_over_limit", "slow_refund" (report 4f2c…)`.
 It exits 0 when the report completed and passed, and 1 otherwise.
 A report that did not pass is written and printed before the command exits
 non-zero; a setup or build failure prints no report. Omitting a required flag
-fails with `hbay: verify requires <flags>`.
+fails with `highbay: verify requires <flags>`.
 
 To verify the current commit of a Highbay project (`shop`, with the test module in
 `eval/` and generated evaluator `./gen/cmd/shop-evals`) from its repository root:
@@ -577,7 +620,7 @@ To verify the current commit of a Highbay project (`shop`, with the test module 
 VERIFY_DIR="$(mktemp -d)"
 WORK_DIR="$VERIFY_DIR/work"
 REPORT_DIR="$VERIFY_DIR/reports"
-hbay verify \
+highbay verify \
   -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary shop=./cmd/shop \
   -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/shop-evals \
   -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
@@ -594,7 +637,7 @@ merged branch from the terminal** on **Approve** or **Build** after merging:
 - Replace `SERVICE` with your service name and adjust `-candidate-module` or
   `-suite-module` if your service or test module lives outside the default
   directories. When the project uses stored verification settings instead of
-  written tests, run `hbay verification show` to fill in the candidate and
+  written tests, run `highbay verification show` to fill in the candidate and
   evaluator flags (including one `-binary` flag per candidate binary).
 - When crafting the command manually, read the full `<request_revision>` and
   `<tests_commit>` from **Verified inputs and digests** on **Approve** (or the
@@ -610,16 +653,16 @@ merged branch from the terminal** on **Approve** or **Build** after merging:
 | `-suite-commit <sha>` *(required)* | Full commit ID of the evaluator. |
 | `-suite-module <dir>` | Evaluator module folder (default `.`; `eval` for a Highbay test module). |
 | `-suite-command <package>` *(required)* | The evaluator program's package, such as `./gen/cmd/shop-evals` for a Highbay test module or `./cmd/orders_acceptance-evals`. |
-| `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `hbay approve` gets the same one. |
+| `-request-revision <digest>` *(required)* | The `request_revision` recorded in the report. Without a Change Card, any label works if `highbay approve` gets the same one. |
 | `-work-dir <path>` *(required)* | A missing or empty operator-owned folder for this operation's checkouts, scratch, outputs, evidence and Go build cache. It is kept after the run, so retrying or running again requires a new or emptied `-work-dir`. Suite evidence can name hidden scenarios: keep this folder separate from builders' working copies and do not show it to builders. Programs running as you retain your file access. Relative paths resolve from the caller's directory. |
 | `-report-dir <path>` *(required)* | Where the full report is written; keep it from the builder when scenarios are hidden. |
 | `-timeout <duration>` | Limit for the run (default `0`, no limit). A stopped run prints any partial report the evaluator saved and exits non-zero; a partial report can pass. |
 | `-builder-view` | Default `true`. `-builder-view=false` prints the full report and names hidden scenarios in the summary. Failures go to standard error in either view; do not show them to the builder. |
 
 When a run ends without completing (`checkout`, `build`, `describe`, `suite`,
-`report` or `supervise`), `hbay verify` writes
-`hbay: verification <failure> at stage <stage>: <summary>` followed by the
-run's `executor.log` to standard error (or `hbay: read executor log: …` if the
+`report` or `supervise`), `highbay verify` writes
+`highbay: verification <failure> at stage <stage>: <summary>` followed by the
+run's `executor.log` to standard error (or `highbay: read executor log: …` if the
 run stopped before creating `executor.log`) and exits 1 (when a canceled or
 timed-out run saved a partial report, it writes that report JSON to standard
 output and the summary line to standard error first, then exits 1).
@@ -671,7 +714,7 @@ func main() {
    starts the application with
    [`candidate.Exec`](../verify/candidate/candidate.go) and
    attaches the evidence of every binary it used, such as
-   `pinned["orders"].Evidence("orders")`, which `hbay verify` compares with the
+   `pinned["orders"].Evidence("orders")`, which `highbay verify` compares with the
    digest it measured; missing or different evidence makes the scenario a
    `harness_error`. The builder view then says in one fixed sentence which
    check failed; the names and digests the scenario reported stay in the
@@ -690,7 +733,8 @@ func main() {
 and [`examples/orders-eval/acceptance/hooks.go`](../examples/orders-eval/acceptance/hooks.go)
 are a complete example.
 
-### `hbay approve`
+<a id="hbay-approve"></a>
+### `highbay approve`
 
 An operator tool that checks a saved full report against explicit promotion
 facts and prints a JSON summary (`report_digest`, `binding`, `counts`). It
@@ -699,13 +743,14 @@ records nothing, contacts no server, and merges and deploys nothing.
 
 | Flag *(all required)* | Meaning |
 | --- | --- |
-| `-report <path>` | A full report written by `hbay verify`. |
+| `-report <path>` | A full report written by `highbay verify`. |
 | `-candidate-commit <sha>` | The commit being promoted. |
 | `-request-revision <digest>` | The revision the report must name. |
 | `-suite-id <id>`, `-suite-commit <sha>`, `-environment <env>` | The evaluator and environment the report must name. |
 | `-artifact <name=sha256>` *(repeatable)* | Each binary's 64-hex-digit SHA-256 digest. |
 
-### `hbay version`
+<a id="hbay-version"></a>
+### `highbay version`
 
 Prints the module version the binary was built from, or `(devel)`.
 
@@ -720,7 +765,7 @@ carries a credential, and the credential fixes the caller's kind:
 
 | Caller | Credential | What it is trusted with |
 | --- | --- | --- |
-| The user | A browser session from the views page | Agreeing changes, building, approving, the live target's model, and the team's panes |
+| The user | A browser session from the views page | Agreeing changes, building, approving, the live target's model, and the team's conversation, agent startup, and terminals |
 | The guide | Its agent credential | Writing the Story and proposing and revising changes, and creating the project |
 | The builder | Its agent credential | Code, checks, live targets and prompt drafts, and asking for verification |
 | The test writer | Its agent credential | Reading its test assignments and reporting them finished |
@@ -779,7 +824,12 @@ all act for that owner.
 | [`merge_change`](#merge_change) | ✓ | | | | | HTTP |
 | [`list_traces`](#list_traces) | ✓ | ✓ | ✓ | | | MCP tool and HTTP |
 | [`get_team`](#get_team) | ✓ | | | | | HTTP |
-| [`show_team_pane`](#show_team_pane) | ✓ | | | | | HTTP |
+| [`get_team_conversation`](#get_team_conversation) | ✓ | | | | | HTTP |
+| [`send_team_message`](#send_team_message) | ✓ | | | | | HTTP |
+| [`interrupt_team_role`](#role-controls) | ✓ | | | | | HTTP |
+| [`stop_team_role`](#role-controls) | ✓ | | | | | HTTP |
+| [`create_terminal_ticket`](#terminal-stream) | ✓ | | | | | HTTP |
+| [`attach_role_terminal`](#terminal-stream) | ✓ | | | | | WebSocket |
 | [`start_team_agents`](#start_team_agents) | ✓ | | | | | HTTP |
 | [`list_team_agent_options`](#list_team_agent_options) | ✓ | | | | | HTTP |
 | [`dismiss_team_notice`](#dismiss_team_notice) | ✓ | | | | | HTTP |
@@ -793,10 +843,14 @@ all act for that owner.
 The user's browser session sends HTTP only, so the user-only MCP tools
 (`confirm_intent`, `decline_revision`, `configure_model`, `review_verification`,
 `approve_merge`)
-appear in no agent's tool list. `hbay` and `hbay stop` call the management
+appear in no agent's tool list. `highbay` and `highbay stop` call the management
 operations. The views page exchanges its single-use link with
-`POST /project/browser-session`, which needs no credential because the link
-is one.
+`POST /project/browser-session`. The response contains `session` and
+`project_name`. The browser stores the session in origin-scoped local
+storage and sends `Authorization: Bearer <session>`. On reload or when a
+second tab opens, `GET /project/browser-session` validates that credential
+and returns the session and project name. An invalid credential returns
+`401`. Coding agents authenticate with their own role's bearer credential.
 
 ### How a call is refused
 
@@ -812,7 +866,7 @@ applied the text. Refusals take these shapes:
 
 | Cause | HTTP | MCP |
 | --- | --- | --- |
-| No credential, or one the server does not hold (for example after a restart) | `401` with the message `session or credential is no longer valid; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion` | The same `401` on `POST /mcp` |
+| No credential, or one the server does not hold (for example after a restart) | `401` and a step to open a new session | The same `401` on `POST /mcp` |
 | The caller's kind may not call the operation | `403` `forbidden`, message `caller may not call <operation>` | A tool error result (`isError: true`) with the same message |
 | A field the route does not declare, at any depth, or a structurally invalid value | `400`, such as `decode_payload` naming the field (`json: unknown field "id"`), `missing_field` or `invalid_pattern` | A tool error starting with `invalid arguments:` that names the field |
 | A named domain refusal, listed with each operation | The status the route declares, such as `404` `not_found`, `409` `conflict` or `422` `unprocessable` | A tool error result with the same message |
@@ -870,7 +924,7 @@ release check that stored promotion settings configure. It is also `false`
 when resolving that target fails: the list still answers, and the error is
 recorded on the read's span
 (`highbay.controlplane.list_changes`, or `highbay.controlplane.wait_for_changes`
-on each of its polls). Outside initialization, a server started by `hbay`
+on each of its polls). Outside initialization, a server started by `highbay`
 always runs verification, with or without promotion settings, so there it is
 `true` unless resolving stored promotion settings fails.
 `version` changes whenever a listed value, `initializing_phase` or `draft_state` changes, and also when a build, the
@@ -930,7 +984,7 @@ approval and this `reason`: "Saved approval for candidate
 commit <commit> could not be verified because the release binaries could not
 be read. Publish the binaries the run built into the release folder that the
 promotion settings name, in a folder named after the commit, and press Check
-current approval; or remove the promotion settings with hbay promotion
+current approval; or remove the promotion settings with highbay promotion
 remove and restart Highbay; or press Approve this result on a newly verified
 run." The read records why on its `controlplane.check_approval` span: the
 event `approval.hidden_tests_changed` when the tests changed, and the error
@@ -951,7 +1005,7 @@ sends `analysis`:
 | --- | --- |
 | `summary` | The change in plain words. |
 | `ambiguities` | The questions only the user can answer, each a `question` with at least two distinct `options` and optional `draft_option` (the exact string in `options` that the evaluated draft design, Story, examples and preserved behaviors already implement when the choice changes them; omitted when every option fits the current draft); empty when nothing is open. |
-| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer. Verification runs the scenarios of the selected suite, the tests Highbay accepted for the build or, with stored [verification settings](#hbay-verification-and-hbay-promotion), the operator's evaluator; the label does not select how or whether one runs. |
+| `examples` | At least one concrete example: `scenario`, `input_summary`, `expected_outcome`, and `verification_kind` (`deterministic` or `model_judged`). `verification_kind` is a saved label for people and the test writer. Verification runs the scenarios of the selected suite, the tests Highbay accepted for the build or, with stored [verification settings](#highbay-verification-and-highbay-promotion), the operator's evaluator; the label does not select how or whether one runs. |
 | `preserved_behaviors` | The behaviors the change must keep, possibly none. |
 | `ui_composition` *(optional)* | An illustration of the decision for the views page (see [MCP resources](#mcp-resources)). It is never checked, never part of `request_revision`, and is dropped when the user changes the answers or examples. |
 
@@ -1106,7 +1160,7 @@ failed evaluation also names the step: “`In the folder that holds that
 go.mod, run: go get github.com/goadesign/highbay/story@<version>, then try
 again.`” The version is the one Highbay's own `go.mod` requires. The guide runs
 the command in its draft, whose `go.mod` was evaluated. A project made by
-`hbay init` or `init_project` already requires the module.
+`highbay init` or `init_project` already requires the module.
 
 #### `update_draft`
 
@@ -1190,8 +1244,9 @@ calls `update_draft` again until `to_correct` is empty, then calls
 `POST /views/open` or MCP tool `open_views`. Takes no fields. The guide or
 user asks the project server to open a fresh views session. The server
 mints a short-lived, single-use link and gives it directly to the local
-browser opener. The result contains `opened` and `message`. The link
-and session credential stay with the server and browser.
+browser opener. The result contains `opened`, `message`, `team`, `channel`,
+and `handle`. The guide uses the returned team, channel, and handle to join
+Chorus. The link and session credential stay with the server and browser.
 
 #### `init_project`
 
@@ -1199,7 +1254,7 @@ and session credential stay with the server and browser.
 `worked_example?`. **Output:**
 `InitProjectResult` (`dir`, `module_path`, `service_name`, `commit`).
 
-Creates the [`hbay init`](#hbay-init) starter, blank unless
+Creates the [`highbay init`](#highbay-init) starter, blank unless
 `worked_example` is `true`, and runs `go mod tidy`,
 `go vet ./...` and `go test ./...` in both modules. The server saves
 `Initial scaffold` with its Git identity and makes the starter its active
@@ -1227,7 +1282,7 @@ publication on restart.
 | --- | --- |
 | `unprocessable` (`422`) | `module_path` or `dir` is invalid. |
 | `conflict` (`409`) | The workspace already holds a project or durable work based on it, the child destination exists, or the in-place destination contains an entry the operation cannot preserve. |
-| `not_implemented` (`501`) | The `hbay` binary was built without an exact module version. Install a tagged or pseudo-versioned release, stop the running project server with `hbay stop` in the project folder (it keeps the version it started with, and a new `hbay` refuses to attach to an older server), restart the coding agent so its `hbay stdio` is the new build, then call `init_project` again. |
+| `not_implemented` (`501`) | The `highbay` binary was built without an exact module version. Install a tagged or pseudo-versioned release, stop the running project server with `highbay stop` in the project folder (it keeps the version it started with, and a new `highbay` refuses to attach to an older server), restart the coding agent so its `highbay stdio` is the new build, then call `init_project` again. |
 
 #### `generate_code`
 
@@ -1239,7 +1294,7 @@ The builder's generation in its `.highbay-build` working copy on `highbay/build-
 (never in the project folder). For `candidate` (the default), it writes the open
 build's saved agreed design into `design/` of the builder's working folder,
 checks that `go.mod` there requires the modules that design imports, compiles
-the design, and replaces that module's `gen/` exactly as [`hbay gen`](#hbay-gen)
+the design, and replaces that module's `gen/` exactly as [`highbay gen`](#highbay-gen)
 does. With `{"target":"eval"}`, it regenerates the `eval/` module of the
 builder's working folder from that module's own design. In a build that runs
 with a test writer (without stored verification settings), `eval/`,
@@ -1280,7 +1335,7 @@ private folder, then runs each module in two Linux containers from
 `golang:1.27.3`: first preparing dependencies with your `GOPROXY`,
 `GOSUMDB`, `GOPRIVATE`, `GONOPROXY`, `GONOSUMDB` and `GOINSECURE` and no
 credentials, then testing with no network. Dependency preparation omits package
-names so they cannot displace Go's errors from the failure message. A helper process, `hbay
+names so they cannot displace Go's errors from the failure message. A helper process, `highbay
 check-run`, owns the containers and finishes removing them even when the call
 is canceled or the server stops. `passed` is true only when every module's
 tests pass. `message` (at most 16 KiB) names the first failure; read the full
@@ -1364,7 +1419,7 @@ declares a confirmation gate, not that the application delivers it; see
 #### `diff`
 
 `POST /diff`. **Input:** `old` and `new` (`DesignSnapshot`). **Output:**
-`DiffResult`. Compares two design snapshots as [`hbay diff`](#hbay-diff)
+`DiffResult`. Compares two design snapshots as [`highbay diff`](#highbay-diff)
 does.
 
 ### Live target and model connection
@@ -1472,7 +1527,7 @@ answers `applied_in_store: false` and `requires_rebuild: true`, with a
 
 The user's **Apply** in the Live target view. It chooses, without a restart,
 the model that live targets started afterwards receive: a direct provider,
-whose request settings the guide's `hbay stdio` connection or bare `hbay`
+whose request settings the guide's `highbay stdio` connection or bare `highbay`
 handed to the server from its environment
 ([`hand_over_model_settings`](#hand_over_model_settings)), or a plaintext
 gRPC `goa-ai` model gateway at a hostname or IP address and port 1–65535,
@@ -1480,14 +1535,14 @@ such as `127.0.0.1:53114` or `[::1]:53114`, without a URL scheme or path.
 Highbay validates its syntax without trying to connect. A running target keeps its model. Keys never
 travel in this request or through MCP. The choice and the held settings last
 until the server stops; after a restart no model is chosen, so the next
-guide attachment or bare `hbay` hand-over selects that provider's default
+guide attachment or bare `highbay` hand-over selects that provider's default
 model again.
 Verification does not use the choice.
 
 | Refusal | When |
 | --- | --- |
 | `400` | An unknown provider or another schema violation. |
-| `unprocessable` (`422`) | An invalid combination or gateway address, or the server holds no request settings for the chosen provider: `provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway.` The previous choice stays in force. |
+| `unprocessable` (`422`) | An invalid combination or gateway address, or the server holds no request settings for the chosen provider: `provider anthropic needs ANTHROPIC_API_KEY: export it, with any ANTHROPIC_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run highbay; the project server keeps running. Or choose a model gateway.` The previous choice stays in force. |
 
 #### `get_model_connection`
 
@@ -1507,7 +1562,7 @@ variable name to value. **Output:** `ModelSettingsResult` (`held`: each
 provider's held variable names, sorted; `connection`: the choice, as
 `get_model_connection` reports it). It never returns a value.
 
-`hbay` calls it after the server answers for the project, with the request
+`highbay` calls it after the server answers for the project, with the request
 settings of each provider whose key is set in its own environment. A
 provider's request settings are the variables of its family (every name
 starting with its prefix) that cross; any other family variable, such as
@@ -1585,7 +1640,7 @@ Which tests run depends on the project:
 
 | The project has | Tests that run |
 | --- | --- |
-| No stored verification settings | The tests Highbay accepted for the user's build of this revision, at their tests commit (`get_build` shows `tests.state == "accepted"`). The run builds the application's programs from `candidate_commit` and the test program `eval/gen/cmd/<service>-evals` from the tests commit, both read from Git, never from working files. Both commits need the layout `hbay init` makes: `go.mod`, `eval/go.mod` for `<module>/eval`, `cmd/<service>` in the candidate and the generated test program in the tests commit. |
+| No stored verification settings | The tests Highbay accepted for the user's build of this revision, at their tests commit (`get_build` shows `tests.state == "accepted"`). The run builds the application's programs from `candidate_commit` and the test program `eval/gen/cmd/<service>-evals` from the tests commit, both read from Git, never from working files. Both commits need the layout `highbay init` makes: `go.mod`, `eval/go.mod` for `<module>/eval`, `cmd/<service>` in the candidate and the generated test program in the tests commit. |
 | Stored verification settings | The evaluator the settings name, at their `suite_commit`. The change's open, undropped build of the agreed revision is still required for the builder's working copy and branch. |
 
 Tests a separate agent wrote run, like the application, as ordinary processes
@@ -1717,8 +1772,8 @@ for the current approved result and keeps manual instructions as a secondary pat
 | `build_branch_mismatch` (`409`) | `candidate_commit` is not on the open build's branch `highbay/build-<n>`, does not descend from the build's base commit, is the base commit itself, or holds commits from another build's branch. |
 | `tests_not_accepted` (`409`) | Highbay has not accepted the build's tests. The message, which the user reads, names their state and who acts next, naming the builder rather than instructing it, for example `the tests of this build are not accepted; their state is reported: Highbay is checking the test writer's report; the builder verifies again after its verdict`. |
 | `unprocessable` (`422`) | The report did not pass, does not follow from its own evidence, was made for another candidate commit or another revision than the ones named, or ran tests at another commit than the tests chosen for the revision. For other tests the message names both commits and ends with the step `the builder verifies the candidate again; then approve that run`. |
-| `unprocessable` (`422`) | Promotion settings are stored and a release binary is missing, unreadable or differs from the run's. The message names no folder path and ends with the step `publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings`: that folder is `<release_dir>/<candidate_commit>/`, and removing the settings is `hbay promotion remove`, then `hbay stop` and `hbay`. |
-| `not_implemented` (`501`) | The server runs no verification. A server started by `hbay` always does. |
+| `unprocessable` (`422`) | Promotion settings are stored and a release binary is missing, unreadable or differs from the run's. The message names no folder path and ends with the step `publish the binaries the run built, whose folder the run's Proof view shows, into the release folder that the promotion settings name, in a folder named after the commit, or remove the promotion settings`: that folder is `<release_dir>/<candidate_commit>/`, and removing the settings is `highbay promotion remove`, then `highbay stop` and `highbay`. |
+| `not_implemented` (`501`) | The server runs no verification. A server started by `highbay` always does. |
 
 #### `merge_change`
 
@@ -1810,7 +1865,7 @@ it. With stored verification settings, a build adds only the builder.
 **The build working copies.** Highbay creates linked Git working copies inside
 the project folder at `.highbay-build` on `highbay/build-<n>` for the builder and,
 when no verification settings are stored (the project then needs the test
-layout `hbay init` makes), at `.highbay-tests` on `highbay/tests-<n>` for the
+layout `highbay init` makes), at `.highbay-tests` on `highbay/tests-<n>` for the
 test writer, each starting at the build's base commit. It adds `# Highbay's
 working copies.`,
 `.highbay-build/` and `.highbay-tests/` to the repository's own `.git/info/exclude`
@@ -1858,8 +1913,8 @@ copy is in use (`working_copy_busy`, or `conflict` for `verify_change`); only
 Highbay's check of a report waits for the copy. After a start has saved the
 build and made the copies,
 bringing the team up has 45 seconds. A team problem after saving leaves the
-build and its roles in place: the result says what to do, and **Start workers**
-or `hbay` finishes it. If the server stops after saving, the saved build
+build and its roles in place. Follow the recovery step, then choose **Start
+workers**. If the server stops after saving, the saved build
 stays; building again makes any missing working copy and registers the roles.
 Required tests that a stopped read did not finish writing are written again at
 the test writer's next report.
@@ -1873,8 +1928,8 @@ the test writer's next report.
 `StartBuildResult` (`build`, `team`).
 
 - `build` is the saved `StartedBuild`, as `get_build` returns it.
-- `team.state` is `ready` (the team result with its `step`), `window_busy`,
-  `ambiguous_space` (with the `count`) or `unavailable`, each with a `step`.
+- `team.state` is `ready` with the team result or `unavailable` with a
+  recovery `step`.
   A team warning still means the build was saved. `ready` means the worker
   start request completed. Inspect the observed role states to see which
   agents are running. The page displays the outcome with its time.
@@ -1964,7 +2019,7 @@ Highbay never shows the output of the dependency download, which may hold
 proxy settings, so it decides whose failure a failed download is from what it
 can compare. When the test module's `go.mod` and `go.sum` are those of the
 copy's base, or the base's own cannot be downloaded either, the check could
-not run, and the step has the user run the download in the terminal `hbay`
+not run, and the step has the user run the download in the terminal `highbay`
 was started from, where its output can be read. When the base's lists
 download and only the test writer's changed ones do not, it is the test
 writer's finding, which names the base commit. A module the test writer
@@ -2112,7 +2167,7 @@ them as well as to the Story's flows. For example, when the user answered
 "Without tax" to "Does the $50 limit include tax?" and the limit includes $50.00 itself, a test checks that an
 order of $50.00 before tax is refunded at once. Highbay's check of a report
 confirms the required tests, not what they assert. Reading the assignment of
-a build that holds no example, such as one saved by a `hbay` without these
+a build that holds no example, such as one saved by a `highbay` without these
 fields, fails with `the build of change "<change_id>" holds none of the
 agreed answers, examples and preserved behaviors; the user builds this change
 again on the views page`.
@@ -2127,10 +2182,10 @@ and then reports. It leaves the Story table, `eval/design/story_tests.go`,
 as it is: Highbay writes it from the agreed Story and generates `eval/gen/` when
 `get_test_writer_assignment` marks an assigned build's assignment read, and
 again at each report. Because the required tests are part of the module's
-design, regenerating the module with `hbay gen -dir eval` keeps them. After
+design, regenerating the module with `highbay gen -dir eval` keeps them. After
 changing the test module's design, the test writer reports, and Highbay generates
 the module again; it can also run
-`hbay gen -dir eval` in `working_folder` first. Reading an assignment marks
+`highbay gen -dir eval` in `working_folder` first. Reading an assignment marks
 it read. `get_test_writer_assignment` refuses with `not_found` (`404`) when
 there is no usable test assignment for this change, and with `no_build` (`409`,
 when the open build was dropped), `copy_off_branch` (`409`),
@@ -2178,195 +2233,135 @@ verdict, returns at once and wakes the report checker.
 
 ## Team supervision
 
-The server tracks each team's role state in memory. In a Herdr workspace,
-Chorus launches role panes and reports which agents are waiting for messages.
-One-time `hbay up` starts Chorus when installed; the guide attaches in place
-through `hbay stdio`. When an accepted Herdr team start needs Chorus and
-`chorus status -json` fails, the project server runs `CHORUS_NO_SETUP=1 chorus up`
-once (without model provider environment variables or repeating client setup) and
-retries `chorus status -json` so a reboot or stopped Chorus server does not
-require `hbay up` again. Open Herdr before launching pane workers. To use a custom managed address, run
-`chorus up -addr :9550` beforehand, then use **Start workers** to
-update the team's connection. A failed connection check leaves the page
-available. Once a roster exists, Chorus can inspect the team's panes. See
-the [Chorus team command reference](https://github.com/goadesign/chorus/blob/main/skills/herdr/chorus-launcher/README.md#choose-roles-from-a-terminal).
+The project server tracks each registered role, the work it owes on the
+current build, and the status of its Herdr Core terminal and Chorus
+connection. The browser sends messages through Chorus and opens live
+terminals through the project server. An external coding session may
+attach as the guide and take terminal input in its own client.
 
-When Herdr is unavailable, the server can launch finite background worker
-processes without Chorus. It waits for in-flight test report checks and
-verification before requesting follow-up work. Each role gets at most three
-invocations per build during the running server's supervision, with a
-30-minute deadline per invocation. Shutdown stops and waits for the managed
-worker process groups. Agents use their own credentials and
-the globally registered `hbay stdio` connection to work on their assignments.
-
-Build and Team show agent, model and permission choices inline. Preferences
-are saved by role in the project. A running role keeps its session; the
-picker needs selections only for roles required by the requested start.
-Configured tests need only a builder. The one-family recommendation appears
-only when a new build needs a test writer too. That recommendation and those
-for working outside Herdr or missing Herdr are dismissible and persist for
-the project. A missing supported agent produces an installation/retry step.
+Build and Team offer installed agent, model, and permission choices. The
+project saves choices by role and uses them when it starts a missing agent.
+A project with configured tests needs only a builder. The page can suggest
+using a second agent family when the build also needs a test writer.
 
 ### `get_team`
 
-`GET /team`. The user's cached team snapshot contains `team`, `herdr_mode`,
-`chorus_status?`, `roles`, `saved_choices` and `dismissed_notices`. Herdr mode is `attached`
-with a guide pane attached to the project, `available` when Herdr can host
-workers (a guide registered without a linked Herdr app tab keeps `state:
-"unknown"`, shown on the page as **Coding agent registered · No Herdr pane linked** rather than `not_started`), or `unavailable` when workers run in the background. `chorus_status` is `connected` after the latest read of the team's Chorus view succeeded, `unavailable` after that read failed or when the team's space has no Chorus connection, `not_used` without Herdr, and omitted before a team space exists or before the first Chorus view read settles it. Roles are in
-guide, builder, test writer order and empty before registration. The read
-starts no subprocesses and marks no assignments read.
+`GET /team` reads `team`, `channel`, `chorus_status`, `roles`, `saved_choices`,
+and `dismissed_notices`. `chorus_status` is `connected` or `unavailable`.
+Roles appear in guide, builder, test writer order. This read starts no
+processes and marks no assignments read.
 
-| Field | Values |
+| Role field | Values |
 | --- | --- |
-| `role` | `guide`, `builder` or `test_writer` |
-| `handle` | The role's registered Chorus handle. |
-| `state` | `not_started`, `ended`, `starting`, `needs_you`, `working`, `waiting`, `error` or `unknown` |
-| `attention` | Why a role needs the user: `none`, `permission`, `question`, `auth`, `silent` (a running agent that reported nothing for 60 seconds, such as waiting at a startup or folder-trust prompt), `assignment` (a role `waiting` with an unread assignment for 90 seconds when Chorus is connected, or 15 seconds when Chorus is unavailable; see **Reminders** below) or `unknown`. `silent` and `assignment` change only what is shown. |
-| `watcher` | `held` when Chorus reports the agent's watcher, `gone` after 90 seconds of known absence, or `unknown` |
-| `assignment` | `unread` (the role has work on the open build and owes an assignment read), `nothing_owed` (the role has work and owes no read; the guide always reads `nothing_owed`, shown on the page as `No assignments`), `no_work` (the open build needs nothing from that role: no build is open, the open build was dropped, the test writer's tests are `accepted`, or a verification of the builder's build passed with current inputs) or `unknown` |
+| `role` | `guide`, `builder`, or `test_writer`. |
+| `handle` | The role's Chorus handle. |
+| `has_terminal` | Whether the browser can open the role's Herdr Core terminal. |
+| `state` | `not_started`, `ended`, `starting`, `needs_you`, `working`, `waiting`, `error`, or `unknown`. |
+| `attention` | `none`, `permission`, `question`, `auth`, `silent`, or `unknown`. |
+| `assignment` | `unread` when the role owes a read, `nothing_owed` when a working role owes none, `no_work` when the build needs nothing from the role, or `unknown`. Guide reads `no_work`. |
+| `choice` | The role's saved agent choice, when set. |
 
-For Herdr panes, terminal state becomes `unknown` after 45 seconds without
-a heartbeat or event and recovers when fresh facts arrive. When the server
-cannot read assignment state, it reports `unknown`. `wait_for_changes` also
-covers these facts.
+### `get_team_conversation`
 
-### `show_team_pane`
+`GET /team/conversation` reads the project's Chorus team, channel,
+connection status, chronological channel and user direct messages, and
+its optional pin. Every message includes its sender, sender role, target,
+sequence within the target, text, and timestamp in Unix milliseconds.
+A reply includes `reply_to`, the original message's sequence in the same
+target. New messages advance `wait_for_changes`.
 
-`POST /team/pane`. **Input:** `role`. Raises the Herdr window, selects this
-project's space and tab, and focuses that role's pane, only when the user asks.
+### `send_team_message`
 
-| Refusal | When |
-| --- | --- |
-| `window_busy` (`409`) | A Herdr dialog is open; close it first. Nothing in the window changed. |
-| `pane_unavailable` (`409`) | The role has no pane Highbay can identify. |
-| `team_unavailable` (`503`) | Herdr could not establish the pane: `Herdr did not complete a team command; open the Herdr app, then try again`. |
+`POST /team/messages` posts the user's `text` (1–3,500 characters). `to`
+accepts `team`, `guide`, `builder`, or `test_writer`. Role targets become
+mentions in the project channel. Supply `reply_to` to reply to a message in
+that channel.
+
+The first message to guide or team starts a guide when there is no active
+one. Supply `guide_choice` to select its client, or let Highbay use the
+saved choice or discover an installed default. One optional `context`
+lets the browser include answers to revise, the selected architecture
+element, or the selected Story flow. A successful request returns the
+posted message. An invalid selection or context returns `422`.
+When Chorus or Herdr Core cannot accept the request, it returns `503`.
+
+<a id="show_team_pane"></a>
+### Terminal stream
+
+`POST /team/roles/{role}/terminal-ticket` issues a single-use ticket for
+the role's terminal, valid for up to 30 seconds. Use the ticket in the
+query when upgrading `GET /team/roles/{role}/terminal` to a WebSocket.
+Optional `cols` and `rows` set the initial size. Use `observe=true` for a
+read-only attachment that cannot change terminal size or send input.
+
+The browser sends input bytes, resizes, focus events, and credit. The
+stream returns output bytes, resizes, and the reason when it closes.
+Replenishing credit after rendering returns rendered bytes to the
+256 KiB output window. Missing terminals return `409` and invalid,
+expired, or reused tickets return `422`.
+
+### Role controls
+
+`POST /team/roles/{role}/interrupt` sends SIGINT to the running terminal.
+`POST /team/roles/{role}/stop` removes a managed terminal so the role can
+start again. Both return `204` on success, `409` when the role has no
+eligible running terminal, or `503` when Herdr Core cannot perform the
+operation.
 
 ### `start_team_agents`
 
-`POST /team/agents`. Send a JSON object such as `{}` to start missing
-workers that have work on the open build, as **Start workers** does. It returns
-`ProjectTeam` (`team`, `space`, `herdr_mode`, `roles`, `step`). `roles` contains
-`role`, `handle` and `running`; `space` is empty without a Herdr space.
+`POST /team/agents` starts missing agents. Send a JSON object such as `{}`
+to request missing workers with work. The response contains `team`,
+`roles`, and the next `step`. Each role result has `role`, `handle`,
+`has_terminal`, and `running`.
 
-A user API client may send `choices` keyed by role. For each choice, pass
-`client` and `program` from [`list_team_agent_options`](#list_team_agent_options)
-and the required boolean `yolo`. When supported, pass a `model` or
-`thinking` effort. Omitting these uses the client's defaults. `yolo: false`
-uses the client's normal permission mode. When Herdr is unavailable, the
-browser asks you to enable **Skip permission prompts (YOLO)** for each client
-that supports the switch, and confirm **I agree to run these workers in the
-background.** before starting. Clients without a separate YOLO switch use
-their configured permissions. Read the selected client's `yolo_effect`; its
-installed CLI must also support background execution.
+For each entry in optional `choices`, pass the `client` and `program` from
+[`list_team_agent_options`](#list_team_agent_options) and the boolean `yolo`.
+If supported, pass a `model` or `thinking` effort. With `yolo: false`, the
+client uses its normal permissions. Read the selected client's
+`yolo_effect` to understand its unattended permission mode.
 
-For example, if discovery returns `/path/to/codex`, send this body to
-start a missing guide in Herdr.
-
-```json
-{"choices":{"guide":{"client":"codex","program":"/path/to/codex","yolo":false}}}
-```
-
-For an omitted worker choice, Highbay uses a supported saved choice or an
-installed default. By default it prefers Codex for the builder and a different
-family for the test writer, using Claude Code when available and distinct.
-With one supported installed family both workers can use it. Highbay saves
-the resolved choices by role for later requests. A worker that is already
-running keeps its existing session.
-
-Highbay starts a guide only when this operation receives an explicit
-`choices.guide` in Herdr. It refuses a guide start if a guide already has a
-running pane or a Chorus watcher. The browser's **Start workers** sends the
-selected choices for every registered worker that currently has work,
-including workers whose sessions are already running. Running workers keep
-their sessions; the saved choices apply when a missing session is launched.
-[`start_build`](#start_build) accepts worker choices only.
-
-An unavailable client, unsupported option or already running guide is
-refused with `unprocessable` (`422`). If the team cannot start, read the
-returned step before retrying. A failed launch can leave team registration
-and preferences saved for the next request.
+Omitted worker choices use supported saved choices or installed defaults.
+The roles can use the same installed agent family. Running workers keep
+their current sessions. An explicit guide choice can start an inactive
+guide. An attempt to replace a running guide or use an invalid client
+option returns `422`. A failed launch can leave saved registration and
+choices for the next request.
 
 ### `list_team_agent_options`
 
-`GET /team/agent-options`. Only the user's browser session may call it.
-Discovers installed coding-agent executables and their options on demand.
-The response requires `agents` and `build_roles`. `build_roles` is
-`["builder"]` with stored verification settings, or
-`["builder", "test_writer"]` otherwise: the control plane derives the roles
-a new build needs from its current test source, even before any role is
-registered. The response's `agents` entries include `client`, `program`,
-`title`,
-`models`, `efforts`, `model_supported`, `thinking_supported`,
-`yolo_supported`, optional `yolo_effect` and `headless_supported`.
-An empty model list can accompany support for custom model IDs.
+`GET /team/agent-options` discovers installed agent executables and their
+options. `build_roles` is `["builder"]` when verification settings name
+the tests, or `["builder", "test_writer"]` otherwise. Each entry in
+`agents` includes `client`, `program`, `title`, `models`, `efforts`,
+`model_supported`, `thinking_supported`, `yolo_supported`, and optional
+`yolo_effect`. A client that supports free-form model names can return an
+empty model list.
 
 ### `dismiss_team_notice`
 
-`POST /team/notices/dismiss`. Only the user's browser session may save a
-project dismissal. Send `notice` with `single_agent_family`, `outside_herdr`
-or `herdr_unavailable`. A successful request returns `204`. The preference
-belongs to the project and leaves startup and agent capabilities unchanged.
+`POST /team/notices/dismiss` saves a project dismissal. Send `notice`
+with `single_agent_family`. A successful request returns `204`.
 
 ### `ensure_team` (management)
 
-`POST /project/team` returns existing `team`, `space`, `herdr_mode`,
-`roles` and `step` to the server's management client. It reads the team
-without launching an agent or creating a space.
+`POST /project/team` returns existing `team`, `roles`, and `step` to the
+server's management client. The call only reads project team metadata.
 
 ### `attach_guide`
 
-`POST /project/attach-guide` lets a local management client register an
-existing coding session as the guide. Send `hc_terminal_id`, `client` and
-`ancestor_pids` when attaching a direct session in Herdr. Highbay adopts the pane
-only if it is a running local model pane inside the project folder with
-matching client and OS lineage facts and compatible project and team labels.
-Outside Herdr (or when spawned by a shared daemon without direct lineage), omit
-the terminal ID and ancestor PIDs. The result includes `team`, the guide's
-`handle`, `adopted_herdr` and `herdr_mode`. The integration gives the coding
-agent its role credential from `agents/<handle>` in the private project
-state folder. The project serves MCP at `/mcp` and authenticates the agent
-with that bearer credential. `hbay stdio` performs this attachment for the
-current guide session; no second guide or launcher is needed. Registration
-also works without pane adoption.
+`POST /project/attach-guide` registers an existing coding session as the
+guide. Send its `client`, `hc_terminal_id`, and `ancestor_pids` when the
+client provides them from a direct Herdr Core session. Highbay matches a
+live local terminal to the project and registers `has_terminal: true`
+when it can label that terminal. The result also includes `team` and the
+guide's `handle`. A coding session registered without a matching terminal
+uses its original client for terminal input.
 
-**Reminders.** Each version of an assignment that a worker role with work on
-the open build has not read is a generation: a new build gives each of its
-roles one while that role has work, every non-accepting verdict gives the test
-writer one, and an acceptance ends the test writer's work on that build and
-gives the builder one while no verification of the build has passed with
-current inputs. The server
-sends the role one fixed Chorus direct message for all its generations not yet
-tried, so at most one per generation, for example `Highbay: you have an unread
-assignment. Use list_builder_assignments and get_builder_assignment to read
-it. Highbay reads no replies.` It first registers its own handle, `highbay-`
-followed by the first 12 characters of the project ID, in the team's swarm
-with the role `Highbay server. Sends reminders only. Reads no replies.`
-
-A message is sent only after a complete assignment read, and only when the
-last read of Chorus's agent list succeeded and has listed the role's handle
-without a break for 60 seconds, so a role that has just joined can act on its
-first message. Neither the watcher fact nor the terminal state gates a
-message: Chorus keeps it until the role's next watcher, `read` or `send`. The
-message names nothing about the work and never changes what is owed.
-
-Each post is bounded at 5 seconds, a response longer than 2 MiB fails, and no
-byte of a response is kept. Every attempt records one `highbay.team.reminder`
-span with outcome `sent` or `failed`. A failed one has error status,
-`team.post` (`who` or `send`) and `team.failure` (`connection`, `timeout`,
-`http_status`, `rpc_error`, `tool_error` or `response`); no caller sees an
-error. The one exception is an attempt cut short because the server is
-stopping: it is not a Chorus failure and records nothing. A generation is
-never tried twice, whatever the outcome. Nothing about reminders is saved, so
-after a restart a role that still has an unread assignment gets one message
-again 60 seconds after its handle is listed. A `sent` outcome means Chorus
-accepted the message, not that the agent read it.
-
-When the agent stays idle with the assignment unread for 90 seconds, the role
-reads `needs_you` with attention `assignment`, and the views page asks the
-user to show its pane and tell it to read its assignments and to keep its
-Chorus watcher running. Supervision never reads screen text, never types into
-a terminal and never takes focus without the user's action.
+The role credential is in `agents/<handle>` in the private project state
+folder. `highbay stdio` binds the session with that bearer credential.
+The guide uses the returned Chorus identity to communicate with the
+project's team.
 
 ---
 
@@ -2436,7 +2431,7 @@ the target declares the same method in its own Goa design and implements it:
   escaped, or rewritten by a URL parser or an
   SDK, is not recognized and is exported as printed; a custom-headers value
   is recognized only as a whole, not header by header.
-- The worked example's test module (`hbay init -example`) implements this
+- The worked example's test module (`highbay init -example`) implements this
   contract: `override_prompt` replaces `<name>.helper.system`. As accepted written tests, its
   `LiveThroughGateway` function uses the model gateway, keeping provider
   settings out of the test program's and application's environments. Its
@@ -2468,19 +2463,19 @@ Changing this contract breaks every target that implements it.
 ## Views page
 
 The server serves the views page at `GET /views` on its loopback address.
-`hbay` opens it with a single-use link in the address fragment
-(`/views#link=<link>`), which a browser never sends to a server. On load the
-page exchanges the link once for a session, removes it from the address, and
-keeps the session only in memory: never in browser storage or a cookie. The
-exchange also returns `project_name`, the base name of the project's
-physical folder, without its path. The tab's title is the next step and that
-name, such as `Confirm change: shop`, from the facts the page last read;
-after a failed read of the changes or the team, a lost update connection or
-an ended session, it names the recovery instead, such as
-`Reconnecting: shop`. Before the exchange succeeds, the title is `Highbay`.
-Reloading or closing the tab ends the session. Ask your coding agent to
-[reopen Highbay](#open_views) or choose **Open Highbay Window** in the Herdr companion
-to open a fresh session. Bare `hbay` remains an operator fallback.
+`highbay` opens a single-use link in the address fragment
+(`/views#link=<link>`). The page removes the fragment after exchanging
+the link. Browser storage keeps the session credential in that origin and
+restores sign-in after a reload or when opening another tab on the same
+project server. In-place [updates](#highbay-update) carry the session forward.
+After a separate stop and start, run `highbay` or ask the guide to
+[reopen Highbay](#open_views) to get a new link.
+
+The session response includes `project_name`, the base name of the
+project folder. The page title includes the next step and project name,
+for example `Confirm change: shop`. If updates fail, the title names the
+recovery state, for example `Reconnecting: shop`.
+
 Opening a fresh link in the same tab reloads the page through the normal link
 exchange. If there are unsaved CP1 edits, unadopted proposal answers, Model-form
 edits, or a pending edit request, the page removes the link from the address
@@ -2491,8 +2486,8 @@ The link still expires two minutes after it was printed, not after it was
 pasted. Obtain another link if it expires while you finish editing.
 A used or expired link is reported as such. When the server answers `401`, as
 it does after a restart, the page keeps everything typed visible and
-copyable and explains how to ask your coding agent to reopen the page. Leaving with unsaved edits asks the
-browser to confirm, including for unadopted proposal answers and Model-form edits.
+available and explains how to reopen the workspace. Leaving with
+unsaved edits asks the browser to confirm, including for unadopted proposal answers and Model-form edits.
 
 **Every view.** The journey bar names **Describe** (or **Changes**), **Agree**,
 **Architecture**, **Build**, **Check** and **Approve**; open **Inspect** to
@@ -2509,11 +2504,9 @@ adopting or declining the proposal across **Agree** and **Build**, and clicking
 **Build agreed revision** asks for confirmation before building the older
 agreement.
 
-Each role that needs your help has a notice, for example
-`Builder needs you: permission`, and a **Show builder pane** action when
-Herdr can show it. This
-polite live region follows the current role facts; a recovered role's line
-disappears without leaving a copied attention message in operation status.
+The page shows an attention notice when a role needs your help. The notice
+can open the role's **Terminal** when it has a live terminal. It clears as
+the role recovers.
 The page keeps one `wait_for_changes` read open and reads again only what
 changed. The operation status announces progress to assistive technology.
 When the server does not answer, a visible notice explains that updates are
@@ -2524,12 +2517,13 @@ holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Describe / Changes** | The welcome card directs you to your coding agent, showing **Preparing your project** with `initializing_phase` while [`init_project`](#init_project) runs and **Working on your request** / **Drafting your Change Card** while your coding agent or `draft_state` prepares the first Change Card. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
-| **Team** | Each registered role has a state, watcher, and any worker assignment. The project coding agent may be attached in its own session outside Herdr. **Show coding agent pane** appears for an attached Herdr pane; eligible workers have their own **Show … pane** actions. **Start workers** requests missing workers and reports the outcome and time. **Refresh team** reads the cached facts. |
+| **Describe / Changes** | The welcome card takes your request and starts the guide when needed, showing **Preparing your project** with `initializing_phase` while [`init_project`](#init_project) runs and **Working on your request** / **Drafting your Change Card** while your coding agent or `draft_state` prepares the first Change Card. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
+| **Conversation** | Project messages, role mentions, replies, and the channel pin. The first message can start the guide. |
+| **Team** | Each role's observed state and its worker assignment. **Start workers** requests missing workers with work. **Terminal** opens a live role terminal. Use `Ctrl+Shift+Escape` to move keyboard focus out of the terminal. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow. A finished flow is marked **will be tested end to end**. Other flows are marked **draft: not tested** with the reasons. Below it, see the current Story evaluation ([`get_story_refresh`](#get_story_refresh)) and how it differs from the change's Story. A draft joins the change when your coding agent proposes it and you confirm the new revision. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
 | **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Previous Saved Revision** keeps the earlier snapshot: questions not yet answered in that proposal are labeled as historical, and a note distinguishes an unconfirmed proposal from the current confirmed agreement. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
-| **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. |
+| **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. Ask the guide about a selected element from the page. |
 | **Check** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
 | **Approve** | The exact selected run’s recorded Story flows, required tests and outcomes; excluded drafts and unknown mapping; test source, human judgment limits and verified commits. **Test details and saved runs** discloses the safe report and history. **Verified inputs and digests** discloses full bindings. Next owns the single approval action, based on [`review_verification`](#review_verification); blocked or unverified records retain the owner’s reason. Unsaved Agree edits remain available on return. |
 | **Diagnostics** | A drawer listing recorded errors, with **All statuses** and **Without error status**, older pages, and **Retry from newest** after a failed read. |
@@ -2640,7 +2634,7 @@ approval and show recovery, including any restoration result. A successful
 dated merge receipt names the actual destination branch and short resulting
 commit; **Merge receipt** discloses the full commit and timestamp. Once the
 build is `merged`, **Verify the merged branch from the terminal** discloses a
-separate [`hbay verify`](#hbay-verify) template: on **Approve** (when the
+separate [`highbay verify`](#highbay-verify) template: on **Approve** (when the
 displayed run matches the recorded approval of the current build), it binds
 that approval's `suite_commit` and any matching merge receipt's resulting
 commit (otherwise checking `"$(git rev-parse --verify HEAD)"` on the checked-out
@@ -2678,7 +2672,7 @@ and exchanging the link or using a browser session still requires
 | --- | --- |
 | `script-src 'sha256-<digest>'` | Only the page's one inline script; nothing is evaluated from a string. |
 | `style-src 'unsafe-inline'` | Inline styles only; no style sheet loads. |
-| `connect-src 'self'` | Requests only to the page's own address. |
+| `connect-src 'self' ws://<host:port>` | Requests to the page's own address and the WebSocket endpoint at its loopback address. |
 | `default-src 'none'` | Nothing else: no images, fonts or frames. |
 | `frame-ancestors 'none'` | The page is never framed. |
 | `form-action 'none'` | No form submission. |
@@ -2833,8 +2827,8 @@ remain independent read-only consumers. A missing module or compiler archive
 triggers preparation of the committed and synthetic test-module closures (including
 `sum.golang.org` verification tiles via `go mod tidy` without an initial `go.sum`)
 for the ordinary partitions (`internal/testmodule` callers in `internal/testwriter`,
-`cmd/hbay`, `internal/designeval`, `internal/diff`, and `internal/controlplane`;
-real networked starter-template initialization in `hbay init` stays owned by
+`cmd/highbay`, `internal/designeval`, `internal/diff`, and `internal/controlplane`;
+real networked starter-template initialization in `highbay init` stays owned by
 **Full / starter** and **Full / generation**),
 the declared race/plain compilation,
 CGO-free product dependencies and pinned Goa generator, then compiles Story,
@@ -2910,7 +2904,7 @@ backstop. Pull requests do not execute this job automatically. To run the
 journey locally with a running Docker engine:
 
 ```sh
-go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/hbay </dev/null
+go test -race -count=1 -timeout 40m -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/highbay </dev/null
 ```
 
 ### Committed test module profiles
@@ -2938,12 +2932,12 @@ matching versions in the profiles and refresh their checksums. For example,
 with the root requirements currently in this repository, run:
 
 ```sh
-GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 </dev/null
-GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
-GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
+GOWORK=off go -C internal/project/testdata/story-fixture mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.36.1-0.20261126175405-92d328af82bf </dev/null
+GOWORK=off go -C internal/project/testdata/story-evaluator mod edit -require=github.com/goadesign/highbay/story@v0.0.0-20261125231720-7e4be2233e61 -require=goa.design/goa/v3@v3.36.1-0.20261126175405-92d328af82bf -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11 </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod edit -require=goa.design/goa/v3@v3.36.1-0.20261126175405-92d328af82bf -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 </dev/null
 GOWORK=off go -C internal/project/testdata/story-fixture mod download all </dev/null
 GOWORK=off go -C internal/project/testdata/story-evaluator mod download all </dev/null
-GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.35.1-0.20261114184515-dee88e893eb3 -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11-0.20261030164016-5e17c2e932fb </dev/null
+GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod edit -require=goa.design/goa/v3@v3.36.1-0.20261126175405-92d328af82bf -require=goa.design/goa-ai@v0.90.1-0.20261111075239-0114fb9d40d3 -require=goa.design/model@v1.16.11 </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-dsl mod download all </dev/null
 GOWORK=off go -C internal/testmodule/testdata/goa-goaai-evaluator mod download all </dev/null
 ```
@@ -2979,24 +2973,23 @@ Temporal CLI for the first three:
 ```bash
 (cd examples/orders-eval && go test -race -tags e2e ./acceptance)
 go test -race -tags e2e ./internal/verify
-go test -race -count=1 -tags e2e ./cmd/hbay
+go test -race -count=1 -tags e2e ./cmd/highbay
 go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold
 ```
 
 The **Full / opt-in (Linux)** job runs the named native browser tests and the
 isolated Herdr server lifecycle on integration-branch pushes, nightly and on
 manual full runs. The Linux PR profile job compiles and vets both tagged profiles. The scheduled job requires
-hosted Chrome, Node 26 and digest-checked Herdr Core 0.1.21; missing tools fail setup.
+hosted Chrome, Node 26 and digest-checked Herdr Core 0.1.22. Missing tools fail setup.
 Its explicit browser roots cover page policy and sessions, phone layout, build
 and test review, keyboard access, and browser cleanup after its parent ends.
 They execute independently of ordinary project tests. The Herdr root, `TestHC`,
-runs the real headless Core and Highbay server with isolated state and fixture
+runs Herdr Core and Highbay server with isolated state and fixture
 window and team effects; it starts no coding agent or model. Each package command
 has a five-minute alarm and the job has a ten-minute backstop. These bounds are
 not measured completion times. The complete selected set is in
 [the integration workflow](../.github/workflows/integration.yml).
-The page-policy journey also checks that a session ends on reload, browser
-storage stays empty, long Story rows scroll within the Story view, and Live
+The page-policy journey covers browser session recovery, long Story rows scroll within the Story view, and Live
 fits a 375-pixel-wide screen.
 
 Local native checks need Chrome or Chromium and Node 22 or later. Set
@@ -3013,7 +3006,7 @@ go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneW
 .
 ├── .github/workflows/ci.yml     # Complete Linux PR checks, reused by integration
 ├── .github/workflows/integration.yml # Native PR coverage and full push/nightly/manual journeys
-├── cmd/hbay/                   # The hbay command: project start and stop, settings, init, preview, diff, gen, verify, approve
+├── cmd/highbay/                   # The highbay command: project start and stop, settings, init, preview, diff, gen, verify, approve
 ├── design/                      # Goa design of the server's contract
 │   ├── design.go                # Change Cards, checks, live target, verification, approval
 │   ├── changes.go               # The change list and the views page's waiting read
@@ -3037,7 +3030,7 @@ go test -race -count=1 -timeout 5m -tags browser -run '^TestTeamAndBuildAtPhoneW
 │   ├── designeval/              # Design evaluation and the C4 extractor
 │   ├── diff/                    # Structural design and dependency diff
 │   ├── goldenpath/              # The Golden Path playbook and decision component catalog
-│   ├── scaffold/                # The hbay init starter and its templates
+│   ├── scaffold/                # The highbay init starter and its templates
 │   ├── traceview/               # The saved operation diagnostics
 │   ├── genpublish/              # Atomic replacement of generated folders
 │   ├── targetprompt/            # Generated client of the live target prompt contract

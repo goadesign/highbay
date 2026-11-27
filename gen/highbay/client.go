@@ -44,8 +44,14 @@ type Client struct {
 	GetStoryRefreshEndpoint             goa.Endpoint
 	UpdateDraftEndpoint                 goa.Endpoint
 	GetTeamEndpoint                     goa.Endpoint
-	ShowTeamPaneEndpoint                goa.Endpoint
+	GetTeamConversationEndpoint         goa.Endpoint
+	SendTeamMessageEndpoint             goa.Endpoint
 	StartTeamAgentsEndpoint             goa.Endpoint
+	InterruptTeamRoleEndpoint           goa.Endpoint
+	StopTeamRoleEndpoint                goa.Endpoint
+	RestartTeamRoleEndpoint             goa.Endpoint
+	CreateTerminalTicketEndpoint        goa.Endpoint
+	AttachRoleTerminalEndpoint          goa.Endpoint
 	ListTeamAgentOptionsEndpoint        goa.Endpoint
 	DismissTeamNoticeEndpoint           goa.Endpoint
 	OpenViewsEndpoint                   goa.Endpoint
@@ -67,7 +73,7 @@ type Client struct {
 }
 
 // NewClient initializes a "highbay" service client given the endpoints.
-func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, showTeamPane, startTeamAgents, listTeamAgentOptions, dismissTeamNotice, openViews, mergeChange, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, waitForBuilderAssignment, getBuilderAssignment, listTestWriterAssignments, waitForTestWriterAssignment, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
+func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange, declineRevision, previewArchitecture, draftOverride, startLiveTarget, stopLiveTarget, getLiveTarget, verifyChange, getVerification, listVerifications, approveMerge, diff, configureModel, getModelConnection, handOverModelSettings, initProject, generateCode, checkProject, updateDependencies, readCheckOutput, listTraces, refreshStory, getStoryRefresh, updateDraft, getTeam, getTeamConversation, sendTeamMessage, startTeamAgents, interruptTeamRole, stopTeamRole, restartTeamRole, createTerminalTicket, attachRoleTerminal, listTeamAgentOptions, dismissTeamNotice, openViews, mergeChange, listChanges, waitForChanges, startBuild, dropBuild, getBuild, getTestFindings, listBuilderAssignments, waitForBuilderAssignment, getBuilderAssignment, listTestWriterAssignments, waitForTestWriterAssignment, getTestWriterAssignment, reportTestsFinished, reviewVerification goa.Endpoint) *Client {
 	return &Client{
 		GoldenPathEndpoint:                  goldenPath,
 		ProposeChangeEndpoint:               proposeChange,
@@ -98,8 +104,14 @@ func NewClient(goldenPath, proposeChange, reviseChange, confirmIntent, getChange
 		GetStoryRefreshEndpoint:             getStoryRefresh,
 		UpdateDraftEndpoint:                 updateDraft,
 		GetTeamEndpoint:                     getTeam,
-		ShowTeamPaneEndpoint:                showTeamPane,
+		GetTeamConversationEndpoint:         getTeamConversation,
+		SendTeamMessageEndpoint:             sendTeamMessage,
 		StartTeamAgentsEndpoint:             startTeamAgents,
+		InterruptTeamRoleEndpoint:           interruptTeamRole,
+		StopTeamRoleEndpoint:                stopTeamRole,
+		RestartTeamRoleEndpoint:             restartTeamRole,
+		CreateTerminalTicketEndpoint:        createTerminalTicket,
+		AttachRoleTerminalEndpoint:          attachRoleTerminal,
 		ListTeamAgentOptionsEndpoint:        listTeamAgentOptions,
 		DismissTeamNoticeEndpoint:           dismissTeamNotice,
 		OpenViewsEndpoint:                   openViews,
@@ -304,7 +316,7 @@ func (c *Client) GetLiveTarget(ctx context.Context) (res *LiveTargetStatus, err 
 //   - "conflict" (type *goa.ServiceError): The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.
 //   - "no_build" (type *goa.ServiceError): No build of this change is open (the user built another change or none), the user dropped it, or the open build is for another revision of the change. The message names what Highbay found and the user's step.
 //   - "tests_not_accepted" (type *goa.ServiceError): Without stored verification settings: Highbay has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.
-//   - "no_test_layout" (type *goa.ServiceError): Without stored verification settings: a commit lacks the test layout hbay init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.
+//   - "no_test_layout" (type *goa.ServiceError): Without stored verification settings: a commit lacks the test layout highbay init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.
 //   - "not_implemented" (type *goa.ServiceError): This server has no verification configuration, so it cannot run Checkpoint 4 verifications.
 //   - "assignment_unread" (type *goa.ServiceError): A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.
 //   - "copy_off_branch" (type *CopyOffBranch): Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and verify again.
@@ -529,7 +541,7 @@ func (c *Client) ReadCheckOutput(ctx context.Context, p *ReadCheckOutputPayload)
 // ListTraces calls the "list_traces" endpoint of the "highbay" service.
 // ListTraces may return the following errors:
 //   - "unprocessable" (type *goa.ServiceError): The cursor is invalid; omit it to refresh the history.
-//   - "not_implemented" (type *goa.ServiceError): This server does not record operations; a project server started with hbay always does.
+//   - "not_implemented" (type *goa.ServiceError): This server does not record operations; a project server started with highbay always does.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
 func (c *Client) ListTraces(ctx context.Context, p *ListTracesPayload) (res *TraceList, err error) {
@@ -599,24 +611,40 @@ func (c *Client) GetTeam(ctx context.Context) (res *TeamSnapshot, err error) {
 	return ires.(*TeamSnapshot), nil
 }
 
-// ShowTeamPane calls the "show_team_pane" endpoint of the "highbay" service.
-// ShowTeamPane may return the following errors:
-//   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before showing a pane.
-//   - "pane_unavailable" (type *goa.ServiceError): The requested registered role has no owned pane to show.
-//   - "team_unavailable" (type *goa.ServiceError): Herdr could not establish the owned pane.
+// GetTeamConversation calls the "get_team_conversation" endpoint of the
+// "highbay" service.
+// GetTeamConversation may return the following errors:
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
-func (c *Client) ShowTeamPane(ctx context.Context, p *ShowTeamPanePayload) (err error) {
-	_, err = c.ShowTeamPaneEndpoint(ctx, p)
-	return
+func (c *Client) GetTeamConversation(ctx context.Context) (res *TeamConversation, err error) {
+	var ires any
+	ires, err = c.GetTeamConversationEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*TeamConversation), nil
+}
+
+// SendTeamMessage calls the "send_team_message" endpoint of the "highbay"
+// service.
+// SendTeamMessage may return the following errors:
+//   - "team_unavailable" (type *goa.ServiceError): Chorus or herdr-core could not accept the message or start the guide.
+//   - "unprocessable" (type *goa.ServiceError): The selected guide client is not installed, does not support the requested options, or the referenced Change Card context is invalid.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) SendTeamMessage(ctx context.Context, p *SendTeamMessagePayload) (res *TeamMessage, err error) {
+	var ires any
+	ires, err = c.SendTeamMessageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TeamMessage), nil
 }
 
 // StartTeamAgents calls the "start_team_agents" endpoint of the "highbay"
 // service.
 // StartTeamAgents may return the following errors:
-//   - "ambiguous_space" (type *goa.ServiceError): Several spaces match the project; close the duplicates before starting agents again.
-//   - "window_busy" (type *goa.ServiceError): Close the open Herdr dialog before starting agents.
-//   - "team_unavailable" (type *goa.ServiceError): The project team could not be prepared.
+//   - "team_unavailable" (type *goa.ServiceError): The project team could not be prepared in herdr-core or Chorus.
 //   - "unprocessable" (type *goa.ServiceError): A selected client is not installed, does not support the requested options, or the supplied guide choice would replace a running guide.
 //   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
 //   - error: internal error
@@ -627,6 +655,73 @@ func (c *Client) StartTeamAgents(ctx context.Context, p *StartTeamAgentsPayload)
 		return
 	}
 	return ires.(*ProjectTeam), nil
+}
+
+// InterruptTeamRole calls the "interrupt_team_role" endpoint of the "highbay"
+// service.
+// InterruptTeamRole may return the following errors:
+//   - "role_not_running" (type *goa.ServiceError): The requested role has no running herdr-core terminal to interrupt.
+//   - "team_unavailable" (type *goa.ServiceError): herdr-core could not interrupt the terminal.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) InterruptTeamRole(ctx context.Context, p *InterruptTeamRolePayload) (err error) {
+	_, err = c.InterruptTeamRoleEndpoint(ctx, p)
+	return
+}
+
+// StopTeamRole calls the "stop_team_role" endpoint of the "highbay" service.
+// StopTeamRole may return the following errors:
+//   - "role_not_running" (type *goa.ServiceError): The requested role has no managed herdr-core terminal.
+//   - "team_unavailable" (type *goa.ServiceError): herdr-core could not stop the terminal.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) StopTeamRole(ctx context.Context, p *StopTeamRolePayload) (err error) {
+	_, err = c.StopTeamRoleEndpoint(ctx, p)
+	return
+}
+
+// RestartTeamRole calls the "restart_team_role" endpoint of the "highbay"
+// service.
+// RestartTeamRole may return the following errors:
+//   - "role_not_running" (type *goa.ServiceError): The requested role is attached to an external non-managed session rather than a managed herdr-core terminal.
+//   - "unprocessable" (type *goa.ServiceError): The selected coding-agent client is not installed or does not support the requested options.
+//   - "team_unavailable" (type *goa.ServiceError): herdr-core or Chorus could not stop or start the role's terminal.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) RestartTeamRole(ctx context.Context, p *RestartTeamRolePayload) (err error) {
+	_, err = c.RestartTeamRoleEndpoint(ctx, p)
+	return
+}
+
+// CreateTerminalTicket calls the "create_terminal_ticket" endpoint of the
+// "highbay" service.
+// CreateTerminalTicket may return the following errors:
+//   - "terminal_unavailable" (type *goa.ServiceError): The requested role has no live herdr-core terminal to attach.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) CreateTerminalTicket(ctx context.Context, p *CreateTerminalTicketPayload) (res *TerminalTicketResult, err error) {
+	var ires any
+	ires, err = c.CreateTerminalTicketEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*TerminalTicketResult), nil
+}
+
+// AttachRoleTerminal calls the "attach_role_terminal" endpoint of the
+// "highbay" service.
+// AttachRoleTerminal may return the following errors:
+//   - "terminal_unavailable" (type *goa.ServiceError): The requested role has no live herdr-core terminal to attach.
+//   - "unprocessable" (type *goa.ServiceError): The supplied terminal ticket is expired, invalid, or already consumed.
+//   - "forbidden" (type *goa.ServiceError): The authenticated caller may not perform this operation or does not own the resource.
+//   - error: internal error
+func (c *Client) AttachRoleTerminal(ctx context.Context, p *AttachRoleTerminalPayload) (res AttachRoleTerminalClientStream, err error) {
+	var ires any
+	ires, err = c.AttachRoleTerminalEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(AttachRoleTerminalClientStream), nil
 }
 
 // ListTeamAgentOptions calls the "list_team_agent_options" endpoint of the

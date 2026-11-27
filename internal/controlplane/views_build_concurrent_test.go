@@ -32,8 +32,8 @@ func TestViewsPageBuildIgnoresAReadCapturedDuringPendingReplacement(t *testing.T
 	team := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
 	team.start = func(context.Context) (*genhighbay.ProjectTeam, error) {
 		return &genhighbay.ProjectTeam{
-			Team: "page-team", Space: "page-space", HerdrMode: "attached",
-			Step:  "Build workers were requested in Herdr.",
+			Team:  "page-team",
+			Step:  "Build workers were requested.",
 			Roles: []*genhighbay.ProjectTeamRole{{Role: "builder", Handle: "page-builder", Running: false}},
 		}, nil
 	}
@@ -113,7 +113,7 @@ expect(newStarted !== oldStarted && page.text("#highbay-build-details").includes
 const teamReceipt = page.text("#highbay-build-start-team-receipt");
 expect(teamReceipt.includes("returned: «") && !teamReceipt.includes("the team was ready"), "the replacement team receipt did not quote the owner's start outcome");
 const startTeam = JSON.parse(replacement.answer).team;
-expect(startTeam.state === "ready" && startTeam.herdr_mode === "attached" && startTeam.roles.find((role) => role.role === "builder")?.running === false, "the fixture did not return a successful launch request without a running builder");
+expect(startTeam.state === "ready" && startTeam.roles.find((role) => role.role === "builder")?.running === false, "the fixture did not return a successful launch request without a running builder");
 expect(teamReceipt.includes("«" + startTeam.step + "»"), "the receipt inferred worker readiness instead of quoting the owner's launch outcome");
 const regressions = [];
 const observe = () => {

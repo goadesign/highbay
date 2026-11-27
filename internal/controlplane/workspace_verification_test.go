@@ -2,7 +2,7 @@
 // project without stored verification settings: a run uses the tests Highbay
 // accepted for the change's build, at their commit, and a live copy uses the
 // same accepted tests against its candidate commit. Both read the layout
-// `hbay init` makes from a real git repository and refuse a commit lacking it.
+// `highbay init` makes from a real git repository and refuse a commit lacking it.
 package controlplane
 
 import (
@@ -52,7 +52,7 @@ type (
 	}
 )
 
-// shopLayout is the layout `hbay init` makes for example.com/shop, with a
+// shopLayout is the layout `highbay init` makes for example.com/shop, with a
 // hand-made generated entry point at the path the generator writes it to.
 var shopLayout = map[string]string{
 	"go.mod":                          "module example.com/shop\n\ngo 1.26\n",
@@ -265,13 +265,13 @@ func TestVerifyChangeRefusesWhatItCannotRunWithItsStep(t *testing.T) {
 		{
 			name: "candidate without its command package", build: accepted, tests: repo.tests, candidate: repo.noProgram,
 			refusal: "no_test_layout",
-			reason:  "commit " + repo.noProgram + " does not have the test layout hbay init makes (it has no folder services/shop/cmd/shop)",
-			step:    "the builder commits the layout hbay init makes and verifies again",
+			reason:  "commit " + repo.noProgram + " does not have the test layout highbay init makes (it has no folder services/shop/cmd/shop)",
+			step:    "the builder commits the layout highbay init makes and verifies again",
 		},
 		{
 			name: "accepted tests without their entry point", build: accepted, tests: repo.noEntry, candidate: repo.candidate,
 			refusal: "no_test_layout",
-			reason:  "commit " + repo.noEntry + " does not have the test layout hbay init makes (it has no folder services/shop/eval/gen/cmd/shop-evals)",
+			reason:  "commit " + repo.noEntry + " does not have the test layout highbay init makes (it has no folder services/shop/eval/gen/cmd/shop-evals)",
 			step:    "the test writer reports again, so Highbay checks and records its tests again",
 		},
 		{

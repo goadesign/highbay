@@ -133,7 +133,7 @@ const (
 	// the same download, with the settings Highbay's go commands use, where
 	// its output can be read. A check and a build start each end it with
 	// their own way to run again.
-	stepDependencies = "In the terminal hbay was started from, run " +
+	stepDependencies = "In the terminal highbay was started from, run " +
 		"GOTOOLCHAIN=local GOWORK=off GOFLAGS= go mod download in the project's " + scaffold.SuiteDir +
 		" folder and fix what it reports, such as no network, proxy or private-module settings " +
 		"missing there, or a Go older than the module requires"

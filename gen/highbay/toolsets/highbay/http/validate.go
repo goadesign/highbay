@@ -1064,6 +1064,15 @@ func ValidateOpenViewsResultTransport(body *OpenViewsResultTransport) (err error
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
 	}
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if body.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if body.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
 	return
 }
 

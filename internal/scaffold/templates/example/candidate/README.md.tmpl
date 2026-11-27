@@ -1,7 +1,7 @@
 # [[.Name]]
 
-A starter Goa / Goa-AI service created by `hbay init` or the `init_project`
-MCP tool, with a starter evaluator suite that `hbay verify` and `verify_change`
+A starter Goa / Goa-AI service created by `highbay init` or the `init_project`
+MCP tool, with a starter evaluator suite that `highbay verify` and `verify_change`
 can run against it.
 
 ## What is here
@@ -26,7 +26,7 @@ can run against it.
   draft and proposes a revision for you to adopt. The builder calls the
   `generate_code` MCP tool on the Highbay project server to write that agreed
   design into its working copy's `design/` and regenerate `gen/`; it edits
-  neither directory. An operator can run `hbay gen`
+  neither directory. An operator can run `highbay gen`
   in this directory: it runs Goa's generator for this module with the
   module's own versions. Never edit `gen/`. Generation compiles the design only, so update the
   hand-written code in `internal/` and `cmd/` to match it; the builder then builds and tests
@@ -75,14 +75,14 @@ can run against it.
   writer (without stored verification settings), `eval/` (`eval/design/`
   included) belongs to the test writer, and Highbay regenerates `eval/gen/` when
   the writer reads an unread assignment and at each report; after changing `eval/design/`, the test
-  writer reports to have Highbay generate it again or runs `hbay gen -dir eval`
+  writer reports to have Highbay generate it again or runs `highbay gen -dir eval`
   first. If you edit `eval/design/` yourself
-  outside a build, regenerate its code with `hbay gen -dir eval` (or have the
+  outside a build, regenerate its code with `highbay gen -dir eval` (or have the
   builder call `generate_code` with `target: "eval"`).
   The test writer runs every Go command with `GOWORK=off` and does not commit:
   Highbay commits the tests it accepts.
   `eval/design/story_tests.go` lists the tests the Story requires, one
-  scenario per finished flow, such as `prices_cookie`. `hbay init` wrote it
+  scenario per finished flow, such as `prices_cookie`. `highbay init` wrote it
   from `design/story.go`, and Highbay writes it again from the agreed Story when
   the test writer reads an unread assignment and at each report; leave it as it is.
   Regenerating `eval/` keeps those tests. If you store verification settings
@@ -97,17 +97,17 @@ could read that repository's files on this machine.
 
 ## Next steps
 
-If you created this project with `hbay init`, make the first commit and start
+If you created this project with `highbay init`, make the first commit and start
 Highbay in this directory:
 
 ```sh
 git init
 git add .gitignore README.md AGENTS_QUICKSTART.md go.mod go.sum design gen internal cmd eval
-git commit -m "Start [[.Name]] from hbay init"
-hbay
+git commit -m "Start [[.Name]] from highbay init"
+highbay
 ```
 
-`hbay` starts this project's server, or attaches to it when it is already
+`highbay` starts this project's server, or attaches to it when it is already
 running, and opens the project's views page in your browser. If the guide
 created this project with `init_project`, the Highbay project server has already
 initialized the Git repository, created the initial commit (`commit` in
@@ -162,7 +162,7 @@ See the
 [MCP tools reference](https://github.com/goadesign/highbay/blob/main/docs/REFERENCE.md#mcp-tools)
 for each tool's inputs and results.
 
-`hbay verify` and `hbay approve` are operator tools that check a commit
+`highbay verify` and `highbay approve` are operator tools that check a commit
 outside the server. To verify the current commit against the starter
 evaluator suite yourself:
 
@@ -170,23 +170,23 @@ evaluator suite yourself:
 VERIFY_DIR="$(mktemp -d)"
 WORK_DIR="$VERIFY_DIR/work"
 REPORT_DIR="$VERIFY_DIR/reports"
-hbay verify \
+highbay verify \
   -candidate-repo . -candidate-commit "$(git rev-parse HEAD)" -binary [[.Name]]=./cmd/[[.Name]] \
   -suite-repo . -suite-commit "$(git rev-parse HEAD)" -suite-module eval -suite-command ./gen/cmd/[[.Name]]-evals \
   -request-revision starter -work-dir "$WORK_DIR" -report-dir "$REPORT_DIR" -builder-view
 ```
 
-`hbay verify` keeps `$WORK_DIR` after the run: it holds the clones, the
+`highbay verify` keeps `$WORK_DIR` after the run: it holds the clones, the
 built binaries, and the evaluator's private evidence, including each build's
 log and each step's output in `$WORK_DIR/evidence/`. `-report-dir "$REPORT_DIR"`
 always writes the full verification report outside the repository as
-`$REPORT_DIR/<digest>.json` (used by `hbay approve`), while `-builder-view` hides holdout scenario names and checks
+`$REPORT_DIR/<digest>.json` (used by `highbay approve`), while `-builder-view` hides holdout scenario names and checks
 in the completed report JSON and summary line (if a run fails before writing a
 report, `stderr` prints operator setup/execution failure diagnostics). Do not
 share `$WORK_DIR`, `$REPORT_DIR`, or setup/execution failure output with coding
 agents that build the service.
 
-`hbay verify` checks a commit. The builder runs the `check_project` loop in
+`highbay verify` checks a commit. The builder runs the `check_project` loop in
 "Next steps" above before it commits.
 
 ## Change checkpoints

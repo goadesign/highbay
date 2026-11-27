@@ -163,7 +163,7 @@ var UpdateDependenciesResult = Type("UpdateDependenciesResult", func() {
 
 // ConfigureModelPayload is the input to the configure_model tool.
 var ConfigureModelPayload = Type("ConfigureModelPayload", func() {
-	Description("Selects either a direct model provider and model name (whose request settings the hbay command handed to the project server) or a running goa-ai model gateway address.")
+	Description("Selects either a direct model provider and model name (whose request settings the highbay command handed to the project server) or a running goa-ai model gateway address.")
 	Attribute("provider", String, "Direct model provider name when configuring a direct provider; must be paired with model_name and omitted when gateway_addr is set.", func() {
 		Enum("anthropic", "openai")
 		Example("anthropic")
@@ -573,7 +573,7 @@ var ApproveMergePayload = Type("ApproveMergePayload", func() {
 	Attribute("candidate_commit", String, "Full commit ID of the candidate being promoted (40 or 64 lowercase hex characters).", func() {
 		Pattern("^([0-9a-f]{40}|[0-9a-f]{64})$")
 	})
-	Attribute("report_digest", String, "SHA-256 digest of the CP4 verification report written by hbay verify (64 lowercase hex characters).", func() {
+	Attribute("report_digest", String, "SHA-256 digest of the CP4 verification report written by highbay verify (64 lowercase hex characters).", func() {
 		Pattern("^[0-9a-f]{64}$")
 	})
 	Required("change_id", "request_revision", "candidate_commit", "report_digest")
@@ -652,7 +652,7 @@ var VerificationCounts = Type("VerificationCounts", func() {
 // BuilderVerificationReport is the builder view of a CP4 report.
 var BuilderVerificationReport = Type("BuilderVerificationReport", func() {
 	Description("The builder view of a Checkpoint 4 verification report: counts, verdict and repair scenario checks. Holdout details, evidence and logs stay with the evaluator.")
-	Attribute("report_digest", String, "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.")
+	Attribute("report_digest", String, "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.")
 	Attribute("counts", VerificationCounts, "Every declared scenario, counted by outcome.")
 	Attribute("passed", Boolean, "The verdict: true only when every declared scenario passed and the suite ran cleanly.")
 	Attribute("suite_failed", Boolean, "Whether the evaluator suite itself failed or ended abnormally.")
@@ -716,7 +716,7 @@ var VerificationStatusResult = Type("VerificationStatusResult", func() {
 
 // OperatorEvaluatorTests is a run whose tests are the operator's evaluator.
 var OperatorEvaluatorTests = Type("OperatorEvaluatorTests", func() {
-	Description("The run used the operator's evaluator: the one stored with hbay verification set, or the one named on hbay verify's command line.")
+	Description("The run used the operator's evaluator: the one stored with highbay verification set, or the one named on highbay verify's command line.")
 })
 
 // AgentWrittenTests is a run whose tests a test writer on this machine wrote.
@@ -745,7 +745,7 @@ var VerificationListResult = Type("VerificationListResult", func() {
 })
 
 var _ = Service("highbay", func() {
-	Description("Highbay MCP software factory control plane.")
+	Description("Owns Highbay's software factory lifecycle across Checkpoint 1 intent and Story Change Cards, Checkpoint 2 C4 architecture and guardrail previews, Checkpoint 3 live target prompt overrides, Checkpoint 4 verification runs, Checkpoint 5 promotion approvals and merges, and the browser workspace's team conversation and terminal controls.")
 	Error("forbidden", ErrorResult, "The authenticated caller may not perform this operation or does not own the resource.")
 	HTTP(func() { Response("forbidden", StatusForbidden) })
 
@@ -846,7 +846,7 @@ var _ = Service("highbay", func() {
 	})
 
 	Method("preview_architecture", func() {
-		Description("Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with hbay preview -dir <draft_folder>.")
+		Description("Return the Checkpoint 2 C4 container topology, tool contracts, and Goa-AI guardrails of a confirmed Change Card's agreed revision, from the architecture its refresh evaluated and the revision saved; it reads and evaluates no file. It refuses a design with no Goa API or Service container and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The result reports what the design declares; it does not compare the design with the Change Card's requirements. The guide sees the architecture of an unsaved draft with highbay preview -dir <draft_folder>.")
 		Payload(PreviewArchitecturePayload)
 		Result(ArchitecturePreviewResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
@@ -933,14 +933,14 @@ var _ = Service("highbay", func() {
 	})
 
 	Method("verify_change", func() {
-		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with hbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.")
+		Description("Start Checkpoint 4 verification of a candidate commit for the owner's confirmed Change Card revision and return its run_id at once. The change's build must be the project's open build, not dropped, and the builder's working copy must have joined it. Before any run Highbay checks, with git in the project's repository: the candidate is on the build's branch highbay/build-<n>, descends from the build's base and is not that base, and holds no commit of another build's branch that the base lacks; its design/ files, read by the design walk in gofmt form, are the build's design source version for version; and every design version at its merge base with the project's commit is one the revision was made from. With verification settings stored with highbay verification set, the run uses the operator's evaluator. Otherwise Highbay must have accepted the build's tests: the run builds the candidate's programs from the candidate commit and runs the generated entry point of the tests at the accepted commit. The server builds the commit and runs the tests in a separate process that keeps running when the caller disconnects or the server restarts; the builds, the tests and the programs they start run as ordinary processes with the user's file and network access. get_verification reads its state. Only the builder view of the report is ever returned, with where its tests came from. A candidate the user already merged still verifies.")
 		Payload(VerifyChangePayload)
 		Result(VerificationStatusResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
 		Error("conflict", ErrorResult, "The Change Card is not confirmed or its request_revision does not match, the candidate commit is not in the project's repository, the project folder was replaced after the server started, the candidate's design/ files differ from the build's design source (the message names them; call generate_code, commit and verify again), or (without stored verification settings) the candidate changes hand-written files in the test module.")
 		Error("no_build", ErrorResult, "No build of this change is open (the user built another change or none), the user dropped it, or the open build is for another revision of the change. The message names what Highbay found and the user's step.")
 		Error("tests_not_accepted", ErrorResult, "Without stored verification settings: Highbay has not accepted the tests of the change's build. The message names the test writer's state and who acts, and ends with the step.")
-		Error("no_test_layout", ErrorResult, "Without stored verification settings: a commit lacks the test layout hbay init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.")
+		Error("no_test_layout", ErrorResult, "Without stored verification settings: a commit lacks the test layout highbay init makes, the accepted tests' commit is no longer in the project's repository, or the project folder is not in a git repository. The message names the commit or folder and what is missing, and ends with the step.")
 		Error("not_implemented", ErrorResult, "This server has no verification configuration, so it cannot run Checkpoint 4 verifications.")
 		Error("assignment_unread", ErrorResult, "A build started after your last read of your assignment: stop your current work, then call get_builder_assignment for its change.")
 		Error("copy_off_branch", CopyOffBranch, "Your working copy is not on the build's branch: the message states its branch, the build's branch and what is uncommitted, and the goal. Put your work there with git, commit it, and verify again.")
@@ -996,7 +996,7 @@ var _ = Service("highbay", func() {
 	})
 
 	Method("approve_merge", func() {
-		Description("Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with hbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.")
+		Description("Record Checkpoint 5 approval for the owner's confirmed Change Card revision. The control plane chooses the tests' commit the same way verify_change does (the suite commit in the project's stored verification settings, or the tests Highbay accepted for the change's build at request_revision), loads the verification report by digest, re-derives the report from its evidence with verify.Approve, and records the approval on the card when the report passed for candidate_commit, request_revision, and that tests' commit. When promotion settings are configured with highbay promotion set (or a PromotionTarget is bound), approve_merge also checks that the staged binaries in <release_dir>/<candidate_commit>/ match the report's binary digests and records those digests in artifacts; without promotion settings, no release folder or staged binaries are required and artifacts is empty. The report's suite_id and environment are what the tests at suite_commit declared and are recorded on the approval without a separate comparison. Nothing is merged or deployed. It checks again, with git, that the candidate is on the build's branch, descends from its base and holds no other build's work.")
 		Payload(ApproveMergePayload)
 		Result(ChangeCardResult)
 		Error("not_found", ErrorResult, "No Change Card exists with this change_id.")
@@ -1006,7 +1006,7 @@ var _ = Service("highbay", func() {
 		Error("unprocessable", ErrorResult, "The verification report did not pass or does not match the Change Card, the chosen tests' commit, or (when promotion settings are configured) the promotion target's staged binary digests.")
 		Error("not_implemented", ErrorResult, "This control plane has no verification configuration bound to it.")
 		Error("build_branch_mismatch", ErrorResult, "The run's candidate is no longer on the build's branch, or that branch now holds another build's work: the builder verifies again, then the user approves that run.")
-		Tool("approve_merge", "Approve the confirmed Change Card revision after its CP4 verification report passed for the candidate commit and the tests chosen for the revision. When promotion settings are configured with hbay promotion set, also checks that the staged release binaries match the report.")
+		Tool("approve_merge", "Approve the confirmed Change Card revision after its CP4 verification report passed for the candidate commit and the tests chosen for the revision. When promotion settings are configured with highbay promotion set, also checks that the staged release binaries match the report.")
 		HTTP(func() {
 			POST("/changes/approve")
 			Response(StatusOK)
@@ -1032,11 +1032,11 @@ var _ = Service("highbay", func() {
 	})
 
 	Method("configure_model", func() {
-		Description("Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the hbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.")
+		Description("Choose, on a running control plane without restarting, the model that CP3 live targets started afterwards receive: a direct provider and model name, whose request settings the highbay command handed to the project server with hand_over_model_settings, or a running gRPC model gateway. With written tests, a direct provider is served by the executor's loopback model gateway and the accepted test program receives only that gateway, never provider settings. The executor-owned gateway has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. With stored verification settings, the evaluator receives the choice and its chosen provider's settings. A configured gateway is passed through unchanged.")
 		Payload(ConfigureModelPayload)
 		Result(ModelConfigResult)
 		Error("unprocessable", ErrorResult, "The field combination is invalid, or the project server holds no request settings for the chosen provider; the message names the provider's key variable and how to hand it over.")
-		Tool("configure_model", "Switch the model provider and model name (such as anthropic/claude-sonnet-4-6 or openai/gpt-5.4-mini, whose key the user exported in the shell that ran hbay) or attach a running model gateway address, without restarting the project server. Live targets that start_live_target starts afterwards plan with this model.")
+		Tool("configure_model", "Switch the model provider and model name (such as anthropic/claude-sonnet-4-6 or openai/gpt-5.4-mini, whose key the user exported in the shell that ran highbay) or attach a running model gateway address, without restarting the project server. Live targets that start_live_target starts afterwards plan with this model.")
 		HTTP(func() {
 			POST("/cp1/model")
 			Response(StatusOK)
@@ -1054,7 +1054,7 @@ var _ = Service("highbay", func() {
 	})
 
 	Method("hand_over_model_settings", func() {
-		Description("The hbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the hbay command's management credential may call this operation; it is never an MCP tool.")
+		Description("The highbay command, after it confirms the project server's identity, hands over the request settings of each model provider whose key is set in the shell it runs in: the key and the listed settings that route and authenticate the provider's requests. The project server holds them in memory only and forgets them when it stops. A live target using stored verification settings receives the chosen provider's held settings; a verification with that evaluator receives every held provider's settings. Accepted written tests receive no provider settings in verification or live targets: for a direct live model the executor serves an executor-owned loopback model gateway. It has no authentication: any local process, including another user's, can use it while the target runs without receiving the provider key. The check helper receives none. An absent provider attribute keeps what is held for that provider. A present one replaces everything held for it and must include the provider's key variable; an empty one is refused, because it is neither a way to keep nor a way to forget. A request with neither attribute changes nothing and reports what is held. When no model is chosen and a provider is now held, live targets use that provider's default model, anthropic before openai; any other choice stays. The result names the held variables and the model choice, never a value. Only the highbay command's management credential may call this operation; it is never an MCP tool.")
 		Payload(HandOverModelSettingsPayload)
 		Result(ModelSettingsResult)
 		Error("unprocessable", ErrorResult, "A provider's settings do not include its key variable, or a value contains a NUL character. The message names the provider and the variable, never a value; nothing held changed.")

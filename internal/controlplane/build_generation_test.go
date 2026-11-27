@@ -38,7 +38,7 @@ func TestBuildGenerationWritesAgreedDesignBeforeDependencyRefusal(t *testing.T) 
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	transport := genhighbayclient.NewClient(origin.Scheme, origin.Host,
-		generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+		generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 	client := &genhighbay.Client{GenerateCodeEndpoint: transport.GenerateCode()}
 	_, err = client.GenerateCode(t.Context(), &genhighbay.GenerateCodePayload{})
 	require.Error(t, err)

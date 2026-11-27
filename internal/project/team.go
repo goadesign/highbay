@@ -1,106 +1,84 @@
-// This file owns the repeatable team-start operation and the Chorus roster contract.
+// This file declares what the project team needs from herdr-core and Chorus,
+// the team's saved roles, and the first message each role is started with.
 package project
 
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	genchorus "github.com/goadesign/chorus/gen/view"
 	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	genproject "github.com/goadesign/highbay/gen/project"
 	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/hc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type (
-	// TeamHost supplies typed Herdr effects; the executable resolves programs and configuration.
-	TeamHost interface {
-		Spaces(context.Context) ([]TeamSpace, error)
-		CreateSpace(context.Context, string, string) (TeamSpace, error)
-		Terminals(context.Context, string, string, []string) ([]TeamTerminal, error)
-		Focus(context.Context, TeamSpace) error
-		Overlays(context.Context) ([]string, error)
-		ReadTerminal(context.Context, string) (TeamTerminal, error)
-		LabelGuide(ctx context.Context, address, root, swarm, client, handle, space, tab string) error
-		OpenCompanion(context.Context) error
-		LaunchWorkers(context.Context, string, map[string]*genhighbay.RoleAgentChoice) error
-		ClosePane(context.Context, string) error
+	// TeamTerminals is what the team asks of herdr-core over one connection:
+	// start, find, label and end terminals, follow their changes, and attach
+	// a viewer. The executable binds it to an hc.Client; Done is closed when
+	// that connection ends, after which the team dials a new one.
+	TeamTerminals interface {
+		Run(context.Context, hc.RunRequest) (hc.Terminal, error)
+		List(context.Context, hc.ListRequest) ([]hc.Terminal, error)
+		Get(ctx context.Context, terminal string) (hc.Terminal, error)
+		Label(ctx context.Context, terminal string, labels map[string]string) (hc.Terminal, error)
+		Interrupt(ctx context.Context, terminal string) (hc.InterruptResult, error)
+		Kill(ctx context.Context, terminal string) (hc.Terminal, error)
+		Remove(ctx context.Context, terminal string) error
+		SubscribeEvents(ctx context.Context, labels map[string]string, emit func(hc.StreamUpdate)) error
+		Attach(context.Context, hc.AttachRequest) (TerminalStream, error)
+		Done() <-chan struct{}
+		Close() error
+	}
+	// TerminalStream is one viewer's live stream to a terminal, as
+	// hc.AttachStream provides it.
+	TerminalStream interface {
+		Recv(context.Context) (hc.AttachEvent, error)
+		WriteInput([]byte) error
+		Resize(cols, rows uint16) error
+		Focus(focused bool) error
+		GrantCredit(bytes uint32) error
+		Close() error
+	}
+	// TeamChorus is what the team asks of the local Chorus server, through
+	// Chorus's generated client: read the project's swarm, waiting for a
+	// change, and post a message as the user or as Highbay. View returns a
+	// service error named "not_modified" when nothing changed within the wait.
+	TeamChorus interface {
+		View(context.Context, *genchorus.ViewPayload) (*genchorus.SwarmView, error)
+		PostMessage(context.Context, *genchorus.PostMessagePayload) (*genchorus.PostMessageResult, error)
 	}
 	// TeamDependencies binds every external team effect and the server's accepted-work lifetime.
 	TeamDependencies struct {
 		// Lifetime ends accepted work only when the owning server shuts down.
 		Lifetime context.Context
-		// Host is the root-injected Herdr command adapter.
-		Host TeamHost
-		// HerdrAvailable reports whether local worker panes can be launched.
-		HerdrAvailable bool
-		// CompanionInstalled enables the first-attachment companion window.
-		CompanionInstalled bool
+		// DialTerminals opens a connection to herdr-core, starting the core
+		// when none runs. The team keeps one connection and dials again when
+		// it ends.
+		DialTerminals func(context.Context) (TeamTerminals, error)
+		// ConnectChorus resolves the running Chorus server, starting it when
+		// none runs. The team resolves it again after a failed call.
+		ConnectChorus func(context.Context) (TeamChorus, error)
 		// DiscoverAgents checks installed programs on explicit option and launch requests.
 		DiscoverAgents func(context.Context) ([]*genhighbay.InstalledAgentOption, error)
 		// PrepareWorkerTrust pre-populates user-scoped folder trust and MCP tool
 		// approval outside git working copies before project roles launch.
 		PrepareWorkerTrust func(context.Context, []WorkerTrustTarget) error
-		// WorkerEnv is the original server login environment for headless CLI sign-in.
-		WorkerEnv []string
-		// RosterDirectory is Herdr's local launcher roster directory.
-		RosterDirectory string
-		// Shell is the server login shell used by the shared running predicate.
+		// AgentCommand builds the command line that starts the chosen coding
+		// agent interactively with prompt as its first message.
+		AgentCommand func(choice *genhighbay.RoleAgentChoice, prompt string) ([]string, error)
+		// AgentEnv is the login environment each agent starts with, so its
+		// client finds the user's sign-in and model provider settings.
+		AgentEnv map[string]string
+		// Shell is the server login shell used by the running-agent predicate.
 		Shell string
-		// Connect resolves the running Chorus owner at each accepted team start.
-		// Failure happens before any team state or window changes.
-		Connect func(context.Context) (TeamConnection, error)
-	}
-	// TeamConnection binds an immutable observer/sender pair to one Chorus endpoint.
-	// The executable constructs it from Chorus status; it is never persisted.
-	TeamConnection struct {
-		// Endpoint identifies the server whose watcher facts permit reminders.
-		Endpoint string
-		// Observer follows only the registered selection; nil leaves facts unknown.
-		Observer TeamObserver
-		// Sender posts fixed direct reminders; nil sends nothing. It never types into a terminal.
-		Sender TeamSender
-	}
-	// TeamSpace is a local space and its tab-to-terminal mapping reported by Herdr.
-	TeamSpace struct {
-		ID      string    `json:"id"`
-		Name    string    `json:"name"`
-		Folder  string    `json:"folder"`
-		Machine *string   `json:"machine"`
-		Tabs    []TeamTab `json:"tabs"`
-	}
-	// TeamTab identifies the terminals belonging to a Herdr tab.
-	TeamTab struct {
-		ID        string     `json:"id"`
-		Terminals []TeamPane `json:"terminals"`
-	}
-	// TeamPane supplies the terminal identifier accepted by pane.focus.
-	TeamPane struct {
-		Terminal string `json:"terminal"`
-		Pane     string `json:"pane"`
-	}
-	// TeamTerminal contains only the trusted observations needed to identify a running role.
-	TeamTerminal struct {
-		Address    string            `json:"address"`
-		PID        int               `json:"pid"`
-		State      string            `json:"state"`
-		Labels     map[string]string `json:"labels"`
-		Foreground *TeamForeground   `json:"foreground"`
-		Reported   bool              `json:"reported"`
-		Status     *TeamStatus       `json:"status"`
-		CreatedMS  int64             `json:"created_ms"`
-		Reason     string            `json:"reason"`
-	}
-	// TeamForeground preserves pid, argv and working directory rather than Herdr's display name.
-	TeamForeground struct {
-		PID  int      `json:"pid"`
-		Argv []string `json:"argv"`
-		Cwd  string   `json:"cwd"`
 	}
 	// WorkerTrustTarget pairs a project and role working folder with the role and
 	// client choice so user-scoped folder trust is ready and explicit restrictions
@@ -119,47 +97,34 @@ type (
 		dependencies TeamDependencies
 		// assignments reads which worker roles currently have work on the open build.
 		assignments controlplane.AssignmentReader
-		// headless owns the one-shot worker processes for the accepted build.
-		headless headlessWorkers
 		// lastStopped is the successfully drained generation, held under the team lock.
 		lastStopped controlplane.BuildIdentity
 		// closed forbids new work once shutdown has begun.
 		closed bool
 		// withTimeout privately injects the accepted-operation deadline; nil uses context.WithTimeout.
 		withTimeout func(context.Context, time.Duration) (context.Context, context.CancelFunc)
-		// observationMu protects the immutable connection and small public snapshot.
-		observationMu sync.RWMutex
-		observed      map[string]roleObservation
-		// chorus is the supervisor's latest answer for the space it watched.
-		chorus     chorusObservation
-		connection TeamConnection
+		// terminals holds the one connection to herdr-core.
+		terminals terminalLink
+		// chorus holds the resolved Chorus client.
+		chorus chorusLink
+		// observed is what the supervisor last saw of the team.
+		observed teamObservation
+		// tickets holds the unused terminal tickets.
+		tickets terminalTickets
 	}
-	// launcherRoster mirrors Chorus load_roster's exact closed schema.
-	launcherRoster struct {
-		Root  string         `json:"root"`
-		Swarm string         `json:"swarm"`
-		Roles []launcherRole `json:"roles"`
-	}
-	// launcherRole binds one trusted role to its existing folder and first message.
-	launcherRole struct {
-		Role         string         `json:"role"`
-		Title        string         `json:"title"`
-		Handle       string         `json:"handle"`
-		Folder       string         `json:"folder"`
-		FirstMessage string         `json:"first_message"`
-		Connections  [0]struct{}    `json:"connections"`
-		Place        *launcherPlace `json:"place"`
-	}
-	// launcherPlace places each worker relative to an earlier role.
-	launcherPlace struct {
-		Beside    string `json:"beside"`
-		Direction string `json:"direction"`
+	// teamRole is one registered role: its stable Chorus handle and the
+	// folder its agent works in.
+	teamRole struct {
+		Role   string
+		Handle string
+		Folder string
 	}
 )
 
-// teamStartTimeout bounds one accepted roster/window transition so an unresponsive
-// Herdr command cannot hold the serialized team operation indefinitely. This budget
-// is independent of a build's working-copy and generation phase.
+// teamStartTimeout bounds one accepted team operation so an unresponsive
+// herdr-core or Chorus call cannot hold the serialized team operation
+// indefinitely. This budget is independent of a build's working-copy and
+// generation phase.
 const teamStartTimeout = 45 * time.Second
 
 // errAssignmentsUnavailable keeps assignment read failures free of private evidence.
@@ -174,46 +139,56 @@ func (s *Server) BindAssignments(assignments controlplane.AssignmentReader) {
 	s.team.assignments = assignments
 }
 
-// readAssignments calls the bound assignment reader, treating an unbound reader
-// and a failed read identically. Unknown assignments never authorize worker effects.
-func (s *Server) readAssignments(ctx context.Context) (controlplane.TeamAssignments, error) {
-	if s.team.assignments == nil {
-		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
-	}
-	assignments, err := s.team.assignments(ctx)
-	if err != nil {
-		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
-	}
-	return assignments, nil
-}
-
-// registeredTeamRoles derives current launcher text from each saved role and folder.
-func registeredTeamRoles(agents map[string]agentRecord) []launcherRole {
-	byRole := make(map[string]string, len(agents))
-	for actor, agent := range agents {
-		byRole[agent.Role] = actor
-	}
-	roles := make([]launcherRole, 0, len(agents))
+// registeredTeamRoles lists the saved roles in guide, builder, test_writer order.
+func registeredTeamRoles(agents map[string]agentRecord) []teamRole {
+	roles := make([]teamRole, 0, len(agents))
 	for _, role := range []string{"guide", "builder", "test_writer"} {
-		handle, exists := byRole[role]
-		if !exists {
-			continue
+		for handle, agent := range agents {
+			if agent.Role == role {
+				roles = append(roles, teamRole{Role: role, Handle: handle, Folder: agent.Folder})
+			}
 		}
-		title, message := roleFirstMessage(role)
-		roles = append(roles, launcherRole{Role: role, Title: title, Handle: handle, Folder: agents[handle].Folder, FirstMessage: message})
 	}
 	return roles
 }
 
-// roleFirstMessage owns the fixed product instructions; messages never enter saved state.
-func roleFirstMessage(role string) (string, string) {
+// roleTitle is the name a role shows next to its handle in Chorus.
+func roleTitle(role string) string {
 	switch role {
 	case "guide":
-		return "Coding agent", "Work through the Story and the change with the user in this project's pane. Highbay registers this coding session under its internal guide role; speak to the user in plain language without calling yourself \"the guide\". Use your highbay connection, starting with the highbay://golden-path guidance resource, list_changes/get_change, and open_views so Highbay opens the project's browser page. Branch your first reply on the open_views result: when opened is true, tell the user clearly that the Highbay browser page has been opened in their default browser (it may appear in a new tab or background window), explain in one plain sentence how chat and page work together (they describe what they want here in chat, and review options, start the build, and approve on that browser page), and mention they can reopen it anytime with Open Highbay Window in the Herdr companion (Cmd+Alt+Shift+H on macOS) or by asking you to call open_views; when opened is false, do not claim the page opened—share the returned message and tell the user they can open it with Open Highbay Window in the Herdr companion or ask you to try open_views again. Never print or guess a 127.0.0.1 URL because each launch uses a fresh private session. If the user has not yet said what they want to build or change, ask one short, plain question and wait; never ask for a Go module path, folder name or requirements checklist (for example, ask \"What would you like to build?\" or \"What would you like to change?\"). If the project folder holds no project yet, call init_project with dir \".\" and no module path unless the user gave one: Highbay derives it from the folder name. Before that call, tell the user in one sentence that creating the project downloads Go modules and can take a few minutes the first time, and that the Highbay page shows its progress. Write the user's goal straight into a Story and a Change Card instead of interviewing them in chat: put open product questions, such as target users, thresholds or edge cases, into the analysis's ambiguities with concrete options, which the user answers on the views page. init_project creates a blank project; pass worked_example only when the user asks to see Highbay's worked example. The project's starting files are plumbing the user never asked about: never mention or ask about them on the Change Card or in chat, replace Highbay's worked example silently in your draft when the project was created with it, leave preserved behaviors empty on a brand-new product, and write summary, ambiguities, examples and preserved behaviors in concise plain user language without repository file paths (such as design/design.go) or Highbay runner flags (such as -listen). Set an ambiguity's draft_option to the option your draft already implements whenever another option would change the design, Story, examples or preserved behaviors, and never write that inside an option's text: the page lets the user confirm only that option, and when they want another you revise the change so the draft implements it before they confirm. After initializing the project, call update_draft before each new change and whenever told a design file changed. Work only in the draft folder returned by update_draft or refresh_story; never edit the project folder or copy design files between it and the draft. Correct the files it reports as needing correction in your draft; when one is in the project folder, tell the user what to correct there and wait. Call update_draft again until that list is empty, then call refresh_story and poll get_story_refresh until it succeeds or fails. Use the succeeded refresh when calling propose_change or revise_change. When the design needs a module, run GOWORK=off go get and GOWORK=off go mod tidy in the draft. To see how Highbay reads your draft, call refresh_story and read the result with get_story_refresh. To discard unsaved edits, delete the draft and refresh. After the user drops a build, refresh before drafting the next change. If the builder reports that a hook reformatted a design file, run the same formatter in the draft, refresh and revise. Only the user confirms intent and approves results, on the views page."
+		return "Coding agent"
 	case "builder":
-		return "Builder", "Use your highbay connection, starting with the highbay://golden-path guidance resource. Use list_builder_assignments to find the build. An empty list means no build needs you: say so and stop. Work only in this working folder, your copy of the project (working_folder in your assignment), on the branch checked out there. Read each new assignment with get_builder_assignment before any other work: it puts your folder on the build's own branch. Then run git status: implementation files you authored or generated for this build are expected current work. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Highbay call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Call generate_code: it writes the agreed design into design/ and regenerates gen/; never edit either. If the design needs a change, ask the guide to propose a revision for the user to adopt. When generation names go get, run what it names here, then call it again. Commit on your branch. Never name, move or delete a highbay/ branch. Never merge, cherry-pick or copy files from another highbay/ branch: they hold work the user has not taken. When a Highbay call says your copy is on another branch, put your work where it says with git and call again; when it names another build's work, remove its commits and its changes to the files named, by any git you choose. When your assignment's gowork_off is true, run every go command as GOWORK=off go .... Use check_project before verify_change. Read the assignment before verification: when a test writer is used, verify_change is refused until its tests are accepted. While you wait for that, do not stop and do not wait for a message: call wait_for_builder_assignment, passing the version it returned as since_version, until your assignment shows the tests accepted or the list is empty; when your client does not offer that tool, call list_builder_assignments about every 30 seconds instead. Only the user confirms intent and approves results on the views page."
+		return "Builder"
 	case "test_writer":
-		return "Test writer", "Use your highbay connection, starting with the highbay://golden-path guidance resource. Use list_test_writer_assignments to find the build. An empty list means no build needs you: say so and stop. Read each new assignment with get_test_writer_assignment before any other work: it puts your folder on the build's own branch. Then run git status: the Story table and generated test-module files Highbay just prepared, and tests you already authored for this build, are expected current work. Leave Highbay's prepared files unchanged. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Highbay call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Stay on the branch checked out in your working copy and do not commit: Highbay commits what it accepts. Never name, move or delete a highbay/ branch. Never bring files or commits from another highbay/ branch. Run every go command as GOWORK=off go ..., as Highbay's tests check does. Implement one test per required entry in the test module, eval/ in the working folder the assignment names, and change nothing outside that module. Your tests must also hold the service to every answer the user confirmed, every confirmation example and every preserved behavior the assignment lists. Highbay writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the test module at each assignment read that marks it read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run hbay gen -dir eval in the working folder first; regenerating keeps the required tests. To check your work, run GOWORK=off go build ./... in eval/: it fails naming any required method you have not written. Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Highbay's verification builds and runs the application. Then call report_tests_finished. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Highbay will show Not stated. These are your statements, not Highbay's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Highbay validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Highbay records the tests it accepts. Highbay's check of your report is the judge: after reporting, do not stop and do not wait for a message: call wait_for_test_writer_assignment, and while the list it returns still shows your assignment as reported, call it again, passing the version it returned as since_version; when your client does not offer that tool, call list_test_writer_assignments about every 30 seconds instead. Highbay may reach its verdict before your first call, so decide by what the list shows: as soon as it shows another state or no assignment at all, read get_test_writer_assignment again. The list is empty once your tests are accepted, and also after the user dropped the change. When its verdict is in, get_test_writer_assignment gives the accepted state or any findings to fix, and it says when the build was dropped or replaced. Only the user confirms intent and approves results on the views page."
+		return "Test writer"
+	}
+	panic("unregistered team role")
+}
+
+// roleFirstMessage is the whole first message a role's coding agent is started
+// with: where to join the project's conversation, then the role's fixed
+// product instructions. Messages never enter saved state.
+func roleFirstMessage(role teamRole, team string) string {
+	join := "Use the installed chorus skill now. Join swarm '" + team + "', channel '#" + team + "', using handle '" +
+		role.Handle + "' and role '" + roleTitle(role.Role) + "'. Report your exact active model when joining, as the chorus skill says. " +
+		"Keep `chorus watch " + role.Handle + " -wait 24h` running in the background while you work. "
+	if role.Role != "guide" {
+		join += "Highbay messages you there when you have an unread assignment; read your assignments when asked. " +
+			"If you cannot join Chorus or its watcher fails, do not stop and do not inspect, start, stop or reconfigure Chorus " +
+			"or any other service or process on this computer: carry on through your highbay connection alone. "
+	}
+	return join + roleInstructions(role.Role)
+}
+
+// roleInstructions owns the fixed product instructions of each role.
+func roleInstructions(role string) string {
+	switch role {
+	case "guide":
+		return "Work through the Story and the change with the user. The user talks with you on Highbay's browser page, through this project's Chorus channel, and may never look at this terminal: read the channel now, answer the user's latest message there as a reply, and keep answering there. Highbay registers this coding session under its internal guide role; speak to the user in plain language without calling yourself \"the guide\". Use your highbay connection, starting with the highbay://golden-path guidance resource and list_changes/get_change. The user already has the Highbay page open; when they ask you to open it again, call open_views and tell them what its message says. Never print or guess a 127.0.0.1 URL because each launch uses a fresh private session. If the user has not yet said what they want to build or change, ask one short, plain question and wait; never ask for a Go module path, folder name or requirements checklist (for example, ask \"What would you like to build?\" or \"What would you like to change?\"). If the project folder holds no project yet, call init_project with dir \".\" and no module path unless the user gave one: Highbay derives it from the folder name. Before that call, tell the user in one sentence that creating the project downloads Go modules and can take a few minutes the first time, and that the Highbay page shows its progress. Write the user's goal straight into a Story and a Change Card instead of interviewing them in chat: put open product questions, such as target users, thresholds or edge cases, into the analysis's ambiguities with concrete options, which the user answers on the views page. init_project creates a blank project; pass worked_example only when the user asks to see Highbay's worked example. The project's starting files are plumbing the user never asked about: never mention or ask about them on the Change Card or in chat, replace Highbay's worked example silently in your draft when the project was created with it, leave preserved behaviors empty on a brand-new product, and write summary, ambiguities, examples and preserved behaviors in concise plain user language without repository file paths (such as design/design.go) or Highbay runner flags (such as -listen). Set an ambiguity's draft_option to the option your draft already implements whenever another option would change the design, Story, examples or preserved behaviors, and never write that inside an option's text: the page lets the user confirm only that option, and when they want another you revise the change so the draft implements it before they confirm. After initializing the project, call update_draft before each new change and whenever told a design file changed. Work only in the draft folder returned by update_draft or refresh_story; never edit the project folder or copy design files between it and the draft. Correct the files it reports as needing correction in your draft; when one is in the project folder, tell the user what to correct there and wait. Call update_draft again until that list is empty, then call refresh_story and poll get_story_refresh until it succeeds or fails. Use the succeeded refresh when calling propose_change or revise_change. When the design needs a module, run GOWORK=off go get and GOWORK=off go mod tidy in the draft. To see how Highbay reads your draft, call refresh_story and read the result with get_story_refresh. To discard unsaved edits, delete the draft and refresh. After the user drops a build, refresh before drafting the next change. If the builder reports that a hook reformatted a design file, run the same formatter in the draft, refresh and revise. Only the user confirms intent and approves results, on the views page."
+	case "builder":
+		return "Use your highbay connection, starting with the highbay://golden-path guidance resource. Use list_builder_assignments to find the build. An empty list means no build needs you: say so and stop. Work only in this working folder, your copy of the project (working_folder in your assignment), on the branch checked out there. Read each new assignment with get_builder_assignment before any other work: it puts your folder on the build's own branch. Then run git status: implementation files you authored or generated for this build are expected current work. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Highbay call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Call generate_code: it writes the agreed design into design/ and regenerates gen/; never edit either. If the design needs a change, ask the guide to propose a revision for the user to adopt. When generation names go get, run what it names here, then call it again. Commit on your branch. Never name, move or delete a highbay/ branch. Never merge, cherry-pick or copy files from another highbay/ branch: they hold work the user has not taken. When a Highbay call says your copy is on another branch, put your work where it says with git and call again; when it names another build's work, remove its commits and its changes to the files named, by any git you choose. When your assignment's gowork_off is true, run every go command as GOWORK=off go .... Use check_project before verify_change. Read the assignment before verification: when a test writer is used, verify_change is refused until its tests are accepted. While you wait for that, do not stop and do not wait for a message: call wait_for_builder_assignment, passing the version it returned as since_version, until your assignment shows the tests accepted or the list is empty; when your client does not offer that tool, call list_builder_assignments about every 30 seconds instead. Only the user confirms intent and approves results on the views page."
+	case "test_writer":
+		return "Use your highbay connection, starting with the highbay://golden-path guidance resource. Use list_test_writer_assignments to find the build. An empty list means no build needs you: say so and stop. Read each new assignment with get_test_writer_assignment before any other work: it puts your folder on the build's own branch. Then run git status: the Story table and generated test-module files Highbay just prepared, and tests you already authored for this build, are expected current work. Leave Highbay's prepared files unchanged. If you find unexpected files or work from an earlier build, stop and tell the user before carrying it forward. When a Highbay call says a build was dropped or a new one started, stop: make no more edits or commits for the old work. Stay on the branch checked out in your working copy and do not commit: Highbay commits what it accepts. Never name, move or delete a highbay/ branch. Never bring files or commits from another highbay/ branch. Run every go command as GOWORK=off go ..., as Highbay's tests check does. Implement one test per required entry in the test module, eval/ in the working folder the assignment names, and change nothing outside that module. Your tests must also hold the service to every answer the user confirmed, every confirmation example and every preserved behavior the assignment lists. Highbay writes eval/design/story_tests.go, which declares the required tests, from the agreed Story and generates the test module at each assignment read that marks it read and again at each report; leave that file as it is. After changing the module's design, report to have it generated again or run highbay gen -dir eval in the working folder first; regenerating keeps the required tests. To check your work, run GOWORK=off go build ./... in eval/: it fails naming any required method you have not written. Never build or start the application itself, which is every program under cmd/, and never run your tests against it: Highbay's verification builds and runs the application. Then call report_tests_finished. When you call report_tests_finished, include coverage_statements. For each scenario whose coverage you state, give its exact scenario ID, question_ids from this assignment's answers[].id, example_ids from examples[].id, and an explanation of the interaction or assertion that exercises them. Use an empty array when you state none; Highbay will show Not stated. These are your statements, not Highbay's judgment of what your tests assert. The tests must still hold the service to every confirmed answer, example and preserved behavior. Highbay validates supplied references while checking your report. Read get_test_writer_assignment for the verdict and the statements you submitted; correct any stated-reference findings and report again. Do not commit: Highbay records the tests it accepts. Highbay's check of your report is the judge: after reporting, do not stop and do not wait for a message: call wait_for_test_writer_assignment, and while the list it returns still shows your assignment as reported, call it again, passing the version it returned as since_version; when your client does not offer that tool, call list_test_writer_assignments about every 30 seconds instead. Highbay may reach its verdict before your first call, so decide by what the list shows: as soon as it shows another state or no assignment at all, read get_test_writer_assignment again. The list is empty once your tests are accepted, and also after the user dropped the change. When its verdict is in, get_test_writer_assignment gives the accepted state or any findings to fix, and it says when the build was dropped or replaced. Only the user confirms intent and approves results on the views page."
 	}
 	panic("unregistered team role")
 }
@@ -234,65 +209,7 @@ func teamName(prefix, id string) string {
 	return base[:min(len(base), 19)] + "-" + suffix
 }
 
-// localSpaceID restricts stored space names to local filenames without path separators
-// so records written before the stricter space-ID rule still load.
-func localSpaceID(id string) bool {
-	return id != "" && id != "." && id != ".." && !strings.ContainsAny(id, "/\\\x00")
-}
-
-// safeSpaceID restricts managed space identifiers to 1–64 ASCII characters of
-// [A-Za-z0-9_.-] other than "." and "..".
-func safeSpaceID(id string) bool {
-	if len(id) == 0 || len(id) > 64 || id == "." || id == ".." {
-		return false
-	}
-	for i := 0; i < len(id); i++ {
-		c := id[i]
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' && c != '.' && c != '-' {
-			return false
-		}
-	}
-	return true
-}
-
-// roleRunning reports whether a terminal is running an agent rather than an idle shell.
-//
-// Shared contract with Highbay: a live terminal for which Herdr reports no
-// foreground program counts as running; only a reported foreground that is an
-// idle shell makes a role not running. An idle shell has the base name of
-// argv[0] (leading dashes removed) in IDLE_SHELLS or the base name of $SHELL,
-// and neither argv[1] nor argv[2] is -c or a single-dash flag group containing
-// c (such as -lic).
-func roleRunning(t TeamTerminal, shell string) bool {
-	if t.State != "live" {
-		return false
-	}
-	if t.Foreground == nil {
-		return true
-	}
-	if len(t.Foreground.Argv) == 0 || t.Foreground.Argv[0] == "" {
-		return true
-	}
-	argv := t.Foreground.Argv
-	name := strings.TrimLeft(filepath.Base(strings.TrimLeft(argv[0], "-")), "-")
-	idleShell := name == strings.TrimLeft(filepath.Base(strings.TrimLeft(shell, "-")), "-") && shell != ""
-	for _, candidate := range []string{"sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "nu", "pwsh", "xonsh", "elvish"} {
-		if name == candidate {
-			idleShell = true
-		}
-	}
-	if !idleShell {
-		return true
-	}
-	for _, arg := range argv[1:min(len(argv), 3)] {
-		if strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") && strings.Contains(arg[1:], "c") {
-			return true
-		}
-	}
-	return false
-}
-
-// validTeamName enforces the persisted launcher identifier contract at the storage boundary.
+// validTeamName enforces Chorus's name rules for the saved team name at the storage boundary.
 func validTeamName(value string) bool {
 	if len(value) == 0 || len(value) > 32 {
 		return false
@@ -319,6 +236,19 @@ func teamUnavailable(ctx context.Context, step, cause string) error {
 	span.RecordError(failure)
 	span.SetStatus(codes.Error, "team start failed")
 	return &genproject.TeamUnavailable{Name: "team_unavailable", Cause: cause}
+}
+
+// readAssignments calls the bound assignment reader, treating an unbound reader
+// and a failed read identically. Unknown assignments never authorize worker effects.
+func (s *Server) readAssignments(ctx context.Context) (controlplane.TeamAssignments, error) {
+	if s.team.assignments == nil {
+		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
+	}
+	assignments, err := s.team.assignments(ctx)
+	if err != nil {
+		return controlplane.TeamAssignments{}, errAssignmentsUnavailable
+	}
+	return assignments, nil
 }
 
 // acceptedTeamContext retains caller values and tracing while the server owns

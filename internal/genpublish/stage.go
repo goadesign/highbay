@@ -55,7 +55,7 @@ func acquireStage(root *os.Root, name string) (*genStage, error) {
 		return nil, fmt.Errorf("open staging directory: %w", err)
 	}
 	refuse := func(reason error) (*genStage, error) {
-		return nil, errors.Join(fmt.Errorf("staging directory %s is not the empty directory hbay gen created; it was left alone: %w", name, reason), dir.Close())
+		return nil, errors.Join(fmt.Errorf("staging directory %s is not the empty directory highbay gen created; it was left alone: %w", name, reason), dir.Close())
 	}
 	listing, err := dir.Open(".")
 	if err != nil {
@@ -92,7 +92,7 @@ func currentGenDir(root *os.Root) (bool, error) {
 	case err != nil:
 		return false, fmt.Errorf("inspect gen/: %w", err)
 	case !info.IsDir():
-		return false, fmt.Errorf("gen is not a directory (%s); move it away and run hbay gen again", info.Mode().Type())
+		return false, fmt.Errorf("gen is not a directory (%s); move it away and run highbay gen again", info.Mode().Type())
 	}
 	return true, nil
 }

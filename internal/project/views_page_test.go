@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,34 +25,49 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	genprojectserver "github.com/goadesign/highbay/gen/http/project/server"
 	genproject "github.com/goadesign/highbay/gen/project"
 	"github.com/goadesign/highbay/internal/controlplane"
 )
 
-// viewsProject is one running project composed as Highbay's composition root
-// composes it: a control plane and a project server behind the project's
-// saved address, with a test-only restart that replaces both, as starting
-// Highbay again does.
-type viewsProject struct {
-	// state is the project's private state.
-	state *State
-	// opts configures every control plane the project starts; CardsDir is
-	// the project's.
-	opts controlplane.Options
-	// cp is the control plane currently answering.
-	cp atomic.Pointer[controlplane.ControlPlane]
-	// server is the project server currently answering.
-	server atomic.Pointer[Server]
-	// handler is server's guarded handler.
-	handler atomic.Pointer[http.Handler]
-}
+type (
+	// viewsProject is one running project composed as Highbay's composition root
+	// composes it: a control plane and a project server behind the project's
+	// saved address, with a test-only restart that replaces both, as starting
+	// Highbay again does.
+	viewsProject struct {
+		// state is the project's private state.
+		state *State
+		// opts configures every control plane the project starts; CardsDir is
+		// the project's.
+		opts controlplane.Options
+		// cp is the control plane currently answering.
+		cp atomic.Pointer[controlplane.ControlPlane]
+		// server is the project server currently answering.
+		server atomic.Pointer[Server]
+		// handler is server's guarded handler.
+		handler atomic.Pointer[http.Handler]
+	}
+
+	// viewsWorkspacePageFixture overrides team, ticket, restart, and update
+	// answers so jsdom tests can verify UI digest probing and per-role restarts.
+	viewsWorkspacePageFixture struct {
+		genhighbay.Service
+		mu            sync.Mutex
+		version       string
+		uiBuild       string
+		ticketCounts  map[string]int
+		restartedRole []string
+	}
+)
 
 // TestViewsPageSessionLifecycle walks the page's session: the served shell
 // and its policy, no link, a link exchanged once and removed from the
-// address, nothing stored in the browser, a reload, a second use of the
-// link, the browser marks reads carry, and a server restart while the user
-// has typed edits.
+// address, origin-scoped localStorage without cookies, a reload staying signed
+// in while the server runs, a second use of the link, the browser marks reads
+// carry, and a server restart without handoff ending the session while keeping
+// typed edits and clearing rejected localStorage.
 func TestViewsPageSessionLifecycle(t *testing.T) {
 	node := requireViewsPageTools(t)
 	vp := startViewsProject(t, controlplane.Options{})
@@ -77,37 +93,19 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
 		"origin": vp.state.Origin(), "first": link(), "guide": string(guide),
 	}
 	runViewsPageScript(t, node, input, `
-  // Recovery stays available through the agent or companion without a shell step.
+  // Recovery names both highbay and /highbay without retired companion or hbay copy.
   const expectRecovery = (page, selector) => {
     const text = page.text(selector);
-    expect(text.includes("coding agent") && text.includes("Open Highbay Window") && text.includes("Herdr companion"), "session recovery omitted the coding-agent or companion entry point: " + text);
-    expect(!text.includes("Run hbay") && !text.includes("run hbay"), "session recovery still requires a typed terminal command: " + text);
+    expect(text.includes("highbay") && text.includes("/highbay") && text.includes("coding agent"), "session recovery omitted highbay or /highbay: " + text);
+    expect(!/\bhbay\b/.test(text) && !text.includes("Herdr companion") && !text.includes("Open Highbay Window"), "session recovery still contains retired CLI or companion text: " + text);
   };
-  const expectPromptCopy = async (page, selector) => {
-    const copied = [];
-    Object.defineProperty(page.win.navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: async (text) => { copied.push(text); } },
-    });
-    const button = page.$(selector + " button");
-    expect(button.textContent === "Copy prompt for coding agent", "the copy prompt action is missing");
-    button.click();
-    const status = () => page.text(selector + ' [role="status"]');
-    await until(() => status() === "Prompt copied.", "the copy success was not announced");
-    expect(copied.length === 1 && copied[0] === "Open Highbay views", "copy included something other than the recovery prompt");
-    Object.defineProperty(page.win.navigator, "clipboard", { value: undefined });
-    button.click();
-    await until(() => status().includes("Could not copy"), "clipboard failure did not offer a fallback");
-    expect(page.text(selector + " code") === "Open Highbay views", "clipboard failure left no selectable prompt");
-  };
-  // Without a link the page explains how to open it and asks the server nothing.
+  // Without a link or stored session the page explains how to open it and asks the server nothing.
   const bare = await openPage(origin);
   await until(() => bare.$("#highbay-signed-out"), "a page without a link did not say how to open it");
   expectRecovery(bare, "#highbay-signed-out");
-  await expectPromptCopy(bare, "#highbay-signed-out");
-  expect(!bare.text("#highbay-signed-out-title").includes("with hbay"), "the no-link heading still directs the user to the CLI");
+  expect(!bare.text("#highbay-signed-out-title").includes("with hbay"), "the no-link heading still directs the user to hbay");
   const lifetime = bare.text("#highbay-signed-out .highbay-muted");
-  expect(lifetime.includes("fresh session") && lifetime.includes("one of those routes"), "the session-lifetime note omitted the established reopen routes: " + lifetime);
+  expect(lifetime.includes("reloading this page") && lifetime.includes("keeps your session active"), "the session-lifetime note omitted reload persistence: " + lifetime);
   await sleep(200);
   expect(bare.requests.length === 0, "a page without a link sent requests: " + JSON.stringify(bare.requests));
   bare.close();
@@ -116,7 +114,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
     expect(refused.status === 401, "a data request without a credential answered " + refused.status + " for " + path);
   }
 
-  // The link becomes a session held only in memory, and leaves the address.
+  // The link becomes an origin-scoped localStorage Bearer session with zero cookies, and leaves the address.
   const page = await openPage(origin, { link: input.first });
   await until(() => page.$("#highbay-change-list-empty"), "the page did not obtain a session and read the empty project");
   expect(page.win.location.href === origin + "/views" && page.win.location.hash === "", "the link stayed in the address: " + page.win.location.href);
@@ -124,7 +122,7 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   expect(exchange.length === 1 && exchange[0].body.link === input.first && !exchange[0].headers.Authorization, "the link was not exchanged exactly once");
   const reads = page.requests.filter((r) => r.method === "GET");
   expect(reads.length > 0 && reads.every((r) => !("Origin" in r.headers) && r.headers.Authorization === reads[0].headers.Authorization), "reads did not carry the session without stating the page's address");
-  expect(page.win.localStorage.length === 0 && page.win.sessionStorage.length === 0 && page.doc.cookie === "", "the session was left in browser storage");
+  expect(page.win.localStorage.length === 1 && page.win.localStorage.getItem("highbay.session") !== null && page.win.sessionStorage.length === 0 && page.doc.cookie === "", "the session was not stored solely in origin-scoped localStorage");
   const session = reads[0].headers.Authorization;
 
   // The server refuses the session from another page or from a program.
@@ -145,21 +143,28 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   const field = page.$('textarea[data-field="expected_outcome"]');
   page.type(field, "Typed before the restart");
 
-  // A reload is a new page without the link: it has no session.
-  const reloaded = await openPage(origin);
-  await until(() => reloaded.$("#highbay-signed-out"), "a reloaded page did not say how to open it again");
+  // Reloading or opening another tab on the same origin stays signed in while the server runs.
+  const reloaded = await openPage(origin, { storage: page.win.localStorage });
+  await until(() => reloaded.$("#highbay-open-change-chg-session") || reloaded.$('textarea[data-field="expected_outcome"]'), "a reloaded page did not stay signed in via GET /project/browser-session");
+  expect(reloaded.sent("GET", "/project/browser-session").length === 1, "reload did not validate its stored session via GET /project/browser-session");
   reloaded.close();
 
-  // A second use of the same link is refused and reported.
-  const reused = await openPage(origin, { link: input.first });
+  // A second use of the same link is refused and reported without erasing the active tab's stored session.
+  const reused = await openPage(origin, { link: input.first, storage: page.win.localStorage });
   await until(() => reused.$("#highbay-link-used"), "a used link was not reported");
   expect(reused.text("#highbay-link-used").includes("already used"), "the used link was not reported plainly");
   expectRecovery(reused, "#highbay-signed-out");
   expect(reused.win.location.hash === "", "a refused link stayed in the address");
+  expect(reused.win.localStorage.getItem("highbay.session") !== null, "a refused link erased an active stored session");
   reused.close();
 
-  // After a restart the old session is refused; typed edits stay and the page says how to continue.
+  // After an unhanded-off restart the old session is refused; typed edits stay and localStorage is cleared.
   await control(origin, "restart");
+  const restartedReload = await openPage(origin, { storage: page.win.localStorage });
+  await until(() => restartedReload.$("#highbay-signed-out"), "a reload after restart did not sign out cleanly");
+  expect(restartedReload.win.localStorage.length === 0, "401 on GET /project/browser-session did not clear localStorage");
+  restartedReload.close();
+
   const fresh = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
   field.focus();
   field.setSelectionRange(2, 8);
@@ -173,14 +178,13 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   page.$("#highbay-confirm-submit").click();
   await until(() => page.$("#highbay-session-ended"), "the page did not say its session ended");
   expectRecovery(page, "#highbay-session-ended");
-  await expectPromptCopy(page, "#highbay-session-ended");
   expect(page.$('textarea[data-field="expected_outcome"]').value === "Typed before the restart", "typed edits were lost");
   expect(page.text("#highbay-session-ended-edits").includes("Typed before the restart"), "the unsaved edits are not shown for copying");
   expect(page.$("#highbay-open-pending-link").disabled && page.beforeUnload(), "a failed save released unsaved input");
   page.$("#highbay-discard-draft").click();
   await until(() => !page.$("#highbay-open-pending-link").disabled, "local discard after session end did not enable the pending link");
   expect(!page.beforeUnload(), "discarded CP1 input still blocked leaving");
-  expect(page.win.localStorage.length === 0 && page.win.sessionStorage.length === 0, "the pending link was persisted in browser storage");
+  expect(page.win.localStorage.length === 0 && page.win.sessionStorage.length === 0, "the ended session or pending link remained in browser storage");
   const afterRestart = await fetch(origin + "/changes", { headers: { Authorization: session, "Sec-Fetch-Site": "same-origin" } });
   expect(afterRestart.status === 401, "a session from before the restart answered " + afterRestart.status);
   page.close();
@@ -226,7 +230,7 @@ func TestViewsPageShellNavigation(t *testing.T) {
 			require.NoError(t, response.Body.Close())
 			if tc.name == "bare address" {
 				assert.Contains(t, string(body), "request must come from the project's own page")
-				assert.Contains(t, string(body), "ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")
+				assert.Contains(t, string(body), "run highbay in the project folder, or ask your coding agent to open Highbay views")
 				assert.NotContains(t, string(body), "run hbay")
 			}
 		})
@@ -276,7 +280,7 @@ func TestViewsPageReadsNeedTheSameOriginMark(t *testing.T) {
 	exchange.Header.Set("Origin", vp.state.Origin())
 	exchanged, err := http.DefaultClient.Do(exchange)
 	require.NoError(t, err)
-	var session genproject.ExchangeBrowserLinkResult
+	var session genproject.BrowserSessionResult
 	require.NoError(t, json.NewDecoder(exchanged.Body).Decode(&session))
 	require.NoError(t, exchanged.Body.Close())
 	require.Equal(t, http.StatusCreated, exchanged.StatusCode)
@@ -322,7 +326,7 @@ func TestViewsProjectRestartReportsStartupFailure(t *testing.T) {
 		vp := &viewsProject{state: testState(t), opts: controlplane.Options{HighbayVersion: "invalid"}}
 		err := vp.restart()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "start the control plane: hbay version")
+		assert.Contains(t, err.Error(), "must be a canonical semantic version")
 		assert.Nil(t, vp.cp.Load())
 		assert.Nil(t, vp.server.Load())
 		assert.Nil(t, vp.handler.Load())
@@ -336,8 +340,247 @@ func TestViewsProjectRestartReportsStartupFailure(t *testing.T) {
 		require.NoError(t, resp.Body.Close())
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-		assert.Contains(t, string(body), "start the control plane: hbay version")
+		assert.Contains(t, string(body), "must be a canonical semantic version")
 	})
+}
+
+// TestViewsPageDetectsExternalUpdateAndScopesRoleRestart verifies that (1) a
+// hidden tab shown after an external update probes GET /project/browser-session
+// and offers Reload even when wait_for_changes succeeds immediately, (2) an
+// already-visible tab detects an external handoff between two successful
+// wait_for_changes rounds, and (3) restarting guide leaves an open builder
+// TerminalDrawer untouched without requesting a second builder ticket.
+func TestViewsPageDetectsExternalUpdateAndScopesRoleRestart(t *testing.T) {
+	node := requireViewsPageTools(t)
+	vp := startViewsProject(t, controlplane.Options{})
+	guide := vp.agent(t, "guide")
+	server := vp.server.Load()
+	fixture := &viewsWorkspacePageFixture{
+		Service:      vp.cp.Load(),
+		version:      "v0.4.0",
+		uiBuild:      controlplane.ViewsPageScriptSHA256,
+		ticketCounts: map[string]int{},
+	}
+
+	appMux := http.NewServeMux()
+	appMux.Handle("GET /views", controlplane.ViewsPage())
+	appMux.Handle("/", controlplane.NewHTTPHandler(fixture, server.Authenticate))
+	baseHandler := server.Handler(appMux)
+
+	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/__test/external-update" && r.Method == http.MethodPost:
+			var req struct {
+				Version string `json:"version"`
+				UIBuild string `json:"ui_build"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			fixture.mu.Lock()
+			fixture.version = req.Version
+			fixture.uiBuild = req.UIBuild
+			fixture.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		case r.URL.Path == "/project/browser-session" && r.Method == http.MethodPost:
+			var req struct {
+				Link string `json:"link"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			res, err := server.ExchangeBrowserLink(r.Context(), &genproject.ExchangeBrowserLinkPayload{Link: req.Link})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			fixture.mu.Lock()
+			version, uiBuild := fixture.version, fixture.uiBuild
+			fixture.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			assert.NoError(t, json.NewEncoder(w).Encode(&genprojectserver.ExchangeBrowserLinkResponseBody{
+				Session:     res.Session,
+				ProjectName: res.ProjectName,
+				Version:     version,
+				UIBuild:     uiBuild,
+			}))
+		case r.URL.Path == "/project/browser-session" && r.Method == http.MethodGet:
+			if _, err := server.Authenticate(r); err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+			token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			fixture.mu.Lock()
+			version, uiBuild := fixture.version, fixture.uiBuild
+			fixture.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			assert.NoError(t, json.NewEncoder(w).Encode(&genprojectserver.GetBrowserSessionResponseBody{
+				Session:     token,
+				ProjectName: filepath.Base(vp.state.Record.Directory),
+				Version:     version,
+				UIBuild:     uiBuild,
+			}))
+		case r.URL.Path == "/project/update" && r.Method == http.MethodGet:
+			if _, err := server.Authenticate(r); err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
+			fixture.mu.Lock()
+			version := fixture.version
+			fixture.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			assert.NoError(t, json.NewEncoder(w).Encode(&genprojectserver.GetUpdateStatusResponseBody{
+				CurrentVersion:  version,
+				LatestVersion:   "v0.5.0",
+				UpdateAvailable: version != "v0.5.0",
+				ReleaseURL:      "https://github.com/goadesign/highbay/releases/tag/v0.5.0",
+				CanAutoUpdate:   true,
+			}))
+		default:
+			baseHandler.ServeHTTP(w, r)
+		}
+	})
+	var handler http.Handler = wrapped
+	vp.handler.Store(&handler)
+
+	firstLink, err := vp.link()
+	require.NoError(t, err)
+	secondLink, err := vp.link()
+	require.NoError(t, err)
+
+	runViewsPageScript(t, node, map[string]any{
+		"origin": vp.state.Origin(),
+		"first":  firstLink,
+		"second": secondLink,
+		"guide":  guide,
+	}, `
+  // (1) Hidden-tab external update: tab hides, server updates to v0.5.0 with a
+  // new UI digest, tab resumes, wait_for_changes succeeds, and Reload appears.
+  const hiddenTab = await openPage(origin, { link: input.first });
+  await until(() => hiddenTab.$("#highbay-update-install"), "initial UpdateBanner did not render");
+  hiddenTab.setHidden(true);
+  const updateHidden = await fetch(origin + "/__test/external-update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: "v0.5.0", ui_build: "external-hidden-ui-build" }),
+  });
+  expect(updateHidden.status === 204, "external-update failed: " + updateHidden.status);
+  const probesBeforeShow = hiddenTab.sent("GET", "/project/browser-session").length;
+  hiddenTab.setHidden(false);
+  await until(() => hiddenTab.$("#highbay-update-reload") && !hiddenTab.$("#highbay-update-install"), "resumed tab did not probe ui_build and replace Update & Restart with Reload");
+  expect(hiddenTab.sent("GET", "/project/browser-session").length > probesBeforeShow, "resumed tab did not send GET /project/browser-session");
+  hiddenTab.close();
+
+  // Reset server to v0.5.0 baseline for a second already-visible tab.
+  const visibleTab = await openPage(origin, { link: input.second });
+  await until(() => visibleTab.$("#highbay-change-list-empty") || visibleTab.$(".highbay-welcome-card"), "visible tab did not finish initial load");
+
+  // (2) Role-scoped restart: open builder TerminalDrawer, restart guide from
+  // Team, verify zero extra builder tickets, then restart builder from drawer.
+  await until(() => visibleTab.$("#highbay-team-attention-terminal-builder"), "builder attention terminal action did not render");
+  visibleTab.$("#highbay-team-attention-terminal-builder").click();
+  await until(() => visibleTab.sent("POST", "/team/roles/builder/terminal-ticket").length === 1, "opening builder drawer did not request one builder ticket");
+  visibleTab.$("#highbay-nav-team").click();
+  await until(() => visibleTab.$("#highbay-team-restart-guide"), "guide restart button did not render");
+  visibleTab.$("#highbay-team-restart-guide").click();
+  await until(() => visibleTab.sent("POST", "/team/roles/guide/restart").length === 1, "guide restart request was not sent");
+  await sleep(150);
+  expect(visibleTab.sent("POST", "/team/roles/builder/terminal-ticket").length === 1, "restarting guide requested another builder terminal ticket");
+  visibleTab.$("#highbay-terminal-restart").click();
+  await until(() => visibleTab.sent("POST", "/team/roles/builder/restart").length === 1 && visibleTab.sent("POST", "/team/roles/builder/terminal-ticket").length === 2, "restarting builder did not request a replacement builder ticket");
+
+  // (3) Already-visible external handoff between two successful wait_for_changes reads.
+  const updateVisible = await fetch(origin + "/__test/external-update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: "v0.6.0", ui_build: "external-visible-ui-build" }),
+  });
+  expect(updateVisible.status === 204, "second external-update failed");
+  const proposed = await api(origin, "POST", "/changes/propose", {
+    change_id: "chg-after-handoff", prompt: "Verify visible handoff digest probe.",
+    analysis: { summary: "Verify visible handoff digest probe.", ambiguities: [], examples: [{ scenario: "S", input_summary: "I", expected_outcome: "O", verification_kind: "deterministic" }], preserved_behaviors: [] },
+  }, input.guide);
+  expect(proposed.status === 200, "propose after visible handoff failed: " + JSON.stringify(proposed));
+  await until(() => visibleTab.$("#highbay-update-reload"), "already-visible tab did not offer Reload after successful wait_for_changes");
+  visibleTab.close();
+`)
+
+	fixture.mu.Lock()
+	restarted := append([]string{}, fixture.restartedRole...)
+	tickets := map[string]int{}
+	for role, count := range fixture.ticketCounts {
+		tickets[role] = count
+	}
+	fixture.mu.Unlock()
+	assert.Equal(t, []string{"guide", "builder"}, restarted)
+	assert.Equal(t, map[string]int{"builder": 2}, tickets)
+}
+
+// GetTeam returns a connected team with a waiting Guide and a blocked Builder terminal.
+func (f *viewsWorkspacePageFixture) GetTeam(context.Context) (*genhighbay.TeamSnapshot, error) {
+	return &genhighbay.TeamSnapshot{
+		Team:         "refunds-team",
+		Channel:      "#refunds-team",
+		ChorusStatus: "connected",
+		Roles: []*genhighbay.TeamRoleState{
+			{
+				Role:        "guide",
+				Handle:      "guide-refunds",
+				HasTerminal: true,
+				State:       "waiting",
+				Attention:   "none",
+				Assignment:  "no_work",
+			},
+			{
+				Role:        "builder",
+				Handle:      "builder-refunds",
+				HasTerminal: true,
+				State:       "needs_you",
+				Attention:   "permission",
+				Assignment:  "nothing_owed",
+			},
+		},
+		SavedChoices:     map[string]*genhighbay.RoleAgentChoice{},
+		DismissedNotices: []string{},
+	}, nil
+}
+
+// GetTeamConversation returns an empty Chorus conversation for the workspace page test.
+func (f *viewsWorkspacePageFixture) GetTeamConversation(context.Context) (*genhighbay.TeamConversation, error) {
+	return &genhighbay.TeamConversation{
+		Team:         "refunds-team",
+		Channel:      "#refunds-team",
+		ChorusStatus: "connected",
+		Messages:     []*genhighbay.TeamMessage{},
+	}, nil
+}
+
+// CreateTerminalTicket records per-role ticket requests for TerminalDrawer.
+func (f *viewsWorkspacePageFixture) CreateTerminalTicket(
+	_ context.Context, p *genhighbay.CreateTerminalTicketPayload,
+) (*genhighbay.TerminalTicketResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ticketCounts[p.Role]++
+	return &genhighbay.TerminalTicketResult{
+		Ticket:    fmt.Sprintf("ticket-%s-%d", p.Role, f.ticketCounts[p.Role]),
+		ExpiresAt: time.Now().UTC().Add(30 * time.Second).Format(time.RFC3339Nano),
+	}, nil
+}
+
+// RestartTeamRole records per-role restart requests from the browser.
+func (f *viewsWorkspacePageFixture) RestartTeamRole(
+	_ context.Context, p *genhighbay.RestartTeamRolePayload,
+) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.restartedRole = append(f.restartedRole, p.Role)
+	return nil
 }
 
 // startViewsProject starts a project on its saved address with a control
@@ -448,7 +691,7 @@ func (vp *viewsProject) link() (string, error) {
 	return strings.TrimPrefix(u.Fragment, "link="), nil
 }
 
-// management is the context of the management caller `hbay` uses.
+// management is the context of the management caller `highbay` uses.
 func (vp *viewsProject) management() context.Context {
 	return controlplane.WithPrincipal(context.Background(), controlplane.Principal{
 		ID: vp.state.Record.Owner, CallerID: "management", Kind: controlplane.CallerManagement,

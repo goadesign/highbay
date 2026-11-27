@@ -1,9 +1,11 @@
 # Handwritten production concurrency owners. The syntax guard checks every
 # non-fixture Go source file, including platform-specific files.
-github.com/goadesign/highbay/cmd/hbay
+github.com/goadesign/highbay/cmd/highbay
 github.com/goadesign/highbay/internal/controlplane
 github.com/goadesign/highbay/internal/designeval
+github.com/goadesign/highbay/internal/hc
 github.com/goadesign/highbay/internal/project
+github.com/goadesign/highbay/internal/selfupdate
 github.com/goadesign/highbay/internal/traceview
 github.com/goadesign/highbay/internal/verifyrun
 github.com/goadesign/highbay/verify/candidate

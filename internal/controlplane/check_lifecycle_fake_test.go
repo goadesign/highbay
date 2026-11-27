@@ -289,7 +289,7 @@ func parseCreateContainer(args []string, dockerConfig string) (*recordedContaine
 }
 
 // testCheckHelper starts this test binary in TestMain's check-run role, the
-// check helper hbay serve would start as `hbay check-run`.
+// check helper highbay serve would start as `highbay check-run`.
 func testCheckHelper(t testing.TB) CheckHelper {
 	t.Helper()
 	self, err := os.Executable()
@@ -313,7 +313,7 @@ func newCheckTestServer(t *testing.T, opts Options) checkClients {
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	doer := generationDoer{client: srv.Client()}
-	httpT := genhttpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	httpT := genhttpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 	mcpT := genmcpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	httpC := &genhighbay.Client{
 		CheckProjectEndpoint:       httpT.CheckProject(),

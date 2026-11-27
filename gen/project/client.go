@@ -22,10 +22,13 @@ type Client struct {
 	StopEndpoint                goa.Endpoint
 	BrowserLinkEndpoint         goa.Endpoint
 	ExchangeBrowserLinkEndpoint goa.Endpoint
+	GetBrowserSessionEndpoint   goa.Endpoint
+	GetUpdateStatusEndpoint     goa.Endpoint
+	ApplyUpdateEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "project" service client given the endpoints.
-func NewClient(identity, ensureTeam, attachGuide, status, stop, browserLink, exchangeBrowserLink goa.Endpoint) *Client {
+func NewClient(identity, ensureTeam, attachGuide, status, stop, browserLink, exchangeBrowserLink, getBrowserSession, getUpdateStatus, applyUpdate goa.Endpoint) *Client {
 	return &Client{
 		IdentityEndpoint:            identity,
 		EnsureTeamEndpoint:          ensureTeam,
@@ -34,12 +37,15 @@ func NewClient(identity, ensureTeam, attachGuide, status, stop, browserLink, exc
 		StopEndpoint:                stop,
 		BrowserLinkEndpoint:         browserLink,
 		ExchangeBrowserLinkEndpoint: exchangeBrowserLink,
+		GetBrowserSessionEndpoint:   getBrowserSession,
+		GetUpdateStatusEndpoint:     getUpdateStatus,
+		ApplyUpdateEndpoint:         applyUpdate,
 	}
 }
 
 // Identity calls the "identity" endpoint of the "project" service.
 // Identity may return the following errors:
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
 func (c *Client) Identity(ctx context.Context) (res *ProjectIdentity, err error) {
@@ -53,7 +59,7 @@ func (c *Client) Identity(ctx context.Context) (res *ProjectIdentity, err error)
 
 // EnsureTeam calls the "ensure_team" endpoint of the "project" service.
 // EnsureTeam may return the following errors:
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
 func (c *Client) EnsureTeam(ctx context.Context) (res *ProjectTeam, err error) {
@@ -68,7 +74,7 @@ func (c *Client) EnsureTeam(ctx context.Context) (res *ProjectTeam, err error) {
 // AttachGuide calls the "attach_guide" endpoint of the "project" service.
 // AttachGuide may return the following errors:
 //   - "team_unavailable" (type *TeamUnavailable): The guide could not be attached to this project.
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
 func (c *Client) AttachGuide(ctx context.Context, p *AttachGuidePayload) (res *AttachGuideResult, err error) {
@@ -82,7 +88,7 @@ func (c *Client) AttachGuide(ctx context.Context, p *AttachGuidePayload) (res *A
 
 // Status calls the "status" endpoint of the "project" service.
 // Status may return the following errors:
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
 func (c *Client) Status(ctx context.Context) (res *ProjectStatus, err error) {
@@ -96,7 +102,7 @@ func (c *Client) Status(ctx context.Context) (res *ProjectStatus, err error) {
 
 // Stop calls the "stop" endpoint of the "project" service.
 // Stop may return the following errors:
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
 func (c *Client) Stop(ctx context.Context) (err error) {
@@ -106,7 +112,7 @@ func (c *Client) Stop(ctx context.Context) (err error) {
 
 // BrowserLink calls the "browser_link" endpoint of the "project" service.
 // BrowserLink may return the following errors:
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
 func (c *Client) BrowserLink(ctx context.Context) (res *BrowserLinkResult, err error) {
@@ -121,14 +127,62 @@ func (c *Client) BrowserLink(ctx context.Context) (res *BrowserLinkResult, err e
 // ExchangeBrowserLink calls the "exchange_browser_link" endpoint of the
 // "project" service.
 // ExchangeBrowserLink may return the following errors:
-//   - "forbidden" (type *goa.ServiceError): The trusted credential cannot perform this operation.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
 //   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
 //   - error: internal error
-func (c *Client) ExchangeBrowserLink(ctx context.Context, p *ExchangeBrowserLinkPayload) (res *ExchangeBrowserLinkResult, err error) {
+func (c *Client) ExchangeBrowserLink(ctx context.Context, p *ExchangeBrowserLinkPayload) (res *BrowserSessionResult, err error) {
 	var ires any
 	ires, err = c.ExchangeBrowserLinkEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ExchangeBrowserLinkResult), nil
+	return ires.(*BrowserSessionResult), nil
+}
+
+// GetBrowserSession calls the "get_browser_session" endpoint of the "project"
+// service.
+// GetBrowserSession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): The browser session credential is missing or no longer valid.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
+//   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
+//   - error: internal error
+func (c *Client) GetBrowserSession(ctx context.Context) (res *BrowserSessionResult, err error) {
+	var ires any
+	ires, err = c.GetBrowserSessionEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*BrowserSessionResult), nil
+}
+
+// GetUpdateStatus calls the "get_update_status" endpoint of the "project"
+// service.
+// GetUpdateStatus may return the following errors:
+//   - "release_unavailable" (type *goa.ServiceError): The latest Highbay release metadata could not be fetched from GitHub.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
+//   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
+//   - error: internal error
+func (c *Client) GetUpdateStatus(ctx context.Context) (res *UpdateStatusResult, err error) {
+	var ires any
+	ires, err = c.GetUpdateStatusEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*UpdateStatusResult), nil
+}
+
+// ApplyUpdate calls the "apply_update" endpoint of the "project" service.
+// ApplyUpdate may return the following errors:
+//   - "conflict" (type *goa.ServiceError): An update or conflicting operation is already running, auto-update is unsupported for this installation, or the requested version would downgrade the installed binary.
+//   - "release_unavailable" (type *goa.ServiceError): The requested Highbay release archive, checksums, or Homebrew formula could not be fetched or verified.
+//   - "forbidden" (type *goa.ServiceError): The trusted credential or browser session cannot perform this operation.
+//   - "unprocessable" (type *goa.ServiceError): The requested credential exchange does not exist or is invalid.
+//   - error: internal error
+func (c *Client) ApplyUpdate(ctx context.Context, p *ApplyUpdatePayload) (res *ApplyUpdateResult, err error) {
+	var ires any
+	ires, err = c.ApplyUpdateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApplyUpdateResult), nil
 }

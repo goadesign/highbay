@@ -9,7 +9,7 @@
 // the project server; the whole family is removed wherever Highbay removes it.
 //
 // The package holds pure values. It reads no process environment and builds
-// no client: the hbay command selects what it hands over from its own
+// no client: the highbay command selects what it hands over from its own
 // environment with Select, the project server holds what arrives as Settings
 // and builds program environments from them, and processes that must not
 // pass a family on remove it with Split.
@@ -78,7 +78,7 @@ type (
 		values map[string]Value
 	}
 
-	// Selection is what the hbay command hands over from its environment.
+	// Selection is what the highbay command hands over from its environment.
 	Selection struct {
 		// Send maps the name of each provider whose key is set to its
 		// request settings that have values, keyed by variable name.
@@ -88,7 +88,7 @@ type (
 		NotSent []Unsent
 	}
 
-	// Unsent is one family variable the hbay command does not hand over.
+	// Unsent is one family variable the highbay command does not hand over.
 	Unsent struct {
 		// Name is the variable's name.
 		Name string
@@ -105,7 +105,7 @@ const (
 	Redacted = "[redacted]"
 	// MaxValueLength bounds one request setting value, in characters. New
 	// refuses a longer value, the hand-over's design validates it, and the
-	// hbay command names it when the project server refuses a longer value.
+	// highbay command names it when the project server refuses a longer value.
 	MaxValueLength = 4096
 	// ExcerptContext is how many bytes before an excerpt ProtectExcerpt
 	// needs to read: an occurrence of a held value that overlaps the excerpt
@@ -195,7 +195,7 @@ func Split(environ []string) (family, rest []string) {
 	return family, rest
 }
 
-// Select chooses what the hbay command hands over from environ, its own
+// Select chooses what the highbay command hands over from environ, its own
 // environment as NAME=value entries. For each provider whose key is not
 // blank after trimming spaces, it sends the provider's request settings that
 // have non-empty values, exactly as they are. Every other family variable

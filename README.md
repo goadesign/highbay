@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/goadesign/highbay/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/goadesign/highbay"></a>
+  <a href="https://www.npmjs.com/package/@goadesign/highbay"><img alt="npm" src="https://img.shields.io/npm/v/%40goadesign%2Fhighbay"></a>
+  <a href="https://glama.ai/mcp/servers/goadesign/highbay"><img alt="Glama MCP Server" src="https://glama.ai/mcp/servers/goadesign/highbay/badges/score.svg"></a>
+  <a href="https://serverdex.io/server/io-github-goadesign-highbay/score"><img alt="Highbay on Serverdex" src="https://serverdex.io/server/io-github-goadesign-highbay/badge.svg" height="20"></a>
   <a href="https://pkg.go.dev/github.com/goadesign/highbay"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/goadesign/highbay.svg"></a>
   <a href="https://modelcontextprotocol.io"><img alt="MCP" src="https://img.shields.io/badge/MCP-2026--07--28-6E56CF"></a>
   <a href="https://github.com/goadesign/highbay/blob/main/LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
@@ -30,22 +34,18 @@ and validation from a Go design, so no model writes them. One agent writes the
 service code, a different agent writes the scenario tests, and Highbay runs
 the accepted tests against the exact commit you then approve and merge.
 
-```bash
-go install github.com/goadesign/highbay/cmd/hbay@latest
-hbay up
-```
-
-Run `hbay up` once. After that, open a project folder in your coding agent and
-say `/highbay` (`$highbay` in Codex). That call starts the project's Highbay
-server when one is needed; there is nothing to start per session.
-[Install](#install) lists what Highbay needs.
-
 ## One change, start to finish
 
-Open an empty folder in your coding agent and say:
+After [installing Highbay](#install), run `highbay up` once. In an empty project
+folder, run `highbay` to open your browser. Choose a coding agent and send it a
+goal in **Describe**.
 
-> `/highbay` — build a refund assistant: refunds up to $50 get instant store
-> credit; larger ones wait for a manager.
+> Build a refund assistant. Refunds up to $50 get instant store credit.
+> Larger ones wait for a manager.
+
+If you already have a coding agent open in the project, give it the same
+goal with `/highbay` (`$highbay` in Codex). Highbay attaches that session as
+the project's guide and opens the browser workspace.
 
 The request leaves one thing unsaid: does $50 count sales tax? One order tells
 the two readings apart.
@@ -60,12 +60,10 @@ it built. Highbay asks you, then tests the $48 order.
 
 Here is how the change reaches your branch:
 
-1. **Describe.** Your coding agent starts or joins the project's Highbay
-   server and opens its page in your browser. In an empty folder it first
-   creates a blank Go project and its first commit, which takes a couple of
-   minutes. It then writes a *Story*, a description of the system's flows in
-   Go, and proposes a *Change Card*: your request, the questions it leaves
-   open, concrete examples, and the behavior to keep.
+1. **Describe.** The guide creates a blank Go project and its first commit
+   when the folder is empty. It writes a *Story*, a description of the
+   system's flows in Go, and proposes a *Change Card* with your request,
+   the questions it leaves open, examples, and the behavior to keep.
 2. **Agree.** On the page, answer the questions and confirm. For the refund
    rule, the card shows the $48 order under each answer. If your answer
    differs from the draft, your coding agent revises the card before you
@@ -203,7 +201,7 @@ For a coding agent this has three effects:
 
 Highbay generates the transports a design declares: HTTP, JSON-RPC and MCP. It
 refuses a design with gRPC transports; see
-[`hbay gen`](docs/REFERENCE.md#hbay-gen).
+[`highbay gen`](docs/REFERENCE.md#highbay-gen).
 
 ## Words you will meet
 
@@ -217,8 +215,8 @@ refuses a design with gRPC transports; see
 | **The guide** | The role of the coding agent you talk to. It writes the Story and proposes changes. |
 | **The builder** | The agent that writes the application code. |
 | **The test writer** | The agent that writes the change's scenario tests, in its own working copy. |
-| **Herdr** | An optional terminal workspace that shows the agents side by side. |
-| **Chorus** | The messaging service the agents use when they run in Herdr. |
+| **Herdr Core** | The local runtime that starts interactive agent terminals. Open a role's terminal in Highbay. |
+| **Chorus** | The local messaging service that carries the project conversation between the browser and agents. |
 
 ## What Highbay does not do
 
@@ -247,40 +245,37 @@ Highbay needs:
 - **Docker Desktop**, or another local Docker engine, for the builder's
   checks.
 - **A coding agent that supports MCP.** The
-  [setup reference](docs/REFERENCE.md#hbay-setup--global) lists the clients
+  [setup reference](docs/REFERENCE.md#highbay-setup--global) lists the clients
   that setup registers.
 
-```bash
-go install github.com/goadesign/highbay/cmd/hbay@latest
-hbay up
-```
-
-From a checkout of this repository, `go install ./cmd/hbay` installs the
-version you are reading. A build that Go reports as `(devel)` or `+dirty`
-must be told which published Highbay version a new project requires; see
-[`hbay init`](docs/REFERENCE.md#hbay-init).
-
-`hbay up` registers Highbay as an MCP server with the coding agents it
-detects and installs the `/highbay` skill. It leaves unrelated settings
-alone. Reload your agent's MCP configuration or start a new session if
-Highbay does not appear. Run `hbay up` again after you add a coding agent or
-move the `hbay` executable.
-
-**Side-by-side panes are optional.** With Herdr and Chorus v0.14.0 or newer
-installed, Highbay opens the builder and the test writer beside your coding
-agent. Without Herdr, it runs them in the background once you agree to that
-on the page. Install both, open Herdr once, then run `hbay up` again:
+Choose an installation method.
 
 ```bash
-curl -fsSL https://releases.herdr.dev/core/install.sh | sh
-curl -fsSL https://releases.herdr.dev/app/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/goadesign/chorus/main/scripts/install.sh | sh
+# Homebrew.
+brew install goadesign/tap/highbay
+highbay up
+
+# npm, with Node.js 20 or later.
+npx @goadesign/highbay up
+
+# Shell installer. It verifies the release and runs highbay up.
+curl -fsSL https://raw.githubusercontent.com/goadesign/highbay/main/scripts/install.sh | sh
 ```
 
-`hbay up` starts Chorus when it is installed, and Highbay starts it again on
-demand if it stops later (for example after a reboot).
-[Prerequisites](docs/REFERENCE.md#prerequisites) and
-[setup details](docs/REFERENCE.md#hbay-setup--global) cover the rest.
+Run `highbay` from your project folder. If you installed through npm, use
+`npx @goadesign/highbay`.
+
+`highbay up` checks Go, Git, and Docker, offers to install compatible Herdr Core
+and Chorus executables when needed, and registers Highbay with the coding
+agents it detects. Herdr Core runs the agents' terminals. Chorus carries
+the messages you see in **Conversation**. Reload an already open coding
+agent to discover the `/highbay` skill, and rerun `highbay up` after installing
+another agent. See [prerequisites and install options](docs/REFERENCE.md#prerequisites).
+
+You can also install from a published Go release with
+`go install github.com/goadesign/highbay/cmd/highbay@latest`, then run `highbay up`.
+For a development build, see [`highbay init`](docs/REFERENCE.md#highbay-init) to
+select the published Highbay module a new project will use.
 
 **Highbay needs no account and no model key.** Each coding agent uses its own
 sign-in. The tests a test writer wrote receive no provider key; a test of an
@@ -292,29 +287,43 @@ register a test program of your own that calls a live model. For a live
 target, export the provider's key, such as `ANTHROPIC_API_KEY` or
 `OPENAI_API_KEY`, in the environment that starts your coding agent. Your
 coding agent must pass that environment on to Highbay; see
-[stdio integration](docs/REFERENCE.md#hbay-stdio). While no model is chosen,
+[stdio integration](docs/REFERENCE.md#highbay-stdio). While no model is chosen,
 live targets then use `claude-sonnet-4-6` or `gpt-5.4-mini`, and the page's
 **Live target** view changes the model.
 
+## Update Highbay
+
+Run `highbay update` or choose **Update & Restart** when the browser offers a
+new release. Highbay installs the version you approve and restarts the
+project server in place. The browser session and running agent terminals
+can continue. Choose **Reload** when you are ready to load the updated
+workspace.
+
+Run `highbay update -check` to see the available release without installing
+it. For npm installations, use `npx @goadesign/highbay@latest` or update
+the global package with `npm install -g @goadesign/highbay@latest`. See the
+[update command](docs/REFERENCE.md#highbay-update).
+
 ## Start a project
 
-**In an empty folder,** say `/highbay` and what you want to build. With
-`/highbay` alone, your coding agent opens the page and asks. It then creates
-a blank starter in place: a Goa and Goa-AI service with no methods yet, an
-architecture diagram, an empty Story, and a test module with one test that
-the program starts. Nothing in it is about someone else's product. See
-[`init_project`](docs/REFERENCE.md#init_project).
+**In an empty folder,** run `highbay`, choose a coding agent, and describe your
+goal in **Describe**. The guide creates a blank Goa and Goa-AI starter with an
+architecture diagram, an empty Story, and a test module with one startup test.
+See [`init_project`](docs/REFERENCE.md#init_project).
 
 **In a project you already have,** Highbay needs a Goa or Goa-AI project with
 at least one Git commit and tests it can run. Those tests are either a test
 module in Highbay's layout or a test program of your own that you register
-with `hbay verification set`. With your own program, Highbay uses it for
+with `highbay verification set`. With your own program, Highbay uses it for
 every change and starts no test writer. See
 [what a build adds](docs/HOW_IT_WORKS.md#what-a-build-adds).
 
-If you close the page, ask your coding agent to open Highbay again.
+The browser stays signed in during a reload while the project server is
+running. Run `highbay` to reopen the page, or ask your connected coding agent
+to open it. Use **Conversation** to send messages and open a role's
+**Terminal** when it needs an answer or permission.
 [Terminal operation](docs/REFERENCE.md#terminal-and-browser-automation)
-covers `hbay --print-link`, `hbay status` and `hbay stop` for operators and
+covers `highbay --print-link`, `highbay status` and `highbay stop` for operators and
 browser automation.
 
 ## Use the tools without a team
@@ -325,23 +334,23 @@ the module's own versions, so no separately installed `goa` is needed.
 ```bash
 # Create a blank service and its test module.
 # Add -example for a worked example, a price-answering service.
-hbay init -dir shop -module example.com/shop
+highbay init -dir shop -module example.com/shop
 
 # Compile shop/design and print its containers, boundary edges,
 # agent policies and tool contracts.
-hbay preview -dir shop
+highbay preview -dir shop
 
 # Regenerate shop/gen after you edit shop/design.
-hbay gen -dir shop
+highbay gen -dir shop
 
-# List all commands. "hbay help <command>" prints a command's flags.
-hbay help
+# List all commands. "highbay help <command>" prints a command's flags.
+highbay help
 ```
 
 The [Orders example](examples/orders/README.md) is a complete platform with
-its own test suite. From a checkout, `hbay preview -dir examples/orders`
-prints its architecture. The [reference](docs/REFERENCE.md#hbay-verify) covers
-`hbay verify` and `hbay approve`, which check a commit against a test suite
+its own test suite. From a checkout, `highbay preview -dir examples/orders`
+prints its architecture. The [reference](docs/REFERENCE.md#highbay-verify) covers
+`highbay verify` and `highbay approve`, which check a commit against a test suite
 outside any server.
 
 ## Dive deeper

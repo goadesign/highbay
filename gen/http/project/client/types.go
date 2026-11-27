@@ -17,7 +17,7 @@ import (
 // AttachGuideRequestBody is the type of the "project" service "attach_guide"
 // endpoint HTTP request body.
 type AttachGuideRequestBody struct {
-	// Invoking local Herdr terminal identity.
+	// Invoking local herdr-core terminal identity when present in the environment.
 	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
 	// Invoking coding-agent client.
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
@@ -32,6 +32,13 @@ type ExchangeBrowserLinkRequestBody struct {
 	Link string `form:"link" json:"link" xml:"link"`
 }
 
+// ApplyUpdateRequestBody is the type of the "project" service "apply_update"
+// endpoint HTTP request body.
+type ApplyUpdateRequestBody struct {
+	// Approved target release version (for example 0.5.1 or v0.5.1).
+	Version string `form:"version" json:"version" xml:"version"`
+}
+
 // IdentityResponseBody is the type of the "project" service "identity"
 // endpoint HTTP response body.
 type IdentityResponseBody struct {
@@ -41,11 +48,15 @@ type IdentityResponseBody struct {
 	Directory *string `form:"directory,omitempty" json:"directory,omitempty" xml:"directory,omitempty"`
 	// Immutable operating-system account identity.
 	Owner *string `form:"owner,omitempty" json:"owner,omitempty" xml:"owner,omitempty"`
-	// SHA-256 of the hbay executable the server started from, read when it
+	// SHA-256 of the highbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and hbay stop must still reach them, so it is not required.
+	// field omit it, and highbay stop must still reach them, so it is not required.
 	Build *string `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
+	// Version reported by the running highbay executable (for example v0.5.0 or
+	// (devel)). Servers built before this field omit it so highbay stop and
+	// highbay update can still reach them.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // EnsureTeamResponseBody is the type of the "project" service "ensure_team"
@@ -53,11 +64,8 @@ type IdentityResponseBody struct {
 type EnsureTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space *string                        `form:"space,omitempty" json:"space,omitempty" xml:"space,omitempty"`
+	// Observed state of each registered project role.
 	Roles []*ProjectTeamRoleResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// What the user does next for the prepared team.
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 }
@@ -69,10 +77,8 @@ type AttachGuideResponseBody struct {
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
 	// Guide's registered Chorus handle.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
-	// Whether the invoking terminal was adopted.
-	AdoptedHerdr *bool `form:"adopted_herdr,omitempty" json:"adopted_herdr,omitempty" xml:"adopted_herdr,omitempty"`
-	// Current desktop attachment.
-	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
+	// Whether a live herdr-core terminal was matched and labeled for this guide.
+	HasTerminal *bool `form:"has_terminal,omitempty" json:"has_terminal,omitempty" xml:"has_terminal,omitempty"`
 }
 
 // StatusResponseBody is the type of the "project" service "status" endpoint
@@ -84,8 +90,6 @@ type StatusResponseBody struct {
 	Directory *string `form:"directory,omitempty" json:"directory,omitempty" xml:"directory,omitempty"`
 	// Stable project team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Current desktop attachment.
-	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// Current saved stage.
 	Stage *string `form:"stage,omitempty" json:"stage,omitempty" xml:"stage,omitempty"`
 	// Current change identifier, empty when none exists.
@@ -110,11 +114,66 @@ type BrowserLinkResponseBody struct {
 // ExchangeBrowserLinkResponseBody is the type of the "project" service
 // "exchange_browser_link" endpoint HTTP response body.
 type ExchangeBrowserLinkResponseBody struct {
-	// User session kept only in the page's memory.
+	// Bearer session credential stored in origin-scoped localStorage and sent in
+	// Authorization: Bearer.
 	Session *string `form:"session,omitempty" json:"session,omitempty" xml:"session,omitempty"`
 	// Base name of the physical project folder, without its path, for this page
 	// session.
 	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Base64 SHA-256 digest of the inline /views bundle served by this running
+	// server, allowing open tabs to detect UI changes across server restarts.
+	UIBuild *string `form:"ui_build,omitempty" json:"ui_build,omitempty" xml:"ui_build,omitempty"`
+}
+
+// GetBrowserSessionResponseBody is the type of the "project" service
+// "get_browser_session" endpoint HTTP response body.
+type GetBrowserSessionResponseBody struct {
+	// Bearer session credential stored in origin-scoped localStorage and sent in
+	// Authorization: Bearer.
+	Session *string `form:"session,omitempty" json:"session,omitempty" xml:"session,omitempty"`
+	// Base name of the physical project folder, without its path, for this page
+	// session.
+	ProjectName *string `form:"project_name,omitempty" json:"project_name,omitempty" xml:"project_name,omitempty"`
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+	// Base64 SHA-256 digest of the inline /views bundle served by this running
+	// server, allowing open tabs to detect UI changes across server restarts.
+	UIBuild *string `form:"ui_build,omitempty" json:"ui_build,omitempty" xml:"ui_build,omitempty"`
+}
+
+// GetUpdateStatusResponseBody is the type of the "project" service
+// "get_update_status" endpoint HTTP response body.
+type GetUpdateStatusResponseBody struct {
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	CurrentVersion *string `form:"current_version,omitempty" json:"current_version,omitempty" xml:"current_version,omitempty"`
+	// Newest stable Highbay release version published on GitHub (with leading v,
+	// for example v0.5.1).
+	LatestVersion *string `form:"latest_version,omitempty" json:"latest_version,omitempty" xml:"latest_version,omitempty"`
+	// True when latest_version is newer than current_version.
+	UpdateAvailable *bool `form:"update_available,omitempty" json:"update_available,omitempty" xml:"update_available,omitempty"`
+	// HTTPS URL of the latest GitHub release notes.
+	ReleaseURL *string `form:"release_url,omitempty" json:"release_url,omitempty" xml:"release_url,omitempty"`
+	// True when this running server can install the release binary or Homebrew
+	// upgrade and restart in place.
+	CanAutoUpdate *bool `form:"can_auto_update,omitempty" json:"can_auto_update,omitempty" xml:"can_auto_update,omitempty"`
+	// Shell command to update manually when can_auto_update is false (for example
+	// go install or npm install -g).
+	ManualCommand *string `form:"manual_command,omitempty" json:"manual_command,omitempty" xml:"manual_command,omitempty"`
+}
+
+// ApplyUpdateResponseBody is the type of the "project" service "apply_update"
+// endpoint HTTP response body.
+type ApplyUpdateResponseBody struct {
+	// restarting when the new binary was installed and the server is re-executing
+	// in place; up_to_date when the running server already matches version.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Target release version with leading v (for example v0.5.1).
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // IdentityForbiddenResponseBody is the type of the "project" service
@@ -231,12 +290,10 @@ type AttachGuideTeamUnavailableResponseBody struct {
 	// Error name.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// What could not be used: stopping (the server is shutting down), chorus (the
-	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Highbay no longer accepts and is still open), roster_folder
-	// (Herdr's launcher roster folder could not be written), project_state (the
-	// project's private record or an agent credential could not be read or
-	// written), or role_folder (a role's working folder could not be read).
+	// local Chorus server is unavailable), hc (herdr-core is unavailable or a
+	// terminal command failed), project_state (the project's private record or an
+	// agent credential could not be read or written), or role_folder (a role's
+	// working folder could not be prepared).
 	Cause *string `form:"cause,omitempty" json:"cause,omitempty" xml:"cause,omitempty"`
 }
 
@@ -386,14 +443,201 @@ type ExchangeBrowserLinkUnprocessableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetBrowserSessionUnauthorizedResponseBody is the type of the "project"
+// service "get_browser_session" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetBrowserSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetBrowserSessionForbiddenResponseBody is the type of the "project" service
+// "get_browser_session" endpoint HTTP response body for the "forbidden" error.
+type GetBrowserSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetBrowserSessionUnprocessableResponseBody is the type of the "project"
+// service "get_browser_session" endpoint HTTP response body for the
+// "unprocessable" error.
+type GetBrowserSessionUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpdateStatusReleaseUnavailableResponseBody is the type of the "project"
+// service "get_update_status" endpoint HTTP response body for the
+// "release_unavailable" error.
+type GetUpdateStatusReleaseUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpdateStatusForbiddenResponseBody is the type of the "project" service
+// "get_update_status" endpoint HTTP response body for the "forbidden" error.
+type GetUpdateStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetUpdateStatusUnprocessableResponseBody is the type of the "project"
+// service "get_update_status" endpoint HTTP response body for the
+// "unprocessable" error.
+type GetUpdateStatusUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyUpdateConflictResponseBody is the type of the "project" service
+// "apply_update" endpoint HTTP response body for the "conflict" error.
+type ApplyUpdateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyUpdateReleaseUnavailableResponseBody is the type of the "project"
+// service "apply_update" endpoint HTTP response body for the
+// "release_unavailable" error.
+type ApplyUpdateReleaseUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyUpdateForbiddenResponseBody is the type of the "project" service
+// "apply_update" endpoint HTTP response body for the "forbidden" error.
+type ApplyUpdateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ApplyUpdateUnprocessableResponseBody is the type of the "project" service
+// "apply_update" endpoint HTTP response body for the "unprocessable" error.
+type ApplyUpdateUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // ProjectTeamRoleResponseBody is used to define fields on response body types.
 type ProjectTeamRoleResponseBody struct {
 	// Trusted role.
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// Stable Chorus handle and Highbay actor identity.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal *bool `form:"has_terminal,omitempty" json:"has_terminal,omitempty" xml:"has_terminal,omitempty"`
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running *bool `form:"running,omitempty" json:"running,omitempty" xml:"running,omitempty"`
 }
 
@@ -403,22 +647,35 @@ type TeamRoleStateResponseBody struct {
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// Registered Chorus handle.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal *bool `form:"has_terminal,omitempty" json:"has_terminal,omitempty" xml:"has_terminal,omitempty"`
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention *string `form:"attention,omitempty" json:"attention,omitempty" xml:"attention,omitempty"`
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher *string `form:"watcher,omitempty" json:"watcher,omitempty" xml:"watcher,omitempty"`
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment *string `form:"assignment,omitempty" json:"assignment,omitempty" xml:"assignment,omitempty"`
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *RoleAgentChoiceResponseBody `form:"choice,omitempty" json:"choice,omitempty" xml:"choice,omitempty"`
+}
+
+// RoleAgentChoiceResponseBody is used to define fields on response body types.
+type RoleAgentChoiceResponseBody struct {
+	// Installed coding-agent client family.
+	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
+	// Installed executable selected from list_team_agent_options.
+	Program *string `form:"program,omitempty" json:"program,omitempty" xml:"program,omitempty"`
+	// Optional client-supported model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo *bool `form:"yolo,omitempty" json:"yolo,omitempty" xml:"yolo,omitempty"`
 }
 
 // NewAttachGuideRequestBody builds the HTTP request body from the payload of
@@ -446,6 +703,15 @@ func NewExchangeBrowserLinkRequestBody(p *project.ExchangeBrowserLinkPayload) *E
 	return body
 }
 
+// NewApplyUpdateRequestBody builds the HTTP request body from the payload of
+// the "apply_update" endpoint of the "project" service.
+func NewApplyUpdateRequestBody(p *project.ApplyUpdatePayload) *ApplyUpdateRequestBody {
+	body := &ApplyUpdateRequestBody{
+		Version: p.Version,
+	}
+	return body
+}
+
 // NewIdentityProjectIdentityOK builds a "project" service "identity" endpoint
 // result from a HTTP "OK" response.
 func NewIdentityProjectIdentityOK(body *IdentityResponseBody) *project.ProjectIdentity {
@@ -454,6 +720,7 @@ func NewIdentityProjectIdentityOK(body *IdentityResponseBody) *project.ProjectId
 		Directory: *body.Directory,
 		Owner:     *body.Owner,
 		Build:     body.Build,
+		Version:   body.Version,
 	}
 
 	return v
@@ -493,10 +760,8 @@ func NewIdentityUnprocessable(body *IdentityUnprocessableResponseBody) *goa.Serv
 // result from a HTTP "OK" response.
 func NewEnsureTeamProjectTeamOK(body *EnsureTeamResponseBody) *project.ProjectTeam {
 	v := &project.ProjectTeam{
-		Team:      *body.Team,
-		Space:     *body.Space,
-		HerdrMode: *body.HerdrMode,
-		Step:      *body.Step,
+		Team: *body.Team,
+		Step: *body.Step,
 	}
 	v.Roles = make([]*project.ProjectTeamRole, len(body.Roles))
 	for i, val := range body.Roles {
@@ -544,10 +809,9 @@ func NewEnsureTeamUnprocessable(body *EnsureTeamUnprocessableResponseBody) *goa.
 // result from a HTTP "OK" response.
 func NewAttachGuideResultOK(body *AttachGuideResponseBody) *project.AttachGuideResult {
 	v := &project.AttachGuideResult{
-		Team:         *body.Team,
-		Handle:       *body.Handle,
-		AdoptedHerdr: *body.AdoptedHerdr,
-		HerdrMode:    *body.HerdrMode,
+		Team:        *body.Team,
+		Handle:      *body.Handle,
+		HasTerminal: *body.HasTerminal,
 	}
 
 	return v
@@ -601,7 +865,6 @@ func NewStatusProjectStatusOK(body *StatusResponseBody) *project.ProjectStatus {
 		ProjectName: *body.ProjectName,
 		Directory:   *body.Directory,
 		Team:        *body.Team,
-		HerdrMode:   *body.HerdrMode,
 		Stage:       *body.Stage,
 		ChangeID:    *body.ChangeID,
 		ChangeTitle: *body.ChangeTitle,
@@ -718,12 +981,14 @@ func NewBrowserLinkUnprocessable(body *BrowserLinkUnprocessableResponseBody) *go
 	return v
 }
 
-// NewExchangeBrowserLinkResultCreated builds a "project" service
+// NewExchangeBrowserLinkBrowserSessionResultCreated builds a "project" service
 // "exchange_browser_link" endpoint result from a HTTP "Created" response.
-func NewExchangeBrowserLinkResultCreated(body *ExchangeBrowserLinkResponseBody) *project.ExchangeBrowserLinkResult {
-	v := &project.ExchangeBrowserLinkResult{
+func NewExchangeBrowserLinkBrowserSessionResultCreated(body *ExchangeBrowserLinkResponseBody) *project.BrowserSessionResult {
+	v := &project.BrowserSessionResult{
 		Session:     *body.Session,
 		ProjectName: *body.ProjectName,
+		Version:     *body.Version,
+		UIBuild:     *body.UIBuild,
 	}
 
 	return v
@@ -759,6 +1024,195 @@ func NewExchangeBrowserLinkUnprocessable(body *ExchangeBrowserLinkUnprocessableR
 	return v
 }
 
+// NewGetBrowserSessionResultOK builds a "project" service
+// "get_browser_session" endpoint result from a HTTP "OK" response.
+func NewGetBrowserSessionResultOK(body *GetBrowserSessionResponseBody) *project.BrowserSessionResult {
+	v := &project.BrowserSessionResult{
+		Session:     *body.Session,
+		ProjectName: *body.ProjectName,
+		Version:     *body.Version,
+		UIBuild:     *body.UIBuild,
+	}
+
+	return v
+}
+
+// NewGetBrowserSessionUnauthorized builds a project service
+// get_browser_session endpoint unauthorized error.
+func NewGetBrowserSessionUnauthorized(body *GetBrowserSessionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetBrowserSessionForbidden builds a project service get_browser_session
+// endpoint forbidden error.
+func NewGetBrowserSessionForbidden(body *GetBrowserSessionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetBrowserSessionUnprocessable builds a project service
+// get_browser_session endpoint unprocessable error.
+func NewGetBrowserSessionUnprocessable(body *GetBrowserSessionUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpdateStatusResultOK builds a "project" service "get_update_status"
+// endpoint result from a HTTP "OK" response.
+func NewGetUpdateStatusResultOK(body *GetUpdateStatusResponseBody) *project.UpdateStatusResult {
+	v := &project.UpdateStatusResult{
+		CurrentVersion:  *body.CurrentVersion,
+		LatestVersion:   *body.LatestVersion,
+		UpdateAvailable: *body.UpdateAvailable,
+		ReleaseURL:      *body.ReleaseURL,
+		CanAutoUpdate:   *body.CanAutoUpdate,
+		ManualCommand:   body.ManualCommand,
+	}
+
+	return v
+}
+
+// NewGetUpdateStatusReleaseUnavailable builds a project service
+// get_update_status endpoint release_unavailable error.
+func NewGetUpdateStatusReleaseUnavailable(body *GetUpdateStatusReleaseUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpdateStatusForbidden builds a project service get_update_status
+// endpoint forbidden error.
+func NewGetUpdateStatusForbidden(body *GetUpdateStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetUpdateStatusUnprocessable builds a project service get_update_status
+// endpoint unprocessable error.
+func NewGetUpdateStatusUnprocessable(body *GetUpdateStatusUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyUpdateResultOK builds a "project" service "apply_update" endpoint
+// result from a HTTP "OK" response.
+func NewApplyUpdateResultOK(body *ApplyUpdateResponseBody) *project.ApplyUpdateResult {
+	v := &project.ApplyUpdateResult{
+		Status:  *body.Status,
+		Version: *body.Version,
+	}
+
+	return v
+}
+
+// NewApplyUpdateConflict builds a project service apply_update endpoint
+// conflict error.
+func NewApplyUpdateConflict(body *ApplyUpdateConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyUpdateReleaseUnavailable builds a project service apply_update
+// endpoint release_unavailable error.
+func NewApplyUpdateReleaseUnavailable(body *ApplyUpdateReleaseUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyUpdateForbidden builds a project service apply_update endpoint
+// forbidden error.
+func NewApplyUpdateForbidden(body *ApplyUpdateForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewApplyUpdateUnprocessable builds a project service apply_update endpoint
+// unprocessable error.
+func NewApplyUpdateUnprocessable(body *ApplyUpdateUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateIdentityResponseBody runs the validations defined on
 // IdentityResponseBody
 func ValidateIdentityResponseBody(body *IdentityResponseBody) (err error) {
@@ -774,6 +1228,11 @@ func ValidateIdentityResponseBody(body *IdentityResponseBody) (err error) {
 	if body.Build != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.build", *body.Build, "^[0-9a-f]{64}$"))
 	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 1, true))
+		}
+	}
 	return
 }
 
@@ -783,14 +1242,8 @@ func ValidateEnsureTeamResponseBody(body *EnsureTeamResponseBody) (err error) {
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if body.Space == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("space", "body"))
-	}
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -798,22 +1251,11 @@ func ValidateEnsureTeamResponseBody(body *EnsureTeamResponseBody) (err error) {
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
-	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-		if utf8.RuneCountInString(*body.Space) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
-		}
-	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleResponseBody(e, "body.roles[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -836,16 +1278,8 @@ func ValidateAttachGuideResponseBody(body *AttachGuideResponseBody) (err error) 
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
-	if body.AdoptedHerdr == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("adopted_herdr", "body"))
-	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
-		}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
 	}
 	return
 }
@@ -861,9 +1295,6 @@ func ValidateStatusResponseBody(body *StatusResponseBody) (err error) {
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
-	}
 	if body.Stage == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("stage", "body"))
 	}
@@ -878,11 +1309,6 @@ func ValidateStatusResponseBody(body *StatusResponseBody) (err error) {
 	}
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
-		}
 	}
 	if body.Stage != nil {
 		if !(*body.Stage == "describe" || *body.Stage == "agree" || *body.Stage == "build" || *body.Stage == "check" || *body.Stage == "approve" || *body.Stage == "merged") {
@@ -923,9 +1349,131 @@ func ValidateExchangeBrowserLinkResponseBody(body *ExchangeBrowserLinkResponseBo
 	if body.ProjectName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
 	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.UIBuild == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ui_build", "body"))
+	}
+	if body.Session != nil {
+		if utf8.RuneCountInString(*body.Session) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session", *body.Session, utf8.RuneCountInString(*body.Session), 16, true))
+		}
+	}
 	if body.ProjectName != nil {
 		if utf8.RuneCountInString(*body.ProjectName) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.project_name", *body.ProjectName, utf8.RuneCountInString(*body.ProjectName), 1, true))
+		}
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 1, true))
+		}
+	}
+	if body.UIBuild != nil {
+		if utf8.RuneCountInString(*body.UIBuild) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ui_build", *body.UIBuild, utf8.RuneCountInString(*body.UIBuild), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateGetBrowserSessionResponseBody runs the validations defined on
+// GetBrowserSessionResponseBody
+func ValidateGetBrowserSessionResponseBody(body *GetBrowserSessionResponseBody) (err error) {
+	if body.Session == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("session", "body"))
+	}
+	if body.ProjectName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_name", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.UIBuild == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ui_build", "body"))
+	}
+	if body.Session != nil {
+		if utf8.RuneCountInString(*body.Session) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session", *body.Session, utf8.RuneCountInString(*body.Session), 16, true))
+		}
+	}
+	if body.ProjectName != nil {
+		if utf8.RuneCountInString(*body.ProjectName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.project_name", *body.ProjectName, utf8.RuneCountInString(*body.ProjectName), 1, true))
+		}
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 1, true))
+		}
+	}
+	if body.UIBuild != nil {
+		if utf8.RuneCountInString(*body.UIBuild) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ui_build", *body.UIBuild, utf8.RuneCountInString(*body.UIBuild), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateGetUpdateStatusResponseBody runs the validations defined on
+// GetUpdateStatusResponseBody
+func ValidateGetUpdateStatusResponseBody(body *GetUpdateStatusResponseBody) (err error) {
+	if body.CurrentVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("current_version", "body"))
+	}
+	if body.LatestVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("latest_version", "body"))
+	}
+	if body.UpdateAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("update_available", "body"))
+	}
+	if body.ReleaseURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("release_url", "body"))
+	}
+	if body.CanAutoUpdate == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_auto_update", "body"))
+	}
+	if body.CurrentVersion != nil {
+		if utf8.RuneCountInString(*body.CurrentVersion) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.current_version", *body.CurrentVersion, utf8.RuneCountInString(*body.CurrentVersion), 1, true))
+		}
+	}
+	if body.LatestVersion != nil {
+		if utf8.RuneCountInString(*body.LatestVersion) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.latest_version", *body.LatestVersion, utf8.RuneCountInString(*body.LatestVersion), 1, true))
+		}
+	}
+	if body.ReleaseURL != nil {
+		if utf8.RuneCountInString(*body.ReleaseURL) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.release_url", *body.ReleaseURL, utf8.RuneCountInString(*body.ReleaseURL), 1, true))
+		}
+	}
+	if body.ManualCommand != nil {
+		if utf8.RuneCountInString(*body.ManualCommand) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.manual_command", *body.ManualCommand, utf8.RuneCountInString(*body.ManualCommand), 1, true))
+		}
+	}
+	return
+}
+
+// ValidateApplyUpdateResponseBody runs the validations defined on
+// ApplyUpdateResponseBody
+func ValidateApplyUpdateResponseBody(body *ApplyUpdateResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "restarting" || *body.Status == "up_to_date") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"restarting", "up_to_date"}))
+		}
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 1, true))
 		}
 	}
 	return
@@ -1085,8 +1633,8 @@ func ValidateAttachGuideTeamUnavailableResponseBody(body *AttachGuideTeamUnavail
 		err = goa.MergeErrors(err, goa.MissingFieldError("cause", "body"))
 	}
 	if body.Cause != nil {
-		if !(*body.Cause == "stopping" || *body.Cause == "chorus" || *body.Cause == "herdr" || *body.Cause == "saved_space" || *body.Cause == "roster_folder" || *body.Cause == "project_state" || *body.Cause == "role_folder") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"stopping", "chorus", "herdr", "saved_space", "roster_folder", "project_state", "role_folder"}))
+		if !(*body.Cause == "stopping" || *body.Cause == "chorus" || *body.Cause == "hc" || *body.Cause == "project_state" || *body.Cause == "role_folder") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.cause", *body.Cause, []any{"stopping", "chorus", "hc", "project_state", "role_folder"}))
 		}
 	}
 	return
@@ -1284,6 +1832,246 @@ func ValidateExchangeBrowserLinkUnprocessableResponseBody(body *ExchangeBrowserL
 	return
 }
 
+// ValidateGetBrowserSessionUnauthorizedResponseBody runs the validations
+// defined on GetBrowserSessionUnauthorizedResponseBody
+func ValidateGetBrowserSessionUnauthorizedResponseBody(body *GetBrowserSessionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetBrowserSessionForbiddenResponseBody runs the validations defined
+// on GetBrowserSessionForbiddenResponseBody
+func ValidateGetBrowserSessionForbiddenResponseBody(body *GetBrowserSessionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetBrowserSessionUnprocessableResponseBody runs the validations
+// defined on GetBrowserSessionUnprocessableResponseBody
+func ValidateGetBrowserSessionUnprocessableResponseBody(body *GetBrowserSessionUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpdateStatusReleaseUnavailableResponseBody runs the validations
+// defined on GetUpdateStatusReleaseUnavailableResponseBody
+func ValidateGetUpdateStatusReleaseUnavailableResponseBody(body *GetUpdateStatusReleaseUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpdateStatusForbiddenResponseBody runs the validations defined on
+// GetUpdateStatusForbiddenResponseBody
+func ValidateGetUpdateStatusForbiddenResponseBody(body *GetUpdateStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetUpdateStatusUnprocessableResponseBody runs the validations
+// defined on GetUpdateStatusUnprocessableResponseBody
+func ValidateGetUpdateStatusUnprocessableResponseBody(body *GetUpdateStatusUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyUpdateConflictResponseBody runs the validations defined on
+// ApplyUpdateConflictResponseBody
+func ValidateApplyUpdateConflictResponseBody(body *ApplyUpdateConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyUpdateReleaseUnavailableResponseBody runs the validations
+// defined on ApplyUpdateReleaseUnavailableResponseBody
+func ValidateApplyUpdateReleaseUnavailableResponseBody(body *ApplyUpdateReleaseUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyUpdateForbiddenResponseBody runs the validations defined on
+// ApplyUpdateForbiddenResponseBody
+func ValidateApplyUpdateForbiddenResponseBody(body *ApplyUpdateForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateApplyUpdateUnprocessableResponseBody runs the validations defined on
+// ApplyUpdateUnprocessableResponseBody
+func ValidateApplyUpdateUnprocessableResponseBody(body *ApplyUpdateUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateProjectTeamRoleResponseBody runs the validations defined on
 // ProjectTeamRole
 func ValidateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody) (err error) {
@@ -1292,6 +2080,9 @@ func ValidateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody) (err
 	}
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
 	}
 	if body.Running == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("running", "body"))
@@ -1313,6 +2104,9 @@ func validateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody, path
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", path))
 	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", path))
+	}
 	if body.Running == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("running", path))
 	}
@@ -1333,14 +2127,14 @@ func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err err
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
+	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
 	if body.Attention == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
-	}
-	if body.Watcher == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", "body"))
 	}
 	if body.Assignment == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", "body"))
@@ -1356,18 +2150,18 @@ func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err err
 		}
 	}
 	if body.Attention != nil {
-		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "assignment" || *body.Attention == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-		}
-	}
-	if body.Watcher != nil {
-		if !(*body.Watcher == "held" || *body.Watcher == "gone" || *body.Watcher == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.watcher", *body.Watcher, []any{"held", "gone", "unknown"}))
+		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 		}
 	}
 	if body.Assignment != nil {
 		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+		}
+	}
+	if body.Choice != nil {
+		if err2 := validateRoleAgentChoiceResponseBody(body.Choice, "body.choice"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -1382,14 +2176,14 @@ func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path str
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", path))
 	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", path))
+	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", path))
 	}
 	if body.Attention == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attention", path))
-	}
-	if body.Watcher == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", path))
 	}
 	if body.Assignment == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", path))
@@ -1405,18 +2199,68 @@ func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path str
 		}
 	}
 	if body.Attention != nil {
-		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "assignment" || *body.Attention == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-		}
-	}
-	if body.Watcher != nil {
-		if !(*body.Watcher == "held" || *body.Watcher == "gone" || *body.Watcher == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".watcher", *body.Watcher, []any{"held", "gone", "unknown"}))
+		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 		}
 	}
 	if body.Assignment != nil {
 		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+		}
+	}
+	if body.Choice != nil {
+		if err2 := validateRoleAgentChoiceResponseBody(body.Choice, path+".choice"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateRoleAgentChoiceResponseBody runs the validations defined on
+// RoleAgentChoice
+func ValidateRoleAgentChoiceResponseBody(body *RoleAgentChoiceResponseBody) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", "body"))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", "body"))
+	}
+	if body.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", "body"))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if body.Program != nil {
+		if utf8.RuneCountInString(*body.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.program", *body.Program, utf8.RuneCountInString(*body.Program), 1, true))
+		}
+	}
+	return
+}
+
+// validateRoleAgentChoiceResponseBody checks RoleAgentChoice and reports
+// errors using the path supplied by its caller
+func validateRoleAgentChoiceResponseBody(body *RoleAgentChoiceResponseBody, path string) (err error) {
+	if body.Client == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client", path))
+	}
+	if body.Program == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("program", path))
+	}
+	if body.Yolo == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("yolo", path))
+	}
+	if body.Client != nil {
+		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".client", *body.Client, []any{"claude", "codex", "antigravity", "cursor", "gemini", "opencode"}))
+		}
+	}
+	if body.Program != nil {
+		if utf8.RuneCountInString(*body.Program) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".program", *body.Program, utf8.RuneCountInString(*body.Program), 1, true))
 		}
 	}
 	return

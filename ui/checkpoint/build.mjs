@@ -31,6 +31,9 @@ const openApiPath = path.join(repoRoot, "gen/http/openapi3.json");
 // route and result validator; the page cannot address anything else.
 const PAGE_OPERATIONS = [
   "project#exchange_browser_link",
+  "project#get_browser_session",
+  "project#get_update_status",
+  "project#apply_update",
   "highbay#list_changes",
   "highbay#wait_for_changes",
   "highbay#get_change",
@@ -41,8 +44,13 @@ const PAGE_OPERATIONS = [
   "highbay#get_build",
   "highbay#get_test_findings",
   "highbay#get_team",
-  "highbay#show_team_pane",
+  "highbay#get_team_conversation",
+  "highbay#send_team_message",
   "highbay#start_team_agents",
+  "highbay#interrupt_team_role",
+  "highbay#stop_team_role",
+  "highbay#restart_team_role",
+  "highbay#create_terminal_ticket",
   "highbay#list_team_agent_options",
   "highbay#dismiss_team_notice",
   "highbay#confirm_intent",
@@ -58,6 +66,12 @@ const PAGE_OPERATIONS = [
   "highbay#stop_live_target",
   "highbay#get_model_connection",
   "highbay#configure_model",
+];
+
+// WEBSOCKET_OPERATIONS lists every bidirectional WebSocket upgrade operation
+// the views page opens, matched against responses["101"] and x-goa-streaming-payload.
+const WEBSOCKET_OPERATIONS = [
+  "highbay#attach_role_terminal",
 ];
 
 // ERROR_SCHEMA is Goa's standard error body, also returned by transport
@@ -153,7 +167,9 @@ function compactSchema(node, at, refs) {
   if (node.format !== undefined) {
     if (node.type === "string" && node.format === "date-time") {
       out.format = "date-time";
-    } else if (!(node.type === "integer" && node.format === "int64")) {
+    } else if (node.type === "string" && node.format === "binary") {
+      // Goa emits format: "binary" for dsl.Bytes, serialized as base64 strings in JSON frames.
+    } else if (!(node.type === "integer" && (node.format === "int64" || node.format === "int32"))) {
       throw new Error(`Unsupported format ${JSON.stringify(node.format)} at ${at}`);
     }
   }
@@ -391,14 +407,78 @@ function encoderSource(op) {
   return lines.join("\n");
 }
 
+// findWebSocketOperations locates each WebSocket upgrade operation declared by
+// the views page and extracts its handshake parameters, x-goa-streaming-payload
+// client frame schema, 101 Switching Protocols server frame schema, and failures.
+function findWebSocketOperations(openApi, refs) {
+  const byId = new Map();
+  for (const [route, methods] of Object.entries(openApi.paths)) {
+    for (const [method, op] of Object.entries(methods)) {
+      byId.set(op.operationId, { route, method: method.toUpperCase(), op });
+    }
+  }
+  return WEBSOCKET_OPERATIONS.map((id) => {
+    const found = byId.get(id);
+    if (!found) {
+      throw new Error(`The views page opens WebSocket ${id}, which gen/http/openapi3.json does not declare`);
+    }
+    const { route, method, op } = found;
+    if (method !== "GET") {
+      throw new Error(`${id}: WebSocket upgrade must use GET, got ${method}`);
+    }
+    const name = id.split("#")[1];
+    const params = (op.parameters || []).map((p) => {
+      if (p.in !== "path" && p.in !== "query") {
+        throw new Error(`${id}: unsupported ${p.in} parameter ${p.name}`);
+      }
+      return {
+        name: p.name,
+        in: p.in,
+        required: Boolean(p.required),
+        schema: compactSchema(p.schema, `${id}.parameters.${p.name}`, refs),
+      };
+    });
+    const clientPayload = op["x-goa-streaming-payload"];
+    const clientRef = refName(clientPayload?.$ref, `${id}.x-goa-streaming-payload`);
+    refs.add(clientRef);
+    const clientFrame = tsName(clientRef);
+
+    const upgrade = op.responses?.["101"];
+    if (!upgrade) {
+      throw new Error(`${id} must declare a 101 Switching Protocols response`);
+    }
+    const serverSchema = upgrade.content?.["application/json"]?.schema;
+    const serverRef = refName(serverSchema?.$ref, `${id}.responses.101`);
+    refs.add(serverRef);
+    const serverFrame = tsName(serverRef);
+
+    const failures = [];
+    const failureRefs = new Set();
+    for (const [code, failure] of Object.entries(op.responses)) {
+      if (code === "101") continue;
+      if (!/^[345]\d\d$/.test(code)) {
+        throw new Error(`${id}: unsupported failure status ${code}`);
+      }
+      for (const [mediaType, content] of Object.entries(failure.content || {})) {
+        const schema = compactSchema(content.schema, `${id}.responses.${code}.${mediaType}`, failureRefs);
+        if (schema.$ref !== `#/$defs/${tsName(ERROR_SCHEMA)}`) {
+          failures.push({ status: Number(code), schema });
+        }
+      }
+    }
+    for (const component of failureRefs) refs.add(component);
+    return { id, name, route, method, params, body: null, clientFrame, serverFrame, failures, failureRefs };
+  });
+}
+
 // failureDecoderSource accepts the operation's declared bodies at their HTTP
 // statuses, plus Goa's standard transport and unexpected-failure body.
-function failureDecoderSource(op) {
+function failureDecoderSource(op, mapName = "Operations") {
   const branches = op.failures.map(
     (failure) => `(status === ${failure.status} && matchesSchema(value, ${JSON.stringify(failure.schema)}))`
   );
   const statusParam = branches.length === 0 ? "_status" : "status";
-  return `function decode${pascal(op.name)}Failure(${statusParam}: number, value: unknown): value is Operations[${JSON.stringify(op.name)}]["failure"] {
+  return `function decode${pascal(op.name)}Failure(${statusParam}: number, value: unknown): value is ${mapName}[${JSON.stringify(op.name)}]["failure"] {
   return is${tsName(ERROR_SCHEMA)}(value)${branches.map((branch) => ` ||\n    ${branch}`).join("")};
 }`;
 }
@@ -409,6 +489,7 @@ export function generateTypesModule(openApi) {
   const components = openApi.components?.schemas || {};
   const refs = new Set([ERROR_SCHEMA]);
   const operations = findOperations(openApi, refs);
+  const wsOperations = findWebSocketOperations(openApi, refs);
 
   // Compact every component reachable from the page's operations.
   const defs = {};
@@ -434,7 +515,9 @@ export function generateTypesModule(openApi) {
   const results = [
     ...new Set([
       ...operations.map((op) => op.result).filter((result) => result !== null),
+      ...wsOperations.map((op) => op.serverFrame),
       ...operations.flatMap((op) => [...op.failureRefs].map(tsName)),
+      ...wsOperations.flatMap((op) => [...op.failureRefs].map(tsName)),
       tsName(ERROR_SCHEMA),
     ]),
   ].sort();
@@ -449,7 +532,7 @@ import { z } from "zod";
 
 ${defNames.map((name) => emitDeclaration(name, defs[name])).join("\n\n")}
 
-${operations.map(requestDeclaration).join("\n\n")}
+${[...operations, ...wsOperations].map(requestDeclaration).join("\n\n")}
 
 // Operations maps each operation the page sends to its request, result and
 // validated failure bodies.
@@ -464,6 +547,20 @@ ${operations
 
 // OperationName names one operation the page sends.
 export type OperationName = keyof Operations;
+
+// WebSocketOperations maps each WebSocket upgrade operation to its handshake
+// request, client-to-server frame, server-to-client frame, and failure bodies.
+export interface WebSocketOperations {
+${wsOperations
+  .map((op) => {
+    const failures = [...new Set([tsName(ERROR_SCHEMA), ...op.failures.map((failure) => tsType(failure.schema))])];
+    return `  ${op.name}: { request: ${pascal(op.name)}Request; clientFrame: ${op.clientFrame}; serverFrame: ${op.serverFrame}; failure: ${failures.join(" | ")} };`;
+  })
+  .join("\n")}
+}
+
+// WebSocketOperationName names one WebSocket operation the page opens.
+export type WebSocketOperationName = keyof WebSocketOperations;
 
 // ServerFailure is a validated failure body returned to the page.
 export type ServerFailure = Operations[OperationName]["failure"];
@@ -490,9 +587,21 @@ export interface Route<K extends OperationName> {
   decodeFailure: (status: number, value: unknown) => value is Operations[K]["failure"];
 }
 
-${operations.map(encoderSource).join("\n\n")}
+// WebSocketRoute encodes one WebSocket upgrade path and validates server frames.
+export interface WebSocketRoute<K extends WebSocketOperationName> {
+  // encode builds the WebSocket upgrade path and query string from its request.
+  encode: (request: WebSocketOperations[K]["request"]) => EncodedRequest;
+  // decodeFrame validates an incoming JSON frame from the server.
+  decodeFrame: (value: unknown) => value is WebSocketOperations[K]["serverFrame"];
+  // decodeFailure validates a handshake failure body against its HTTP status.
+  decodeFailure: (status: number, value: unknown) => value is WebSocketOperations[K]["failure"];
+}
 
-${operations.map(failureDecoderSource).join("\n\n")}
+${[...operations, ...wsOperations].map(encoderSource).join("\n\n")}
+
+${operations.map((op) => failureDecoderSource(op, "Operations")).join("\n\n")}
+
+${wsOperations.map((op) => failureDecoderSource(op, "WebSocketOperations")).join("\n\n")}
 
 // ROUTES addresses every operation the page sends.
 export const ROUTES: { [K in OperationName]: Route<K> } = {
@@ -500,6 +609,16 @@ ${operations
   .map(
     (op) =>
       `  ${op.name}: { method: ${JSON.stringify(op.method)}, success: ${op.success}, encode: encode${pascal(op.name)}, decode: ${op.result === null ? "isNoContent" : `is${op.result}`}, decodeFailure: decode${pascal(op.name)}Failure },`
+  )
+  .join("\n")}
+};
+
+// WEBSOCKET_ROUTES addresses every WebSocket stream the page opens.
+export const WEBSOCKET_ROUTES: { [K in WebSocketOperationName]: WebSocketRoute<K> } = {
+${wsOperations
+  .map(
+    (op) =>
+      `  ${op.name}: { encode: encode${pascal(op.name)}, decodeFrame: is${op.serverFrame}, decodeFailure: decode${pascal(op.name)}Failure },`
   )
   .join("\n")}
 };
@@ -640,7 +759,9 @@ async function buildArtifacts() {
     fs.writeFileSync(typesTsPath, generatedTypesTs, "utf8");
   }
 
-  const stylesCss = fs.readFileSync(path.join(__dirname, "src/styles.css"), "utf8").trim();
+  const xtermCssPath = path.join(__dirname, "node_modules/@xterm/xterm/css/xterm.css");
+  const xtermCss = fs.existsSync(xtermCssPath) ? fs.readFileSync(xtermCssPath, "utf8").trim() + "\n" : "";
+  const stylesCss = (xtermCss + fs.readFileSync(path.join(__dirname, "src/styles.css"), "utf8")).trim();
 
   const appBundle = await esbuild.build({
     entryPoints: [path.join(__dirname, "src/app.tsx")],

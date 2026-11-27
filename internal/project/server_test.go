@@ -36,7 +36,10 @@ func (d headerDoer) Do(r *http.Request) (*http.Response, error) {
 		r.Header.Set("Authorization", "Bearer "+d.token)
 	}
 	if d.browser {
+		// A page's request says it is same-origin and names the page's
+		// origin, which is the address it is sent to.
 		r.Header.Set("Sec-Fetch-Site", "same-origin")
+		r.Header.Set("Origin", "http://"+r.URL.Host)
 	}
 	return d.client.Do(r)
 }
@@ -188,62 +191,73 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 		token string
 	}{{controlplane.CallerGuide, string(guideRaw)}, {controlplane.CallerBuilder, actorTokens[controlplane.CallerBuilder]}, {controlplane.CallerTestWriter, actorTokens[controlplane.CallerTestWriter]}, {controlplane.CallerUser, session.Session}, {controlplane.CallerManagement, management}} {
 		t.Run(string(tc.role), func(t *testing.T) {
-			list := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`, tc.token, tc.role == controlplane.CallerUser)
-			var body struct {
-				Error  any `json:"error"`
-				Result *struct {
-					ResultType string `json:"resultType"`
-					Tools      []struct {
-						Name string `json:"name"`
-					} `json:"tools"`
-				} `json:"result"`
-			}
-			require.Equal(t, http.StatusOK, list.StatusCode)
-			require.NoError(t, json.NewDecoder(list.Body).Decode(&body))
-			require.NoError(t, list.Body.Close())
-			require.Nil(t, body.Error)
-			require.NotNil(t, body.Result)
-			assert.Equal(t, "complete", body.Result.ResultType)
-			listed := map[string]bool{}
-			for _, tool := range body.Result.Tools {
-				listed[tool.Name] = true
-			}
-			// The views page's HTTP-only operations are not listed as tools.
-			httpOrResourceOnly := map[string]bool{
-				"golden_path": true, "wait_for_changes": true, "start_build": true, "drop_build": true, "get_model_connection": true, "get_test_findings": true,
-				"get_team": true, "show_team_pane": true, "start_team_agents": true, "hand_over_model_settings": true,
-				"list_team_agent_options": true, "dismiss_team_notice": true, "merge_change": true,
-			}
-			for _, name := range genhighbay.MethodNames {
-				if !httpOrResourceOnly[name] {
-					assert.Equal(t, controlplane.OperationAllowed(tc.role, name), listed[name], name)
+			if tc.role == controlplane.CallerUser {
+				// The MCP endpoint serves agents, not pages: it refuses a
+				// request that names an origin, as every POST from a page
+				// does. The user's session reaches the HTTP API only.
+				refused := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`, tc.token, true)
+				assert.Equal(t, http.StatusForbidden, refused.StatusCode)
+				require.NoError(t, refused.Body.Close())
+			} else {
+				list := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`, tc.token, false)
+				var body struct {
+					Error  any `json:"error"`
+					Result *struct {
+						ResultType string `json:"resultType"`
+						Tools      []struct {
+							Name string `json:"name"`
+						} `json:"tools"`
+					} `json:"result"`
 				}
-			}
-			resources := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":4,"method":"resources/list","params":{}}`, tc.token, tc.role == controlplane.CallerUser)
-			require.Equal(t, http.StatusOK, resources.StatusCode)
-			var catalog struct {
-				Error  any `json:"error"`
-				Result *struct {
-					Resources []struct {
-						Name string `json:"name"`
-					} `json:"resources"`
-				} `json:"result"`
-			}
-			require.NoError(t, json.NewDecoder(resources.Body).Decode(&catalog))
-			require.NoError(t, resources.Body.Close())
-			require.Nil(t, catalog.Error)
-			require.NotNil(t, catalog.Result)
-			names := []string{}
-			for _, resource := range catalog.Result.Resources {
-				names = append(names, resource.Name)
-			}
-			expected := []string{}
-			for _, name := range []string{"golden_path"} {
-				if controlplane.OperationAllowed(tc.role, name) {
-					expected = append(expected, name)
+				require.Equal(t, http.StatusOK, list.StatusCode)
+				require.NoError(t, json.NewDecoder(list.Body).Decode(&body))
+				require.NoError(t, list.Body.Close())
+				require.Nil(t, body.Error)
+				require.NotNil(t, body.Result)
+				assert.Equal(t, "complete", body.Result.ResultType)
+				listed := map[string]bool{}
+				for _, tool := range body.Result.Tools {
+					listed[tool.Name] = true
 				}
+				// The views page's HTTP-only operations are not listed as tools.
+				httpOrResourceOnly := map[string]bool{
+					"golden_path": true, "wait_for_changes": true, "start_build": true, "drop_build": true, "get_model_connection": true, "get_test_findings": true,
+					"get_team": true, "start_team_agents": true, "hand_over_model_settings": true,
+					"get_team_conversation": true, "send_team_message": true, "interrupt_team_role": true, "stop_team_role": true, "restart_team_role": true,
+					"create_terminal_ticket": true, "attach_role_terminal": true,
+					"list_team_agent_options": true, "dismiss_team_notice": true, "merge_change": true,
+				}
+				for _, name := range genhighbay.MethodNames {
+					if !httpOrResourceOnly[name] {
+						assert.Equal(t, controlplane.OperationAllowed(tc.role, name), listed[name], name)
+					}
+				}
+				resources := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":4,"method":"resources/list","params":{}}`, tc.token, false)
+				require.Equal(t, http.StatusOK, resources.StatusCode)
+				var catalog struct {
+					Error  any `json:"error"`
+					Result *struct {
+						Resources []struct {
+							Name string `json:"name"`
+						} `json:"resources"`
+					} `json:"result"`
+				}
+				require.NoError(t, json.NewDecoder(resources.Body).Decode(&catalog))
+				require.NoError(t, resources.Body.Close())
+				require.Nil(t, catalog.Error)
+				require.NotNil(t, catalog.Result)
+				names := []string{}
+				for _, resource := range catalog.Result.Resources {
+					names = append(names, resource.Name)
+				}
+				expected := []string{}
+				for _, name := range []string{"golden_path"} {
+					if controlplane.OperationAllowed(tc.role, name) {
+						expected = append(expected, name)
+					}
+				}
+				assert.ElementsMatch(t, expected, names)
 			}
-			assert.ElementsMatch(t, expected, names)
 			if tc.role != controlplane.CallerManagement {
 				for _, managementCall := range []struct{ method, path, body string }{
 					{http.MethodGet, "/project/identity", ""},
@@ -274,7 +288,14 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, denied.Body.Close())
 				assert.Equal(t, http.StatusForbidden, denied.StatusCode, request.operation+": "+string(failure))
-				assert.Contains(t, string(failure), "may not call "+request.operation)
+				refusal := "may not call " + request.operation
+				if request.operation == "attach_role_terminal" {
+					// This request is not a WebSocket upgrade, which the
+					// terminal's route refuses for every caller before the
+					// role policy is asked.
+					refusal = "a role's terminal opens only from this project's Highbay page"
+				}
+				assert.Contains(t, string(failure), refusal)
 				assert.NotContains(t, string(failure), "refused-value", "a refusal never echoes a handed-over value")
 			}
 			guidance := testRequest(t, api.Client(), http.MethodGet, state.Origin()+"/golden-path", "", tc.token, tc.role == controlplane.CallerUser)
@@ -291,8 +312,8 @@ func TestProjectIdentitySessionsAndRoles(t *testing.T) {
 				assert.Equal(t, http.StatusOK, read.StatusCode)
 			}
 			require.NoError(t, read.Body.Close())
-			if tc.role == controlplane.CallerUser || tc.role == controlplane.CallerGuide || tc.role == controlplane.CallerBuilder {
-				called := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_change","arguments":{"change_id":"change"}}}`, tc.token, tc.role == controlplane.CallerUser)
+			if tc.role == controlplane.CallerGuide || tc.role == controlplane.CallerBuilder {
+				called := testRequest(t, api.Client(), http.MethodPost, state.Origin()+"/mcp", `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_change","arguments":{"change_id":"change"}}}`, tc.token, false)
 				require.Equal(t, http.StatusOK, called.StatusCode)
 				var envelope struct {
 					Error  any `json:"error"`
@@ -398,7 +419,7 @@ func testState(t *testing.T) *State {
 }
 func testClient(state *State, client *http.Client, token string, browser bool) *genproject.Client {
 	transport := genprojectclient.NewClient("http", state.Address(), headerDoer{client: client, token: token, browser: browser}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
-	return genproject.NewClient(transport.Identity(), transport.EnsureTeam(), transport.AttachGuide(), transport.Status(), transport.Stop(), transport.BrowserLink(), transport.ExchangeBrowserLink())
+	return genproject.NewClient(transport.Identity(), transport.EnsureTeam(), transport.AttachGuide(), transport.Status(), transport.Stop(), transport.BrowserLink(), transport.ExchangeBrowserLink(), transport.GetBrowserSession(), transport.GetUpdateStatus(), transport.ApplyUpdate())
 }
 func testRequest(t *testing.T, client *http.Client, method, target, body, token string, browser bool) *http.Response {
 	t.Helper()
@@ -450,10 +471,16 @@ func policyHTTPRequests(card *genhighbay.ChangeCardResult, propose, confirm stri
 		{"drop_build", http.MethodPost, "/changes/change/build/drop", `{"started_at":"2026-01-02T03:04:05Z"}`},
 		{"update_draft", http.MethodPost, "/workspace/draft/update", ""},
 		{"get_team", http.MethodGet, "/team", ""},
-		{"show_team_pane", http.MethodPost, "/team/pane", `{"role":"guide"}`},
+		{"get_team_conversation", http.MethodGet, "/team/conversation", ""},
+		{"send_team_message", http.MethodPost, "/team/messages", `{"to":"team","text":"hello"}`},
+		{"interrupt_team_role", http.MethodPost, "/team/roles/guide/interrupt", ""},
+		{"stop_team_role", http.MethodPost, "/team/roles/guide/stop", ""},
+		{"restart_team_role", http.MethodPost, "/team/roles/guide/restart", "{}"},
+		{"create_terminal_ticket", http.MethodPost, "/team/roles/guide/terminal-ticket", ""},
+		{"attach_role_terminal", http.MethodGet, "/team/roles/guide/terminal?ticket=0123456789abcdef", ""},
 		{"start_team_agents", http.MethodPost, "/team/agents", `{}`},
 		{"list_team_agent_options", http.MethodGet, "/team/agent-options", ""},
-		{"dismiss_team_notice", http.MethodPost, "/team/notices/dismiss", `{"notice":"outside_herdr"}`},
+		{"dismiss_team_notice", http.MethodPost, "/team/notices/dismiss", `{"notice":"single_agent_family"}`},
 		{"open_views", http.MethodPost, "/views/open", ""},
 		{"merge_change", http.MethodPost, "/changes/change/merge", fmt.Sprintf(`{"request_revision":%q,"candidate_commit":%q,"report_digest":"report"}`, revision, commit)},
 		{"golden_path", "GET", "/golden-path", ""},

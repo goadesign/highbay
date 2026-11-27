@@ -24,6 +24,15 @@ export interface AmbiguityQuestion {
   question: string;
 }
 
+export interface ApplyUpdateRequestBody {
+  version: string;
+}
+
+export interface ApplyUpdateResult {
+  status: "restarting" | "up_to_date";
+  version: string;
+}
+
 export interface ApprovalItem {
   approved_by: string;
   artifacts: Record<string, string>;
@@ -43,6 +52,12 @@ export interface ApproveMergePayload {
   request_revision: string;
 }
 
+export interface ArchitectureElementContext {
+  change_id?: string;
+  element_id: string;
+  element_name: string;
+}
+
 export interface ArchitecturePreviewResult {
   agent_policies: AgentPolicyItem[];
   banner: string;
@@ -53,6 +68,15 @@ export interface ArchitecturePreviewResult {
   request_revision: string;
   system_name: string;
   tools: ToolContractItem[];
+}
+
+export type AttachRoleTerminalStreamingBody = TerminalClientFrame;
+
+export interface BrowserSessionResult {
+  project_name: string;
+  session: string;
+  ui_build: string;
+  version: string;
 }
 
 export interface BuilderProgress {
@@ -156,7 +180,7 @@ export interface DeclineRevisionPayload {
 }
 
 export interface DismissTeamNoticeRequestBody {
-  notice: "single_agent_family" | "outside_herdr" | "herdr_unavailable";
+  notice: "single_agent_family";
 }
 
 export interface ExampleItem {
@@ -171,15 +195,9 @@ export interface ExchangeBrowserLinkRequestBody {
   link: string;
 }
 
-export interface ExchangeBrowserLinkResponseBody {
-  project_name: string;
-  session: string;
-}
-
 export interface InstalledAgentOption {
   client: "claude" | "codex" | "antigravity" | "cursor" | "gemini" | "opencode";
   efforts: string[];
-  headless_supported: boolean;
   model_supported: boolean;
   models: string[];
   program: string;
@@ -238,9 +256,12 @@ export interface OpenBuildRefusal {
   name: string;
 }
 
-export interface OpenViewsResponseBody {
+export interface OpenViewsResult {
+  channel: string;
+  handle: string;
   message: string;
   opened: boolean;
+  team: string;
 }
 
 export interface PreviewArchitecturePayload {
@@ -249,15 +270,14 @@ export interface PreviewArchitecturePayload {
 }
 
 export interface ProjectTeam {
-  herdr_mode: "attached" | "available" | "unavailable";
   roles: ProjectTeamRole[];
-  space: string;
   step: string;
   team: string;
 }
 
 export interface ProjectTeamRole {
   handle: string;
+  has_terminal: boolean;
   role: "guide" | "builder" | "test_writer";
   running: boolean;
 }
@@ -287,12 +307,30 @@ export interface RequiredTest {
   story: string;
 }
 
+export interface RestartTeamRoleRequestBody {
+  choice?: RoleAgentChoice;
+}
+
+export interface ReviseAnswersContext {
+  answers: Record<string, string>;
+  change_id: string;
+  request_revision: string;
+}
+
 export interface RoleAgentChoice {
   client: "claude" | "codex" | "antigravity" | "cursor" | "gemini" | "opencode";
   model?: string;
   program: string;
   thinking?: string;
   yolo: boolean;
+}
+
+export interface SendTeamMessagePayload {
+  context?: ({ "type": "revise_answers"; "value": ReviseAnswersContext } | { "type": "architecture_element"; "value": ArchitectureElementContext } | { "type": "story_flow"; "value": StoryFlowContext });
+  guide_choice?: RoleAgentChoice;
+  reply_to?: number;
+  text: string;
+  to: "team" | "guide" | "builder" | "test_writer";
 }
 
 export interface ServerError {
@@ -304,10 +342,6 @@ export interface ServerError {
   timeout: boolean;
 }
 
-export interface ShowTeamPaneRequestBody {
-  role: "guide" | "builder" | "test_writer";
-}
-
 export interface StartBuildRequestBody {
   choices?: Record<string, RoleAgentChoice>;
   replaces?: ReplacedBuild;
@@ -316,7 +350,7 @@ export interface StartBuildRequestBody {
 
 export interface StartBuildResult {
   build: StartedBuild;
-  team: ({ "herdr_mode": "attached" | "available" | "unavailable"; "roles": ProjectTeamRole[]; "space": string; "state": "ready"; "step": string; "team": string } | { "state": "window_busy"; "step": string } | { "count": number; "state": "ambiguous_space"; "step": string } | { "state": "unavailable"; "step": string });
+  team: ({ "roles": ProjectTeamRole[]; "state": "ready"; "step": string; "team": string } | { "state": "unavailable"; "step": string });
 }
 
 export interface StartTeamAgentsRequestBody {
@@ -346,6 +380,12 @@ export interface StoryActorItem {
   description?: string;
   key: string;
   title: string;
+}
+
+export interface StoryFlowContext {
+  change_id?: string;
+  flow_key?: string;
+  story: string;
 }
 
 export interface StoryFlowItem {
@@ -390,22 +430,56 @@ export interface StorySummaryItem {
   name: string;
 }
 
+export interface TeamConversation {
+  channel: string;
+  chorus_status: "connected" | "unavailable";
+  messages: TeamMessage[];
+  pin?: TeamMessage;
+  team: string;
+}
+
+export interface TeamMessage {
+  id: string;
+  model?: string;
+  reply_to?: number;
+  sender: string;
+  sender_role: "you" | "guide" | "builder" | "test_writer" | "service" | "peer";
+  sent_at_ms: number;
+  seq: number;
+  target: string;
+  text: string;
+}
+
 export interface TeamRoleState {
   assignment: "unread" | "nothing_owed" | "no_work" | "unknown";
-  attention: "none" | "permission" | "question" | "auth" | "silent" | "assignment" | "unknown";
+  attention: "none" | "permission" | "question" | "auth" | "silent" | "unknown";
+  choice?: RoleAgentChoice;
   handle: string;
+  has_terminal: boolean;
   role: "guide" | "builder" | "test_writer";
   state: "not_started" | "ended" | "starting" | "needs_you" | "working" | "waiting" | "error" | "unknown";
-  watcher: "held" | "gone" | "unknown";
 }
 
 export interface TeamSnapshot {
-  chorus_status?: "connected" | "unavailable" | "not_used";
-  dismissed_notices: ("single_agent_family" | "outside_herdr" | "herdr_unavailable")[];
-  herdr_mode: "attached" | "available" | "unavailable";
+  channel: string;
+  chorus_status: "connected" | "unavailable";
+  dismissed_notices: "single_agent_family"[];
   roles: TeamRoleState[];
   saved_choices: Record<string, RoleAgentChoice>;
   team: string;
+}
+
+export interface TerminalClientFrame {
+  client_frame: ({ "data": string; "kind": "input" } | { "cols": number; "kind": "resize"; "rows": number } | { "focused": boolean; "kind": "focus" } | { "bytes": number; "kind": "credit" });
+}
+
+export interface TerminalServerFrame {
+  server_frame: ({ "data": string; "kind": "output" } | { "cols": number; "kind": "resize"; "rows": number } | { "exit_code"?: number; "kind": "closed"; "reason": string; "signal"?: number });
+}
+
+export interface TerminalTicketResult {
+  expires_at: string;
+  ticket: string;
 }
 
 export interface TestCoverageStatement {
@@ -481,6 +555,15 @@ export interface UICompositionItem {
 export interface UnverifiedApprovalItem {
   approval: ApprovalItem;
   reason: string;
+}
+
+export interface UpdateStatusResult {
+  can_auto_update: boolean;
+  current_version: string;
+  latest_version: string;
+  manual_command?: string;
+  release_url: string;
+  update_available: boolean;
 }
 
 export interface VerificationCheck {
@@ -559,6 +642,12 @@ export interface VerificationStatusResult {
 
 export type ExchangeBrowserLinkRequest = ExchangeBrowserLinkRequestBody;
 
+export type GetBrowserSessionRequest = Record<string, never>;
+
+export type GetUpdateStatusRequest = Record<string, never>;
+
+export type ApplyUpdateRequest = ApplyUpdateRequestBody;
+
 export type ListChangesRequest = Record<string, never>;
 
 export interface WaitForChangesRequest {
@@ -587,9 +676,25 @@ export interface GetTestFindingsRequest {
 
 export type GetTeamRequest = Record<string, never>;
 
-export type ShowTeamPaneRequest = ShowTeamPaneRequestBody;
+export type GetTeamConversationRequest = Record<string, never>;
+
+export type SendTeamMessageRequest = SendTeamMessagePayload;
 
 export type StartTeamAgentsRequest = StartTeamAgentsRequestBody;
+
+export interface InterruptTeamRoleRequest {
+  "role": "guide" | "builder" | "test_writer";
+}
+
+export interface StopTeamRoleRequest {
+  "role": "guide" | "builder" | "test_writer";
+}
+
+export type RestartTeamRoleRequest = RestartTeamRoleRequestBody & { "role": "guide" | "builder" | "test_writer" };
+
+export interface CreateTerminalTicketRequest {
+  "role": "guide" | "builder" | "test_writer";
+}
 
 export type ListTeamAgentOptionsRequest = Record<string, never>;
 
@@ -631,22 +736,38 @@ export type GetModelConnectionRequest = Record<string, never>;
 
 export type ConfigureModelRequest = ConfigureModelPayload;
 
+export interface AttachRoleTerminalRequest {
+  "ticket": string;
+  "cols"?: number;
+  "rows"?: number;
+  "observe"?: boolean;
+  "role": "guide" | "builder" | "test_writer";
+}
+
 // Operations maps each operation the page sends to its request, result and
 // validated failure bodies.
 export interface Operations {
-  exchange_browser_link: { request: ExchangeBrowserLinkRequest; result: ExchangeBrowserLinkResponseBody; failure: ServerError };
+  exchange_browser_link: { request: ExchangeBrowserLinkRequest; result: BrowserSessionResult; failure: ServerError };
+  get_browser_session: { request: GetBrowserSessionRequest; result: BrowserSessionResult; failure: ServerError };
+  get_update_status: { request: GetUpdateStatusRequest; result: UpdateStatusResult; failure: ServerError };
+  apply_update: { request: ApplyUpdateRequest; result: ApplyUpdateResult; failure: ServerError };
   list_changes: { request: ListChangesRequest; result: ChangeList; failure: ServerError };
   wait_for_changes: { request: WaitForChangesRequest; result: ChangeListVersion; failure: ServerError };
   get_change: { request: GetChangeRequest; result: ChangeCardResult; failure: ServerError };
   get_story_refresh: { request: GetStoryRefreshRequest; result: StoryRefreshResult; failure: ServerError };
-  open_views: { request: OpenViewsRequest; result: OpenViewsResponseBody; failure: ServerError };
+  open_views: { request: OpenViewsRequest; result: OpenViewsResult; failure: ServerError };
   start_build: { request: StartBuildRequest; result: StartBuildResult; failure: ServerError | OpenBuildRefusal };
   drop_build: { request: DropBuildRequest; result: ChangeBuild; failure: ServerError | OpenBuildRefusal };
   get_build: { request: GetBuildRequest; result: ChangeBuild; failure: ServerError };
   get_test_findings: { request: GetTestFindingsRequest; result: TestFindings; failure: ServerError };
   get_team: { request: GetTeamRequest; result: TeamSnapshot; failure: ServerError };
-  show_team_pane: { request: ShowTeamPaneRequest; result: undefined; failure: ServerError };
+  get_team_conversation: { request: GetTeamConversationRequest; result: TeamConversation; failure: ServerError };
+  send_team_message: { request: SendTeamMessageRequest; result: TeamMessage; failure: ServerError };
   start_team_agents: { request: StartTeamAgentsRequest; result: ProjectTeam; failure: ServerError };
+  interrupt_team_role: { request: InterruptTeamRoleRequest; result: undefined; failure: ServerError };
+  stop_team_role: { request: StopTeamRoleRequest; result: undefined; failure: ServerError };
+  restart_team_role: { request: RestartTeamRoleRequest; result: undefined; failure: ServerError };
+  create_terminal_ticket: { request: CreateTerminalTicketRequest; result: TerminalTicketResult; failure: ServerError };
   list_team_agent_options: { request: ListTeamAgentOptionsRequest; result: ListTeamAgentOptionsResponseBody; failure: ServerError };
   dismiss_team_notice: { request: DismissTeamNoticeRequest; result: undefined; failure: ServerError };
   confirm_intent: { request: ConfirmIntentRequest; result: ChangeCardResult; failure: ServerError };
@@ -666,6 +787,15 @@ export interface Operations {
 
 // OperationName names one operation the page sends.
 export type OperationName = keyof Operations;
+
+// WebSocketOperations maps each WebSocket upgrade operation to its handshake
+// request, client-to-server frame, server-to-client frame, and failure bodies.
+export interface WebSocketOperations {
+  attach_role_terminal: { request: AttachRoleTerminalRequest; clientFrame: AttachRoleTerminalStreamingBody; serverFrame: TerminalServerFrame; failure: ServerError };
+}
+
+// WebSocketOperationName names one WebSocket operation the page opens.
+export type WebSocketOperationName = keyof WebSocketOperations;
 
 // ServerFailure is a validated failure body returned to the page.
 export type ServerFailure = Operations[OperationName]["failure"];
@@ -692,8 +822,30 @@ export interface Route<K extends OperationName> {
   decodeFailure: (status: number, value: unknown) => value is Operations[K]["failure"];
 }
 
+// WebSocketRoute encodes one WebSocket upgrade path and validates server frames.
+export interface WebSocketRoute<K extends WebSocketOperationName> {
+  // encode builds the WebSocket upgrade path and query string from its request.
+  encode: (request: WebSocketOperations[K]["request"]) => EncodedRequest;
+  // decodeFrame validates an incoming JSON frame from the server.
+  decodeFrame: (value: unknown) => value is WebSocketOperations[K]["serverFrame"];
+  // decodeFailure validates a handshake failure body against its HTTP status.
+  decodeFailure: (status: number, value: unknown) => value is WebSocketOperations[K]["failure"];
+}
+
 function encodeExchangeBrowserLink(request: ExchangeBrowserLinkRequest): EncodedRequest {
   return { path: "/project/browser-session", body: JSON.stringify(request) };
+}
+
+function encodeGetBrowserSession(_request: GetBrowserSessionRequest): EncodedRequest {
+  return { path: "/project/browser-session", body: undefined };
+}
+
+function encodeGetUpdateStatus(_request: GetUpdateStatusRequest): EncodedRequest {
+  return { path: "/project/update", body: undefined };
+}
+
+function encodeApplyUpdate(request: ApplyUpdateRequest): EncodedRequest {
+  return { path: "/project/update", body: JSON.stringify(request) };
 }
 
 function encodeListChanges(_request: ListChangesRequest): EncodedRequest {
@@ -741,12 +893,33 @@ function encodeGetTeam(_request: GetTeamRequest): EncodedRequest {
   return { path: "/team", body: undefined };
 }
 
-function encodeShowTeamPane(request: ShowTeamPaneRequest): EncodedRequest {
-  return { path: "/team/pane", body: JSON.stringify(request) };
+function encodeGetTeamConversation(_request: GetTeamConversationRequest): EncodedRequest {
+  return { path: "/team/conversation", body: undefined };
+}
+
+function encodeSendTeamMessage(request: SendTeamMessageRequest): EncodedRequest {
+  return { path: "/team/messages", body: JSON.stringify(request) };
 }
 
 function encodeStartTeamAgents(request: StartTeamAgentsRequest): EncodedRequest {
   return { path: "/team/agents", body: JSON.stringify(request) };
+}
+
+function encodeInterruptTeamRole(request: InterruptTeamRoleRequest): EncodedRequest {
+  return { path: "/team/roles/" + encodeURIComponent(String(request.role)) + "/interrupt", body: undefined };
+}
+
+function encodeStopTeamRole(request: StopTeamRoleRequest): EncodedRequest {
+  return { path: "/team/roles/" + encodeURIComponent(String(request.role)) + "/stop", body: undefined };
+}
+
+function encodeRestartTeamRole(request: RestartTeamRoleRequest): EncodedRequest {
+  const { role: _role, ...payload } = request;
+  return { path: "/team/roles/" + encodeURIComponent(String(request.role)) + "/restart", body: JSON.stringify(payload) };
+}
+
+function encodeCreateTerminalTicket(request: CreateTerminalTicketRequest): EncodedRequest {
+  return { path: "/team/roles/" + encodeURIComponent(String(request.role)) + "/terminal-ticket", body: undefined };
 }
 
 function encodeListTeamAgentOptions(_request: ListTeamAgentOptionsRequest): EncodedRequest {
@@ -821,7 +994,35 @@ function encodeConfigureModel(request: ConfigureModelRequest): EncodedRequest {
   return { path: "/cp1/model", body: JSON.stringify(request) };
 }
 
+function encodeAttachRoleTerminal(request: AttachRoleTerminalRequest): EncodedRequest {
+  const query = new URLSearchParams();
+  query.set("ticket", String(request.ticket));
+  if (request.cols !== undefined) {
+    query.set("cols", String(request.cols));
+  }
+  if (request.rows !== undefined) {
+    query.set("rows", String(request.rows));
+  }
+  if (request.observe !== undefined) {
+    query.set("observe", String(request.observe));
+  }
+  const search = query.toString();
+  return { path: "/team/roles/" + encodeURIComponent(String(request.role)) + "/terminal" + (search === "" ? "" : "?" + search), body: undefined };
+}
+
 function decodeExchangeBrowserLinkFailure(_status: number, value: unknown): value is Operations["exchange_browser_link"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetBrowserSessionFailure(_status: number, value: unknown): value is Operations["get_browser_session"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeGetUpdateStatusFailure(_status: number, value: unknown): value is Operations["get_update_status"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeApplyUpdateFailure(_status: number, value: unknown): value is Operations["apply_update"]["failure"] {
   return isServerError(value);
 }
 
@@ -867,11 +1068,31 @@ function decodeGetTeamFailure(_status: number, value: unknown): value is Operati
   return isServerError(value);
 }
 
-function decodeShowTeamPaneFailure(_status: number, value: unknown): value is Operations["show_team_pane"]["failure"] {
+function decodeGetTeamConversationFailure(_status: number, value: unknown): value is Operations["get_team_conversation"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeSendTeamMessageFailure(_status: number, value: unknown): value is Operations["send_team_message"]["failure"] {
   return isServerError(value);
 }
 
 function decodeStartTeamAgentsFailure(_status: number, value: unknown): value is Operations["start_team_agents"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeInterruptTeamRoleFailure(_status: number, value: unknown): value is Operations["interrupt_team_role"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeStopTeamRoleFailure(_status: number, value: unknown): value is Operations["stop_team_role"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeRestartTeamRoleFailure(_status: number, value: unknown): value is Operations["restart_team_role"]["failure"] {
+  return isServerError(value);
+}
+
+function decodeCreateTerminalTicketFailure(_status: number, value: unknown): value is Operations["create_terminal_ticket"]["failure"] {
   return isServerError(value);
 }
 
@@ -935,21 +1156,33 @@ function decodeConfigureModelFailure(_status: number, value: unknown): value is 
   return isServerError(value);
 }
 
+function decodeAttachRoleTerminalFailure(_status: number, value: unknown): value is WebSocketOperations["attach_role_terminal"]["failure"] {
+  return isServerError(value);
+}
+
 // ROUTES addresses every operation the page sends.
 export const ROUTES: { [K in OperationName]: Route<K> } = {
-  exchange_browser_link: { method: "POST", success: 201, encode: encodeExchangeBrowserLink, decode: isExchangeBrowserLinkResponseBody, decodeFailure: decodeExchangeBrowserLinkFailure },
+  exchange_browser_link: { method: "POST", success: 201, encode: encodeExchangeBrowserLink, decode: isBrowserSessionResult, decodeFailure: decodeExchangeBrowserLinkFailure },
+  get_browser_session: { method: "GET", success: 200, encode: encodeGetBrowserSession, decode: isBrowserSessionResult, decodeFailure: decodeGetBrowserSessionFailure },
+  get_update_status: { method: "GET", success: 200, encode: encodeGetUpdateStatus, decode: isUpdateStatusResult, decodeFailure: decodeGetUpdateStatusFailure },
+  apply_update: { method: "POST", success: 200, encode: encodeApplyUpdate, decode: isApplyUpdateResult, decodeFailure: decodeApplyUpdateFailure },
   list_changes: { method: "GET", success: 200, encode: encodeListChanges, decode: isChangeList, decodeFailure: decodeListChangesFailure },
   wait_for_changes: { method: "GET", success: 200, encode: encodeWaitForChanges, decode: isChangeListVersion, decodeFailure: decodeWaitForChangesFailure },
   get_change: { method: "GET", success: 200, encode: encodeGetChange, decode: isChangeCardResult, decodeFailure: decodeGetChangeFailure },
   get_story_refresh: { method: "GET", success: 200, encode: encodeGetStoryRefresh, decode: isStoryRefreshResult, decodeFailure: decodeGetStoryRefreshFailure },
-  open_views: { method: "POST", success: 200, encode: encodeOpenViews, decode: isOpenViewsResponseBody, decodeFailure: decodeOpenViewsFailure },
+  open_views: { method: "POST", success: 200, encode: encodeOpenViews, decode: isOpenViewsResult, decodeFailure: decodeOpenViewsFailure },
   start_build: { method: "POST", success: 200, encode: encodeStartBuild, decode: isStartBuildResult, decodeFailure: decodeStartBuildFailure },
   drop_build: { method: "POST", success: 200, encode: encodeDropBuild, decode: isChangeBuild, decodeFailure: decodeDropBuildFailure },
   get_build: { method: "GET", success: 200, encode: encodeGetBuild, decode: isChangeBuild, decodeFailure: decodeGetBuildFailure },
   get_test_findings: { method: "GET", success: 200, encode: encodeGetTestFindings, decode: isTestFindings, decodeFailure: decodeGetTestFindingsFailure },
   get_team: { method: "GET", success: 200, encode: encodeGetTeam, decode: isTeamSnapshot, decodeFailure: decodeGetTeamFailure },
-  show_team_pane: { method: "POST", success: 204, encode: encodeShowTeamPane, decode: isNoContent, decodeFailure: decodeShowTeamPaneFailure },
+  get_team_conversation: { method: "GET", success: 200, encode: encodeGetTeamConversation, decode: isTeamConversation, decodeFailure: decodeGetTeamConversationFailure },
+  send_team_message: { method: "POST", success: 201, encode: encodeSendTeamMessage, decode: isTeamMessage, decodeFailure: decodeSendTeamMessageFailure },
   start_team_agents: { method: "POST", success: 200, encode: encodeStartTeamAgents, decode: isProjectTeam, decodeFailure: decodeStartTeamAgentsFailure },
+  interrupt_team_role: { method: "POST", success: 204, encode: encodeInterruptTeamRole, decode: isNoContent, decodeFailure: decodeInterruptTeamRoleFailure },
+  stop_team_role: { method: "POST", success: 204, encode: encodeStopTeamRole, decode: isNoContent, decodeFailure: decodeStopTeamRoleFailure },
+  restart_team_role: { method: "POST", success: 204, encode: encodeRestartTeamRole, decode: isNoContent, decodeFailure: decodeRestartTeamRoleFailure },
+  create_terminal_ticket: { method: "POST", success: 201, encode: encodeCreateTerminalTicket, decode: isTerminalTicketResult, decodeFailure: decodeCreateTerminalTicketFailure },
   list_team_agent_options: { method: "GET", success: 200, encode: encodeListTeamAgentOptions, decode: isListTeamAgentOptionsResponseBody, decodeFailure: decodeListTeamAgentOptionsFailure },
   dismiss_team_notice: { method: "POST", success: 204, encode: encodeDismissTeamNotice, decode: isNoContent, decodeFailure: decodeDismissTeamNoticeFailure },
   confirm_intent: { method: "POST", success: 200, encode: encodeConfirmIntent, decode: isChangeCardResult, decodeFailure: decodeConfirmIntentFailure },
@@ -965,6 +1198,11 @@ export const ROUTES: { [K in OperationName]: Route<K> } = {
   stop_live_target: { method: "DELETE", success: 200, encode: encodeStopLiveTarget, decode: isStopLiveTargetResult, decodeFailure: decodeStopLiveTargetFailure },
   get_model_connection: { method: "GET", success: 200, encode: encodeGetModelConnection, decode: isModelConnection, decodeFailure: decodeGetModelConnectionFailure },
   configure_model: { method: "POST", success: 200, encode: encodeConfigureModel, decode: isModelConfigResult, decodeFailure: decodeConfigureModelFailure },
+};
+
+// WEBSOCKET_ROUTES addresses every WebSocket stream the page opens.
+export const WEBSOCKET_ROUTES: { [K in WebSocketOperationName]: WebSocketRoute<K> } = {
+  attach_role_terminal: { encode: encodeAttachRoleTerminal, decodeFrame: isTerminalServerFrame, decodeFailure: decodeAttachRoleTerminalFailure },
 };
 
 interface JSONSchemaNode {
@@ -1043,6 +1281,38 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         }
       },
       "question": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "ApplyUpdateRequestBody": {
+    "type": "object",
+    "required": [
+      "version"
+    ],
+    "properties": {
+      "version": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "ApplyUpdateResult": {
+    "type": "object",
+    "required": [
+      "status",
+      "version"
+    ],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": [
+          "restarting",
+          "up_to_date"
+        ]
+      },
+      "version": {
         "type": "string"
       }
     },
@@ -1159,6 +1429,25 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "ArchitectureElementContext": {
+    "type": "object",
+    "required": [
+      "element_id",
+      "element_name"
+    ],
+    "properties": {
+      "change_id": {
+        "type": "string"
+      },
+      "element_id": {
+        "type": "string"
+      },
+      "element_name": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "ArchitecturePreviewResult": {
     "type": "object",
     "required": [
@@ -1211,6 +1500,33 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "items": {
           "$ref": "#/$defs/ToolContractItem"
         }
+      }
+    },
+    "additionalProperties": false
+  },
+  "AttachRoleTerminalStreamingBody": {
+    "$ref": "#/$defs/TerminalClientFrame"
+  },
+  "BrowserSessionResult": {
+    "type": "object",
+    "required": [
+      "session",
+      "project_name",
+      "version",
+      "ui_build"
+    ],
+    "properties": {
+      "project_name": {
+        "type": "string"
+      },
+      "session": {
+        "type": "string"
+      },
+      "ui_build": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
       }
     },
     "additionalProperties": false
@@ -1826,9 +2142,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "notice": {
         "type": "string",
         "enum": [
-          "single_agent_family",
-          "outside_herdr",
-          "herdr_unavailable"
+          "single_agent_family"
         ]
       }
     },
@@ -1878,22 +2192,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
-  "ExchangeBrowserLinkResponseBody": {
-    "type": "object",
-    "required": [
-      "session",
-      "project_name"
-    ],
-    "properties": {
-      "project_name": {
-        "type": "string"
-      },
-      "session": {
-        "type": "string"
-      }
-    },
-    "additionalProperties": false
-  },
   "InstalledAgentOption": {
     "type": "object",
     "required": [
@@ -1904,8 +2202,7 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       "efforts",
       "model_supported",
       "thinking_supported",
-      "yolo_supported",
-      "headless_supported"
+      "yolo_supported"
     ],
     "properties": {
       "client": {
@@ -1924,9 +2221,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "items": {
           "type": "string"
         }
-      },
-      "headless_supported": {
-        "type": "boolean"
       },
       "model_supported": {
         "type": "boolean"
@@ -2326,18 +2620,30 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
-  "OpenViewsResponseBody": {
+  "OpenViewsResult": {
     "type": "object",
     "required": [
       "opened",
-      "message"
+      "message",
+      "team",
+      "channel",
+      "handle"
     ],
     "properties": {
+      "channel": {
+        "type": "string"
+      },
+      "handle": {
+        "type": "string"
+      },
       "message": {
         "type": "string"
       },
       "opened": {
         "type": "boolean"
+      },
+      "team": {
+        "type": "string"
       }
     },
     "additionalProperties": false
@@ -2362,28 +2668,15 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "team",
-      "space",
       "roles",
-      "herdr_mode",
       "step"
     ],
     "properties": {
-      "herdr_mode": {
-        "type": "string",
-        "enum": [
-          "attached",
-          "available",
-          "unavailable"
-        ]
-      },
       "roles": {
         "type": "array",
         "items": {
           "$ref": "#/$defs/ProjectTeamRole"
         }
-      },
-      "space": {
-        "type": "string"
       },
       "step": {
         "type": "string"
@@ -2399,11 +2692,15 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "required": [
       "role",
       "handle",
+      "has_terminal",
       "running"
     ],
     "properties": {
       "handle": {
         "type": "string"
+      },
+      "has_terminal": {
+        "type": "boolean"
       },
       "role": {
         "type": "string",
@@ -2519,6 +2816,38 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "RestartTeamRoleRequestBody": {
+    "type": "object",
+    "properties": {
+      "choice": {
+        "$ref": "#/$defs/RoleAgentChoice"
+      }
+    },
+    "additionalProperties": false
+  },
+  "ReviseAnswersContext": {
+    "type": "object",
+    "required": [
+      "change_id",
+      "request_revision",
+      "answers"
+    ],
+    "properties": {
+      "answers": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "change_id": {
+        "type": "string"
+      },
+      "request_revision": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "RoleAgentChoice": {
     "type": "object",
     "required": [
@@ -2553,6 +2882,97 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "SendTeamMessagePayload": {
+    "type": "object",
+    "required": [
+      "to",
+      "text"
+    ],
+    "properties": {
+      "context": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "revise_answers"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/ReviseAnswersContext"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "architecture_element"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/ArchitectureElementContext"
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "value"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "story_flow"
+                ]
+              },
+              "value": {
+                "$ref": "#/$defs/StoryFlowContext"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "guide_choice": {
+        "$ref": "#/$defs/RoleAgentChoice"
+      },
+      "reply_to": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "text": {
+        "type": "string"
+      },
+      "to": {
+        "type": "string",
+        "enum": [
+          "team",
+          "guide",
+          "builder",
+          "test_writer"
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
   "ServerError": {
     "type": "object",
     "required": [
@@ -2581,23 +3001,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       },
       "timeout": {
         "type": "boolean"
-      }
-    },
-    "additionalProperties": false
-  },
-  "ShowTeamPaneRequestBody": {
-    "type": "object",
-    "required": [
-      "role"
-    ],
-    "properties": {
-      "role": {
-        "type": "string",
-        "enum": [
-          "guide",
-          "builder",
-          "test_writer"
-        ]
       }
     },
     "additionalProperties": false
@@ -2640,29 +3043,16 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
             "type": "object",
             "required": [
               "team",
-              "space",
               "roles",
-              "herdr_mode",
               "step",
               "state"
             ],
             "properties": {
-              "herdr_mode": {
-                "type": "string",
-                "enum": [
-                  "attached",
-                  "available",
-                  "unavailable"
-                ]
-              },
               "roles": {
                 "type": "array",
                 "items": {
                   "$ref": "#/$defs/ProjectTeamRole"
                 }
-              },
-              "space": {
-                "type": "string"
               },
               "state": {
                 "type": "string",
@@ -2674,49 +3064,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
                 "type": "string"
               },
               "team": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "step",
-              "state"
-            ],
-            "properties": {
-              "state": {
-                "type": "string",
-                "enum": [
-                  "window_busy"
-                ]
-              },
-              "step": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "required": [
-              "count",
-              "step",
-              "state"
-            ],
-            "properties": {
-              "count": {
-                "type": "integer",
-                "minimum": 2
-              },
-              "state": {
-                "type": "string",
-                "enum": [
-                  "ambiguous_space"
-                ]
-              },
-              "step": {
                 "type": "string"
               }
             },
@@ -2988,6 +3335,24 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "StoryFlowContext": {
+    "type": "object",
+    "required": [
+      "story"
+    ],
+    "properties": {
+      "change_id": {
+        "type": "string"
+      },
+      "flow_key": {
+        "type": "string"
+      },
+      "story": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "StoryFlowItem": {
     "type": "object",
     "required": [
@@ -3161,14 +3526,100 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     },
     "additionalProperties": false
   },
+  "TeamConversation": {
+    "type": "object",
+    "required": [
+      "team",
+      "channel",
+      "chorus_status",
+      "messages"
+    ],
+    "properties": {
+      "channel": {
+        "type": "string"
+      },
+      "chorus_status": {
+        "type": "string",
+        "enum": [
+          "connected",
+          "unavailable"
+        ]
+      },
+      "messages": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/TeamMessage"
+        }
+      },
+      "pin": {
+        "$ref": "#/$defs/TeamMessage"
+      },
+      "team": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "TeamMessage": {
+    "type": "object",
+    "required": [
+      "id",
+      "target",
+      "seq",
+      "sender",
+      "sender_role",
+      "text",
+      "sent_at_ms"
+    ],
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "reply_to": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "sender": {
+        "type": "string"
+      },
+      "sender_role": {
+        "type": "string",
+        "enum": [
+          "you",
+          "guide",
+          "builder",
+          "test_writer",
+          "service",
+          "peer"
+        ]
+      },
+      "sent_at_ms": {
+        "type": "integer"
+      },
+      "seq": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "target": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
   "TeamRoleState": {
     "type": "object",
     "required": [
       "role",
       "handle",
+      "has_terminal",
       "state",
       "attention",
-      "watcher",
       "assignment"
     ],
     "properties": {
@@ -3189,12 +3640,17 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
           "question",
           "auth",
           "silent",
-          "assignment",
           "unknown"
         ]
       },
+      "choice": {
+        "$ref": "#/$defs/RoleAgentChoice"
+      },
       "handle": {
         "type": "string"
+      },
+      "has_terminal": {
+        "type": "boolean"
       },
       "role": {
         "type": "string",
@@ -3216,14 +3672,6 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
           "error",
           "unknown"
         ]
-      },
-      "watcher": {
-        "type": "string",
-        "enum": [
-          "held",
-          "gone",
-          "unknown"
-        ]
       }
     },
     "additionalProperties": false
@@ -3232,18 +3680,21 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
     "type": "object",
     "required": [
       "team",
+      "channel",
       "roles",
-      "herdr_mode",
       "saved_choices",
-      "dismissed_notices"
+      "dismissed_notices",
+      "chorus_status"
     ],
     "properties": {
+      "channel": {
+        "type": "string"
+      },
       "chorus_status": {
         "type": "string",
         "enum": [
           "connected",
-          "unavailable",
-          "not_used"
+          "unavailable"
         ]
       },
       "dismissed_notices": {
@@ -3251,19 +3702,9 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         "items": {
           "type": "string",
           "enum": [
-            "single_agent_family",
-            "outside_herdr",
-            "herdr_unavailable"
+            "single_agent_family"
           ]
         }
-      },
-      "herdr_mode": {
-        "type": "string",
-        "enum": [
-          "attached",
-          "available",
-          "unavailable"
-        ]
       },
       "roles": {
         "type": "array",
@@ -3278,6 +3719,212 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
         }
       },
       "team": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "TerminalClientFrame": {
+    "type": "object",
+    "required": [
+      "client_frame"
+    ],
+    "properties": {
+      "client_frame": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "data",
+              "kind"
+            ],
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "input"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "cols",
+              "rows",
+              "kind"
+            ],
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "minimum": 20,
+                "maximum": 500
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "resize"
+                ]
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 5,
+                "maximum": 250
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "focused",
+              "kind"
+            ],
+            "properties": {
+              "focused": {
+                "type": "boolean"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "focus"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "bytes",
+              "kind"
+            ],
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16777216
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "credit"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "TerminalServerFrame": {
+    "type": "object",
+    "required": [
+      "server_frame"
+    ],
+    "properties": {
+      "server_frame": {
+        "type": "object",
+        "anyOf": [
+          {
+            "type": "object",
+            "required": [
+              "data",
+              "kind"
+            ],
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "output"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "cols",
+              "rows",
+              "kind"
+            ],
+            "properties": {
+              "cols": {
+                "type": "integer",
+                "minimum": 20,
+                "maximum": 500
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "resize"
+                ]
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 5,
+                "maximum": 250
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "reason",
+              "kind"
+            ],
+            "properties": {
+              "exit_code": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "closed"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "signal": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 255
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "additionalProperties": false
+  },
+  "TerminalTicketResult": {
+    "type": "object",
+    "required": [
+      "ticket",
+      "expires_at"
+    ],
+    "properties": {
+      "expires_at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "ticket": {
         "type": "string"
       }
     },
@@ -3700,6 +4347,37 @@ const SCHEMA_DEFS: Record<string, JSONSchemaNode> = {
       },
       "reason": {
         "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "UpdateStatusResult": {
+    "type": "object",
+    "required": [
+      "current_version",
+      "latest_version",
+      "update_available",
+      "release_url",
+      "can_auto_update"
+    ],
+    "properties": {
+      "can_auto_update": {
+        "type": "boolean"
+      },
+      "current_version": {
+        "type": "string"
+      },
+      "latest_version": {
+        "type": "string"
+      },
+      "manual_command": {
+        "type": "string"
+      },
+      "release_url": {
+        "type": "string"
+      },
+      "update_available": {
+        "type": "boolean"
       }
     },
     "additionalProperties": false
@@ -4572,9 +5250,19 @@ export function isNoContent(value: unknown): value is undefined {
   return value === undefined;
 }
 
+// isApplyUpdateResult validates a parsed answer against the generated ApplyUpdateResult schema.
+export function isApplyUpdateResult(value: unknown): value is ApplyUpdateResult {
+  return matchesSchema(value, { $ref: "#/$defs/ApplyUpdateResult" });
+}
+
 // isArchitecturePreviewResult validates a parsed answer against the generated ArchitecturePreviewResult schema.
 export function isArchitecturePreviewResult(value: unknown): value is ArchitecturePreviewResult {
   return matchesSchema(value, { $ref: "#/$defs/ArchitecturePreviewResult" });
+}
+
+// isBrowserSessionResult validates a parsed answer against the generated BrowserSessionResult schema.
+export function isBrowserSessionResult(value: unknown): value is BrowserSessionResult {
+  return matchesSchema(value, { $ref: "#/$defs/BrowserSessionResult" });
 }
 
 // isChangeBuild validates a parsed answer against the generated ChangeBuild schema.
@@ -4595,11 +5283,6 @@ export function isChangeList(value: unknown): value is ChangeList {
 // isChangeListVersion validates a parsed answer against the generated ChangeListVersion schema.
 export function isChangeListVersion(value: unknown): value is ChangeListVersion {
   return matchesSchema(value, { $ref: "#/$defs/ChangeListVersion" });
-}
-
-// isExchangeBrowserLinkResponseBody validates a parsed answer against the generated ExchangeBrowserLinkResponseBody schema.
-export function isExchangeBrowserLinkResponseBody(value: unknown): value is ExchangeBrowserLinkResponseBody {
-  return matchesSchema(value, { $ref: "#/$defs/ExchangeBrowserLinkResponseBody" });
 }
 
 // isListTeamAgentOptionsResponseBody validates a parsed answer against the generated ListTeamAgentOptionsResponseBody schema.
@@ -4632,9 +5315,9 @@ export function isOpenBuildRefusal(value: unknown): value is OpenBuildRefusal {
   return matchesSchema(value, { $ref: "#/$defs/OpenBuildRefusal" });
 }
 
-// isOpenViewsResponseBody validates a parsed answer against the generated OpenViewsResponseBody schema.
-export function isOpenViewsResponseBody(value: unknown): value is OpenViewsResponseBody {
-  return matchesSchema(value, { $ref: "#/$defs/OpenViewsResponseBody" });
+// isOpenViewsResult validates a parsed answer against the generated OpenViewsResult schema.
+export function isOpenViewsResult(value: unknown): value is OpenViewsResult {
+  return matchesSchema(value, { $ref: "#/$defs/OpenViewsResult" });
 }
 
 // isProjectTeam validates a parsed answer against the generated ProjectTeam schema.
@@ -4662,9 +5345,29 @@ export function isStoryRefreshResult(value: unknown): value is StoryRefreshResul
   return matchesSchema(value, { $ref: "#/$defs/StoryRefreshResult" });
 }
 
+// isTeamConversation validates a parsed answer against the generated TeamConversation schema.
+export function isTeamConversation(value: unknown): value is TeamConversation {
+  return matchesSchema(value, { $ref: "#/$defs/TeamConversation" });
+}
+
+// isTeamMessage validates a parsed answer against the generated TeamMessage schema.
+export function isTeamMessage(value: unknown): value is TeamMessage {
+  return matchesSchema(value, { $ref: "#/$defs/TeamMessage" });
+}
+
 // isTeamSnapshot validates a parsed answer against the generated TeamSnapshot schema.
 export function isTeamSnapshot(value: unknown): value is TeamSnapshot {
   return matchesSchema(value, { $ref: "#/$defs/TeamSnapshot" });
+}
+
+// isTerminalServerFrame validates a parsed answer against the generated TerminalServerFrame schema.
+export function isTerminalServerFrame(value: unknown): value is TerminalServerFrame {
+  return matchesSchema(value, { $ref: "#/$defs/TerminalServerFrame" });
+}
+
+// isTerminalTicketResult validates a parsed answer against the generated TerminalTicketResult schema.
+export function isTerminalTicketResult(value: unknown): value is TerminalTicketResult {
+  return matchesSchema(value, { $ref: "#/$defs/TerminalTicketResult" });
 }
 
 // isTestFindings validates a parsed answer against the generated TestFindings schema.
@@ -4675,6 +5378,11 @@ export function isTestFindings(value: unknown): value is TestFindings {
 // isTraceList validates a parsed answer against the generated TraceList schema.
 export function isTraceList(value: unknown): value is TraceList {
   return matchesSchema(value, { $ref: "#/$defs/TraceList" });
+}
+
+// isUpdateStatusResult validates a parsed answer against the generated UpdateStatusResult schema.
+export function isUpdateStatusResult(value: unknown): value is UpdateStatusResult {
+  return matchesSchema(value, { $ref: "#/$defs/UpdateStatusResult" });
 }
 
 // isVerificationListResult validates a parsed answer against the generated VerificationListResult schema.

@@ -31,14 +31,12 @@ You are taking part in a usability study of a developer tool called
   real first-time user works from the README and the tool, and that is what
   this study measures. Documents the README links to are not available. If
   you want one, say so in your report, because that is useful evidence.
-- Install and set up Highbay the way the README shows. After one-time setup,
-  use your coding-agent conversation and Highbay's browser page to reach the
-  goal. Setup changes global coding-agent configuration and skill files,
-  and may install the Herdr companion and its free macOS shortcut outside
-  `work/`. Report the paths it changes; do not remove shared settings during
-  cleanup. Report every terminal command you still need to enter as the user;
-  distinguish commands your coding agent runs internally and harness-only
-  agent launches. Do not hide a manual workaround as ordinary progress.
+- Install and set up Highbay the way the README shows. After setup, open its
+  browser workspace from your project and use it to reach the goal.
+  Setup can install dependency executables and update global coding-agent
+  settings and skills. Report the paths it changes and preserve those paths
+  at cleanup. Record each user-entered command separately from commands
+  your coding agent runs and the study harness uses.
 - You may read and invoke the runtime `/highbay` (`$highbay`) skill that Highbay
   installs for your coding agent. This is separate from the forbidden
   `highbay-ux-review` study skill. Learn the entrypoint from the README; the
@@ -55,26 +53,22 @@ You are taking part in a usability study of a developer tool called
   run, do not run it. Say so in your report instead.
 - This machine has: {{ENVIRONMENT_FACTS}}. Never print the value of a
   secret.
-- You may use these coding agents in `work/`: {{CODING_AGENTS}}. Start
-  one, type to it and read it only the way "Your screen" below describes,
-  and keep that one session for the whole study. After each exchange, save
-  what its pane showed under
-  `{{PARTICIPANT}}/work/agent-logs/`. Tell it to use Highbay, and tell it not to
-  read Highbay's source, use the `highbay-ux-review` skill, or compile, generate
-  code from, or run the product's code except through Highbay's documented
-  operations. If it needs such a step, it must stop and say so in its output,
-  not skip the step or edit generated files by hand. Highbay's source is
-  the clone apart from its README, and `github.com/goadesign/highbay` in the Go
-  module cache. It may read other libraries it needs to write code.
+- You may use these coding agents in `work/`: {{CODING_AGENTS}}. Use the
+  browser for the guide unless the challenge starts from an existing coding
+  session. Save the relevant Conversation or Terminal output under
+  `{{PARTICIPANT}}/work/agent-logs/`. Keep the guide session through the
+  project. Tell the guide to use Highbay's documented operations for building,
+  generating and running your product, to stop when a required operation is
+  missing, and to leave Highbay's source and the study skill alone.
 - Run long-running processes, such as servers, in the background. Report
   their PIDs and ports, and the path of any folder you create outside
   `work/`.
 
 ## Your screen
 
-You experience Highbay the way a person at a desk does: through what is on the
-screen. That is your coding agent's pane, the browser page Highbay opens, and
-the Herdr window when one is open. These are your eyes and hands:
+Use the browser workspace, including Conversation and the Terminal drawer,
+to see what Highbay is doing and act. If the challenge starts in an existing
+coding session, observe that client too.
 
 {{SCREEN_TOOLS}}
 
@@ -85,30 +79,26 @@ tool saves, not only reading the text it prints.
   every few seconds until a page appears. Look at that page at once, and
   again about ten seconds later.
 - **Keep looking while you wait.** Whenever your agent or Highbay is working,
-  wait in steps of a minute or less, and look at the page and the Herdr
-  window after each step. Note the time, the page's heading and status line
+  wait in steps of a minute or less and look at the workspace after each
+  step. Note the time, the page's heading and status line
   word for word, and whether a person could tell from that screen that work
   is going on and what to do next. Never wait for your agent to finish
   before you look.
 - **Wait with the screen only.** While your agent or Highbay is working, and
   whenever the screen leaves you unsure, do not run `git`, list or read
-  project files, run `hbay status` or any other command, or read logs to
+  project files, run `highbay status` or any other command, or read logs to
   find out what is happening. A person who asked for a product looks at the
   screen and gets impatient. If the screen does not tell you, that is the
   finding: report it.
 - **Be impatient.** Report at once, before you try anything, when:
   - the page goes back to an earlier or empty state, or asks for something
     you already gave;
-  - an error appears anywhere on the screen, including a small panel in the
-    Herdr window;
+  - an error appears in the workspace, Conversation, or Terminal;
   - a click changes nothing you can see within ten seconds;
   - the screen shows no change and no explanation for two minutes.
-- **Use what the screen offers.** When the page or the Herdr window offers a
-  button for what you need, such as getting to your coding agent or getting
-  the page back, press it. Do not type a command or switch windows yourself
-  instead. After every click, look again at about two and ten seconds, and
-  report what changed: the page, which window is in front, and which pane
-  has the keyboard.
+- **Use what the screen offers.** If the workspace offers a way to contact an
+  agent or act on its prompt, use it. Look again at about two and ten seconds.
+  Report what changed and where the keyboard focus went.
 - **Read every word as yourself.** You know what you asked for and what
   Highbay has shown you, nothing else. Before you answer or confirm anything
   on the page, read all of it: every heading, sentence, question, option and
@@ -132,12 +122,10 @@ Think aloud. Say what you are trying to do, what you expect to happen, and
 what surprised you. Do not hide confusion or make the tool look better than
 it was. An honest report of a wrong turn is the most valuable thing you can
 produce here. Start the way an impatient real user does: skim only enough to
-begin, invoke `/highbay` (`$highbay`) alone or with a short one-sentence summary
-of what you want to build rather than pasting a full specification up front,
-and call out in `THINKING` whenever Highbay or its guide asks you to supply
-plumbing details the tool could derive (such as Go module paths or folder
-names) or conducts a chat interview instead of putting structured options on
-the browser page.
+begin, open the workspace and start with a one-sentence summary of what you
+want to build. Call out in `THINKING` whenever Highbay or its guide asks for
+details it could derive, such as Go module paths or folder names. Describe
+where the guide asks open product questions and which answers the page offers.
 
 Send a step report when any of these happens:
 
@@ -145,9 +133,9 @@ Send a step report when any of these happens:
 - you are stuck;
 - the screen does anything on the "Be impatient" list above;
 - you are choosing between different ways of using Highbay;
-- you are about to install or set up Highbay, invoke its skill for the first
-  time, or make a new human decision in its browser page. Report before the
-  action and say what you expect;
+- you are about to install or set up Highbay, open the workspace, or make a
+  human decision in the browser. Report before the action and say what you
+  expect;
 - you need to enter a terminal command as the user after one-time setup to
   move the product forward; report the reason and what the interface made
   available;
@@ -161,7 +149,7 @@ DID:
 - <each command you ran, message you typed to your agent and button you
   pressed, exactly, with the key part of its output; quote errors verbatim>
 SCREEN:
-- <time> <agent pane | page | Herdr window>: <its heading and status line
+- <time> <workspace | Conversation | Terminal | existing client>: <its heading and status line
   word for word, or what the frame shows> (<frame file>)
 PAGE TEXT:
 - <file holding the complete text of each proposal you read>

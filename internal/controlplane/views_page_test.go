@@ -92,9 +92,9 @@ func TestViewsPageFindsOpensAndConfirmsChanges(t *testing.T) {
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-change-list-empty"), "empty project did not show its empty state");
-expect(page.text("#highbay-change-list-title") === "Start in your coding agent with /highbay" &&
+await until(() => page.text("#highbay-change-list-title") === "Describe what you want to build" &&
        page.text("#highbay-change-list-empty").includes("Your Change Card will appear here automatically."),
-       "empty state did not say where to start and how a change appears");
+       "empty state did not say where to start and how a change appears: " + page.text("#highbay-change-list-title") + " / " + page.text("#highbay-change-list-empty"));
 expect(page.win.location.href === origin + "/views", "the link stayed in the address: " + page.win.location.href);
 
 const phaseStatus = page.$("#highbay-change-list-empty");
@@ -578,7 +578,7 @@ page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-approval-stage"), "a passed result showed no review stage");
 await until(() => page.$("#highbay-cp5-unavailable"), "approval was not shown as unavailable before any click");
 const reason = page.text("#highbay-cp5-unavailable");
-expect(reason.includes("Approval is unavailable on this server") && reason.includes("Start Highbay from a project directory") && !reason.includes("hbay promotion set"), "unavailable approval does not name the enabling step: " + reason);
+expect(reason.includes("Approval is unavailable on this server") && reason.includes("Start Highbay from a project directory") && !reason.includes("highbay promotion set"), "unavailable approval does not name the enabling step: " + reason);
 expect(!page.$("#highbay-cp5-approve"), "an unavailable approval still offered its control");
 expect(page.sent("POST", "/changes/approve").length === 0, "the page sent an approval it knew the server cannot record");
 page.close();
@@ -616,7 +616,7 @@ await control(origin, "reply", { key: "POST /changes/approve", status: 501, body
 page.$("#highbay-cp5-approve").click();
 await until(() => page.$("#highbay-cp5-approve-error"), "a refused approval was not shown in the review");
 const reason = page.text("#highbay-cp5-unavailable");
-expect(reason.includes("verification is not configured") && reason.includes("Start Highbay from a project directory") && !reason.includes("hbay promotion set"), "the refusal does not carry the server's reason and the enabling step: " + reason);
+expect(reason.includes("verification is not configured") && reason.includes("Start Highbay from a project directory") && !reason.includes("highbay promotion set"), "the refusal does not carry the server's reason and the enabling step: " + reason);
 expect(page.doc.activeElement === page.$("#highbay-cp5-approve-error"), "the unavailable result did not take focus");
 expect(!page.$("#highbay-cp5-approve"), "a refused approval still offered its control");
 page.close();

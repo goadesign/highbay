@@ -265,6 +265,9 @@ jobs:
       - name: Test generated page contract consumers
         run: node --test ui/checkpoint/build_test.mjs </dev/null
 
+      - name: Test Highbay npm launcher
+        run: node --test npm/highbay/test_cli.mjs </dev/null
+
       - name: Vet the native browser profile
         run: go vet -tags browser ./internal/project </dev/null
 
@@ -289,7 +292,7 @@ jobs:
         run: docker version
       - name: Run the dependency-repair journey
         run: |
-          go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/hbay </dev/null \
+          go test -race -count=1 -timeout 40m -json -tags=e2e,docker -run '^TestCheckProjectRepairsDependenciesOnOneServer$' ./cmd/highbay </dev/null \
             | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
       - name: Run the container owner's execution and lifecycle contracts
         # These tagged roots exercise the real engine, not the check helper's
@@ -308,7 +311,7 @@ jobs:
     # Package alarms exclude setup; hosted timings stay visible.
     timeout-minutes: 10
     env:
-      BROWSER_TESTS: '^(TestViewsPageInARealBrowser|TestTeamAndBuildAtPhoneWidth|TestBuildTakingAtDesktopAndPhoneWidth|TestTestsReturnedAtDesktopAndPhoneWidth|TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth|TestAgreementSummaryAtDesktopAndPhoneWidths|TestRealBrowserEndsWithItsTest)$'
+      BROWSER_TESTS: '^(TestViewsPageInARealBrowser|TestTeamAndBuildAtPhoneWidth|TestBuildTakingAtDesktopAndPhoneWidth|TestTestsReturnedAtDesktopAndPhoneWidth|TestApprovalFrameAndEvidenceAtDesktopAndPhoneWidth|TestAgreementSummaryAtDesktopAndPhoneWidths|TestBrowserWorkspaceConversationTerminalAndUpdateInChromium|TestRealBrowserEndsWithItsTest)$'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -332,8 +335,8 @@ jobs:
           herdr_archive="$RUNNER_TEMP/herdr-core-linux-x86_64.tar.gz"
           herdr_bin="$RUNNER_TEMP/herdr-bin"
           curl -fsSL --max-time 60 -o "$herdr_archive" \
-            https://releases.herdr.dev/core/0.1.21/herdr-core-linux-x86_64.tar.gz </dev/null
-          printf '%s  %s\n' '78424755c10a40dde38a0bdb55c20ac19706e9ae05ed68fc2acf1fcff0d941c1' "$herdr_archive" \
+            https://releases.herdr.dev/core/0.1.22/herdr-core-linux-x86_64.tar.gz </dev/null
+          printf '%s  %s\n' '3054ec3992ce80c5715d721caa9dcefa6056721d15dc113f4750afce763ba5df' "$herdr_archive" \
             | sha256sum -c -
           mkdir -p "$herdr_bin"
           tar -xzf "$herdr_archive" -C "$herdr_bin" herdr-core
@@ -352,7 +355,7 @@ jobs:
           command -v hc
           hc --version </dev/null
           go test -race -count=1 -timeout 5m -json -tags herdr \
-            -run '^TestHC$' ./cmd/hbay </dev/null \
+            -run '^TestHC(Client)?$' ./internal/hc ./cmd/highbay </dev/null \
               | go run "$GITHUB_WORKSPACE/.github/scripts/testcheck/main.go"
 
 
@@ -380,7 +383,7 @@ jobs:
           - suite: generation
             module: .
             # Ordinary CLI tests belong to full-root; journey owns its tagged root.
-            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|HighbayInitBlankProjectCommitsAndRegeneratesUnchanged|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/hbay
+            args: -tags=e2e -run '^Test(GenMatchesGoaGenByteForByte|GenOnAFreshStarterChangesNothingAndKeepsModulesApart|HighbayInitBlankProjectCommitsAndRegeneratesUnchanged|OrdersLiveCopyAppliesADraftThroughTheProjectServer|ProjectBuildCacheNativeLifecycle)$' ./cmd/highbay
             test_timeout: 60m
             job_timeout: 70
           - suite: journey
@@ -395,7 +398,7 @@ jobs:
             # Its package alarm outlasts the test's own 32-minute wait for one
             # verification run by 8 minutes, so a hung run ends with the
             # test's message when the steps before it took less than that.
-            args: -tags=e2e -run '^TestWholeJourneyThroughTheProjectServer$' ./cmd/hbay
+            args: -tags=e2e -run '^TestWholeJourneyThroughTheProjectServer$' ./cmd/highbay
             test_timeout: 40m
             job_timeout: 50
           - suite: starter

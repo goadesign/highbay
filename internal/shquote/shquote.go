@@ -1,6 +1,6 @@
 // Package shquote quotes text so that a POSIX shell reads it as one word.
 // Highbay prints commands for the user to run, in the next steps after
-// hbay init and in refusals that name a git command. Every value such a
+// highbay init and in refusals that name a git command. Every value such a
 // command line carries, a folder's path for instance, goes through Quote, so
 // that a name chosen by someone else cannot be read as shell syntax.
 package shquote

@@ -87,7 +87,7 @@ func TestGenerateCodeHTTPMCPAndIteration(t *testing.T) {
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	doer := generationDoer{client: srv.Client()}
-	httpTransport := genhttpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	httpTransport := genhttpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 	httpClient := &genhighbay.Client{GenerateCodeEndpoint: httpTransport.GenerateCode()}
 	mcpTransport := genmcpclient.NewClient(origin.Scheme, origin.Host, doer, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
 	mcpClient := &genmcphighbay.Client{ToolsCallEndpoint: mcpTransport.ToolsCall(), ToolsListEndpoint: mcpTransport.ToolsList()}

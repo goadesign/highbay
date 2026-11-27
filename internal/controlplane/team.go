@@ -21,11 +21,31 @@ type (
 	// BindAssignments installs the owner's read-only assignment reader before the
 	// server listens. Supervise returns nil when either of its owning lifetimes
 	// ends; a non-nil error means unexpected failure and permits a bounded retry.
+	//
+	// ReadTeam and ReadConversation return what the owner last observed and
+	// start no call to herdr-core or Chorus, so the change list may read both
+	// on every poll. SendMessage posts the user's message to the project's
+	// Chorus channel and starts a missing guide first when the message is for
+	// the guide or the whole team. InterruptRole presses a running role's stop
+	// key; StopRole ends and removes the role's managed terminal.
+	// CreateTerminalTicket mints the single-use value AttachTerminal consumes;
+	// AttachTerminal relays one viewer's frames until either side ends the
+	// stream. The owner returns the generated errors each operation declares.
 	Team interface {
 		BindAssignments(AssignmentReader)
 		ReadTeam(context.Context) (*genhighbay.TeamSnapshot, error)
-		ShowPane(context.Context, string) error
+		ReadConversation(context.Context) (*genhighbay.TeamConversation, error)
+		SendMessage(context.Context, *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error)
 		StartAgents(context.Context, map[string]*genhighbay.RoleAgentChoice) (*genhighbay.ProjectTeam, error)
+		InterruptRole(ctx context.Context, role string) error
+		StopRole(ctx context.Context, role string) error
+		// RestartRole ends the terminal Highbay started for role, if any,
+		// and starts the role again with choice, else its saved choice, else
+		// an installed default. It refuses a role that runs in a session
+		// Highbay did not start.
+		RestartRole(ctx context.Context, role string, choice *genhighbay.RoleAgentChoice) error
+		CreateTerminalTicket(ctx context.Context, role string) (*genhighbay.TerminalTicketResult, error)
+		AttachTerminal(context.Context, *genhighbay.AttachRoleTerminalPayload, genhighbay.AttachRoleTerminalServerStream) error
 		ListAgentOptions(context.Context) ([]*genhighbay.InstalledAgentOption, error)
 		DismissNotice(context.Context, string) error
 		StopWorkers(context.Context, BuildIdentity) error
@@ -37,7 +57,7 @@ type (
 	// Its two cases carry only working folders: admission cannot name the guide,
 	// duplicate a role, or supply credentials or first messages. Registration saves
 	// exactly these roles and folders, removing an old test writer and credential
-	// for BuilderOnly. It performs no window operation; StartAgents owns that phase.
+	// for BuilderOnly. It starts no terminal; StartAgents owns that phase.
 	BuildFolders interface {
 		buildFolders()
 	}
@@ -50,18 +70,10 @@ type (
 		BuilderFolder    string
 		TestWriterFolder string
 	}
-	// TeamSpaceConflict is the Team owner's refusal to start agents when more
-	// than one local Herdr space matches the project's team name and folder.
-	// It carries only the count, never a space name or other peer text, and the
-	// control plane turns it into the user's ambiguous_space step.
-	TeamSpaceConflict struct {
-		// Count is how many local spaces match; it is always at least 2.
-		Count int
-	}
 	// PolicyRefusalKind identifies which explicit client setting blocked worker startup.
 	PolicyRefusalKind string
 	// TeamPolicyRefusal is the Team owner's bounded refusal to start non-Yolo
-	// workers when an explicit setting in a coding client's configuration
+	// agents when an explicit setting in a coding client's configuration
 	// blocks required Highbay/Chorus MCP operations or folder trust. It omits raw
 	// filesystem paths so StartTeamAgents and StartBuild's BuildStartStep
 	// (<= 512 characters) present the exact setting and retry step.
@@ -167,19 +179,92 @@ func (c *ControlPlane) GetTeam(ctx context.Context) (*genhighbay.TeamSnapshot, e
 	return team.ReadTeam(ctx)
 }
 
-// ShowTeamPane delegates the user's role after purpose and resource authorization.
-func (c *ControlPlane) ShowTeamPane(ctx context.Context, p *genhighbay.ShowTeamPanePayload) error {
+// GetTeamConversation returns the project's Chorus conversation as the team
+// owner last read it.
+func (c *ControlPlane) GetTeamConversation(ctx context.Context) (*genhighbay.TeamConversation, error) {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return team.ReadConversation(ctx)
+}
+
+// SendTeamMessage posts the user's message through the team owner, which
+// starts a missing guide first, and turns a client-policy refusal of that
+// start into the user's next step.
+func (c *ControlPlane) SendTeamMessage(ctx context.Context, p *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error) {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return nil, err
+	}
+	message, err := team.SendMessage(ctx, p)
+	var policy *TeamPolicyRefusal
+	if errors.As(err, &policy) {
+		return nil, genhighbay.MakeUnprocessable(errors.New(policy.Step("then send your message again.")))
+	}
+	return message, err
+}
+
+// InterruptTeamRole presses the stop key in the role's terminal for the user.
+func (c *ControlPlane) InterruptTeamRole(ctx context.Context, p *genhighbay.InterruptTeamRolePayload) error {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return err
 	}
-	return team.ShowPane(ctx, p.Role)
+	return team.InterruptRole(ctx, p.Role)
 }
 
-// Error names the number of matching spaces; it is the only text the
-// conflict carries.
-func (e *TeamSpaceConflict) Error() string {
-	return fmt.Sprintf("%d Herdr spaces match this project", e.Count)
+// StopTeamRole ends and removes the role's managed terminal for the user.
+func (c *ControlPlane) StopTeamRole(ctx context.Context, p *genhighbay.StopTeamRolePayload) error {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return err
+	}
+	return team.StopRole(ctx, p.Role)
+}
+
+// RestartTeamRole ends the role's managed terminal and starts the role
+// again for the user, and maps a coding client's setting that blocks the
+// start to an actionable error.
+func (c *ControlPlane) RestartTeamRole(ctx context.Context, p *genhighbay.RestartTeamRolePayload) error {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return err
+	}
+	err = team.RestartRole(ctx, p.Role, p.Choice)
+	var policy *TeamPolicyRefusal
+	if errors.As(err, &policy) {
+		return genhighbay.MakeUnprocessable(errors.New(policy.Step("then choose Restart again.")))
+	}
+	return err
+}
+
+// CreateTerminalTicket mints the single-use value the page presents when it
+// opens the role's terminal stream.
+func (c *ControlPlane) CreateTerminalTicket(ctx context.Context, p *genhighbay.CreateTerminalTicketPayload) (*genhighbay.TerminalTicketResult, error) {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return team.CreateTerminalTicket(ctx, p.Role)
+}
+
+// AttachRoleTerminal hands the upgraded connection to the team owner, which
+// consumes the ticket and relays frames until the viewer or the terminal ends
+// the stream.
+func (c *ControlPlane) AttachRoleTerminal(ctx context.Context, p *genhighbay.AttachRoleTerminalPayload, stream genhighbay.AttachRoleTerminalServerStream) error {
+	team, err := c.ownedTeam(ctx)
+	if err != nil {
+		return err
+	}
+	conn, ok := ctx.Value(terminalConnKey{}).(*terminalConn)
+	if !ok {
+		// Only NewHTTPHandler's terminal route opens this stream.
+		return team.AttachTerminal(ctx, p, stream)
+	}
+	// However the relay ends, the viewer's connection is closed with it.
+	err = team.AttachTerminal(ctx, p, &boundedTerminalStream{AttachRoleTerminalServerStream: stream, conn: conn})
+	return errors.Join(err, conn.close())
 }
 
 // Error returns the bounded policy refusal text for internal callers and tests.
@@ -265,45 +350,14 @@ func (e *TeamPolicyRefusal) Step(retry string) string {
 	return boundedPolicyText(step, 512)
 }
 
-// policyClientDisplayName maps a client key to its user-facing product name.
-func policyClientDisplayName(client string) string {
-	switch client {
-	case "claude":
-		return "Claude Code"
-	case "codex":
-		return "Codex"
-	case "gemini":
-		return "Gemini CLI"
-	case "cursor":
-		return "Cursor"
-	default:
-		return ""
-	}
-}
-
-// boundedPolicyText clamps s to at most maxRunes Unicode code points.
-func boundedPolicyText(s string, maxRunes int) string {
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return string(runes[:maxRunes])
-}
-
 // StartTeamAgents uses the project owner's existing repeatable team preparation
-// and maps its typed space and client-policy refusals to actionable user errors.
+// and maps its typed client-policy refusal to an actionable user error.
 func (c *ControlPlane) StartTeamAgents(ctx context.Context, p *genhighbay.StartTeamAgentsPayload) (*genhighbay.ProjectTeam, error) {
 	team, err := c.ownedTeam(ctx)
 	if err != nil {
 		return nil, err
 	}
 	result, err := team.StartAgents(ctx, p.Choices)
-	var conflict *TeamSpaceConflict
-	if errors.As(err, &conflict) {
-		return nil, genhighbay.MakeAmbiguousSpace(fmt.Errorf(
-			"%d Herdr spaces match this project. %s", conflict.Count, duplicateTeamSpacesStep(),
-		))
-	}
 	var policy *TeamPolicyRefusal
 	if errors.As(err, &policy) {
 		return nil, genhighbay.MakeUnprocessable(errors.New(policy.Step("then choose Start workers again.")))
@@ -337,6 +391,31 @@ func (c *ControlPlane) DismissTeamNotice(ctx context.Context, p *genhighbay.Dism
 	return team.DismissNotice(ctx, p.Notice)
 }
 
+// policyClientDisplayName maps a client key to its user-facing product name.
+func policyClientDisplayName(client string) string {
+	switch client {
+	case "claude":
+		return "Claude Code"
+	case "codex":
+		return "Codex"
+	case "gemini":
+		return "Gemini CLI"
+	case "cursor":
+		return "Cursor"
+	default:
+		return ""
+	}
+}
+
+// boundedPolicyText clamps s to at most maxRunes Unicode code points.
+func boundedPolicyText(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes])
+}
+
 // assignmentGeneration returns the hex SHA-256 of identity's JSON form.
 func assignmentGeneration(identity any) (string, error) {
 	raw, err := json.Marshal(identity)
@@ -345,12 +424,6 @@ func assignmentGeneration(identity any) (string, error) {
 	}
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:]), nil
-}
-
-// duplicateTeamSpacesStep owns the recovery shared by user starts and saved builds.
-// Highbay cannot select among matching spaces, so the duplicates must be closed first.
-func duplicateTeamSpacesStep() string {
-	return "Close the duplicate Herdr spaces, then start the agents."
 }
 
 // buildFolders seals the builder-only case to this package.

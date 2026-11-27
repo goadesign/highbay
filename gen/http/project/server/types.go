@@ -17,7 +17,7 @@ import (
 // AttachGuideRequestBody is the type of the "project" service "attach_guide"
 // endpoint HTTP request body.
 type AttachGuideRequestBody struct {
-	// Invoking local Herdr terminal identity.
+	// Invoking local herdr-core terminal identity when present in the environment.
 	HcTerminalID *string `form:"hc_terminal_id,omitempty" json:"hc_terminal_id,omitempty" xml:"hc_terminal_id,omitempty"`
 	// Invoking coding-agent client.
 	Client *string `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
@@ -32,6 +32,13 @@ type ExchangeBrowserLinkRequestBody struct {
 	Link *string `form:"link,omitempty" json:"link,omitempty" xml:"link,omitempty"`
 }
 
+// ApplyUpdateRequestBody is the type of the "project" service "apply_update"
+// endpoint HTTP request body.
+type ApplyUpdateRequestBody struct {
+	// Approved target release version (for example 0.5.1 or v0.5.1).
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
+}
+
 // IdentityResponseBody is the type of the "project" service "identity"
 // endpoint HTTP response body.
 type IdentityResponseBody struct {
@@ -41,11 +48,15 @@ type IdentityResponseBody struct {
 	Directory string `form:"directory" json:"directory" xml:"directory"`
 	// Immutable operating-system account identity.
 	Owner string `form:"owner" json:"owner" xml:"owner"`
-	// SHA-256 of the hbay executable the server started from, read when it
+	// SHA-256 of the highbay executable the server started from, read when it
 	// started; it tells any two builds apart, including two local builds of one
 	// commit. The CLI attaches only to its own build. Servers built before this
-	// field omit it, and hbay stop must still reach them, so it is not required.
+	// field omit it, and highbay stop must still reach them, so it is not required.
 	Build *string `form:"build,omitempty" json:"build,omitempty" xml:"build,omitempty"`
+	// Version reported by the running highbay executable (for example v0.5.0 or
+	// (devel)). Servers built before this field omit it so highbay stop and
+	// highbay update can still reach them.
+	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
 // EnsureTeamResponseBody is the type of the "project" service "ensure_team"
@@ -53,11 +64,8 @@ type IdentityResponseBody struct {
 type EnsureTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team string `form:"team" json:"team" xml:"team"`
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space string                         `form:"space" json:"space" xml:"space"`
+	// Observed state of each registered project role.
 	Roles []*ProjectTeamRoleResponseBody `form:"roles" json:"roles" xml:"roles"`
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step string `form:"step" json:"step" xml:"step"`
 }
@@ -69,10 +77,8 @@ type AttachGuideResponseBody struct {
 	Team string `form:"team" json:"team" xml:"team"`
 	// Guide's registered Chorus handle.
 	Handle string `form:"handle" json:"handle" xml:"handle"`
-	// Whether the invoking terminal was adopted.
-	AdoptedHerdr bool `form:"adopted_herdr" json:"adopted_herdr" xml:"adopted_herdr"`
-	// Current desktop attachment.
-	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
+	// Whether a live herdr-core terminal was matched and labeled for this guide.
+	HasTerminal bool `form:"has_terminal" json:"has_terminal" xml:"has_terminal"`
 }
 
 // StatusResponseBody is the type of the "project" service "status" endpoint
@@ -84,8 +90,6 @@ type StatusResponseBody struct {
 	Directory string `form:"directory" json:"directory" xml:"directory"`
 	// Stable project team name.
 	Team string `form:"team" json:"team" xml:"team"`
-	// Current desktop attachment.
-	HerdrMode string `form:"herdr_mode" json:"herdr_mode" xml:"herdr_mode"`
 	// Current saved stage.
 	Stage string `form:"stage" json:"stage" xml:"stage"`
 	// Current change identifier, empty when none exists.
@@ -110,11 +114,66 @@ type BrowserLinkResponseBody struct {
 // ExchangeBrowserLinkResponseBody is the type of the "project" service
 // "exchange_browser_link" endpoint HTTP response body.
 type ExchangeBrowserLinkResponseBody struct {
-	// User session kept only in the page's memory.
+	// Bearer session credential stored in origin-scoped localStorage and sent in
+	// Authorization: Bearer.
 	Session string `form:"session" json:"session" xml:"session"`
 	// Base name of the physical project folder, without its path, for this page
 	// session.
 	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	Version string `form:"version" json:"version" xml:"version"`
+	// Base64 SHA-256 digest of the inline /views bundle served by this running
+	// server, allowing open tabs to detect UI changes across server restarts.
+	UIBuild string `form:"ui_build" json:"ui_build" xml:"ui_build"`
+}
+
+// GetBrowserSessionResponseBody is the type of the "project" service
+// "get_browser_session" endpoint HTTP response body.
+type GetBrowserSessionResponseBody struct {
+	// Bearer session credential stored in origin-scoped localStorage and sent in
+	// Authorization: Bearer.
+	Session string `form:"session" json:"session" xml:"session"`
+	// Base name of the physical project folder, without its path, for this page
+	// session.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	Version string `form:"version" json:"version" xml:"version"`
+	// Base64 SHA-256 digest of the inline /views bundle served by this running
+	// server, allowing open tabs to detect UI changes across server restarts.
+	UIBuild string `form:"ui_build" json:"ui_build" xml:"ui_build"`
+}
+
+// GetUpdateStatusResponseBody is the type of the "project" service
+// "get_update_status" endpoint HTTP response body.
+type GetUpdateStatusResponseBody struct {
+	// Version reported by this running highbay server (for example v0.5.0 or
+	// (devel)).
+	CurrentVersion string `form:"current_version" json:"current_version" xml:"current_version"`
+	// Newest stable Highbay release version published on GitHub (with leading v,
+	// for example v0.5.1).
+	LatestVersion string `form:"latest_version" json:"latest_version" xml:"latest_version"`
+	// True when latest_version is newer than current_version.
+	UpdateAvailable bool `form:"update_available" json:"update_available" xml:"update_available"`
+	// HTTPS URL of the latest GitHub release notes.
+	ReleaseURL string `form:"release_url" json:"release_url" xml:"release_url"`
+	// True when this running server can install the release binary or Homebrew
+	// upgrade and restart in place.
+	CanAutoUpdate bool `form:"can_auto_update" json:"can_auto_update" xml:"can_auto_update"`
+	// Shell command to update manually when can_auto_update is false (for example
+	// go install or npm install -g).
+	ManualCommand *string `form:"manual_command,omitempty" json:"manual_command,omitempty" xml:"manual_command,omitempty"`
+}
+
+// ApplyUpdateResponseBody is the type of the "project" service "apply_update"
+// endpoint HTTP response body.
+type ApplyUpdateResponseBody struct {
+	// restarting when the new binary was installed and the server is re-executing
+	// in place; up_to_date when the running server already matches version.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Target release version with leading v (for example v0.5.1).
+	Version string `form:"version" json:"version" xml:"version"`
 }
 
 // IdentityForbiddenResponseBody is the type of the "project" service
@@ -231,12 +290,10 @@ type AttachGuideTeamUnavailableResponseBody struct {
 	// Error name.
 	Name string `form:"name" json:"name" xml:"name"`
 	// What could not be used: stopping (the server is shutting down), chorus (the
-	// managed Chorus server or its settings are unavailable), herdr (a Herdr
-	// command failed), saved_space (the project's saved Herdr space has an ID this
-	// version of Highbay no longer accepts and is still open), roster_folder
-	// (Herdr's launcher roster folder could not be written), project_state (the
-	// project's private record or an agent credential could not be read or
-	// written), or role_folder (a role's working folder could not be read).
+	// local Chorus server is unavailable), hc (herdr-core is unavailable or a
+	// terminal command failed), project_state (the project's private record or an
+	// agent credential could not be read or written), or role_folder (a role's
+	// working folder could not be prepared).
 	Cause string `form:"cause" json:"cause" xml:"cause"`
 }
 
@@ -386,14 +443,201 @@ type ExchangeBrowserLinkUnprocessableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetBrowserSessionUnauthorizedResponseBody is the type of the "project"
+// service "get_browser_session" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetBrowserSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBrowserSessionForbiddenResponseBody is the type of the "project" service
+// "get_browser_session" endpoint HTTP response body for the "forbidden" error.
+type GetBrowserSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetBrowserSessionUnprocessableResponseBody is the type of the "project"
+// service "get_browser_session" endpoint HTTP response body for the
+// "unprocessable" error.
+type GetBrowserSessionUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUpdateStatusReleaseUnavailableResponseBody is the type of the "project"
+// service "get_update_status" endpoint HTTP response body for the
+// "release_unavailable" error.
+type GetUpdateStatusReleaseUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUpdateStatusForbiddenResponseBody is the type of the "project" service
+// "get_update_status" endpoint HTTP response body for the "forbidden" error.
+type GetUpdateStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUpdateStatusUnprocessableResponseBody is the type of the "project"
+// service "get_update_status" endpoint HTTP response body for the
+// "unprocessable" error.
+type GetUpdateStatusUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyUpdateConflictResponseBody is the type of the "project" service
+// "apply_update" endpoint HTTP response body for the "conflict" error.
+type ApplyUpdateConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyUpdateReleaseUnavailableResponseBody is the type of the "project"
+// service "apply_update" endpoint HTTP response body for the
+// "release_unavailable" error.
+type ApplyUpdateReleaseUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyUpdateForbiddenResponseBody is the type of the "project" service
+// "apply_update" endpoint HTTP response body for the "forbidden" error.
+type ApplyUpdateForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ApplyUpdateUnprocessableResponseBody is the type of the "project" service
+// "apply_update" endpoint HTTP response body for the "unprocessable" error.
+type ApplyUpdateUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ProjectTeamRoleResponseBody is used to define fields on response body types.
 type ProjectTeamRoleResponseBody struct {
 	// Trusted role.
 	Role string `form:"role" json:"role" xml:"role"`
 	// Stable Chorus handle and Highbay actor identity.
 	Handle string `form:"handle" json:"handle" xml:"handle"`
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal bool `form:"has_terminal" json:"has_terminal" xml:"has_terminal"`
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running bool `form:"running" json:"running" xml:"running"`
 }
 
@@ -403,22 +647,35 @@ type TeamRoleStateResponseBody struct {
 	Role string `form:"role" json:"role" xml:"role"`
 	// Registered Chorus handle.
 	Handle string `form:"handle" json:"handle" xml:"handle"`
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal bool `form:"has_terminal" json:"has_terminal" xml:"has_terminal"`
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State string `form:"state" json:"state" xml:"state"`
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention string `form:"attention" json:"attention" xml:"attention"`
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher string `form:"watcher" json:"watcher" xml:"watcher"`
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment string `form:"assignment" json:"assignment" xml:"assignment"`
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *RoleAgentChoiceResponseBody `form:"choice,omitempty" json:"choice,omitempty" xml:"choice,omitempty"`
+}
+
+// RoleAgentChoiceResponseBody is used to define fields on response body types.
+type RoleAgentChoiceResponseBody struct {
+	// Installed coding-agent client family.
+	Client string `form:"client" json:"client" xml:"client"`
+	// Installed executable selected from list_team_agent_options.
+	Program string `form:"program" json:"program" xml:"program"`
+	// Optional client-supported model.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Optional client-supported reasoning effort.
+	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
+	// Whether to enable this client's advertised unattended permission mode.
+	Yolo bool `form:"yolo" json:"yolo" xml:"yolo"`
 }
 
 // NewIdentityResponseBody builds the HTTP response body from the result of the
@@ -429,6 +686,7 @@ func NewIdentityResponseBody(res *project.ProjectIdentity) *IdentityResponseBody
 		Directory: res.Directory,
 		Owner:     res.Owner,
 		Build:     res.Build,
+		Version:   res.Version,
 	}
 	return body
 }
@@ -437,10 +695,8 @@ func NewIdentityResponseBody(res *project.ProjectIdentity) *IdentityResponseBody
 // the "ensure_team" endpoint of the "project" service.
 func NewEnsureTeamResponseBody(res *project.ProjectTeam) *EnsureTeamResponseBody {
 	body := &EnsureTeamResponseBody{
-		Team:      res.Team,
-		Space:     res.Space,
-		HerdrMode: res.HerdrMode,
-		Step:      res.Step,
+		Team: res.Team,
+		Step: res.Step,
 	}
 	if res.Roles != nil {
 		body.Roles = make([]*ProjectTeamRoleResponseBody, len(res.Roles))
@@ -461,10 +717,9 @@ func NewEnsureTeamResponseBody(res *project.ProjectTeam) *EnsureTeamResponseBody
 // the "attach_guide" endpoint of the "project" service.
 func NewAttachGuideResponseBody(res *project.AttachGuideResult) *AttachGuideResponseBody {
 	body := &AttachGuideResponseBody{
-		Team:         res.Team,
-		Handle:       res.Handle,
-		AdoptedHerdr: res.AdoptedHerdr,
-		HerdrMode:    res.HerdrMode,
+		Team:        res.Team,
+		Handle:      res.Handle,
+		HasTerminal: res.HasTerminal,
 	}
 	return body
 }
@@ -476,7 +731,6 @@ func NewStatusResponseBody(res *project.ProjectStatus) *StatusResponseBody {
 		ProjectName: res.ProjectName,
 		Directory:   res.Directory,
 		Team:        res.Team,
-		HerdrMode:   res.HerdrMode,
 		Stage:       res.Stage,
 		ChangeID:    res.ChangeID,
 		ChangeTitle: res.ChangeTitle,
@@ -509,10 +763,48 @@ func NewBrowserLinkResponseBody(res *project.BrowserLinkResult) *BrowserLinkResp
 
 // NewExchangeBrowserLinkResponseBody builds the HTTP response body from the
 // result of the "exchange_browser_link" endpoint of the "project" service.
-func NewExchangeBrowserLinkResponseBody(res *project.ExchangeBrowserLinkResult) *ExchangeBrowserLinkResponseBody {
+func NewExchangeBrowserLinkResponseBody(res *project.BrowserSessionResult) *ExchangeBrowserLinkResponseBody {
 	body := &ExchangeBrowserLinkResponseBody{
 		Session:     res.Session,
 		ProjectName: res.ProjectName,
+		Version:     res.Version,
+		UIBuild:     res.UIBuild,
+	}
+	return body
+}
+
+// NewGetBrowserSessionResponseBody builds the HTTP response body from the
+// result of the "get_browser_session" endpoint of the "project" service.
+func NewGetBrowserSessionResponseBody(res *project.BrowserSessionResult) *GetBrowserSessionResponseBody {
+	body := &GetBrowserSessionResponseBody{
+		Session:     res.Session,
+		ProjectName: res.ProjectName,
+		Version:     res.Version,
+		UIBuild:     res.UIBuild,
+	}
+	return body
+}
+
+// NewGetUpdateStatusResponseBody builds the HTTP response body from the result
+// of the "get_update_status" endpoint of the "project" service.
+func NewGetUpdateStatusResponseBody(res *project.UpdateStatusResult) *GetUpdateStatusResponseBody {
+	body := &GetUpdateStatusResponseBody{
+		CurrentVersion:  res.CurrentVersion,
+		LatestVersion:   res.LatestVersion,
+		UpdateAvailable: res.UpdateAvailable,
+		ReleaseURL:      res.ReleaseURL,
+		CanAutoUpdate:   res.CanAutoUpdate,
+		ManualCommand:   res.ManualCommand,
+	}
+	return body
+}
+
+// NewApplyUpdateResponseBody builds the HTTP response body from the result of
+// the "apply_update" endpoint of the "project" service.
+func NewApplyUpdateResponseBody(res *project.ApplyUpdateResult) *ApplyUpdateResponseBody {
+	body := &ApplyUpdateResponseBody{
+		Status:  res.Status,
+		Version: res.Version,
 	}
 	return body
 }
@@ -725,6 +1017,149 @@ func NewExchangeBrowserLinkUnprocessableResponseBody(res *goa.ServiceError) *Exc
 	return body
 }
 
+// NewGetBrowserSessionUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "get_browser_session" endpoint of the "project"
+// service.
+func NewGetBrowserSessionUnauthorizedResponseBody(res *goa.ServiceError) *GetBrowserSessionUnauthorizedResponseBody {
+	body := &GetBrowserSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBrowserSessionForbiddenResponseBody builds the HTTP response body from
+// the result of the "get_browser_session" endpoint of the "project" service.
+func NewGetBrowserSessionForbiddenResponseBody(res *goa.ServiceError) *GetBrowserSessionForbiddenResponseBody {
+	body := &GetBrowserSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetBrowserSessionUnprocessableResponseBody builds the HTTP response body
+// from the result of the "get_browser_session" endpoint of the "project"
+// service.
+func NewGetBrowserSessionUnprocessableResponseBody(res *goa.ServiceError) *GetBrowserSessionUnprocessableResponseBody {
+	body := &GetBrowserSessionUnprocessableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUpdateStatusReleaseUnavailableResponseBody builds the HTTP response
+// body from the result of the "get_update_status" endpoint of the "project"
+// service.
+func NewGetUpdateStatusReleaseUnavailableResponseBody(res *goa.ServiceError) *GetUpdateStatusReleaseUnavailableResponseBody {
+	body := &GetUpdateStatusReleaseUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUpdateStatusForbiddenResponseBody builds the HTTP response body from
+// the result of the "get_update_status" endpoint of the "project" service.
+func NewGetUpdateStatusForbiddenResponseBody(res *goa.ServiceError) *GetUpdateStatusForbiddenResponseBody {
+	body := &GetUpdateStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUpdateStatusUnprocessableResponseBody builds the HTTP response body
+// from the result of the "get_update_status" endpoint of the "project" service.
+func NewGetUpdateStatusUnprocessableResponseBody(res *goa.ServiceError) *GetUpdateStatusUnprocessableResponseBody {
+	body := &GetUpdateStatusUnprocessableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyUpdateConflictResponseBody builds the HTTP response body from the
+// result of the "apply_update" endpoint of the "project" service.
+func NewApplyUpdateConflictResponseBody(res *goa.ServiceError) *ApplyUpdateConflictResponseBody {
+	body := &ApplyUpdateConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyUpdateReleaseUnavailableResponseBody builds the HTTP response body
+// from the result of the "apply_update" endpoint of the "project" service.
+func NewApplyUpdateReleaseUnavailableResponseBody(res *goa.ServiceError) *ApplyUpdateReleaseUnavailableResponseBody {
+	body := &ApplyUpdateReleaseUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyUpdateForbiddenResponseBody builds the HTTP response body from the
+// result of the "apply_update" endpoint of the "project" service.
+func NewApplyUpdateForbiddenResponseBody(res *goa.ServiceError) *ApplyUpdateForbiddenResponseBody {
+	body := &ApplyUpdateForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewApplyUpdateUnprocessableResponseBody builds the HTTP response body from
+// the result of the "apply_update" endpoint of the "project" service.
+func NewApplyUpdateUnprocessableResponseBody(res *goa.ServiceError) *ApplyUpdateUnprocessableResponseBody {
+	body := &ApplyUpdateUnprocessableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAttachGuidePayload builds a project service attach_guide endpoint payload.
 func NewAttachGuidePayload(body *AttachGuideRequestBody) *project.AttachGuidePayload {
 	v := &project.AttachGuidePayload{
@@ -746,6 +1181,15 @@ func NewAttachGuidePayload(body *AttachGuideRequestBody) *project.AttachGuidePay
 func NewExchangeBrowserLinkPayload(body *ExchangeBrowserLinkRequestBody) *project.ExchangeBrowserLinkPayload {
 	v := &project.ExchangeBrowserLinkPayload{
 		Link: *body.Link,
+	}
+
+	return v
+}
+
+// NewApplyUpdatePayload builds a project service apply_update endpoint payload.
+func NewApplyUpdatePayload(body *ApplyUpdateRequestBody) *project.ApplyUpdatePayload {
+	v := &project.ApplyUpdatePayload{
+		Version: *body.Version,
 	}
 
 	return v
@@ -787,6 +1231,23 @@ func ValidateExchangeBrowserLinkRequestBody(body *ExchangeBrowserLinkRequestBody
 		}
 		if utf8.RuneCountInString(*body.Link) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.link", *body.Link, utf8.RuneCountInString(*body.Link), 256, false))
+		}
+	}
+	return
+}
+
+// ValidateApplyUpdateRequestBody runs the validations defined on
+// ApplyUpdateRequestBody
+func ValidateApplyUpdateRequestBody(body *ApplyUpdateRequestBody) (err error) {
+	if body.Version == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	if body.Version != nil {
+		if utf8.RuneCountInString(*body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 1, true))
+		}
+		if utf8.RuneCountInString(*body.Version) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 64, false))
 		}
 	}
 	return

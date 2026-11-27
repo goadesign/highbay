@@ -6,7 +6,7 @@
 // scaffold.RunCommand on internal/scaffold/templates/{blank,example}) is
 // intentionally out of scope: those paths exercise a user's real networked
 // first run and belong to the non-PR Full / starter (-tags=scaffold
-// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/hbay) jobs in
+// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/highbay) jobs in
 // .github/workflows/integration.yml, while ordinary-partition tests in
 // internal/scaffold and internal/controlplane substitute fake runners and
 // generators.

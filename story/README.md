@@ -84,7 +84,7 @@ describes each step. Highbay's page shows a Story's flows; to change a Story,
 the guide edits its source in its draft.
 
 A project's design imports this module, so the project's `go.mod` must
-require it. A starter project made by `hbay init` does, at the version
+require it. A starter project made by `highbay init` does, at the version
 Highbay itself requires. In another project, a Story refresh that fails for
 that reason names the command to run:
 `go get github.com/goadesign/highbay/story@<version>`.

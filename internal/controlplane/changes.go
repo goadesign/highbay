@@ -26,7 +26,7 @@ import (
 const (
 	// defaultChangesWait bounds one wait_for_changes call when nothing changes.
 	// It stays below the project server's five-second ordered-shutdown grace,
-	// so an open page never makes `hbay stop` wait for its request.
+	// so an open page never makes `highbay stop` wait for its request.
 	defaultChangesWait = 4 * time.Second
 	// defaultChangesPoll is how often a waiting call reads the list again.
 	// Verification runs are written by separate processes, so only reading
@@ -66,7 +66,9 @@ func (c *ControlPlane) ListChanges(ctx context.Context) (*genhighbay.ChangeList,
 // soon as it differs from p.Since, or after a bounded wait with the unchanged
 // version. It reads the saved list again every poll interval and ends early
 // when the caller goes away; it never changes anything. The views page keeps
-// one such call open, so its span is never saved in the diagnostics history.
+// one such call open, so its span is never saved in the diagnostics history,
+// and the call returns the unchanged version as soon as the server begins to
+// stop, so an open page never holds the server's shutdown.
 func (c *ControlPlane) WaitForChanges(
 	ctx context.Context,
 	p *genhighbay.WaitForChangesPayload,
@@ -97,6 +99,12 @@ func (c *ControlPlane) WaitForChanges(
 			// The page closed or paused its request; nobody reads a result.
 			return nil, ctx.Err()
 		case <-deadline.C:
+			span.SetAttributes(attribute.Bool("highbay.changed", false))
+			return &genhighbay.ChangeListVersion{Version: list.Version}, nil
+		case <-c.stopping:
+			span.SetAttributes(attribute.Bool("highbay.changed", false))
+			return &genhighbay.ChangeListVersion{Version: list.Version}, nil
+		case <-c.serverCtx.Done():
 			span.SetAttributes(attribute.Bool("highbay.changed", false))
 			return &genhighbay.ChangeListVersion{Version: list.Version}, nil
 		case <-ticker.C:
@@ -226,9 +234,17 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 			draftState = firstChangeDraftState(storyState, hasDraft, initCompleted)
 		}
 	}
+	// The team and its conversation are what the owner last observed, read
+	// without calling herdr-core or Chorus, so a new message or a role's
+	// changed state ends a wait the same way a saved card does.
 	var team *genhighbay.TeamSnapshot
+	var conversation *genhighbay.TeamConversation
 	if c.team.Owner == owner {
 		team, err = c.team.Service.ReadTeam(ctx)
+		if err != nil {
+			return nil, err
+		}
+		conversation, err = c.team.Service.ReadConversation(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -238,11 +254,12 @@ func (c *ControlPlane) changeList(ctx context.Context, span trace.Span, owner st
 		Builds            []string                     `json:"builds"`
 		ApprovalAvailable bool                         `json:"approval_available"`
 		Team              *genhighbay.TeamSnapshot     `json:"team"`
+		Conversation      *genhighbay.TeamConversation `json:"conversation"`
 		StoryEvaluation   storyEvaluationVersion       `json:"story_evaluation"`
 		LiveTarget        liveTargetVersion            `json:"live_target"`
 		Initializing      *string                      `json:"initializing,omitempty"`
 		DraftState        *string                      `json:"draft_state,omitempty"`
-	}{items, buildVersions, approvalAvailable, team, story, c.liveTargetVersion(), initializing, draftState})
+	}{items, buildVersions, approvalAvailable, team, conversation, story, c.liveTargetVersion(), initializing, draftState})
 	if err != nil {
 		err = fmt.Errorf("encode change list version: %w", err)
 		span.RecordError(err)

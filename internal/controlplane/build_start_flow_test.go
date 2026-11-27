@@ -87,7 +87,7 @@ func TestStartBuildOrdersItsOwners(t *testing.T) {
 		assert.NoError(t, err, "window work retains neither the card lock nor the phase deadline")
 		_, bounded := ctx.Deadline()
 		assert.False(t, bounded, "StartAgents receives its own server-owned lifetime")
-		return &genhighbay.ProjectTeam{Team: "team", Space: "space", Roles: []*genhighbay.ProjectTeamRole{}, HerdrMode: "attached", Step: "Read the fixture assignments."}, nil
+		return &genhighbay.ProjectTeam{Team: "team", Roles: []*genhighbay.ProjectTeamRole{}, Step: "Read the fixture assignments."}, nil
 	}
 	result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 	require.NoError(t, err)
@@ -364,18 +364,22 @@ func TestStartBuildStoredEvaluatorBypassesWriterPrerequisites(t *testing.T) {
 	assert.Equal(t, []string{"register", "start"}, f.calls)
 }
 
-// TestStartBuildTeamWarningsKeepTheSavedBuild checks the typed window boundary
-// after registration and confirms no transient dialog state enters the build file.
+// TestStartBuildTeamWarningsKeepTheSavedBuild checks that a team that cannot
+// become ready after registration leaves the build saved, and that the
+// owner's typed cause selects the step start_build returns.
 func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
-		kind genhighbay.TeamKind
+		// step is the exact step expected, or empty when only the kind matters.
+		step string
 	}{
-		{"busy", genhighbay.MakeWindowBusy(errors.New("fixture busy")), genhighbay.TeamKindWindowBusy},
-		{"ambiguous", fmt.Errorf("fixture: %w", &TeamSpaceConflict{Count: 2}), genhighbay.TeamKindAmbiguousSpace},
-		{"unavailable", genhighbay.MakeTeamUnavailable(errors.New("fixture unavailable")), genhighbay.TeamKindUnavailable},
-		{"unavailable herdr", genhighbay.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: "herdr"}), genhighbay.TeamKindUnavailable},
+		{name: "unavailable", err: genhighbay.MakeTeamUnavailable(errors.New("fixture unavailable"))},
+		{
+			name: "unavailable herdr-core",
+			err:  genhighbay.MakeTeamUnavailable(&genproject.TeamUnavailable{Name: "team_unavailable", Cause: "hc"}),
+			step: buildTeamStep("hc"),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := &teamServiceFixture{start: func(context.Context) (*genhighbay.ProjectTeam, error) { return nil, tc.err }}
@@ -383,17 +387,15 @@ func TestStartBuildTeamWarningsKeepTheSavedBuild(t *testing.T) {
 			card := buildableChange(t, cp, "chg")
 			result, err := cp.StartBuild(asCaller("alice@example.com", CallerUser), &genhighbay.StartBuildPayload{ChangeID: "chg", RequestRevision: card.RequestRevision})
 			require.NoError(t, err)
-			assert.Equal(t, tc.kind, result.Team.Kind())
-			if ambiguous, ok := result.Team.AsAmbiguousSpace(); ok {
-				assert.Equal(t, 2, ambiguous.Count)
-				assert.Equal(t, "Close the duplicate Herdr spaces, then start the agents.", string(ambiguous.Step))
-			}
-			if unavailable, ok := result.Team.AsUnavailable(); ok && tc.name == "unavailable herdr" {
-				assert.Equal(t, "Herdr did not complete a team command. Open the Herdr app, then use Team → Start workers on the views page to start the team agents for this saved build.", string(unavailable.Step))
+			unavailable, ok := result.Team.AsUnavailable()
+			require.True(t, ok, "the team outcome is %s", result.Team.Kind())
+			if tc.step != "" {
+				assert.Equal(t, tc.step, string(unavailable.Step))
 			}
 			assert.Equal(t, []string{"register", "start"}, f.calls)
 			assert.Equal(t, result.Build, mustStartedBuild(t, cp, asCaller("alice@example.com", CallerUser), "chg"))
-			assert.NotContains(t, string(readBuildFile(t, cp, "chg")), "dialog")
+			assert.NotContains(t, string(readBuildFile(t, cp, "chg")), string(unavailable.Step),
+				"the team's failure is answered, never saved with the build")
 		})
 	}
 }

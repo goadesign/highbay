@@ -16,10 +16,7 @@ import (
 // the explicit refinement action and the existing build consequence warning.
 // Build and agent processes are fixture boundaries, not execution proof.
 func TestViewsPageConfirmedBuildLeadsTheFoldedAgreement(t *testing.T) {
-	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{
-		Team: "page-team", HerdrMode: "available", Roles: []*genhighbay.TeamRoleState{},
-		SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
-	}}
+	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{Team: "page-team"}}
 	cp := newBuildControlPlane(t, Options{
 		Team: &TeamBinding{Owner: pageOwner, Service: team},
 	})

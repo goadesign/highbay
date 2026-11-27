@@ -136,7 +136,7 @@ func (c *ControlPlane) InitProject(
 	if !scaffold.ValidVersion(c.highbayVersion) {
 		recordInitRefused(span, "highbay_version_unavailable")
 		return nil, genhighbay.MakeNotImplemented(errors.New(
-			"this server has no exact github.com/goadesign/highbay module version configured for starter generation; install hbay from a tagged or pseudo-versioned module release, stop this project's server with hbay stop in the project folder, restart your coding agent so its Highbay connection starts the new hbay, then call init_project again",
+			"this server has no exact github.com/goadesign/highbay module version configured for starter generation; install highbay from a tagged or pseudo-versioned module release, stop this project's server with highbay stop in the project folder, restart your coding agent so its Highbay connection starts the new highbay, then call init_project again",
 		))
 	}
 
