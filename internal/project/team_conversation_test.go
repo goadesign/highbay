@@ -327,6 +327,9 @@ func TestSendMessageRefusals(t *testing.T) {
 			if test.cause != "" && assert.ErrorAs(t, err, &unavailable) {
 				assert.Equal(t, test.cause, unavailable.Cause)
 			}
+			if test.want == "unprocessable" {
+				assert.Empty(t, fakes.core.runs)
+			}
 			assert.Empty(t, fakes.chorus.posted())
 		})
 	}

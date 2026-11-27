@@ -69,7 +69,7 @@ const beforeReplacement = page.requests.length;
 await control(origin, "act", { key: "accept-t2" });
 await until(() => page.requests.slice(beforeReplacement).some((r) => r.path === "/verifications/" + input.run && r.status === 200 && JSON.parse(r.answer).inputs_current === false), "the opened Build did not read the second acceptance's negative match");
 await until(() => review() && !review().disabled && !currentBuild() && review().textContent === "Review saved check", "a second accepted commit left the opened Build claiming current proof");
-expect(page.$("#highbay-cp1-editor") && !page.$("#highbay-cp4-verification"), "a background acceptance navigated away from Build");
+expect(page.state() === "build" && !page.$("#highbay-cp4-verification"), "a background acceptance navigated away from Build");
 await control(origin, "act", { key: "accept-t1" });
 await until(currentBuild, "reaccepting the recorded tests did not restore Build's decision");
 review().click();
@@ -245,9 +245,11 @@ func TestViewsPagePendingAndFailedFreshnessPreservesReportAndDraft(t *testing.T)
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#highbay-build-review-check").disabled, "the saved passing check did not load");
+page.$("#highbay-nav-cp1").click();
 page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-field="expected_outcome"]');
 page.type(draft, "Keep this unsaved agreement outcome");
+page.$("#highbay-nav-build").click();
 page.$("#highbay-build-review-check").click();
 await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true) && !page.$("#highbay-load-verifications").disabled, "the selected passing proof did not settle");
 const verdict = page.text("#highbay-cp4-title");
@@ -351,9 +353,11 @@ func TestViewsPageBackgroundCardReadRequiresRecoveryBeforeApproval(t *testing.T)
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-review-check")?.classList.contains("shadcn-btn-primary") && !page.$("#highbay-build-review-check").disabled, "the saved passing check did not load");
+page.$("#highbay-nav-cp1").click();
 page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-field="expected_outcome"]');
 page.type(draft, "Preserve this draft through the card read");
+page.$("#highbay-nav-build").click();
 page.$("#highbay-build-review-check").click();
 await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp5-approve") && !(page.$("#highbay-cp5-approve")?.disabled ?? true), "the selected passing proof did not settle");
 const approve = page.$("#highbay-cp5-approve");
@@ -410,6 +414,7 @@ func TestViewsPageExplicitCardReadFailureRequiresRecoveryBeforeApproval(t *testi
 	runPageScript(t, ps, map[string]any{"run": runID}, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-review-check") && !page.$("#highbay-build-review-check").disabled, "the initial current result did not load");
+page.$("#highbay-nav-cp1").click();
 page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-field="expected_outcome"]');
 page.type(draft, "Keep this draft while the manual read recovers");
@@ -491,6 +496,7 @@ await control(origin, "hold", { key: "GET /change-updates" });
 await control(origin, "reply", { key: "GET " + buildPath, status: 503, body: { name: "internal", message: "Retry the saved build read." } });
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-refresh") && !page.$("#highbay-build-refresh").disabled && page.sent("GET", runPath).some((r) => r.status === 200 && JSON.parse(r.answer).inputs_current === true), "the initial failed build read did not retain the positive T1 owner observation");
+page.$("#highbay-nav-cp1").click();
 page.$("#highbay-refine-agreement").open = true;
 page.type(page.$('textarea[data-field="expected_outcome"]'), "Keep the editor beside saved proof");
 page.$("#highbay-nav-cp5").click();
@@ -536,9 +542,10 @@ func TestViewsPageConfirmationWaitsForMatchingListBeforeNamingCurrentAgreement(t
 	}, `
 await control(origin, "hold", { key: "GET /change-updates" });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor")?.dataset.requestRevision === input.listed &&
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.requestRevision === input.listed &&
   page.sent("GET", "/change-updates").some((r) => r.status === undefined) && !page.$("#highbay-build-loading"),
   "the original agreement and held update read did not settle");
+page.$("#highbay-nav-cp1").click();
 page.$("#highbay-refine-agreement").open = true;
 page.type(page.$('textarea[data-field="expected_outcome"]'), "The manager reviews the refund and records the reason");
 page.$("#highbay-confirm-submit").click();

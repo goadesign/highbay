@@ -142,25 +142,30 @@ with unsaved input, save or discard your edits and then choose **Open link**.
 The two-minute expiry starts when the link is issued. See
 [startup and recovery](REFERENCE.md#highbay-and-highbay-stop).
 
-The frame names the journey Describe → Agree → Architecture → Build → Check →
-Approve. **Inspect** opens Story, Team, Live target and Diagnostics.
-Agreed, Needs you and Next keep the current context and
-decision visible; on a phone, Next moves to the bottom of the viewport.
-The frame previews at most two lines of the agreed summary. **Read full
-summary** opens Agree at the complete saved summary, keeping unsaved edits.
-On Describe, with no change open for editing, it shows no agreement.
+The Studio header offers **Describe** (or **Changes**), **+ New change**, and
+the five-step change journey **Agree → Architecture → Build → Verify →
+Approve**, while **Inspect** opens Story, Team, Live target and Diagnostics.
+On desktop viewports, the active stage occupies a single main column (with any
+open agent terminal docked beneath that stage column) beside the sticky
+**Conversation** dock; on narrow viewports, Stage, Conversation, and Terminal
+switch cleanly one surface at a time. Agreed, Status, and Next keep the current
+context and decision visible; on a phone, Next moves to the bottom of the
+viewport. The frame previews at most two lines of the agreed summary. **Read
+full summary** opens Agree at the complete saved summary, keeping unsaved edits
+per Change Card. On Describe, with no change open for editing, it shows no
+agreement.
 
 | View | What it is for |
 | --- | --- |
-| Describe | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
-| Conversation | The project's messages and pinned instructions. Send a message to the team or mention a role to ask it directly. |
-| Team | Each role's status, assignment, and saved coding-agent choices. **Start workers** starts missing workers with work on the build. Open a role's **Terminal** to see and answer its prompts. |
+| Describe / Changes | Start your first project goal or browse saved Change Cards (most recently saved first, each with its latest saved verification run). **+ New change** drafts a separate Change Card at any time. |
+| Conversation | The project's messages and pinned instructions. Send a message to the team, ask Guide to revise the open Change Card, or mention a role directly. |
+| Team | Each role's status, assignment, and saved coding-agent choices. **Start workers** starts missing workers with work on the build. Watch a running role's **Terminal** passively, or choose **Type in terminal** to answer prompts interactively. |
 | Story | The Story of the change shown, and the guide's latest Story draft. |
 | Live target | The running copy of your application that the builder tries prompts on, and the model connection it uses. |
-| Agree | The Change Card: its questions, your answers, confirmation and a proposed revision. Unsaved edits stay available when you move to another stage. |
-| Build | The saved build and its next step, with agreement details available below. |
-| Architecture | The architecture preview of the confirmed card. |
-| Check | The change’s saved verification runs and their test details. |
+| Agree | The Change Card: its questions, your answers, confirmation, refinements, and any proposed revision. Unsaved edits stay isolated per Change Card when you move to another stage or card. |
+| Build | The saved build and its next step, with a folded read-only agreement summary and saved approval link below. |
+| Architecture | The optional C4 architecture preview of the confirmed card. |
+| Verify | The change’s saved verification runs and their test details. |
 | Approve | The selected run’s recorded Story, finished flows and required test outcomes, excluded drafts, unknown coverage, approval requirements and verified commits. Next offers **Approve this result** when available, then **Merge into current branch** for the current approved result. |
 
 A **Diagnostics** drawer shows the server's [operation diagnostics](REFERENCE.md#operation-diagnostics).
@@ -587,14 +592,14 @@ Every run records where its tests came from. For tests the test writer wrote,
 the run's result, as `verify_change`, `get_verification` and
 `list_verifications` return it, names the tests commit and carries this
 notice: "These tests were written by a separate agent on this machine and are
-not isolated from the builder." The Check view lists the change's saved runs
+not isolated from the builder." The Verify view lists the change's saved runs
 and shows the selected run's scenarios and outcome. For a run of the test
 writer's tests it shows that notice with the result. Under **Candidate and
 run details** it shows the builder's commit as "Candidate commit" and the
 tests commit as "Accepted tests commit", or as "Evaluator commit" when the
 run used the evaluator that stored verification settings name.
 
-The Describe view shows each change's latest saved run, for example "Latest
+The Changes view shows each change's latest saved run, for example "Latest
 saved run: passed", and says under it whether that run counts for the change
 as it stands. "Matches the agreed revision and selected tests." means the run
 verified the agreed revision with the tests a run of that revision would
@@ -602,12 +607,12 @@ use: the tests accepted for the build of that revision or, with stored
 verification settings, the evaluator they name. Otherwise the line reads
 "Earlier inputs or no current test selection." and tells you to ask the
 builder for a run of the agreed revision. A run that does not match stays
-readable in the Check view.
+readable in the Verify view.
 
 The opened change and the selected run also refresh this match when the
 agreement or selected tests change. While a read is pending or fails, the
 report and your unsaved edits stay visible, but approval waits for a fresh
-match. Check shows **Check started** in your local time: it is the time the
+match. Verify shows **Check started** in your local time: it is the time the
 server accepted the run, not a completion time. Details retain the exact
 recorded timestamp.
 
@@ -693,7 +698,7 @@ the binaries the run built. When one is missing or differs, approval is
 refused, and the refusal ends with your step: "publish the binaries the run
 built, whose folder the run's Proof view shows, into the release folder that
 the promotion settings name, in a folder named after the commit, or remove
-the promotion settings". For a completed run, the Check view shows you its
+the promotion settings". For a completed run, the Verify view shows you its
 actual binary folder under **Binaries built by this run**, as selectable
 code. Use that folder for the selected run; the approval error panel repeats
 it. Agents never receive this path. See

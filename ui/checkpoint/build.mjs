@@ -808,18 +808,29 @@ const viewsPageScriptSource = "'sha256-${scriptDigest}'"
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8fafc" />
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#090d16" />
   <title>Highbay</title>
   <style>
 ${stylesCss}
   </style>
 </head>
 <body>
-  <a class="highbay-skip-link" href="#highbay-checkpoint-view">Skip to the current stage</a>
-  <main id="highbay-checkpoint-root" data-state="starting">
-    <nav id="highbay-checkpoint-nav" aria-label="Workspace stages" hidden></nav>
-    <p id="highbay-checkpoint-status" role="status" aria-live="polite">Opening Highbay...</p>
-    <section id="highbay-checkpoint-view" aria-label="Workspace View" tabindex="-1"></section>
-  </main>
+  <div id="highbay-checkpoint-root" data-session="starting">
+    <a id="highbay-skip-link" class="highbay-skip-link" href="#highbay-checkpoint-view">Skip to the current stage</a>
+    <p id="highbay-checkpoint-status" class="highbay-visually-hidden" role="status" aria-live="polite">Opening Highbay...</p>
+    <header id="highbay-checkpoint-nav" aria-label="Workspace stages" hidden></header>
+    <div id="highbay-checkpoint-notices"></div>
+    <div id="highbay-workspace-columns" class="highbay-workspace-grid" data-rail="hidden">
+      <div id="highbay-stage-column" class="highbay-stage-column">
+        <main id="highbay-checkpoint-view" data-stage="starting" aria-label="Workspace stage" tabindex="-1"></main>
+        <section id="highbay-terminal-region" aria-label="Role terminal" hidden></section>
+      </div>
+      <aside id="highbay-conversation-rail" aria-label="Team conversation" hidden></aside>
+    </div>
+    <aside id="highbay-trace-region" aria-label="Operation diagnostics" hidden></aside>
+  </div>
   <script>${scriptText}</script>
 </body>
 </html>

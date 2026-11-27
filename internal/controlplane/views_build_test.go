@@ -48,9 +48,13 @@ const originalStart = JSON.parse(page.sent("POST", path)[0].answer).build.starte
 expect(page.text("#highbay-build-builder").includes("assignment unread"), "page read marked the builder assignment read");
 await control(origin, "act", { key: "builder-read" });
 await until(() => page.text("#highbay-build-builder").includes("assignment read") && page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "real assignment read did not update the ready Build controls");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
 const typed = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 expect(typed, "editable example is missing");
 page.type(typed, "unsaved page text");
+page.$("#highbay-nav-build").click();
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "Build again did not return");
 page.$("#highbay-build-again").click();
 await until(() => page.$("#highbay-build-confirm"), "Build again did not ask first");
 expect(page.text("#highbay-build-question").includes("accepted again before verification or a new live target"), "the rebuild question does not explain the verification and live-target consequences");
@@ -72,8 +76,9 @@ await until(() => page.sent("POST", path).length === 2 && page.$("#highbay-build
 const replacement = page.sent("POST", path)[1].body;
 expect(replacement.request_revision === input.revision && replacement.replaces?.change_id === "chg" && replacement.replaces.started_at === originalStart && Object.keys(replacement.replaces).length === 2, "confirmed restart did not name exactly the observed unfinished build");
 await until(() => page.text("#highbay-build-builder").includes("assignment unread"), "rebuild did not clear the assignment read");
-expect(typed === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && typed.value === "unsaved page text", "build updates discarded the unsaved editor");
 expect(page.sent("POST", path).length === 2, "one confirmed rebuild submitted twice");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "unsaved page text", "build updates discarded the unsaved editor");
 page.close();
 `)
 }
@@ -106,24 +111,28 @@ func TestViewsPageRebuildEscapeDuringRefresh(t *testing.T) {
 const path = "/changes/chg/build";
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "the initial rebuild control did not become ready");
-const edited = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
-page.type(edited, "keep this unsaved example");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep this unsaved example");
+page.$("#highbay-nav-build").click();
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "rebuild control did not return");
+const externalInput = page.$("#highbay-composer-input");
 page.$("#highbay-build-again").click();
 await until(() => page.$("#highbay-build-confirm"), "rebuild confirmation did not open");
 page.$("#highbay-build-confirm").focus();
-if (input.after === "editor") edited.focus();
+if (input.after === "editor") externalInput.focus();
 await control(origin, "hold", { key: "GET " + path });
 await control(origin, "act", { key: "refresh-team" });
 await until(() => page.$("#highbay-build-loading") && page.$("#highbay-build-again").disabled && page.$("#highbay-build-confirm"), "the held refresh did not disable the trigger beside the open question");
 if (input.after === "editor") {
-  expect(page.doc.activeElement === edited, "the refresh took focus into the open question");
+  expect(page.doc.activeElement === externalInput, "the refresh took focus into the open question");
   page.$("#highbay-build-confirm").focus();
 }
 page.$("#highbay-build-confirm").dispatchEvent(new page.win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 await until(() => !page.$("#highbay-build-confirm"), "Escape did not cancel during the refresh");
 expect(page.sent("POST", path).length === 0, "Escape sent a build request");
 if (input.after === "editor") {
-  edited.focus();
+  externalInput.focus();
 } else if (input.after === "read failed") {
   await control(origin, "reply", { key: "GET " + path, status: 500,
     body: { name: "fault", id: "read-failed", message: "Build read failed.", fault: true, temporary: false, timeout: false } });
@@ -135,12 +144,13 @@ await until(() => !page.$("#highbay-build-loading"), "the released build read di
 if (input.after === "ready") {
   await until(() => page.doc.activeElement === page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "Escape lost focus when the rebuild trigger became enabled");
 } else if (input.after === "editor") {
-  expect(page.doc.activeElement === edited, "the finished refresh took focus from the editor");
+  expect(page.doc.activeElement === externalInput, "the finished refresh took focus from the external input");
 } else {
   expect(page.doc.activeElement === page.$("#highbay-build-title"), "the unavailable or replaced trigger did not leave focus on the stable Build heading");
 }
-expect(edited.value === "keep this unsaved example", "the refresh discarded the edited example");
 expect(!page.$("#highbay-build-confirm") && page.sent("POST", path).length === 0, "the refresh reopened or submitted the cancelled question");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "keep this unsaved example", "the refresh discarded the edited example");
 page.close();
 `)
 		})

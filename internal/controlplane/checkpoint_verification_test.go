@@ -153,10 +153,14 @@ const openChange = async (page, changeId) => {
   const buildPath = "/changes/" + changeId + "/build";
   const buildReads = page.sent("GET", buildPath).length;
   page.$("#highbay-open-change-" + changeId).click();
-  await until(() => page.$("#highbay-cp1-editor").dataset.changeId === changeId, changeId + " did not open");
+  await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === changeId, changeId + " did not open");
   // The initial build observation may invalidate selected proof. Settle this
   // opening's own read before testing status actions under unchanged inputs.
   await until(() => page.sent("GET", buildPath).slice(buildReads).some((r) => r.status === 200) && !page.$("#highbay-build-loading") && !page.$("#highbay-build-error"), changeId + " did not settle its initial build read");
+  if (!page.$("#highbay-cp1-editor")) {
+    page.$("#highbay-nav-cp1").click();
+    await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === changeId, changeId + " Agree did not open");
+  }
 };
 const proof = async (page, changeId) => {
   const listPath = "/changes/" + changeId + "/verifications";
@@ -202,18 +206,17 @@ const selectRun = async (page, runId) => {
   expect(reviewReads(page, input.runA).length === reads + 1 && statusReads() === statusBefore, "status action did not review this exact run");
   const refresh = reviewReads(page, input.runA)[reads];
   expect(button(page).disabled && page.$("#highbay-cp4-verification").getAttribute("aria-busy") === "true", "status request was not disabled or marked aria-busy");
-  expect(!field(page).disabled, "status read disabled independent CP1 editing");
-  page.type(field(page), "Edited while checking status");
   await control(origin, "release", { key });
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "completed report is not shown");
   expect(refresh.status === 200 && JSON.parse(refresh.answer).run_id === input.runA, "status action did not receive its selected run");
   expect(!button(page) && page.$("#highbay-cp4-verification").getAttribute("aria-busy") === null, "completed report is not final or remained aria-busy");
   expect(text(page).includes("The check passed: 2 of 2 scenarios.") && text(page).includes("holdout-1"), "report denominator or anonymous outcome is missing");
   expect(page.text("#highbay-cp4-evidence-limits").includes("What this run does not establish") && text(page).includes(input.commit), "coverage limits or verified inputs are missing");
-  expect(field(page).value === "Edited while checking status", "status reply erased a draft");
   await sleep(200);
   expect(reviewReads(page, input.runA).length === reads + 1 && statusReads() === statusBefore, "completed report started another request");
   expect(page.sent("POST", "/changes/chg-verify/verifications").length === 0, "reviewing a run restarted verification");
+  page.$("#highbay-nav-cp1").click();
+  expect(field(page).value === "Unsaved CP4 draft", "status reply erased a draft");
   page.close();
 }
 
@@ -248,13 +251,15 @@ const selectRun = async (page, runId) => {
   await control(origin, "reply", { key: "GET " + reviewPath(input.runA), status: 503, body: { name: "fault", id: "x", message: "Verification service unavailable", temporary: true, timeout: false, fault: true } });
   button(page).click();
   await until(() => text(page).includes("Verification service unavailable"), "the read failure is not shown");
-  expect(text(page).includes("The check is running") && field(page).value === "Draft after read error" && !button(page).disabled, "read failure lost the run, the draft or the retry");
+  expect(text(page).includes("The check is running") && !button(page).disabled, "read failure lost the run or the retry");
   await fixture("run passed");
   button(page).click();
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "the retry did not read the run");
   const [failure, retry] = reviewReads(page, input.runA).slice(reads);
   expect(failure?.status === 503 && retry?.status === 200 && JSON.parse(retry.answer).run_id === input.runA, "recovery did not retry the same run's review");
   expect(!text(page).includes("Verification service unavailable"), "successful retry retained old feedback");
+  page.$("#highbay-nav-cp1").click();
+  expect(field(page).value === "Draft after read error", "read failure lost the draft");
   page.close();
 }
 
@@ -292,22 +297,25 @@ const selectRun = async (page, runId) => {
   await fixture("run running");
   const page = await open("chg-verify");
   page.type(field(page), "Saved edited outcome");
-  await proof(page, "chg-verify");
-  expect(field(page), "the editor with unsaved edits did not stay beside the runs");
-  const reads = reviewReads(page, input.runA).length;
   await control(origin, "hold", { key: "POST /changes/confirm" });
   page.$("#highbay-confirm-submit").click();
+  await proof(page, "chg-verify");
+  const reads = reviewReads(page, input.runA).length;
   await fixture("run passed");
   button(page).click();
   expect(page.sent("POST", "/changes/confirm").length === 1 && reviewReads(page, input.runA).length === reads + 1, "independent review was blocked behind the save");
   await until(() => text(page).includes("The check passed: 2 of 2 scenarios."), "the status read did not finish during the save");
+  page.$("#highbay-nav-cp1").click();
   expect(field(page).disabled, "status reply unlocked an unfinished card save");
   await control(origin, "release", { key: "POST /changes/confirm" });
   await until(() => !field(page).disabled, "card answer did not finish independently");
   expect(field(page).value === "Saved edited outcome", "card answer lost saved text");
+  page.$("#highbay-nav-cp4").click();
   expect(page.$("#highbay-cp4-different-revision") && text(page).includes(input.revision), "report for another revision looked current after the card changed");
+  page.$("#highbay-nav-cp1").click();
   page.type(field(page), "Discard this local draft");
   page.$("#highbay-discard-draft").click();
+  page.$("#highbay-nav-cp4").click();
   expect(!field(page) && page.$("#highbay-cp4-different-revision"), "closed editor lost the retained card revision warning");
   page.close();
 }
@@ -317,7 +325,7 @@ const selectRun = async (page, runId) => {
   await fixture("runs chg-verify late,early");
   const page = await open("chg-verify");
   await proof(page, "chg-verify");
-  expect(page.state() === "cp4-verification" && page.$("#highbay-result-view").dataset.runId === "20000000-0000-4000-8000-000000000002", "the list did not select the first server-ordered run");
+  expect(page.state() === "verify" && page.$("#highbay-result-view").dataset.runId === "20000000-0000-4000-8000-000000000002", "the list did not select the first server-ordered run");
   const buttons = page.$$("#highbay-cp4-run-list button");
   expect(buttons.length === 2 && buttons[0].dataset.runId === "20000000-0000-4000-8000-000000000002" && buttons[1].dataset.runId === "10000000-0000-4000-8000-000000000001", "run buttons changed the server's sub-second ordering");
   expect(buttons[0].textContent.includes("started ") && page.$('#highbay-cp4-details time[datetime="2026-10-31T12:00:00.9Z"]').textContent === "2026-10-31T12:00:00.9Z", "the latest run lost its local start label or exact accepted_at time");
@@ -447,6 +455,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   const warning = page.$("#highbay-cp4-different-revision");
   expect(warning && warning.textContent.includes("different saved Change Card revision") && !warning.textContent.includes("earlier"), "revision hashes were used to invent chronology");
   expect(page.text("#highbay-cp4-inputs").includes("does not match"), "the saved other-revision fixture claimed current inputs");
+  page.$("#highbay-nav-cp1").click();
   expect(field(page).value === "Retain older editor", "a report for a different revision erased the draft");
   page.close();
 }
@@ -506,7 +515,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   await fixture("run passed");
   await control(origin, "release", { key });
   await until(() => refresh?.status === 200, "the late review did not arrive");
-  expect(page.state() === "cp1-change-card" && page.$("#highbay-result-view").dataset.state === undefined, "a late status answer replaced a different stage");
+  expect(page.state() === "agree" && !page.$("#highbay-result-view"), "a late status answer replaced a different stage");
   page.close();
 }
 

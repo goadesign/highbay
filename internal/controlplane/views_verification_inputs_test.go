@@ -58,7 +58,7 @@ func TestViewsPageSeparatesRecordedRunsFromCurrentInputs(t *testing.T) {
 	})
 	runPageScript(t, ps, map[string]any{"run": runID, "revision": card.RequestRevision}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-summary", "the page did not finish opening its single change");
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-summary", "the page did not finish opening its single change");
 page.$("#highbay-nav-changes").click();
 const row = () => page.$('#highbay-change-list [data-change-id="chg-summary"]');
 const basis = () => row()?.querySelector("[data-inputs-current]");
@@ -78,7 +78,7 @@ await until(() => basis()?.dataset.inputsCurrent === "false", "a new agreed revi
 expect(row().textContent.includes("Latest saved run: passed") && !badge().classList.contains("shadcn-badge-success"), "a historical verdict became this revision's result");
 await until(() => page.$("#highbay-open-change-chg-summary") && !page.$("#highbay-open-change-chg-summary").disabled, "the changed agreement could not be opened");
 page.$("#highbay-open-change-chg-summary").click();
-await until(() => page.$("#highbay-cp1-editor")?.dataset.requestRevision !== input.revision, "the new agreement did not open");
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.requestRevision !== input.revision, "the new agreement did not open");
 page.$("#highbay-nav-cp4").click();
 await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp4-test-source"), "the old saved proof could not be inspected");
 expect(page.text("#highbay-cp4-details").includes(input.revision), "the proof lost its recorded revision");

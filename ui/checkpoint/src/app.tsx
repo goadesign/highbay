@@ -1,16 +1,16 @@
-// Package main implements the Highbay views page. The page exchanges the
-// one-use link `highbay` opened it with for an origin-scoped Bearer session,
-// then reads and acts on the project's changes by calling
-// the Highbay server at the address it was loaded from. It coordinates the
-// stage navigation bar (#highbay-checkpoint-nav), the displayed-subject context
-// strip (#highbay-workspace-context), the two-region layout (#highbay-cp1-editor
-// and #highbay-result-view), the change list, and synchronous React 19
-// rendering.
+// Package main implements the Highbay Studio views page (/views). The page
+// exchanges the one-use link `highbay` opened it with for an origin-scoped
+// Bearer session, then coordinates the sticky Studio header
+// (#highbay-checkpoint-nav), global notices (#highbay-checkpoint-notices),
+// single-column main stage (main#highbay-checkpoint-view[data-stage=...]),
+// stage-docked terminal drawer (section#highbay-terminal-region), full-height
+// Chorus conversation dock (aside#highbay-conversation-rail), and diagnostics
+// drawer (aside#highbay-trace-region).
 
 // zod-jitless stays the first import: it configures zod before any imported
 // module builds a schema.
 import "./zod-jitless";
-import React from "react";
+import React, { useEffect } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, Root } from "react-dom/client";
 import { ArchitecturePreviewView, IncomingChangeCardView } from "./components/c4-graph";
@@ -20,30 +20,59 @@ import {
   ComposerDraft,
   ComposerRecipient,
   ConversationRail,
-  DescribeComposer,
+  contextRequiresGuide,
   guideRoleNeedsStart,
 } from "./components/conversation";
+import { DraftChangeWorkspace, ProposalReviewQueue } from "./components/draft-workspace";
 import { CP1EditorView } from "./components/cp1-editor";
-import { BuildMergeInstructions, BuildSectionView, BuildStartReceipt, runBelongsToBuild } from "./components/build";
+import {
+  BuildMergeInstructions,
+  BuildSectionView,
+  BuildStartReceipt,
+  buildTimestampNanos,
+  runBelongsToBuild,
+} from "./components/build";
 import { AgentPickerView } from "./components/agent-picker";
-import { choicesForRoles, proposeGuideChoice, proposeWorkerChoices, roleChoiceError, workerChoicesReady } from "./agent-choices";
+import {
+  choicesForRoles,
+  proposeGuideChoice,
+  proposeWorkerChoices,
+  roleChoiceError,
+  workerChoicesReady,
+} from "./agent-choices";
 import type { WorkerChoices, WorkerRole } from "./agent-choices";
 import { MergeFeedback, MergePrimaryAction, MergedBranchVerification } from "./components/merge-action";
 import type { MergeControls } from "./components/merge-action";
 import { VerificationView } from "./components/cp4-verification";
 import { ProposedRevisionView } from "./components/proposal";
 import { ApprovalStage } from "./components/approval-stage";
-import { WorkspaceFrame } from "./components/workspace-frame";
+import { JourneyStep, WorkspaceFrame } from "./components/workspace-frame";
 import { SessionEndedNotice, SignedOutReason, SignedOutView } from "./components/session";
 import { StoryStageView } from "./components/story";
-import { GlobalTeamAttention, TeamFactsError, TeamStageProps, TeamStageView, teamAttentionText } from "./components/team";
-import { TerminalDrawer, TerminalTicketOutcome } from "./components/terminal-drawer";
+import {
+  GlobalTeamAttention,
+  TeamFactsError,
+  TeamStageProps,
+  TeamStageView,
+  teamAttentionText,
+} from "./components/team";
+import {
+  TerminalDrawer,
+  TerminalDrawerSize,
+  TerminalTicketOutcome,
+} from "./components/terminal-drawer";
 import { UpdateBanner, UpdateProgress } from "./components/update-banner";
-import { LiveTargetStageView, ModelDraft, ServerAnswer, describeApplied } from "./components/live-target";
-import { Alert, Button, Card } from "./components/shadcn";
+import {
+  LiveTargetStageView,
+  ModelDraft,
+  ServerAnswer,
+  describeApplied,
+} from "./components/live-target";
+import { Alert, Badge, Button, Card } from "./components/shadcn";
 import { TraceDrawer, TraceFilter } from "./components/trace-drawer";
 import { answersNeedingRevision, isDraftDirty, PreservedDraft } from "./context/cp1-draft";
 import {
+  AmbiguityQuestion,
   ArchitecturePreviewResult,
   ApprovalItem,
   ChangeCardResult,
@@ -77,23 +106,17 @@ import {
 } from "./types";
 
 // WAIT_RETRY_MS is how long the page waits before asking again after the
-// first failed round of its waiting read: the server did not answer, or
-// answered that the list changed but then refused to send it. Each further
-// failed round doubles the wait, up to WAIT_RETRY_MAX_MS.
+// first failed round of its waiting read. Each further failed round doubles
+// the wait, up to WAIT_RETRY_MAX_MS.
 const WAIT_RETRY_MS = 5000;
 // WAIT_RETRY_MAX_MS bounds the wait between failed rounds.
 const WAIT_RETRY_MAX_MS = 30000;
 
 // Failure describes one request the server refused or never answered.
 interface Failure {
-  // kind separates a session the server no longer accepts, a refusal or
-  // malformed answer, an unreachable server, and a request the page stopped.
   kind: "session" | "server" | "network" | "aborted";
-  // status is the HTTP status, or 0 when no answer arrived.
   status: number;
-  // message is the server's own error message when it sent one.
   message: string;
-  // body retains only a validated response, including typed refusal facts.
   body?: ServerFailure;
 }
 
@@ -103,61 +126,265 @@ type Outcome<T> = { ok: true; result: T } | ({ ok: false } & Failure);
 // PendingCall records one outstanding request so views derive their waiting
 // state from the requests actually in flight.
 interface PendingCall {
-  // op is the operation sent.
   op: OperationName;
-  // subject is the change_id or run_id the request is about, or "".
   subject: string;
 }
 
-// ActiveEditorState keeps received saved values separate from editable drafts.
+// ActiveEditorState keeps received saved values separate from editable drafts
+// for one specific Change Card in editorsByChangeId.
 interface ActiveEditorState {
-  // card is the last saved snapshot received from the server.
   card: ChangeCardResult;
-  // priorCard is the immediately prior saved snapshot for this change_id
-  // when the editor transitioned between distinct revisions of the same card.
   priorCard: ChangeCardResult | null;
-  // incomingCard retains a newer revision that arrived while the editor had
-  // unsaved state or an outstanding request, until the user switches to it
-  // or a card is mounted directly.
   incomingCard: ChangeCardResult | null;
-  // draftAnswers contains the user's current choices, including unsaved ones.
   draftAnswers: Record<string, string>;
-  // draftExamples contains the exact text the user is editing.
   draftExamples: ExampleItem[];
-  // preservedDraft retains unsaved draft edits from an earlier revision.
   preservedDraft: PreservedDraft | null;
-  // formError describes the latest failed editor request or invalid input.
   formError: { message: string; source: "input" | "request" } | null;
-  // proposalAnswers holds the user's choices for the waiting proposal's
-  // questions; a re-read keeps those that still fit the proposal.
   proposalAnswers: Record<string, string>;
-  // proposalError describes the last refused adopt or decline, or null.
   proposalError: string | null;
 }
 
-// ActiveResultState selects the view displayed in #highbay-result-view.
-type ActiveResultState =
-  | { kind: "changes" }
-  | { kind: "story" }
-  | { kind: "live" }
-  | { kind: "team" }
-  | { kind: "cp2-architecture-preview" }
-  | { kind: "cp4-verification" }
-  | { kind: "cp5-approval" }
-  | { kind: "cp1-incoming-card" };
+// ChangeStageName names one of the 5 stages in the Change Stepper.
+type ChangeStageName = "agree" | "arch" | "build" | "verify" | "approve";
 
-// SessionState is the page's session lifecycle: starting while the link is
-// exchanged, active with a session, signed out without one, or ended when
-// the server stopped accepting the session.
+// WorkspaceView names the single stage rendered in main#highbay-checkpoint-view.
+type WorkspaceView =
+  | { kind: "changes" }
+  | { kind: "new" }
+  | { kind: "change"; changeId: string; stage: ChangeStageName }
+  | { kind: "team" }
+  | { kind: "story" }
+  | { kind: "live" };
+
+// MobileSurface selects the single visible surface below 1080px.
+type MobileSurface = "stage" | "conversation" | "terminal";
+
+// HistoryViewState stores opaque navigation IDs in window.history.state on
+// exact /views without ever storing user-typed prompt or draft text.
+interface HistoryViewState {
+  view: "changes" | "new" | "change" | "team" | "story" | "live";
+  changeId?: string;
+  stage?: ChangeStageName;
+  runId?: string;
+  mobileSurface?: MobileSurface;
+  newDraft?: { sentMessageId?: string };
+}
+
+// SessionState is the page's session lifecycle.
 type SessionState = "starting" | "active" | "signed-out" | "ended";
 
+// WorkspaceSubjectDescriptor describes the displayed subject in Current view details.
+interface WorkspaceSubjectDescriptor {
+  role: "editor" | "incoming" | "result";
+  label: string;
+  stage: string;
+  changeId?: string;
+  requestRevision?: string;
+  detail?: string;
+}
+
+// DraftRevisionAidLoader triggers initial agent-option discovery inside a React
+// effect rather than mutating state during render.
+function DraftRevisionAidLoader({
+  active,
+  onLoad,
+}: {
+  active: boolean;
+  onLoad: () => void;
+}) {
+  useEffect(() => {
+    if (active) {
+      onLoad();
+    }
+  }, [active, onLoad]);
+  return null;
+}
+
+// StagePrerequisiteCard explains calmly when Architecture or Build requires
+// confirming the Change Card in Agree first, without firing a 409 RPC.
+function StagePrerequisiteCard({
+  stageTitle,
+  explanation,
+  primaryGoAgree,
+  onGoAgree,
+}: {
+  stageTitle: string;
+  explanation: string;
+  primaryGoAgree: boolean;
+  onGoAgree: () => void;
+}) {
+  return (
+    <Card
+      id="highbay-stage-prerequisite"
+      className="highbay-card"
+      role="status"
+      aria-labelledby="highbay-prerequisite-title"
+    >
+      <h2 id="highbay-prerequisite-title" tabIndex={-1}>
+        {stageTitle + " follows Agree"}
+      </h2>
+      <p>{explanation}</p>
+      <div className="highbay-field-row">
+        <Button
+          id="highbay-prerequisite-go-agree"
+          variant={primaryGoAgree ? "primary" : "secondary"}
+          onClick={onGoAgree}
+        >
+          Go to Agree
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// ReadOnlyAgreementSummary renders the folded Agreement details disclosure on
+// Build so users can check the agreed decisions and saved approval without leaving Build.
+function ReadOnlyAgreementSummary({
+  card,
+  onOpenAgree,
+  onReviewApproval,
+}: {
+  card: ChangeCardResult;
+  onOpenAgree: () => void;
+  onReviewApproval: () => void;
+}) {
+  const ambiguities = Array.isArray(card.ambiguities) ? card.ambiguities : [];
+  return (
+    <>
+      <Card className="highbay-card">
+        <h2>{"Agreed: " + card.prompt}</h2>
+        <details className="highbay-details" id="highbay-agreement-details">
+          <summary>Agreement details</summary>
+          {card.status === "confirmed" && ambiguities.length > 0 ? (
+            <div id="highbay-confirmed-decisions" role="region" aria-label="Confirmed Decisions">
+              <p>
+                <strong>Confirmed Decisions:</strong>
+              </p>
+              <ul>
+                {ambiguities.map((amb) => (
+                  <li key={amb.id}>
+                    <strong>{amb.question}</strong> <code>{card.answers?.[amb.id] ?? ""}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <p id="highbay-agreement-summary" tabIndex={-1}>
+            <strong>
+              {card.status === "confirmed" && ambiguities.length > 0
+                ? "Initial Proposal Summary: "
+                : "Summary: "}
+            </strong>
+            {card.summary}
+          </p>
+          {card.confirmed_by ? (
+            <p>
+              <strong>
+                {card.confirmed_by.startsWith("uid:")
+                  ? "Agreed by (operating system user): "
+                  : "Agreed by (recorded user identity): "}
+              </strong>
+              <code>{card.confirmed_by}</code>
+            </p>
+          ) : null}
+          <details className="highbay-details">
+            <summary>Agreement identifiers</summary>
+            <p>
+              change_id: <code>{card.change_id}</code> · status: <code>{card.status}</code> ·
+              request_revision: <code>{card.request_revision}</code>
+            </p>
+          </details>
+          <div className="highbay-field-row">
+            <Button variant="secondary" onClick={onOpenAgree}>
+              Open in Agree
+            </Button>
+          </div>
+        </details>
+      </Card>
+      {card.approval !== undefined || card.unverified_approval !== undefined ? (
+        <section className="highbay-approval-summary" aria-label="Saved approval">
+          <p>
+            <strong>
+              {card.unverified_approval !== undefined
+                ? "Saved approval needs checking."
+                : "Approval recorded."}
+            </strong>{" "}
+            Read its evidence, verified commits and current status in Approve.
+          </p>
+          <Button id="highbay-review-approval" onClick={onReviewApproval}>
+            Review saved approval
+          </Button>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+// isHistoryViewState narrows unknown browser history state to HistoryViewState.
+function isHistoryViewState(value: unknown): value is HistoryViewState {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  const view = value.view;
+  if (
+    view !== "changes" &&
+    view !== "new" &&
+    view !== "change" &&
+    view !== "team" &&
+    view !== "story" &&
+    view !== "live"
+  ) {
+    return false;
+  }
+  if (value.changeId !== undefined && typeof value.changeId !== "string") {
+    return false;
+  }
+  if (
+    value.stage !== undefined &&
+    value.stage !== "agree" &&
+    value.stage !== "arch" &&
+    value.stage !== "build" &&
+    value.stage !== "verify" &&
+    value.stage !== "approve"
+  ) {
+    return false;
+  }
+  if (value.runId !== undefined && typeof value.runId !== "string") {
+    return false;
+  }
+  if (
+    value.mobileSurface !== undefined &&
+    value.mobileSurface !== "stage" &&
+    value.mobileSurface !== "conversation" &&
+    value.mobileSurface !== "terminal"
+  ) {
+    return false;
+  }
+  if (value.newDraft !== undefined) {
+    if (!isPlainObject(value.newDraft)) {
+      return false;
+    }
+    if (
+      value.newDraft.sentMessageId !== undefined &&
+      typeof value.newDraft.sentMessageId !== "string"
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // formatChangedDraftLines formats only the ambiguity answers and acceptance
-// examples that differ from the saved Change Card, including cleared values,
-// so unchanged saved content is not relabeled as unsaved draft edits.
-function formatChangedDraftLines(ed: ActiveEditorState): string[] {
+// examples that differ from the saved Change Card, optionally excluding values
+// already satisfied by an adopted revision.
+function formatChangedDraftLines(
+  ed: ActiveEditorState,
+  adopted?: ChangeCardResult
+): string[] {
   const rev = ed.card.request_revision;
   const ambiguities = Array.isArray(ed.card.ambiguities) ? ed.card.ambiguities : [];
   const savedAnswers = isPlainObject(ed.card.answers) ? ed.card.answers : {};
+  const adoptedAnswers = adopted && isPlainObject(adopted.answers) ? adopted.answers : null;
   const draftAnswers = ed.draftAnswers || {};
   const questionByID = new Map<string, string>();
   const answerIDs: string[] = [];
@@ -184,71 +411,86 @@ function formatChangedDraftLines(ed: ActiveEditorState): string[] {
   const lines: string[] = [];
   for (let i = 0; i < answerIDs.length; i++) {
     const k = answerIDs[i];
-    const savedVal = Object.prototype.hasOwnProperty.call(savedAnswers, k)
-      ? savedAnswers[k]
-      : "";
-    const draftVal = Object.prototype.hasOwnProperty.call(draftAnswers, k)
-      ? draftAnswers[k]
-      : "";
+    const savedVal = Object.prototype.hasOwnProperty.call(savedAnswers, k) ? savedAnswers[k] : "";
+    const draftVal = Object.prototype.hasOwnProperty.call(draftAnswers, k) ? draftAnswers[k] : "";
     if (draftVal !== savedVal) {
+      if (
+        adoptedAnswers !== null &&
+        Object.prototype.hasOwnProperty.call(adoptedAnswers, k) &&
+        adoptedAnswers[k] === draftVal
+      ) {
+        continue;
+      }
       const q = questionByID.get(k);
       lines.push("[" + rev + "] " + k + (q ? " (" + q + ")" : "") + "=" + draftVal);
     }
   }
 
   const savedExamples = Array.isArray(ed.card.examples) ? ed.card.examples : [];
+  const adoptedExamples = adopted && Array.isArray(adopted.examples) ? adopted.examples : null;
   const draftExamples = Array.isArray(ed.draftExamples) ? ed.draftExamples : [];
   for (let i = 0; i < draftExamples.length; i++) {
     const ex = draftExamples[i];
     const savedEx = savedExamples.find((s) => s.id === ex.id);
-    if (
+    const differsFromSaved =
       !savedEx ||
       savedEx.scenario !== ex.scenario ||
       savedEx.input_summary !== ex.input_summary ||
       savedEx.expected_outcome !== ex.expected_outcome ||
-      savedEx.verification_kind !== ex.verification_kind
-    ) {
-      lines.push(
-        "[" +
-          rev +
-          "] " +
-          ex.id +
-          ": " +
-          ex.scenario +
-          " | " +
-          ex.input_summary +
-          " -> " +
-          ex.expected_outcome +
-          " [" +
-          ex.verification_kind +
-          "]"
-      );
+      savedEx.verification_kind !== ex.verification_kind;
+    if (!differsFromSaved) {
+      continue;
     }
+    if (adoptedExamples !== null) {
+      const adoptedEx = adoptedExamples.find((a) => a.id === ex.id);
+      if (
+        adoptedEx &&
+        adoptedEx.scenario === ex.scenario &&
+        adoptedEx.input_summary === ex.input_summary &&
+        adoptedEx.expected_outcome === ex.expected_outcome &&
+        adoptedEx.verification_kind === ex.verification_kind
+      ) {
+        continue;
+      }
+    }
+    lines.push(
+      "[" +
+        rev +
+        "] " +
+        ex.id +
+        ": " +
+        ex.scenario +
+        " | " +
+        ex.input_summary +
+        " -> " +
+        ex.expected_outcome +
+        " [" +
+        ex.verification_kind +
+        "]"
+    );
   }
   return lines;
 }
 
-// snapshotUnsavedDraft preserves unsaved local edits and any earlier unsaved
-// draft lines before a different saved revision replaces the editable form.
-function snapshotUnsavedDraft(ed: ActiveEditorState): PreservedDraft | null {
+// snapshotUnsavedDraft preserves unsaved local edits for one specific Change Card.
+function snapshotUnsavedDraft(
+  ed: ActiveEditorState,
+  adopted?: ChangeCardResult
+): PreservedDraft | null {
   const priorLines = ed.preservedDraft ? ed.preservedDraft.lines : [];
-  const currentLines = formatChangedDraftLines(ed);
+  const currentLines = formatChangedDraftLines(ed, adopted);
   if (currentLines.length === 0 && priorLines.length === 0) {
     return null;
   }
   return {
     fromRevision:
-      currentLines.length > 0
-        ? ed.card.request_revision
-        : ed.preservedDraft!.fromRevision,
+      currentLines.length > 0 ? ed.card.request_revision : ed.preservedDraft!.fromRevision,
     lines: priorLines.concat(currentLines),
   };
 }
 
 // nextPriorCard returns the immediately prior saved card when transitioning
-// between distinct revisions of the same change_id, preserves the existing
-// priorCard when refreshing the same revision, and returns null when
-// mounting an initial card or switching to a different change_id.
+// between distinct revisions of the same change_id.
 function nextPriorCard(
   current: ActiveEditorState | null,
   next: ChangeCardResult
@@ -262,8 +504,7 @@ function nextPriorCard(
   return current.card;
 }
 
-// editorDraftFrom starts editable drafts from a saved card's own values, with
-// no answers chosen yet for a waiting proposal.
+// editorDraftFrom initializes editable drafts from a saved card's own values.
 function editorDraftFrom(card: ChangeCardResult): {
   draftAnswers: Record<string, string>;
   draftExamples: ExampleItem[];
@@ -284,9 +525,7 @@ function editorDraftFrom(card: ChangeCardResult): {
   };
 }
 
-// keepProposalAnswers keeps the user's choices that still fit next: same
-// question ID, same question, and the option still offered. A re-read of the
-// same proposal therefore keeps every choice.
+// keepProposalAnswers keeps choices that still fit the updated proposal.
 function keepProposalAnswers(
   answers: Record<string, string>,
   previous: ProposedRevisionItem | undefined,
@@ -295,28 +534,29 @@ function keepProposalAnswers(
   if (previous === undefined || next === undefined) {
     return {};
   }
-  const before = new Map((previous.ambiguities ?? []).map((question) => [question.id, question.question]));
+  const before = new Map((previous.ambiguities ?? []).map((q) => [q.id, q.question]));
   const kept: Record<string, string> = {};
   for (const question of next.ambiguities ?? []) {
     const chosen = answers[question.id];
-    if (chosen !== undefined && before.get(question.id) === question.question && question.options.includes(chosen)) {
+    if (
+      chosen !== undefined &&
+      before.get(question.id) === question.question &&
+      question.options.includes(chosen)
+    ) {
       kept[question.id] = chosen;
     }
   }
   return kept;
 }
 
-// readLinkFromFragment returns the one-use link carried in the address
-// fragment, which a browser never sends to a server.
+// readLinkFromFragment returns the one-use link carried in the URL fragment.
 function readLinkFromFragment(hash: string): string | null {
   const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
   const link = params.get("link");
   return link !== null && link !== "" ? link : null;
 }
 
-// validateVerificationListPayload checks that a VerificationListResult carries
-// a non-empty change_id, matches expectedChangeId, and only contains runs
-// belonging to that same change_id.
+// validateVerificationListPayload verifies change_id correlation on list_verifications.
 function validateVerificationListPayload(
   payload: VerificationListResult,
   expectedChangeId: string
@@ -347,26 +587,7 @@ function validateVerificationListPayload(
   return null;
 }
 
-// WorkspaceSubjectDescriptor describes the exact displayed subject of an editor
-// or result region without retaining or caching a duplicate copy of session state.
-interface WorkspaceSubjectDescriptor {
-  // role identifies whether this descriptor describes the Change Card editor,
-  // an incoming Change Card banner, or the active result view.
-  role: "editor" | "incoming" | "result";
-  // label is the human-readable prefix shown in the workspace context strip.
-  label: string;
-  // stage names the workspace stage being shown.
-  stage: string;
-  // changeId is set only when the displayed payload itself is bound to a Change Card.
-  changeId?: string;
-  // requestRevision is set only when the displayed payload itself carries a request_revision.
-  requestRevision?: string;
-  // detail summarizes secondary state (such as status, design digest, or run ID).
-  detail?: string;
-}
-
-// liveTargetKey names a live target read's case, commit, start and end, so the
-// page can tell when the state a message described has changed.
+// liveTargetKey names a live target read's case, commit, start and end.
 function liveTargetKey(target: LiveTargetStatus): string {
   const live = target.live_target;
   switch (live.state) {
@@ -383,252 +604,178 @@ function liveTargetKey(target: LiveTargetStatus): string {
   }
 }
 
-// describeActiveResultSubject derives the subject of #highbay-result-view strictly
-// from the displayed payload and selected verification run, never falling
-// back to the editor's card. The Story stage shows the Story saved with
-// storyCard, the change open in the editor, and the owner's current
-// evaluation.
-function describeActiveResultSubject(
-  activeResult: ActiveResultState | null,
-  previewState: ArchitecturePreviewResult | null,
-  displayedRun: VerificationStatusResult | null,
-  selectedVerificationChangeId: string | null,
-  bothRegionsShown: boolean,
-  storyCard: ChangeCardResult | null,
-  storyEvaluation: StoryRefreshResult | null
-): WorkspaceSubjectDescriptor | null {
-  if (
-    !activeResult ||
-    activeResult.kind === "cp1-incoming-card" ||
-    activeResult.kind === "live" ||
-    activeResult.kind === "team"
-  ) {
-    return null;
+// stripSeededBoilerplate removes action-seeded boilerplate when switching
+// recipients, preserving any additional text typed by the user.
+function stripSeededBoilerplate(text: string, seeded: string | undefined): string {
+  if (seeded === undefined || seeded === "") {
+    return text;
   }
-  const label = bothRegionsShown ? "Displayed view" : "Showing";
-  if (activeResult.kind === "changes") {
-    return bothRegionsShown ? { role: "result", label, stage: "Project changes" } : null;
+  if (text === seeded) {
+    return "";
   }
-  if (activeResult.kind === "story") {
-    let draft = "current draft not read yet";
-    if (storyEvaluation !== null) {
-      draft = "current draft " + storyEvaluation.state;
-      if (storyEvaluation.snapshot_digest) {
-        draft += " · snapshot " + storyEvaluation.snapshot_digest.slice(0, 15);
-      }
-    }
-    return {
-      role: "result",
-      label,
-      stage: "Story",
-      changeId: storyCard?.change_id,
-      requestRevision: storyCard?.request_revision,
-      detail: draft,
-    };
+  if (text.endsWith("\n\n" + seeded)) {
+    return text.slice(0, text.length - ("\n\n" + seeded).length);
   }
-  if (activeResult.kind === "cp2-architecture-preview") {
-    if (!previewState) {
-      return null;
-    }
-    return {
-      role: "result",
-      label,
-      stage: "Architecture · " + previewState.system_name,
-      changeId: previewState.change_id,
-      requestRevision: previewState.request_revision,
-      detail: "design " + previewState.design_digest.slice(0, 15),
-    };
+  if (text.startsWith(seeded + "\n\n")) {
+    return text.slice((seeded + "\n\n").length);
   }
-  if (displayedRun) {
-    return {
-      role: "result",
-      label,
-      stage: activeResult.kind === "cp5-approval" ? "Approve" : "Check",
-      changeId: displayedRun.change_id,
-      requestRevision: displayedRun.request_revision,
-      detail:
-        "run " +
-        displayedRun.run_id.slice(0, 8) +
-        " · commit " +
-        displayedRun.candidate_commit.slice(0, 7),
-    };
-  }
-  return {
-    role: "result",
-    label,
-    stage: activeResult.kind === "cp5-approval" ? "Approve" : "Check",
-    changeId: selectedVerificationChangeId || undefined,
-    detail: "saved verification runs",
-  };
+  return text;
 }
 
-// bootstrapViewsPage mounts the views page, obtains its session, and starts
-// reading the project's changes.
+// isNarrowViewport reports whether the viewport is below the 1080px 2-column desktop breakpoint.
+function isNarrowViewport(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(max-width: 1079px)").matches
+  );
+}
+
+// bootstrapViewsPage mounts the Highbay Studio views page, exchanges or restores
+// the origin-scoped session, and drives reactive updates.
 export function bootstrapViewsPage() {
   const rawRootEl = document.getElementById("highbay-checkpoint-root");
+  const rawSkipEl = document.getElementById("highbay-skip-link");
   const rawStatusEl = document.getElementById("highbay-checkpoint-status");
-  const rawViewEl = document.getElementById("highbay-checkpoint-view");
   const rawNavEl = document.getElementById("highbay-checkpoint-nav");
-  if (!rawRootEl || !rawStatusEl || !rawViewEl || !rawNavEl) {
+  const rawNoticesEl = document.getElementById("highbay-checkpoint-notices");
+  const rawColumnsEl = document.getElementById("highbay-workspace-columns");
+  const rawViewEl = document.getElementById("highbay-checkpoint-view");
+  const rawTerminalEl = document.getElementById("highbay-terminal-region");
+  const rawConversationEl = document.getElementById("highbay-conversation-rail");
+  const rawTraceEl = document.getElementById("highbay-trace-region");
+
+  if (
+    !rawRootEl ||
+    !rawStatusEl ||
+    !rawNavEl ||
+    !rawNoticesEl ||
+    !rawColumnsEl ||
+    !rawViewEl ||
+    !rawTerminalEl ||
+    !rawConversationEl ||
+    !rawTraceEl
+  ) {
     return;
   }
-  const rootEl: HTMLElement = rawRootEl;
-  const statusEl: HTMLElement = rawStatusEl;
-  const viewEl: HTMLElement = rawViewEl;
-  const navEl: HTMLElement = rawNavEl;
 
-  const noticeEl = document.createElement("div");
-  noticeEl.setAttribute("id", "highbay-session-notice");
-  statusEl.after(noticeEl);
-  const traceRegionEl = document.createElement("aside");
-  traceRegionEl.setAttribute("aria-label", "Operation diagnostics");
-  viewEl.before(traceRegionEl);
-  const columnsEl = document.createElement("div");
-  columnsEl.setAttribute("id", "highbay-workspace-columns");
-  columnsEl.className = "highbay-workspace-columns";
-  viewEl.before(columnsEl);
-  columnsEl.appendChild(viewEl);
-  const editorRegionEl = document.createElement("div");
-  editorRegionEl.setAttribute("id", "highbay-cp1-editor");
-  editorRegionEl.setAttribute("tabindex", "-1");
-  editorRegionEl.setAttribute("aria-label", "Change decisions");
-  const resultRegionEl = document.createElement("div");
-  resultRegionEl.setAttribute("id", "highbay-result-view");
-  viewEl.appendChild(editorRegionEl);
-  viewEl.appendChild(resultRegionEl);
-  const conversationRegionEl = document.createElement("aside");
-  conversationRegionEl.setAttribute("id", "highbay-conversation-rail");
-  conversationRegionEl.setAttribute("aria-label", "Team conversation");
-  columnsEl.appendChild(conversationRegionEl);
-  const terminalRegionEl = document.createElement("div");
-  terminalRegionEl.setAttribute("id", "highbay-terminal-region");
-  columnsEl.after(terminalRegionEl);
+  const rootEl: HTMLElement = rawRootEl;
+  const skipEl: HTMLAnchorElement | null = rawSkipEl instanceof HTMLAnchorElement ? rawSkipEl : null;
+  const statusEl: HTMLElement = rawStatusEl;
+  const navEl: HTMLElement = rawNavEl;
+  const noticesEl: HTMLElement = rawNoticesEl;
+  const columnsEl: HTMLElement = rawColumnsEl;
+  const viewEl: HTMLElement = rawViewEl;
+  const terminalRegionEl: HTMLElement = rawTerminalEl;
+  const conversationRegionEl: HTMLElement = rawConversationEl;
+  const traceRegionEl: HTMLElement = rawTraceEl;
 
   const navRoot: Root = createRoot(navEl);
-  const noticeRoot: Root = createRoot(noticeEl);
-  const editorRoot: Root = createRoot(editorRegionEl);
-  const resultRoot: Root = createRoot(resultRegionEl);
-  const traceRoot: Root = createRoot(traceRegionEl);
-  const conversationRoot: Root = createRoot(conversationRegionEl);
+  const noticeRoot: Root = createRoot(noticesEl);
+  const viewRoot: Root = createRoot(viewEl);
   const terminalRoot: Root = createRoot(terminalRegionEl);
+  const conversationRoot: Root = createRoot(conversationRegionEl);
+  const traceRoot: Root = createRoot(traceRegionEl);
 
   const SESSION_STORAGE_KEY = "highbay.session";
-  // session is the Bearer credential scoped to this origin (scheme + host + port)
-  // in localStorage, never sent in cross-port 127.0.0.1 cookies.
   let session: string | null = null;
-  // projectName is the physical folder's base name from the authenticated
-  // session, fixed for this page session and never derived from a team ID.
   let projectName: string | null = null;
   let sessionState: SessionState = "starting";
   let signedOutReason: SignedOutReason = "no-link";
   let signedOutMessage = "";
   const pendingCalls = new Set<PendingCall>();
 
+  // Re-entrancy guard around flushSync so effects triggered on mount never
+  // invoke nested flushSync inside a React lifecycle commit.
+  let syncingRegions = false;
+  let syncAgain = false;
+
+  let currentView: WorkspaceView = { kind: "changes" };
+  let activeChangeId: string | null = null;
+  let navigationSeq = 0;
+  let handlingPopState = false;
+  let mobileSurface: MobileSurface = "stage";
+  let mobileSurfaceInvoker: HTMLElement | null = null;
+
   let changeList: ChangeList | null = null;
   let listError: string | null = null;
   let listRequest: Promise<boolean> | null = null;
   let waitController: AbortController | null = null;
   let waitLoopRunning = false;
-  // waitTroubleShown is true while the status line reports that the waiting
-  // read is retrying after a failed round.
   let waitTroubleShown = false;
-  // cardRefresh is the outstanding background read of the open card;
-  // cardRefreshAgain asks for one more read after it because the list
-  // changed again meanwhile.
-  let cardRefresh: Promise<void> | null = null;
-  let cardRefreshAgain = false;
-  // cardRefreshAfterEditor names the open card to read again once the
-  // page's own Change Card request finishes. Reading it during that request
-  // could return the page's own save and announce it as another caller's.
-  let cardRefreshAfterEditor: string | null = null;
+
+  // Per-change isolated CP1 editors and strict request/generation tracking.
+  const editorsByChangeId = new Map<string, ActiveEditorState>();
+  const editorRequestsByChangeId = new Map<string, OperationName>();
+  const editorGenerationByChangeId = new Map<string, number>();
+  const cardRefreshInFlight = new Map<string, Promise<void>>();
+  const cardRefreshAgain = new Set<string>();
+  const cardRefreshAfterEditor = new Set<string>();
 
   let traceOpen = false;
   let traceFilter: TraceFilter = "error";
   let tracePage: TraceList | null = null;
   let traceError: string | null = null;
 
-  // editorRequest owns the editor until the card request finishes. Reads
-  // lock editing too, but only writes can leave a save pending on unload.
-  let editorRequest: OperationName | null = null;
-  let activeEditor: ActiveEditorState | null = null;
-  // editorOpen tracks whether #highbay-cp1-editor is mounted. Another stage
-  // keeps activeEditor in memory while the editor is not shown.
-  let editorOpen = false;
-  // editorStage tracks navigation intent while Agree and Build share the
-  // existing editor content during this first stage's rollout.
-  let editorStage: "agree" | "build" = "agree";
   let previewState: ArchitecturePreviewResult | null = null;
   const previewErrors = new Map<string, string>();
-  // storyEvaluation is the owner's current Story evaluation as last read, or
-  // null before the first read; storyEvaluationError is its last failed read.
+
   let storyEvaluation: StoryRefreshResult | null = null;
   let storyEvaluationError: string | null = null;
-  // storyEvaluationStale is true when the change list's version moved since
-  // the evaluation was last read while the Story stage was not shown, so
-  // opening the stage reads it again.
   let storyEvaluationStale = true;
-  // storyReadAgain asks for one more read after the outstanding one, because
-  // the version moved while it was in flight.
   let storyReadAgain = false;
-  // liveTarget is the live target as last read, or null before the first
-  // read; liveTargetError is its last failed read. liveTargetStale and
-  // liveReadAgain follow the change list's version as the Story's do.
+
   let liveTarget: LiveTargetStatus | null = null;
   let liveTargetError: string | null = null;
   let liveTargetStale = true;
   let liveReadAgain = false;
-  // liveStopOutcome is the server's answer to the last stop request. It is
-  // shown until the live target's state next changes: liveStopBasis is the
-  // state the first read issued after the answer found, and only reads
-  // numbered above liveStopAfterRead, liveReadCount when the answer came,
-  // count, so a read already in flight cannot clear it.
   let liveStopOutcome: ServerAnswer | null = null;
   let liveStopBasis: string | null = null;
   let liveStopAfterRead = 0;
   let liveReadCount = 0;
-  // modelConnection is the model connection as last read, or null before
-  // the first read; it is not part of the change list's version, so the
-  // page reads it when the Live target view opens and after it changes it.
+
   let modelConnection: ModelConnection | null = null;
   let modelConnectionError: string | null = null;
-  // modelApplyOutcome is the server's answer to the last change of model.
   let modelApplyOutcome: ServerAnswer | null = null;
-  // modelDraft is the model form's unsent input, kept here so it survives
-  // refreshes and leaving the Live target view.
   let modelDraft: ModelDraft = { kind: null, provider: "anthropic", modelName: "", gatewayAddr: "" };
-  // modelDraftDirty records edits since the last successful Apply or local discard.
   let modelDraftDirty = false;
-  // modelDraftReset remounts only the uncontrolled model form on local discard.
   let modelDraftReset = 0;
-  // pendingLinkFragment stays in memory until all unsaved input is resolved.
+
   let pendingLinkFragment: string | null = null;
-  // teamSnapshot is shared by the Team stage and notices on every stage.
-  // Failed reads retain facts, visibly labeled as last read.
+
   let teamSnapshot: TeamSnapshot | null = null;
-  // teamReadError keeps the last read error and whether its message needs
-  // the failed-read label; session and update notices stand alone.
   let teamReadError: TeamFactsError | null = null;
   let teamReadAgain = false;
   let teamStartReceipt: TeamStageProps["startReceipt"] = null;
   let teamActionError: string | null = null;
-  // Installed options are read on demand. Local choices survive team polling,
-  // navigation and failed discovery; only an explicit launch persists them.
+
   let agentOptions: Operations["list_team_agent_options"]["result"] | null = null;
   let agentOptionsError: string | null = null;
   let workerChoices: WorkerChoices = {};
   const editedWorkerChoices = new Set<WorkerRole>();
   let guideChoice: RoleAgentChoice | undefined = undefined;
   let guideChoiceEdited = false;
-  // Chorus conversation rail and live terminal drawer state.
+
+  // Chorus conversation dock, unread tracking, and + New change receipt state.
   let conversationOpen = true;
+  let userCollapsedConversation = false;
+  let seenMessageCount = 0;
   let teamConversation: TeamConversation | null = null;
   let conversationError: string | null = null;
   let conversationReadAgain = false;
   let composerDraft: ComposerDraft = { to: "guide", text: "", replyTo: null, context: null };
   let composerSendError: string | null = null;
+  let composerDetachedNotice: string | null = null;
+
   let describeText = "";
   let describeSendError: string | null = null;
+  let describeSendUncertain = false;
+  let draftSentMessageId: string | undefined = undefined;
+
+  // Stage-docked terminal state.
   let openTerminalRole: TeamRoleState["role"] | null = null;
+  let terminalObserveMode = true;
+  let terminalSize: TerminalDrawerSize = "default";
   let terminalInvoker: HTMLElement | null = null;
   let terminalActionError: string | null = null;
   const terminalRestartSeq: Record<TeamRoleState["role"], number> = {
@@ -636,6 +783,7 @@ export function bootstrapViewsPage() {
     builder: 0,
     test_writer: 0,
   };
+
   // Server release update and UI bundle build tracking.
   let initialUiBuild: string | null = null;
   let uiBuildChanged = false;
@@ -643,72 +791,120 @@ export function bootstrapViewsPage() {
   let uiBuildProbeAgain = false;
   let updateStatus: UpdateStatusResult | null = null;
   let updateProgress: UpdateProgress | null = null;
-  // Successful dismissal receipts prevent an earlier team read restoring a
-  // notice. Reload still reads the preference from its project owner.
+
   type TeamNotice = TeamSnapshot["dismissed_notices"][number];
   const noticeDismissed = new Set<TeamNotice>();
   const noticeErrors = new Map<TeamNotice, string>();
-  // Merge outcomes belong to one exact approval and build, never a latest run.
+
   let mergeOutcome: {
     identity: string;
     receipt: MergeControls["receipt"];
     error: MergeControls["error"];
   } | null = null;
-  // buildChangeId identifies the single retained build read. The generation
-  // rejects replies begun before a start, its successful answer, or a change
-  // of selected card.
+
   let buildChangeId: string | null = null;
   let buildSnapshot: ChangeBuild["build"] | null = null;
-  // The owner reports this narrow admission fact with each guarded build read.
   let buildDraftedBeforeDrop: boolean | null = null;
   let buildReadError: string | null = null;
   let buildStartError: string | null = null;
   let buildReadAgain = false;
   let buildGeneration = 0;
   let buildStartReceipt: BuildStartReceipt | null = null;
-  // A validated refusal may describe another change, whose build cannot be
-  // obtained from the selected card's get_build result.
   let openBuildRefusal: OpenBuildRefusal | null = null;
-  let buildConfirmationRead: ((build: ChangeBuild | null) => void) | null = null;
-  // Findings belong to one build/report/verdict, rather than only a change ID.
+  const buildReadWaiters = new Map<string, Array<(build: ChangeBuild | null) => void>>();
+
   let buildFindings: TestFindings | null = null;
   let findingsBasis: string | null = null;
   let findingsError: string | null = null;
   let findingsReadAgain = false;
+
   const runsById = new Map<string, VerificationStatusResult>();
-  // Verification observations follow the page's owner updates independently
-  // of immutable terminal reports. Request order also covers overlapping
-  // list/get reads of the same run within one update generation.
   let verificationGeneration = 0;
   let verificationReadOrder = 0;
   const runObservationGeneration = new Map<string, number>();
   const runObservationOrder = new Map<string, number>();
   const runReadAgain = new Set<string>();
+  const reviewsByRunId = new Map<
+    string,
+    { generation: number; order: number; review: VerificationReview }
+  >();
   const lastLoadedListByChangeId = new Map<string, string[]>();
   let selectedVerificationChangeId: string | null = null;
   let selectedRunId: string | null = null;
-  // Only the selected run retains a review; history keeps its compact statuses.
-  let selectedReview: {
-    runId: string; generation: number; order: number; review: VerificationReview;
-  } | null = null;
   const selectionTouchedDuringList = new Map<string, boolean>();
   const runRequestErrors = new Map<string, string>();
   const listRequestErrors = new Map<string, string>();
   const cardLoadErrors = new Map<string, string>();
   const approveErrors = new Map<string, string>();
-  // approvalUnavailable is the server's reason it cannot record approvals,
-  // learned from its answer to an approval request. The change list says
-  // the same before any request; this answer covers a page that has not
-  // read the list, or a server whose answer changed since.
   let approvalUnavailable: string | null = null;
-  // lastOpenAttempt is the change the user last asked to open, whose read
-  // failure the change list shows.
   let lastOpenAttempt: string | null = null;
-  let activeResult: ActiveResultState | null = null;
 
-  // send encodes one request with the generated route, sends it to the
-  // page's own address with the session, and validates the answer with the
-  // generated result validator. It is the page's only network call.
+  // getActiveEditor returns the isolated editor state for activeChangeId, if any.
+  function getActiveEditor(): ActiveEditorState | null {
+    return activeChangeId !== null ? editorsByChangeId.get(activeChangeId) ?? null : null;
+  }
+
+  // getEditorRequest returns the active Change Card RPC for changeId, or null.
+  function getEditorRequest(changeId: string | null): OperationName | null {
+    return changeId !== null ? editorRequestsByChangeId.get(changeId) ?? null : null;
+  }
+
+  // bumpEditorGeneration advances changeId's request generation so older reads are ignored.
+  function bumpEditorGeneration(changeId: string): number {
+    const next = (editorGenerationByChangeId.get(changeId) ?? 0) + 1;
+    editorGenerationByChangeId.set(changeId, next);
+    return next;
+  }
+
+  // isEditorDirtyState reports whether ed holds unsaved answers, examples, or preserved lines.
+  function isEditorDirtyState(ed: ActiveEditorState): boolean {
+    return isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples) || ed.preservedDraft !== null;
+  }
+
+  // currentHistoryState derives opaque IDs for window.history.state on /views.
+  function currentHistoryState(): HistoryViewState {
+    const base: HistoryViewState = {
+      view: currentView.kind,
+      ...(mobileSurface !== "stage" ? { mobileSurface } : {}),
+      ...(draftSentMessageId !== undefined ? { newDraft: { sentMessageId: draftSentMessageId } } : {}),
+    };
+    if (currentView.kind === "change") {
+      base.changeId = currentView.changeId;
+      base.stage = currentView.stage;
+      if ((currentView.stage === "verify" || currentView.stage === "approve") && selectedRunId !== null) {
+        base.runId = selectedRunId;
+      }
+    } else if (activeChangeId !== null && (currentView.kind === "story" || currentView.kind === "live")) {
+      base.changeId = activeChangeId;
+    }
+    return base;
+  }
+
+  // syncHistoryState updates window.history.state on exact /views without mutating pathname/search/hash.
+  function syncHistoryState(mode: "push" | "replace") {
+    if (
+      handlingPopState ||
+      sessionState !== "active" ||
+      readLinkFromFragment(window.location.hash) !== null
+    ) {
+      return;
+    }
+    const next = currentHistoryState();
+    const prev = window.history.state;
+    if (isHistoryViewState(prev) && JSON.stringify(prev) === JSON.stringify(next) && window.location.hash === "") {
+      return;
+    }
+    const targetUrl = window.location.pathname + window.location.search;
+    if (mode === "push") {
+      window.history.pushState(next, "", targetUrl);
+    } else {
+      window.history.replaceState(next, "", targetUrl);
+    }
+  }
+
+  // send encodes one request with the generated route, sends it to the page's
+  // own address with the session, and validates the answer with the generated
+  // result validator. It is the page's only HTTP network call.
   async function send<K extends OperationName>(
     op: K,
     request: Operations[K]["request"],
@@ -774,9 +970,8 @@ export function bootstrapViewsPage() {
       ok: false,
       kind: status === 401 ? "session" : "server",
       status,
-      message: body !== undefined
-        ? body.message
-        : "The server refused the request (HTTP " + status + ").",
+      message:
+        body !== undefined ? body.message : "The server refused the request (HTTP " + status + ").",
       body,
     };
   }
@@ -791,8 +986,7 @@ export function bootstrapViewsPage() {
     return false;
   }
 
-  // callServer sends one request whose waiting state views derive from
-  // pendingCalls, then hands its outcome to exactly one callback and renders.
+  // callServer sends one request whose waiting state views derive from pendingCalls.
   function callServer<K extends OperationName>(
     op: K,
     request: Operations[K]["request"],
@@ -826,42 +1020,47 @@ export function bootstrapViewsPage() {
     });
   }
 
-  // callEditorServer owns the editable form for one Change Card request;
-  // only these requests disable the form.
+  // callEditorServer owns the editable form for one specific Change Card;
+  // late responses whose generation was superseded are ignored.
   function callEditorServer<K extends OperationName>(
     op: K,
     request: Operations[K]["request"],
-    subject: string,
+    changeId: string,
     onSuccess: (result: Operations[K]["result"]) => void,
     onError: (message: string, failure: Failure) => void
   ) {
-    editorRequest = op;
-    // readDeferredCard runs the background read the request held back.
+    const reqGen = bumpEditorGeneration(changeId);
+    editorRequestsByChangeId.set(changeId, op);
     const readDeferredCard = () => {
-      const deferred = cardRefreshAfterEditor;
-      cardRefreshAfterEditor = null;
-      if (deferred !== null) {
-        refreshOpenCard(deferred);
+      if (cardRefreshAfterEditor.delete(changeId)) {
+        refreshOpenCard(changeId);
       }
     };
     callServer(
       op,
       request,
-      subject,
+      changeId,
       (result) => {
-        editorRequest = null;
-        onSuccess(result);
+        if (editorRequestsByChangeId.get(changeId) === op) {
+          editorRequestsByChangeId.delete(changeId);
+        }
+        if ((editorGenerationByChangeId.get(changeId) ?? 0) === reqGen) {
+          onSuccess(result);
+        }
         readDeferredCard();
       },
       (message, failure) => {
-        editorRequest = null;
-        onError(message, failure);
+        if (editorRequestsByChangeId.get(changeId) === op) {
+          editorRequestsByChangeId.delete(changeId);
+        }
+        if ((editorGenerationByChangeId.get(changeId) ?? 0) === reqGen) {
+          onError(message, failure);
+        }
         readDeferredCard();
       }
     );
   }
 
-  // sessionEndedMessage tells the user what to do once the session is gone.
   function sessionEndedMessage(): string {
     return "This page’s Highbay session has ended. Run highbay in your project folder or invoke /highbay in your coding agent to open Highbay views.";
   }
@@ -883,8 +1082,6 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // clearStoredSession removes SESSION_STORAGE_KEY only when it still holds
-  // rejectedToken, so a stale tab cannot erase a newer session stored by a sibling tab.
   function clearStoredSession(rejectedToken: string | null) {
     if (rejectedToken === null) {
       return;
@@ -898,12 +1095,16 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // start exchanges #link=<token> for an origin-scoped Bearer session when present,
-  // or validates the stored origin-scoped session on reload/sibling tab via GET /project/browser-session.
+  // start exchanges #link=<token> or validates the stored origin-scoped session.
   async function start() {
+    const initialHistory = isHistoryViewState(window.history.state) ? window.history.state : null;
     const link = readLinkFromFragment(window.location.hash);
     if (window.location.hash !== "") {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      window.history.replaceState(
+        link !== null ? null : initialHistory,
+        "",
+        window.location.pathname + window.location.search
+      );
     }
     if (link !== null) {
       statusEl.textContent = "Opening your Highbay session...";
@@ -943,20 +1144,24 @@ export function bootstrapViewsPage() {
     }
     sessionState = "active";
     rootEl.dataset.session = "active";
-    activeResult = { kind: "changes" };
-    rootEl.dataset.state = "changes";
+    currentView = { kind: "changes" };
     readConversation();
-    await loadChanges();
+    const loaded = await loadChanges();
+    if (loaded && link === null && initialHistory !== null) {
+      applyHistoryViewState(initialHistory);
+    } else {
+      syncHistoryState("replace");
+    }
   }
 
-  // signOut shows how to open the page with `highbay` or `/highbay`; the page then
-  // sends no further requests.
   function signOut(reason: SignedOutReason, message: string) {
     sessionState = "signed-out";
     signedOutReason = reason;
     signedOutMessage = message;
     rootEl.dataset.session = "none";
-    rootEl.dataset.state = reason === "link-used" ? "link-used" : "signed-out";
+    if (window.location.hash === "") {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
     statusEl.textContent =
       reason === "link-used"
         ? "This link was already used. Run highbay in your project folder or invoke /highbay in your coding agent."
@@ -964,15 +1169,10 @@ export function bootstrapViewsPage() {
     syncAllRegions();
   }
 
-  // isReleaseBuildVersion reports whether version is a canonical MAJOR.MINOR.PATCH
-  // release build (with or without leading "v") rather than "(devel)" or a pseudo-version.
   function isReleaseBuildVersion(version: string): boolean {
     return /^v?\d+\.\d+\.\d+$/.test(version);
   }
 
-  // maybeCheckUpdateStatus checks for a newer Highbay release in the background
-  // when the running server reports a release build version. Offline or 502
-  // responses quietly leave the workspace undisturbed.
   function maybeCheckUpdateStatus(currentVersion: string) {
     if (!isReleaseBuildVersion(currentVersion)) {
       return;
@@ -991,14 +1191,10 @@ export function bootstrapViewsPage() {
     })();
   }
 
-  // normalizeVersionTag ensures a release version carries a leading "v".
   function normalizeVersionTag(version: string): string {
     return version.startsWith("v") ? version : "v" + version;
   }
 
-  // probeUiBuildAfterReconnect checks whether an in-place server restart
-  // (such as `highbay update` from a terminal while the tab was hidden or
-  // between two waiting reads) replaced the embedded /views bundle.
   function probeUiBuildAfterReconnect() {
     if (session === null || sessionState !== "active" || uiBuildChanged) {
       return;
@@ -1026,7 +1222,8 @@ export function bootstrapViewsPage() {
         }
         if (
           updateStatus !== null &&
-          normalizeVersionTag(outcome.result.version) === normalizeVersionTag(updateStatus.latest_version)
+          normalizeVersionTag(outcome.result.version) ===
+            normalizeVersionTag(updateStatus.latest_version)
         ) {
           updateStatus = null;
           changed = true;
@@ -1043,9 +1240,6 @@ export function bootstrapViewsPage() {
     })();
   }
 
-  // waitForUpdatedServer polls GET /project/browser-session for up to 30 seconds
-  // until the in-place restarted server answers with targetVersion, preserving
-  // the browser session across syscall.Exec without re-issuing POST /project/update.
   async function waitForUpdatedServer(targetVersion: string) {
     const normalizedTarget = targetVersion.startsWith("v") ? targetVersion : "v" + targetVersion;
     updateProgress = { kind: "restarting", targetVersion: normalizedTarget };
@@ -1094,8 +1288,6 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // applyServerUpdate installs the approved release version on the running
-  // server and waits for its session-preserving in-place restart.
   function applyServerUpdate() {
     if (sessionState !== "active" || session === null) {
       return;
@@ -1145,8 +1337,6 @@ export function bootstrapViewsPage() {
     })();
   }
 
-  // endSession forgets a session the server no longer accepts, stops the
-  // waiting read, and keeps every view and draft on the page.
   function endSession() {
     if (sessionState !== "active") {
       return;
@@ -1156,10 +1346,18 @@ export function bootstrapViewsPage() {
     clearStoredSession(expiredSession);
     sessionState = "ended";
     openTerminalRole = null;
+    if (mobileSurface === "terminal") {
+      mobileSurface = "stage";
+    }
     buildStartReceipt = null;
     buildStartError = null;
     openBuildRefusal = null;
-    buildConfirmationRead = null;
+    for (const waiters of buildReadWaiters.values()) {
+      for (const ready of waiters) {
+        ready(null);
+      }
+    }
+    buildReadWaiters.clear();
     teamStartReceipt = null;
     buildGeneration++;
     rootEl.dataset.session = "ended";
@@ -1170,9 +1368,27 @@ export function bootstrapViewsPage() {
     syncAllRegions();
   }
 
-  // loadChanges reads the change list once at a time, then applies what
-  // changed to the open change and its runs. It resolves to whether the list
-  // was read; a failure is shown on the list and kept in listError.
+  // reconcileConversationDefaultOpen collapses Conversation only on idle Moment 0
+  // unless the user explicitly collapsed it.
+  function reconcileConversationDefaultOpen() {
+    if (changeList === null || teamSnapshot === null || teamConversation === null) {
+      return;
+    }
+    const isIdleMomentZero =
+      changeList.changes.length === 0 &&
+      changeList.initializing_phase === undefined &&
+      changeList.draft_state === undefined &&
+      connectedGuide() === undefined &&
+      teamConversation.messages.length === 0 &&
+      !teamSnapshot.roles.some((role) => role.state === "needs_you") &&
+      currentView.kind === "changes";
+    if (isIdleMomentZero) {
+      conversationOpen = false;
+    } else if (!userCollapsedConversation) {
+      conversationOpen = true;
+    }
+  }
+
   function loadChanges(): Promise<boolean> {
     if (listRequest !== null) {
       return listRequest;
@@ -1188,7 +1404,7 @@ export function bootstrapViewsPage() {
           endSession();
         }
         listError = outcome.message;
-        if (activeResult?.kind === "changes") {
+        if (currentView.kind === "changes") {
           statusEl.textContent = "Could not read this project's changes.";
         }
         syncAllRegions();
@@ -1204,25 +1420,23 @@ export function bootstrapViewsPage() {
       if (previous === null || previous.version !== outcome.result.version) {
         readTeam();
         readConversation();
-        if (activeEditor !== null) {
-          readBuild(activeEditor.card.change_id);
-          refreshVerificationObservations(activeEditor.card.change_id);
+        const activeEd = getActiveEditor();
+        if (activeEd !== null) {
+          readBuild(activeEd.card.change_id);
+          refreshVerificationObservations(activeEd.card.change_id);
         }
-        // Story and Live can open before the first list arrives. Refresh
-        // their observations after each new version, including the first.
-        if (activeResult?.kind === "story") {
+        if (currentView.kind === "story" || currentView.kind === "new") {
           readStoryEvaluation();
         } else {
           storyEvaluationStale = true;
         }
-        // It also covers the live target: its case, commit, start time and
-        // the versions in force.
-        if (activeResult?.kind === "live") {
+        if (currentView.kind === "live") {
           readLiveTarget();
         } else {
           liveTargetStale = true;
         }
       }
+      reconcileConversationDefaultOpen();
       syncAllRegions();
       startWaiting();
       return true;
@@ -1234,54 +1448,99 @@ export function bootstrapViewsPage() {
     return pending;
   }
 
-  // applyListChanges opens the only change on the first read or when the
-  // first proposal arrives on the empty Changes view. Later reads preserve
-  // the current editor and reconcile its saved facts by change ID.
+  // applyListChanges auto-opens the sole Change Card on 0 -> 1 transitions when
+  // the user has no unsaved input, and refreshes any retained editors whose
+  // saved revision or verification moved.
   function applyListChanges(previous: ChangeList | null, next: ChangeList) {
-    if (activeEditor === null && next.changes.length === 1 &&
-      (previous === null || (previous.changes.length === 0 && activeResult?.kind === "changes"))) {
-      openChange(next.changes[0].change_id);
-      return;
+    if (
+      editorsByChangeId.size === 0 &&
+      activeChangeId === null &&
+      next.changes.length === 1
+    ) {
+      const onlyId = next.changes[0].change_id;
+      if (
+        !hasUnsavedPageInput() &&
+        ((previous === null && currentView.kind === "changes" && navigationSeq === 0) ||
+          (previous !== null &&
+            previous.changes.length === 0 &&
+            (currentView.kind === "changes" || currentView.kind === "new")))
+      ) {
+        draftSentMessageId = undefined;
+        describeSendUncertain = false;
+        describeSendError = null;
+        openChange(onlyId);
+        return;
+      }
+      if (previous === null && !editorRequestsByChangeId.has(onlyId)) {
+        callEditorServer(
+          "get_change",
+          { change_id: onlyId },
+          onlyId,
+          (loadedCard) => {
+            if (loadedCard.change_id === onlyId && !editorsByChangeId.has(onlyId)) {
+              editorsByChangeId.set(onlyId, {
+                card: loadedCard,
+                priorCard: null,
+                incomingCard: null,
+                ...editorDraftFrom(loadedCard),
+                preservedDraft: null,
+                formError: null,
+              });
+              if (activeChangeId === null) {
+                activeChangeId = onlyId;
+              }
+              syncAllRegions();
+            }
+          },
+          () => {}
+        );
+      }
     }
     const initializing = next.initializing_phase !== undefined;
     const wasInitializing = previous?.initializing_phase !== undefined;
     const drafting = next.draft_state !== undefined;
     const wasDrafting = previous?.draft_state !== undefined;
-    if (activeResult?.kind === "changes" &&
-      (previous === null || initializing !== wasInitializing || drafting !== wasDrafting)) {
-      statusEl.textContent = initializing ? "Preparing the starter project."
-        : drafting ? "Drafting the project's first Change Card."
-        : next.changes.length === 0 ? "This project has no changes yet."
+    if (
+      currentView.kind === "changes" &&
+      (previous === null || initializing !== wasInitializing || drafting !== wasDrafting)
+    ) {
+      statusEl.textContent = initializing
+        ? "Preparing the starter project."
+        : drafting
+        ? "Drafting the project's first Change Card."
+        : next.changes.length === 0
+        ? "This project has no changes yet."
         : "Showing this project's " + next.changes.length + " changes.";
     }
-    if (previous === null || activeEditor === null) {
+    if (previous === null) {
       return;
     }
-    const openId = activeEditor.card.change_id;
-    const before = previous.changes.find((item) => item.change_id === openId);
-    const after = next.changes.find((item) => item.change_id === openId);
-    if (!after) {
-      return;
-    }
-    if (
-      !before ||
-      before.request_revision !== after.request_revision ||
-      before.saved_at !== after.saved_at
-    ) {
-      refreshOpenCard(openId);
-    }
-    const runBefore = before?.latest_verification;
-    const runAfter = after.latest_verification;
-    if (
-      lastLoadedListByChangeId.has(openId) &&
-      (runBefore?.run_id !== runAfter?.run_id || runBefore?.state !== runAfter?.state)
-    ) {
-      refreshVerificationsInBackground(openId);
+    for (const changeId of editorsByChangeId.keys()) {
+      const before = previous.changes.find((item) => item.change_id === changeId);
+      const after = next.changes.find((item) => item.change_id === changeId);
+      if (!after) {
+        continue;
+      }
+      if (
+        !before ||
+        before.request_revision !== after.request_revision ||
+        before.proposed_revision !== after.proposed_revision ||
+        before.saved_at !== after.saved_at
+      ) {
+        refreshOpenCard(changeId);
+      }
+      const runBefore = before?.latest_verification;
+      const runAfter = after.latest_verification;
+      if (
+        changeId === activeChangeId &&
+        lastLoadedListByChangeId.has(changeId) &&
+        (runBefore?.run_id !== runAfter?.run_id || runBefore?.state !== runAfter?.state)
+      ) {
+        refreshVerificationsInBackground(changeId);
+      }
     }
   }
 
-  // startWaiting keeps one waiting read open while the page has a session
-  // and a list version and the tab is visible.
   function startWaiting() {
     if (waitLoopRunning || session === null || changeList === null || document.hidden) {
       return;
@@ -1292,13 +1551,6 @@ export function bootstrapViewsPage() {
     });
   }
 
-  // waitLoop asks the server to answer when the list differs from the last
-  // one read, and reads the list again only then. Hiding the tab stops the
-  // open request; showing it again resumes from the same version. A round
-  // fails when the waiting read gets no answer or the list read that follows
-  // it fails; the loop then reports the failure once and waits longer after
-  // each failed round before asking again, because a list that keeps
-  // failing would otherwise be asked for again at once.
   async function waitLoop() {
     let failedRounds = 0;
     while (session !== null && changeList !== null && !document.hidden) {
@@ -1347,22 +1599,29 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // refreshOpenCard reads the open card again because the list says it
-  // changed, without taking the editor's request slot. While the page's own
-  // Change Card request is in flight, the read waits for it to finish.
+  // refreshOpenCard refreshes changeId's Change Card in the background without
+  // clobbering an in-flight write or superseding a newer generation.
   function refreshOpenCard(changeId: string) {
-    if (editorRequest !== null) {
-      cardRefreshAfterEditor = changeId;
+    if (editorRequestsByChangeId.has(changeId)) {
+      cardRefreshAfterEditor.add(changeId);
       return;
     }
-    if (cardRefresh !== null) {
-      cardRefreshAgain = true;
+    if (cardRefreshInFlight.has(changeId)) {
+      cardRefreshAgain.add(changeId);
       return;
     }
-    cardRefresh = (async () => {
+    const task = (async () => {
       do {
-        cardRefreshAgain = false;
+        cardRefreshAgain.delete(changeId);
+        const startGen = editorGenerationByChangeId.get(changeId) ?? 0;
         const outcome = await send("get_change", { change_id: changeId });
+        if (editorRequestsByChangeId.has(changeId)) {
+          cardRefreshAfterEditor.add(changeId);
+          return;
+        }
+        if ((editorGenerationByChangeId.get(changeId) ?? 0) !== startGen) {
+          continue;
+        }
         if (!outcome.ok) {
           if (outcome.kind === "session") {
             endSession();
@@ -1376,44 +1635,48 @@ export function bootstrapViewsPage() {
         }
         cardLoadErrors.delete(changeId);
         receiveLatestCard(outcome.result);
-      } while (cardRefreshAgain && session !== null);
+      } while (cardRefreshAgain.has(changeId) && session !== null);
     })();
-    void cardRefresh.finally(() => {
-      cardRefresh = null;
+    cardRefreshInFlight.set(changeId, task);
+    void task.finally(() => {
+      cardRefreshInFlight.delete(changeId);
       syncAllRegions();
     });
     syncAllRegions();
   }
 
-  // receiveLatestCard applies a background read of the open card. The same
-  // revision updates saved metadata such as approval and keeps drafts; a new
-  // revision is held as an incoming card while the user has unsaved edits or
-  // a request in flight, and replaces a clean editor otherwise. It never
-  // moves focus and announces a new revision once.
+  // receiveLatestCard reconciles a background read of latest.change_id inside
+  // editorsByChangeId, checking dirty state strictly on that card (@fable-2 L2).
   function receiveLatestCard(latest: ChangeCardResult) {
-    if (!activeEditor || activeEditor.card.change_id !== latest.change_id) {
+    const ed = editorsByChangeId.get(latest.change_id);
+    if (!ed) {
       return;
     }
     cardLoadErrors.delete(latest.change_id);
-    const ed = activeEditor;
+    const isActive = activeChangeId === latest.change_id;
     if (latest.request_revision !== ed.card.request_revision || latest.status !== ed.card.status) {
       verificationGeneration++;
-      refreshVerificationObservations(latest.change_id);
+      if (isActive) {
+        refreshVerificationObservations(latest.change_id);
+      }
     }
     if (latest.request_revision === ed.card.request_revision) {
       const before = ed.card.proposed_revision;
       const after = latest.proposed_revision;
-      activeEditor = {
+      editorsByChangeId.set(latest.change_id, {
         ...ed,
         card: latest,
         proposalAnswers: keepProposalAnswers(ed.proposalAnswers, before, after),
         proposalError: before?.request_revision === after?.request_revision ? ed.proposalError : null,
-      };
-      if ((ed.card.approval ?? ed.card.unverified_approval?.approval)?.report_digest !==
-          (latest.approval ?? latest.unverified_approval?.approval)?.report_digest) {
+      });
+      if (
+        isActive &&
+        (ed.card.approval ?? ed.card.unverified_approval?.approval)?.report_digest !==
+          (latest.approval ?? latest.unverified_approval?.approval)?.report_digest
+      ) {
         refreshVerificationObservations(latest.change_id);
       }
-      if (after !== undefined && before?.request_revision !== after.request_revision) {
+      if (isActive && after !== undefined && before?.request_revision !== after.request_revision) {
         statusEl.textContent =
           (before === undefined
             ? "Your coding agent proposed a new revision of this change."
@@ -1424,38 +1687,38 @@ export function bootstrapViewsPage() {
       return;
     }
     if (ed.incomingCard && ed.incomingCard.request_revision === latest.request_revision) {
-      activeEditor = { ...ed, incomingCard: latest };
+      editorsByChangeId.set(latest.change_id, { ...ed, incomingCard: latest });
       syncAllRegions();
       return;
     }
-    if (editorRequest !== null || hasUnsavedEditorState()) {
-      activeEditor = { ...ed, incomingCard: latest };
-      if (editorOpen && (!activeResult || activeResult.kind === "cp1-incoming-card")) {
-        activeResult = { kind: "cp1-incoming-card" };
+    const cardBusyOrDirty =
+      editorRequestsByChangeId.has(latest.change_id) ||
+      isEditorDirtyState(ed) ||
+      ed.formError !== null ||
+      Object.keys(ed.proposalAnswers).length > 0;
+    if (cardBusyOrDirty) {
+      editorsByChangeId.set(latest.change_id, { ...ed, incomingCard: latest });
+      if (isActive) {
+        statusEl.textContent =
+          "A newer revision of this Change Card was saved. Your unsaved edits are kept; use Switch to Incoming Card to review it.";
       }
-      statusEl.textContent =
-        "A newer revision of this Change Card was saved. Your unsaved edits are kept; use Switch to Incoming Card to review it.";
       syncAllRegions();
       return;
     }
-    activeEditor = {
+    editorsByChangeId.set(latest.change_id, {
       card: latest,
       priorCard: nextPriorCard(ed, latest),
       incomingCard: null,
       ...editorDraftFrom(latest),
       preservedDraft: null,
       formError: null,
-    };
-    if (activeResult?.kind === "cp1-incoming-card") {
-      activeResult = null;
+    });
+    if (isActive) {
+      statusEl.textContent = "A newer revision of this Change Card was saved and is now shown.";
     }
-    statusEl.textContent = "A newer revision of this Change Card was saved and is now shown.";
     syncAllRegions();
   }
 
-  // refreshVerificationsInBackground reads the open change's runs again
-  // because the list says its latest run changed, keeping the user's view
-  // and selected run.
   function refreshVerificationsInBackground(changeId: string) {
     if (hasPending("list_verifications", changeId)) {
       return;
@@ -1463,7 +1726,9 @@ export function bootstrapViewsPage() {
     const generation = verificationGeneration;
     const order = ++verificationReadOrder;
     for (const run of runsById.values()) {
-      if (run.change_id === changeId) markRunReadPending(run.run_id, order);
+      if (run.change_id === changeId) {
+        markRunReadPending(run.run_id, order);
+      }
     }
     callServer(
       "list_verifications",
@@ -1479,13 +1744,27 @@ export function bootstrapViewsPage() {
         const loadedIds = payload.runs.map((r) => r.run_id);
         lastLoadedListByChangeId.set(changeId, loadedIds);
         listRequestErrors.delete(changeId);
-        if (selectedVerificationChangeId === changeId && selectedRunId === null && loadedIds.length > 0) {
-          const card = activeEditor?.card;
+        if (
+          selectedVerificationChangeId === changeId &&
+          selectedRunId === null &&
+          loadedIds.length > 0
+        ) {
+          const card = editorsByChangeId.get(changeId)?.card;
           const approval = card?.approval ?? card?.unverified_approval?.approval;
-          selectedRunId = activeResult?.kind === "cp5-approval" && card?.change_id === changeId && approval !== undefined
-            ? savedApprovalEvidenceRun(card, approval)?.run_id ?? null : loadedIds[0];
+          const onApproveStage =
+            currentView.kind === "change" &&
+            currentView.changeId === changeId &&
+            currentView.stage === "approve";
+          selectedRunId =
+            onApproveStage && card !== undefined && approval !== undefined
+              ? savedApprovalEvidenceRun(card, approval)?.run_id ?? null
+              : loadedIds[0];
         }
-        if (selectedVerificationChangeId === changeId && selectedRunId !== null && isViewingSelectedRun(selectedRunId)) {
+        if (
+          selectedVerificationChangeId === changeId &&
+          selectedRunId !== null &&
+          isViewingSelectedRun(selectedRunId)
+        ) {
           readApprovalReview(selectedRunId, changeId);
         }
       },
@@ -1495,25 +1774,31 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // resolveDisplayedVerificationRun returns the selected VerificationStatusResult
-  // snapshot when one is currently selected in runsById.
   function resolveDisplayedVerificationRun(): VerificationStatusResult | null {
     return selectedRunId !== null ? runsById.get(selectedRunId) ?? null : null;
   }
 
-  // runInputsKnown means the displayed owner observation survived the latest
-  // update and all reads on which its action depends. Saved evidence remains
-  // visible while any of these facts are unknown.
   function runInputsKnown(run: VerificationStatusResult): boolean {
     const listed = changeList?.changes.find((item) => item.change_id === run.change_id);
-    const ed = activeEditor?.card.change_id === run.change_id ? activeEditor : null;
-    // A confirmation can reach this page before its change-list notification.
-    // A retained dirty editor may instead have the fresh card waiting beside it.
-    const cardMatchesList = ed === null || [ed.card, ed.incomingCard].some((card) =>
-      card !== null && card.request_revision === listed?.request_revision && card.status === listed.status);
-    return sessionState === "active" && !document.hidden && changeList !== null && listError === null &&
-      !hasPending("list_changes", "") && cardMatchesList &&
-      !waitTroubleShown && editorRequest === null && cardRefresh === null &&
+    const ed = editorsByChangeId.get(run.change_id) ?? null;
+    const cardMatchesList =
+      ed === null ||
+      [ed.card, ed.incomingCard].some(
+        (card) =>
+          card !== null &&
+          card.request_revision === listed?.request_revision &&
+          card.status === listed.status
+      );
+    return (
+      sessionState === "active" &&
+      !document.hidden &&
+      changeList !== null &&
+      listError === null &&
+      !hasPending("list_changes", "") &&
+      cardMatchesList &&
+      !waitTroubleShown &&
+      !editorRequestsByChangeId.has(run.change_id) &&
+      !cardRefreshInFlight.has(run.change_id) &&
       runObservationGeneration.get(run.run_id) === verificationGeneration &&
       !hasPending("get_verification", run.run_id) &&
       !hasPending("review_verification", run.run_id) &&
@@ -1521,174 +1806,200 @@ export function bootstrapViewsPage() {
       !hasPending("get_build", run.change_id) &&
       !hasPending("start_build", run.change_id) &&
       !cardLoadErrors.has(run.change_id) &&
-      (buildChangeId !== run.change_id || buildReadError === null);
+      (buildChangeId !== run.change_id || buildReadError === null)
+    );
   }
 
-  // refreshVerificationObservations reads exact owner-supplied identities.
-  // An older selected run is independent of the latest run's match.
   function refreshVerificationObservations(changeId: string) {
     const latest = changeList?.changes.find((item) => item.change_id === changeId)?.latest_verification;
-    if (latest !== undefined) readVerification(latest.run_id, changeId);
-    if (selectedVerificationChangeId === changeId && selectedRunId !== null &&
-        selectedRunId !== latest?.run_id) readVerification(selectedRunId, changeId);
-    const card = activeEditor?.card;
+    if (latest !== undefined) {
+      readVerification(latest.run_id, changeId);
+    }
+    if (
+      selectedVerificationChangeId === changeId &&
+      selectedRunId !== null &&
+      selectedRunId !== latest?.run_id
+    ) {
+      readVerification(selectedRunId, changeId);
+    }
+    const card = editorsByChangeId.get(changeId)?.card;
     const approval = card?.approval ?? card?.unverified_approval?.approval;
-    if (card?.change_id === changeId && approval !== undefined && knownTakingBuild(changeId) !== null &&
-        !listRequestErrors.has(changeId) && approvalRunFor(card, approval) === null) {
+    if (
+      card !== undefined &&
+      approval !== undefined &&
+      knownTakingBuild(changeId) !== null &&
+      !listRequestErrors.has(changeId) &&
+      approvalRunFor(card, approval) === null
+    ) {
       refreshVerificationsInBackground(changeId);
     }
   }
 
-  // knownTakingBuild excludes retained facts while the owner observation is
-  // stale, failed or being replaced. Saved results remain readable throughout.
   function knownTakingBuild(changeId: string): StartedBuild | null {
-    return sessionState === "active" && !waitTroubleShown && buildChangeId === changeId &&
-      buildSnapshot?.state === "started" && buildReadError === null &&
-      !hasPending("get_build", changeId) && !hasPending("start_build", changeId) &&
+    return sessionState === "active" &&
+      !waitTroubleShown &&
+      buildChangeId === changeId &&
+      buildSnapshot?.state === "started" &&
+      buildReadError === null &&
+      !hasPending("get_build", changeId) &&
+      !hasPending("start_build", changeId) &&
       !Array.from(pendingCalls).some((call) => call.op === "drop_build")
-      ? buildSnapshot : null;
+      ? buildSnapshot
+      : null;
   }
 
-  // approvalRunFor correlates every recorded input to an eligible owner run;
-  // neither recency nor equal commits alone establishes this build's identity.
-  function approvalRunFor(card: ChangeCardResult, approval: ApprovalItem): VerificationStatusResult | null {
+  // currentInForceBuild returns the active in-force non-dropped StartedBuild
+  // matching card.request_revision when all build reads are fresh.
+  function currentInForceBuild(card: ChangeCardResult): StartedBuild | null {
     const build = knownTakingBuild(card.change_id);
-    if (build === null) return null;
+    if (
+      build === null ||
+      !build.in_force ||
+      build.taking.state === "dropped" ||
+      build.request_revision !== card.request_revision
+    ) {
+      return null;
+    }
+    return build;
+  }
+
+  // runStartedInCurrentBuild attributes both passing and failed/incomplete runs
+  // to the current build without changing runBelongsToBuild's merge admission.
+  function runStartedInCurrentBuild(
+    card: ChangeCardResult,
+    build: StartedBuild,
+    run: VerificationStatusResult
+  ): boolean {
+    return (
+      run.change_id === card.change_id &&
+      run.request_revision === build.request_revision &&
+      buildTimestampNanos(run.accepted_at) >= buildTimestampNanos(build.started_at)
+    );
+  }
+
+  function approvalRunFor(
+    card: ChangeCardResult,
+    approval: ApprovalItem
+  ): VerificationStatusResult | null {
+    const build = knownTakingBuild(card.change_id);
+    if (build === null) {
+      return null;
+    }
     for (const run of runsById.values()) {
-      if (runInputsKnown(run) && runBelongsToBuild(card.change_id, build, run) &&
-          run.request_revision === card.request_revision && run.candidate_commit === approval.candidate_commit &&
-          run.suite_commit === approval.suite_commit && run.test_source.source === approval.test_source.source &&
-          run.state.type === "completed" && run.state.value.report.report_digest === approval.report_digest) return run;
+      if (
+        runInputsKnown(run) &&
+        runBelongsToBuild(card.change_id, build, run) &&
+        run.request_revision === card.request_revision &&
+        run.candidate_commit === approval.candidate_commit &&
+        run.suite_commit === approval.suite_commit &&
+        run.test_source.source === approval.test_source.source &&
+        run.state.type === "completed" &&
+        run.state.value.report.report_digest === approval.report_digest
+      ) {
+        return run;
+      }
     }
     return null;
   }
 
-  // savedApprovalEvidenceRun selects only an unambiguous recorded binding.
-  // This locates evidence; the owner's new review still decides admission.
-  function savedApprovalEvidenceRun(card: ChangeCardResult, approval: ApprovalItem): VerificationStatusResult | null {
-    const matches = Array.from(runsById.values()).filter((run) => run.change_id === card.change_id &&
-      run.request_revision === card.request_revision && run.candidate_commit === approval.candidate_commit &&
-      run.suite_commit === approval.suite_commit && run.test_source.source === approval.test_source.source &&
-      run.state.type === "completed" && run.state.value.report.report_digest === approval.report_digest);
+  function savedApprovalEvidenceRun(
+    card: ChangeCardResult,
+    approval: ApprovalItem
+  ): VerificationStatusResult | null {
+    const matches = Array.from(runsById.values()).filter(
+      (run) =>
+        run.change_id === card.change_id &&
+        run.request_revision === card.request_revision &&
+        run.candidate_commit === approval.candidate_commit &&
+        run.suite_commit === approval.suite_commit &&
+        run.test_source.source === approval.test_source.source &&
+        run.state.type === "completed" &&
+        run.state.value.report.report_digest === approval.report_digest
+    );
     return matches.length === 1 ? matches[0] : approvalRunFor(card, approval);
   }
 
-  // latestVerificationFor uses the run identity supplied by the change owner.
   function latestVerificationFor(changeId: string): VerificationStatusResult | null {
-    const id = changeList?.changes.find((item) => item.change_id === changeId)?.latest_verification?.run_id;
+    const id = changeList?.changes.find((item) => item.change_id === changeId)?.latest_verification
+      ?.run_id;
     return id === undefined ? null : runsById.get(id) ?? null;
   }
 
-  // newerCheckFor offers only the latest identity agreed by both owner reads.
-  // Their ordered history must place the displayed run after it; a delayed
-  // list cannot describe a more recently selected run as older.
   function newerCheckFor(run: VerificationStatusResult): VerificationStatusResult | null {
     const latest = latestVerificationFor(run.change_id);
     const history = lastLoadedListByChangeId.get(run.change_id);
     return latest !== null && history?.[0] === latest.run_id && history.indexOf(run.run_id) > 0
-      ? latest : null;
+      ? latest
+      : null;
   }
 
-  // reviewSavedCheck opens the exact result whose action the user selected.
-  function reviewSavedCheck(run: VerificationStatusResult) {
-    selectedVerificationChangeId = run.change_id;
-    selectedRunId = run.run_id;
-    editorOpen = false;
-    activeResult = { kind: "cp5-approval" };
-    rootEl.dataset.state = "cp5-approval";
-    statusEl.textContent = "Review the saved check before approving it.";
-    if (!lastLoadedListByChangeId.has(run.change_id)) refreshVerificationsInBackground(run.change_id);
-    readApprovalReview(run.run_id, run.change_id);
-    syncAllRegions();
-    focusResult("#highbay-cp5-title");
+  function reviewForRun(runId: string | null): VerificationReview | null {
+    return runId !== null ? reviewsByRunId.get(runId)?.review ?? null : null;
   }
 
-  // openApproval preserves an explicitly selected run; otherwise it opens the
-  // change owner's current result. An empty stage names the required selection.
-  function openApproval() {
-    const selected = activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval"
-      ? resolveDisplayedVerificationRun() : null;
-    const run = selected ?? (activeEditor !== null ? latestVerificationFor(activeEditor.card.change_id) : null);
-    if (run !== null) {
-      reviewSavedCheck(run);
-      return;
-    }
-    selectedRunId = null;
-    selectedVerificationChangeId = activeEditor?.card.change_id ?? null;
-    editorOpen = false;
-    activeResult = { kind: "cp5-approval" };
-    rootEl.dataset.state = "cp5-approval";
-    if (selectedVerificationChangeId !== null) refreshVerificationsInBackground(selectedVerificationChangeId);
-    syncAllRegions();
-    focusResult("#highbay-cp5-title");
-  }
-
-  // openRecordedApproval retains the exact saved binding rather than choosing
-  // another run's approval by recency. The record stays visible without a run.
-  function openRecordedApproval() {
-    const card = activeEditor?.card;
-    if (card === undefined) return;
-    const approval = card.approval ?? card.unverified_approval?.approval;
-    const run = approval !== undefined ? savedApprovalEvidenceRun(card, approval) : null;
-    if (run !== null) { reviewSavedCheck(run); return; }
-    selectedVerificationChangeId = card.change_id;
-    selectedRunId = null;
-    editorOpen = false;
-    activeResult = { kind: "cp5-approval" };
-    rootEl.dataset.state = "cp5-approval";
-    if (!lastLoadedListByChangeId.has(card.change_id) && !listRequestErrors.has(card.change_id)) {
-      refreshVerificationsInBackground(card.change_id);
-    }
-    syncAllRegions();
-    focusResult("#highbay-cp5-title");
-  }
-
-  // displayedApprovalReview never borrows another selected run's observation.
   function displayedApprovalReview(): VerificationReview | null {
-    return selectedReview !== null && selectedReview.runId === selectedRunId ? selectedReview.review : null;
+    return reviewForRun(selectedRunId);
   }
 
-  // isViewingSelectedRun binds evidence reads to the explicit Check/Approve selection.
   function isViewingSelectedRun(runId: string): boolean {
-    return selectedRunId === runId &&
-      (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval" ||
-        editorOpen && editorStage === "build" && activeEditor?.card.change_id === runsById.get(runId)?.change_id);
+    const runChangeId = runsById.get(runId)?.change_id;
+    return (
+      selectedRunId === runId &&
+      currentView.kind === "change" &&
+      (currentView.stage === "verify" ||
+        currentView.stage === "approve" ||
+        (currentView.stage === "build" && currentView.changeId === runChangeId))
+    );
   }
 
-  // approvalReviewFresh validates the observation's identity and transport
-  // freshness, not its admission predicates; only the server decides those.
   function approvalReviewFresh(run: VerificationStatusResult): boolean {
-    return runInputsKnown(run) && !hasPending("review_verification", run.run_id) &&
-      selectedReview !== null && selectedReview.runId === run.run_id &&
-      selectedReview.generation === verificationGeneration &&
-      selectedReview.order >= (runObservationOrder.get(run.run_id) ?? -1);
+    const entry = reviewsByRunId.get(run.run_id);
+    return (
+      runInputsKnown(run) &&
+      !hasPending("review_verification", run.run_id) &&
+      entry !== undefined &&
+      entry.generation === verificationGeneration &&
+      entry.order >= (runObservationOrder.get(run.run_id) ?? -1)
+    );
   }
 
-  // mergeIdentity correlates receipts with the approved inputs and saved build.
-  // It deliberately does not bind the user to the newest passed run.
   function mergeIdentity(run: VerificationStatusResult): string | null {
-    const build = buildChangeId === run.change_id && buildSnapshot?.state === "started" ? buildSnapshot : null;
+    const build =
+      buildChangeId === run.change_id && buildSnapshot?.state === "started" ? buildSnapshot : null;
     return build !== null && run.state.type === "completed"
-      ? JSON.stringify([run.change_id, build.started_at, run.request_revision,
-        run.candidate_commit, run.state.value.report.report_digest]) : null;
+      ? JSON.stringify([
+          run.change_id,
+          build.started_at,
+          run.request_revision,
+          run.candidate_commit,
+          run.state.value.report.report_digest,
+        ])
+      : null;
   }
 
-  // buildApprovalRun locates the card's exact saved approval, keeping a user
-  // selection when it carries that binding. Branch tips and recency are not IDs.
   function buildApprovalRun(card: ChangeCardResult): VerificationStatusResult | null {
     const approval = card.approval;
-    if (approval === undefined) return null;
+    if (approval === undefined) {
+      return null;
+    }
     const selected = resolveDisplayedVerificationRun();
-    if (selected !== null && selected.change_id === card.change_id &&
-      selected.request_revision === card.request_revision && selected.candidate_commit === approval.candidate_commit &&
-      selected.state.type === "completed" && selected.state.value.report.report_digest === approval.report_digest) return selected;
+    if (
+      selected !== null &&
+      selected.change_id === card.change_id &&
+      selected.request_revision === card.request_revision &&
+      selected.candidate_commit === approval.candidate_commit &&
+      selected.state.type === "completed" &&
+      selected.state.value.report.report_digest === approval.report_digest
+    ) {
+      return selected;
+    }
     return savedApprovalEvidenceRun(card, approval);
   }
 
-  // refreshMergeState follows the exact approval through existing read owners.
-  // It may resolve an unknown outcome but never repeats the mutation.
   function refreshMergeState(run: VerificationStatusResult) {
-    if (sessionState !== "active") return;
+    if (sessionState !== "active") {
+      return;
+    }
     selectedRunId = run.run_id;
     selectedVerificationChangeId = run.change_id;
     readBuild(run.change_id);
@@ -1697,178 +2008,331 @@ export function bootstrapViewsPage() {
     readTeam();
   }
 
-  // mergeControls admits only a current owner-recorded approval for this build.
-  // Retained evidence remains visible while reads or the update chain are stale.
   function mergeControls(run: VerificationStatusResult | null): MergeControls {
     const build = run !== null ? knownTakingBuild(run.change_id) : null;
-    const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
+    const review = run !== null ? reviewForRun(run.run_id) : null;
     const anyMergePending = Array.from(pendingCalls).some((call) => call.op === "merge_change");
     const pending = run !== null && hasPending("merge_change", run.change_id);
     const identity = run !== null ? mergeIdentity(run) : null;
     const outcome = identity !== null && mergeOutcome?.identity === identity ? mergeOutcome : null;
     let reason: string | null = null;
     if (run === null) reason = "Read the exact saved approval before merging.";
-    else if (sessionState !== "active") reason = "Open a fresh Highbay page through your coding agent to check current approval.";
-    else if (anyMergePending && !pending) reason = "Another change is being merged. Wait for that operation to finish.";
+    else if (sessionState !== "active")
+      reason = "Open a fresh Highbay page through your coding agent to check current approval.";
+    else if (anyMergePending && !pending)
+      reason = "Another change is being merged. Wait for that operation to finish.";
     else if (build === null) reason = "Read the current build before merging.";
-    else if (build.taking.state === "merged") reason = "This build is already merged. Describe the next change when you are ready.";
-    else if (build.taking.state === "dropped") reason = "This build was dropped; it cannot be merged through Highbay.";
-    else if (!build.in_force || !runBelongsToBuild(run.change_id, build, run)) reason = "This result does not belong to the current agreed build.";
-    else if (!approvalReviewFresh(run)) reason = "Refresh merge state to read current approval and build facts.";
-    else if (review?.approval.state !== "recorded") reason = "Review and approve this result before merging.";
-    else if (build.taking.state !== "passed") reason = "The current build has no passed result to merge.";
-    else if (run.state.type !== "completed" || !run.state.value.report.passed ||
+    else if (build.taking.state === "merged")
+      reason = "This build is already merged. Describe the next change when you are ready.";
+    else if (build.taking.state === "dropped")
+      reason = "This build was dropped; it cannot be merged through Highbay.";
+    else if (!build.in_force || !runBelongsToBuild(run.change_id, build, run))
+      reason = "This result does not belong to the current agreed build.";
+    else if (!approvalReviewFresh(run))
+      reason = "Refresh merge state to read current approval and build facts.";
+    else if (review?.approval.state !== "recorded")
+      reason = "Review and approve this result before merging.";
+    else if (build.taking.state !== "passed")
+      reason = "The current build has no passed result to merge.";
+    else if (
+      run.state.type !== "completed" ||
+      !run.state.value.report.passed ||
       review.approval.candidate_commit !== run.candidate_commit ||
       review.approval.report_digest !== run.state.value.report.report_digest ||
-      review.approval.suite_commit !== run.suite_commit) reason = "The saved approval does not match this result. Refresh merge state.";
-    return { eligible: reason === null && !pending, pending, reason,
-      receipt: outcome?.receipt ?? null, error: outcome?.error ?? null,
-      onMerge: () => { if (run !== null) mergeApprovedRun(run); },
-      onRefresh: () => { if (run !== null) refreshMergeState(run); } };
+      review.approval.suite_commit !== run.suite_commit
+    )
+      reason = "The saved approval does not match this result. Refresh merge state.";
+    return {
+      eligible: reason === null && !pending,
+      pending,
+      reason,
+      receipt: outcome?.receipt ?? null,
+      error: outcome?.error ?? null,
+      onMerge: () => {
+        if (run !== null) mergeApprovedRun(run);
+      },
+      onRefresh: () => {
+        if (run !== null) refreshMergeState(run);
+      },
+    };
   }
 
-  // mergeApprovedRun captures the exact tuple before any asynchronous read can
-  // change selection. Lost responses recover through reads, never automatic retry.
   function mergeApprovedRun(run: VerificationStatusResult) {
-    if (!mergeControls(run).eligible || run.state.type !== "completed") return;
+    if (!mergeControls(run).eligible || run.state.type !== "completed") {
+      return;
+    }
     const identity = mergeIdentity(run);
-    if (identity === null) return;
+    if (identity === null) {
+      return;
+    }
     const request: Operations["merge_change"]["request"] = {
-      change_id: run.change_id, request_revision: run.request_revision,
-      candidate_commit: run.candidate_commit, report_digest: run.state.value.report.report_digest,
+      change_id: run.change_id,
+      request_revision: run.request_revision,
+      candidate_commit: run.candidate_commit,
+      report_digest: run.state.value.report.report_digest,
     };
     mergeOutcome = { identity, receipt: null, error: null };
-    // Reads begun before the mutation cannot establish its outcome or restore
-    // approval admission. A failure needs a fresh owner read before another try.
     buildGeneration++;
     verificationGeneration++;
-    callServer("merge_change", request, run.change_id, (result) => {
-      if (sessionState !== "active") return;
-      mergeOutcome = { identity, receipt: { at: new Date().toISOString(), ...result }, error: null };
-      statusEl.textContent = "Merged approved change " + run.change_id + " into " + result.branch + " at " + result.head_commit.slice(0, 12) + ".";
-      readBuild(run.change_id);
-      refreshOpenCard(run.change_id);
-      readTeam();
-      void loadChanges();
-    }, (message, failure) => {
-      if (sessionState !== "active") return;
-      mergeOutcome = { identity, receipt: null, error: {
-        name: failure.kind === "server" ? failure.body?.name ?? null : null, message,
-      } };
-      statusEl.textContent = "Merge was not confirmed. Refresh merge state before trying again.";
-    });
-  }
-
-  // mergePanel keeps manual merge commands secondary. A fresh merged build
-  // can also supply inputs for a separate check of the resulting commit.
-  function mergePanel(run: VerificationStatusResult | null, idPrefix: string, observedBuild: StartedBuild | null = null): React.ReactNode {
-    const controls = mergeControls(run);
-    const build = run !== null ? knownTakingBuild(run.change_id) : observedBuild;
-    const review = run !== null && selectedReview?.runId === run.run_id ? selectedReview.review : null;
-    const approvedBuild = run !== null && build !== null && build.in_force && runBelongsToBuild(run.change_id, build, run) &&
-      (build.taking.state === "passed" || build.taking.state === "merged") && review?.approval.state === "recorded";
-    const tests = build?.test_writer.tests;
-    const postMerge = build?.taking.state === "merged" && (approvedBuild || observedBuild !== null)
-      ? <MergedBranchVerification id={idPrefix + "-verify-merged"} requestRevision={build.request_revision}
-        suiteCommit={approvedBuild ? run.suite_commit : tests?.state === "accepted" ? tests.commit : null}
-        approvedSuite={approvedBuild} mergedCommit={approvedBuild ? controls.receipt?.head_commit ?? null : null}
-        storedEvaluator={tests?.state === "not_used"} />
-      : null;
-    if (run === null || !approvedBuild && !controls.pending && controls.receipt === null && controls.error === null) return postMerge;
-    let manualInstructions: React.ReactNode = null;
-    if (controls.eligible && build !== null && build.taking.state === "passed" &&
-      review?.approval.state === "recorded" && approvalReviewFresh(run) &&
-      runBelongsToBuild(run.change_id, build, run) && run.state.type === "completed") {
-      manualInstructions = <BuildMergeInstructions taking={build.taking} candidateCommit={run.candidate_commit}
-        testsCommit={run.test_source.source === "written_tests" ? run.test_source.commit : null}
-        onFocusedControlRemoved={focusVerificationHeading} />;
-    }
-    return <><MergeFeedback idPrefix={idPrefix} controls={controls} />
-      {manualInstructions}{postMerge}</>;
-  }
-
-  // isViewingChangeResult reports whether the active result view currently
-  // displays a CP2 preview or CP4 verification view for changeId.
-  function isViewingChangeResult(changeId: string): boolean {
-    if (activeResult?.kind === "cp2-architecture-preview") {
-      return activeEditor !== null && activeEditor.card.change_id === changeId;
-    }
-    if (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") {
-      const displayedRun = resolveDisplayedVerificationRun();
-      const effectiveId = displayedRun
-        ? displayedRun.change_id
-        : selectedVerificationChangeId || "";
-      return effectiveId === changeId;
-    }
-    return activeResult?.kind === "changes";
-  }
-
-  // hasUnsavedEdits reports typed edits the page would lose on unload.
-  function hasUnsavedEdits(): boolean {
-    if (!activeEditor) {
-      return false;
-    }
-    return (
-      isDraftDirty(activeEditor.card, activeEditor.draftAnswers, activeEditor.draftExamples) ||
-      activeEditor.preservedDraft !== null
+    callServer(
+      "merge_change",
+      request,
+      run.change_id,
+      (result) => {
+        if (sessionState !== "active") return;
+        mergeOutcome = { identity, receipt: { at: new Date().toISOString(), ...result }, error: null };
+        statusEl.textContent =
+          "Merged approved change " +
+          run.change_id +
+          " into " +
+          result.branch +
+          " at " +
+          result.head_commit.slice(0, 12) +
+          ".";
+        readBuild(run.change_id);
+        refreshOpenCard(run.change_id);
+        readTeam();
+        void loadChanges();
+      },
+      (message, failure) => {
+        if (sessionState !== "active") return;
+        mergeOutcome = {
+          identity,
+          receipt: null,
+          error: {
+            name: failure.kind === "server" ? failure.body?.name ?? null : null,
+            message,
+          },
+        };
+        statusEl.textContent = "Merge was not confirmed. Refresh merge state before trying again.";
+      }
     );
   }
 
-  // hasPendingEditorSave excludes card reads, which lock the editor but have
-  // no unsaved request to lose. The generated route owns the read/write fact.
+  function mergePanel(
+    run: VerificationStatusResult | null,
+    idPrefix: string,
+    observedBuild: StartedBuild | null = null
+  ): React.ReactNode {
+    const controls = mergeControls(run);
+    const build = run !== null ? knownTakingBuild(run.change_id) : observedBuild;
+    const review = run !== null ? reviewForRun(run.run_id) : null;
+    const approvedBuild =
+      run !== null &&
+      build !== null &&
+      build.in_force &&
+      runBelongsToBuild(run.change_id, build, run) &&
+      (build.taking.state === "passed" || build.taking.state === "merged") &&
+      review?.approval.state === "recorded";
+    const tests = build?.test_writer.tests;
+    const postMerge =
+      build?.taking.state === "merged" && (approvedBuild || observedBuild !== null) ? (
+        <MergedBranchVerification
+          id={idPrefix + "-verify-merged"}
+          requestRevision={build.request_revision}
+          suiteCommit={
+            approvedBuild ? run.suite_commit : tests?.state === "accepted" ? tests.commit : null
+          }
+          approvedSuite={approvedBuild}
+          mergedCommit={approvedBuild ? controls.receipt?.head_commit ?? null : null}
+          storedEvaluator={tests?.state === "not_used"}
+        />
+      ) : null;
+    if (
+      run === null ||
+      (!approvedBuild && !controls.pending && controls.receipt === null && controls.error === null)
+    ) {
+      return postMerge;
+    }
+    let manualInstructions: React.ReactNode = null;
+    if (
+      controls.eligible &&
+      build !== null &&
+      build.taking.state === "passed" &&
+      review?.approval.state === "recorded" &&
+      approvalReviewFresh(run) &&
+      runBelongsToBuild(run.change_id, build, run) &&
+      run.state.type === "completed"
+    ) {
+      manualInstructions = (
+        <BuildMergeInstructions
+          taking={build.taking}
+          candidateCommit={run.candidate_commit}
+          testsCommit={run.test_source.source === "written_tests" ? run.test_source.commit : null}
+          onFocusedControlRemoved={focusVerificationHeading}
+        />
+      );
+    }
+    return (
+      <>
+        <MergeFeedback idPrefix={idPrefix} controls={controls} />
+        {manualInstructions}
+        {postMerge}
+      </>
+    );
+  }
+
+  // reviewSavedCheck opens Approve on the exact run whose action the user selected.
+  function reviewSavedCheck(run: VerificationStatusResult) {
+    navigationSeq++;
+    activeChangeId = run.change_id;
+    selectedVerificationChangeId = run.change_id;
+    selectedRunId = run.run_id;
+    mobileSurface = "stage";
+    currentView = { kind: "change", changeId: run.change_id, stage: "approve" };
+    statusEl.textContent = "Review the saved check before approving it.";
+    if (!lastLoadedListByChangeId.has(run.change_id)) {
+      refreshVerificationsInBackground(run.change_id);
+    }
+    readApprovalReview(run.run_id, run.change_id);
+    syncHistoryState("push");
+    syncAllRegions();
+    focusResult("#highbay-cp5-title");
+  }
+
+  function openApproval() {
+    navigationSeq++;
+    const changeId = activeChangeId ?? selectedVerificationChangeId;
+    if (changeId === null) {
+      return;
+    }
+    const onVerifyOrApprove =
+      currentView.kind === "change" &&
+      (currentView.stage === "verify" || currentView.stage === "approve");
+    const selected = onVerifyOrApprove ? resolveDisplayedVerificationRun() : null;
+    const ed = editorsByChangeId.get(changeId);
+    const savedApproval = ed?.card.approval ?? ed?.card.unverified_approval?.approval;
+    const savedRun =
+      ed !== undefined && savedApproval !== undefined
+        ? savedApprovalEvidenceRun(ed.card, savedApproval)
+        : null;
+    const run = selected ?? savedRun ?? latestVerificationFor(changeId);
+    if (run !== null) {
+      reviewSavedCheck(run);
+      return;
+    }
+    selectedRunId = null;
+    selectedVerificationChangeId = changeId;
+    mobileSurface = "stage";
+    currentView = { kind: "change", changeId, stage: "approve" };
+    refreshVerificationsInBackground(changeId);
+    syncHistoryState("push");
+    syncAllRegions();
+    focusResult("#highbay-cp5-title");
+  }
+
+  function openRecordedApproval() {
+    const ed = getActiveEditor();
+    if (ed === null) {
+      return;
+    }
+    const card = ed.card;
+    const approval = card.approval ?? card.unverified_approval?.approval;
+    const run = approval !== undefined ? savedApprovalEvidenceRun(card, approval) : null;
+    if (run !== null) {
+      reviewSavedCheck(run);
+      return;
+    }
+    navigationSeq++;
+    selectedVerificationChangeId = card.change_id;
+    selectedRunId = null;
+    mobileSurface = "stage";
+    currentView = { kind: "change", changeId: card.change_id, stage: "approve" };
+    if (!lastLoadedListByChangeId.has(card.change_id) && !listRequestErrors.has(card.change_id)) {
+      refreshVerificationsInBackground(card.change_id);
+    }
+    syncHistoryState("push");
+    syncAllRegions();
+    focusResult("#highbay-cp5-title");
+  }
+
+  // dirtyChangeIds lists all changeIds in editorsByChangeId with unsaved edits or proposal answers.
+  function dirtyChangeIds(): Set<string> {
+    const out = new Set<string>();
+    for (const [id, ed] of editorsByChangeId.entries()) {
+      if (isEditorDirtyState(ed) || Object.keys(ed.proposalAnswers).length > 0) {
+        out.add(id);
+      }
+    }
+    return out;
+  }
+
+  function hasAnyUnsavedEdits(): boolean {
+    for (const ed of editorsByChangeId.values()) {
+      if (isEditorDirtyState(ed)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function hasPendingEditorSave(): boolean {
-    return editorRequest !== null && ROUTES[editorRequest].method !== "GET";
+    for (const op of editorRequestsByChangeId.values()) {
+      if (ROUTES[op].method !== "GET") {
+        return true;
+      }
+    }
+    return false;
   }
 
-  // hasUnsavedPageInput protects all input that reloading this document loses.
-  // Agreement warnings continue to use the narrower CP1 draft predicate.
   function hasUnsavedPageInput(): boolean {
-    return hasUnsavedEdits() || hasPendingEditorSave() || modelDraftDirty ||
-      composerDraft.text.trim() !== "" || describeText.trim() !== "" ||
-      (activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0);
+    if (
+      hasAnyUnsavedEdits() ||
+      hasPendingEditorSave() ||
+      modelDraftDirty ||
+      composerDraft.text.trim() !== "" ||
+      describeText.trim() !== ""
+    ) {
+      return true;
+    }
+    for (const ed of editorsByChangeId.values()) {
+      if (Object.keys(ed.proposalAnswers).length > 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  // openPendingLink re-enters the normal bootstrap after saving or discarding.
-  // replaceState avoids queuing another hashchange before the reload.
+  function discardAllPageDrafts() {
+    if (hasPendingEditorSave()) {
+      return;
+    }
+    for (const [id, ed] of editorsByChangeId.entries()) {
+      editorsByChangeId.set(id, {
+        card: ed.card,
+        priorCard: ed.priorCard,
+        incomingCard: ed.incomingCard,
+        ...editorDraftFrom(ed.card),
+        preservedDraft: null,
+        formError: null,
+      });
+    }
+    composerDraft = { ...composerDraft, text: "", seededText: undefined };
+    describeText = "";
+    if (!hasPending("configure_model", "")) {
+      modelDraft = { kind: null, provider: "anthropic", modelName: "", gatewayAddr: "" };
+      modelDraftDirty = false;
+      modelDraftReset++;
+    }
+    syncAllRegions();
+  }
+
   function openPendingLink() {
-    if (pendingLinkFragment === null || hasUnsavedPageInput()) return;
-    history.replaceState(null, "", window.location.pathname + window.location.search + pendingLinkFragment);
+    if (pendingLinkFragment === null || hasUnsavedPageInput()) {
+      return;
+    }
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search + pendingLinkFragment
+    );
     window.location.reload();
   }
 
-  // hasUnsavedEditorState identifies work that a different stage must leave
-  // available for the user to recover or continue editing.
-  function hasUnsavedEditorState(): boolean {
-    return hasUnsavedEdits() || (activeEditor !== null && activeEditor.formError !== null);
-  }
-
-  // shouldRetainEditor keeps drafts and the destination of a pending editor
-  // response visible when another stage is shown.
-  function shouldRetainEditor(): boolean {
-    return activeEditor !== null && ((editorOpen && editorRequest !== null) || hasUnsavedEditorState());
-  }
-
-  // clearEditorDataset removes DOM metadata when no card is displayed.
-  function clearEditorDataset() {
-    delete editorRegionEl.dataset.state;
-    delete editorRegionEl.dataset.changeId;
-    delete editorRegionEl.dataset.requestRevision;
-  }
-
-  // clearResultDataset prevents a new result from inheriting old DOM metadata.
-  function clearResultDataset() {
-    delete resultRegionEl.dataset.state;
-    delete resultRegionEl.dataset.changeId;
-    delete resultRegionEl.dataset.requestRevision;
-    delete resultRegionEl.dataset.designDigest;
-    delete resultRegionEl.dataset.runId;
-  }
-
-  // showChanges switches to the change list, reading it when none is loaded.
   function showChanges() {
-    editorOpen = shouldRetainEditor();
-    activeResult = { kind: "changes" };
-    rootEl.dataset.state = "changes";
+    navigationSeq++;
+    mobileSurface = "stage";
+    currentView = { kind: "changes" };
     statusEl.textContent =
       changeList === null
         ? "Reading this project's changes..."
@@ -1878,29 +2342,43 @@ export function bootstrapViewsPage() {
     if (changeList === null) {
       void loadChanges();
     }
+    syncHistoryState("push");
     syncAllRegions();
   }
 
-  // openStory shows the Story stage: the open change's saved Story, if a
-  // change is open, and the owner's current Story evaluation, which it reads
-  // when it was never read or the change list's version moved since.
+  function openNewChange() {
+    navigationSeq++;
+    mobileSurface = "stage";
+    if (changeList !== null && changeList.changes.length === 0) {
+      currentView = { kind: "changes" };
+    } else {
+      currentView = { kind: "new" };
+    }
+    statusEl.textContent = "Describe the next change for Guide to draft.";
+    if (storyEvaluation === null || storyEvaluationStale) {
+      readStoryEvaluation();
+    }
+    syncHistoryState("push");
+    syncAllRegions();
+    focusResult("#highbay-describe-input");
+  }
+
   function openStory() {
-    editorOpen = shouldRetainEditor();
-    activeResult = { kind: "story" };
-    rootEl.dataset.state = "story";
+    navigationSeq++;
+    mobileSurface = "stage";
+    currentView = { kind: "story" };
+    const ed = getActiveEditor();
     statusEl.textContent =
-      activeEditor !== null
-        ? "Showing the Story of Change Card " + activeEditor.card.change_id + "."
+      ed !== null
+        ? "Showing the Story of Change Card " + ed.card.change_id + "."
         : "Showing the current Story draft.";
     if (storyEvaluation === null || storyEvaluationStale) {
       readStoryEvaluation();
     }
+    syncHistoryState("push");
     syncAllRegions();
   }
 
-  // readStoryEvaluation reads the owner's current Story evaluation. A read
-  // asked for while one is in flight runs once more after it, so the page
-  // never keeps an answer older than the last version it saw.
   function readStoryEvaluation() {
     if (hasPending("get_story_refresh", "")) {
       storyReadAgain = true;
@@ -1925,7 +2403,7 @@ export function bootstrapViewsPage() {
       (message) => {
         storyEvaluationError = message;
         storyEvaluationStale = true;
-        if (activeResult?.kind === "story") {
+        if (currentView.kind === "story") {
           statusEl.textContent = "Could not read the current Story draft.";
         }
         done();
@@ -1933,19 +2411,19 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // openTeam shows the shared team snapshot without dropping an edited card.
   function openTeam() {
-    editorOpen = shouldRetainEditor();
-    activeResult = { kind: "team" };
-    rootEl.dataset.state = "team";
+    navigationSeq++;
+    mobileSurface = "stage";
+    currentView = { kind: "team" };
     statusEl.textContent = "Showing the project team.";
-    if (teamSnapshot === null || teamReadError !== null || waitTroubleShown) readTeam();
+    if (teamSnapshot === null || teamReadError !== null || waitTroubleShown) {
+      readTeam();
+    }
+    syncHistoryState("push");
     syncAllRegions();
     document.getElementById("highbay-team-title")?.focus();
   }
 
-  // readTeam follows the existing single version chain. One extra read is
-  // retained when another change arrives during an outstanding request.
   function readTeam() {
     if (sessionState !== "active") return;
     if (hasPending("get_team", "")) {
@@ -1957,12 +2435,15 @@ export function bootstrapViewsPage() {
       if (teamReadAgain && sessionState === "active") readTeam();
     };
     callServer(
-      "get_team", {}, "",
+      "get_team",
+      {},
+      "",
       (snapshot) => {
         if (sessionState !== "active") return;
         teamSnapshot = snapshot;
         teamReadError = null;
         proposeMissingWorkerChoices();
+        reconcileConversationDefaultOpen();
         done();
       },
       (message) => {
@@ -1970,27 +2451,26 @@ export function bootstrapViewsPage() {
         const firstFailure = teamReadError === null;
         teamReadError = { readFailed: true, message };
         if (firstFailure) {
-          statusEl.textContent = "Could not read the project team. Open Team to see the error and retry.";
+          statusEl.textContent =
+            "Could not read the project team. Open Team to see the error and retry.";
         }
         done();
       }
     );
   }
 
-  // buildWorkerRoles is the owner's plan for a new build, including the
-  // builder-only case before any working copy or role has been registered.
   function buildWorkerRoles(): readonly WorkerRole[] {
     return agentOptions?.build_roles ?? [];
   }
 
-  // teamWorkerRoles selects only registered workers with current assignments.
   function teamWorkerRoles(): WorkerRole[] {
-    return (teamSnapshot?.roles ?? []).flatMap((role) => role.role !== "guide" &&
-      (role.assignment === "unread" || role.assignment === "nothing_owed") ? [role.role] : []);
+    return (teamSnapshot?.roles ?? []).flatMap((role) =>
+      role.role !== "guide" && (role.assignment === "unread" || role.assignment === "nothing_owed")
+        ? [role.role]
+        : []
+    );
   }
 
-  // readConversation follows the change-list version chain and coalesces
-  // overlapping reads so Chorus messages stay current without polling.
   function readConversation() {
     if (sessionState !== "active") return;
     if (hasPending("get_team_conversation", "")) {
@@ -2002,11 +2482,20 @@ export function bootstrapViewsPage() {
       if (conversationReadAgain && sessionState === "active") readConversation();
     };
     callServer(
-      "get_team_conversation", {}, "",
+      "get_team_conversation",
+      {},
+      "",
       (conv) => {
         if (sessionState !== "active") return;
         teamConversation = conv;
         conversationError = null;
+        reconcileConversationDefaultOpen();
+        const visibleOnScreen = isNarrowViewport()
+          ? mobileSurface === "conversation"
+          : conversationOpen;
+        if (visibleOnScreen) {
+          seenMessageCount = conv.messages.length;
+        }
         done();
       },
       (message) => {
@@ -2017,8 +2506,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // proposeMissingWorkerChoices refreshes only automatic proposals. A user's
-  // input remains unchanged even when saved preferences or discovery change.
   function proposeMissingWorkerChoices() {
     if (agentOptions === null) return;
     const saved = { ...(teamSnapshot?.saved_choices ?? {}) };
@@ -2037,108 +2524,146 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // loadAgentOptions is a stable mount callback; queueMicrotask avoids calling
-  // flushSync inside a React effect commit, and the owner is not probed again
-  // once discovery has completed.
+  // loadAgentOptions starts initial discovery directly without nested microtasks (@fable-2 L1).
   function loadAgentOptions() {
-    queueMicrotask(() => {
-      if (agentOptions === null && agentOptionsError === null) readAgentOptions();
-    });
+    if (agentOptions === null && agentOptionsError === null) {
+      readAgentOptions();
+    }
   }
 
-  // readAgentOptions is the explicit discovery and retry path. Failed reads
-  // retain drafts but cannot authorize a new launch from stale capabilities.
   function readAgentOptions() {
     if (sessionState !== "active" || hasPending("list_team_agent_options", "")) return;
     if (teamSnapshot === null || teamFactsError() !== null) readTeam();
-    callServer("list_team_agent_options", {}, "", (result) => {
-      if (sessionState !== "active") return;
-      agentOptions = result;
-      agentOptionsError = null;
-      proposeMissingWorkerChoices();
-    }, (message) => {
-      if (sessionState === "active") agentOptionsError = message;
-    });
+    callServer(
+      "list_team_agent_options",
+      {},
+      "",
+      (result) => {
+        if (sessionState !== "active") return;
+        agentOptions = result;
+        agentOptionsError = null;
+        proposeMissingWorkerChoices();
+      },
+      (message) => {
+        if (sessionState === "active") agentOptionsError = message;
+      }
+    );
   }
 
-  // workersReady shares the same admission facts between visible controls
-  // and their callbacks; empty or stale discovery never silently uses defaults.
   function workersReady(roles: readonly WorkerRole[]): boolean {
-    return agentOptions !== null && agentOptionsError === null &&
-      !hasPending("list_team_agent_options", "") && teamFactsError() === null &&
-      workerChoicesReady(roles, workerChoices, agentOptions.agents);
+    return (
+      agentOptions !== null &&
+      agentOptionsError === null &&
+      !hasPending("list_team_agent_options", "") &&
+      teamFactsError() === null &&
+      workerChoicesReady(roles, workerChoices, agentOptions.agents)
+    );
   }
 
-  // dismissTeamNotice saves only the named recommendation, without launching
-  // an agent or changing a capability. A refusal leaves the notice visible.
   function dismissTeamNotice(notice: TeamNotice) {
     if (sessionState !== "active" || hasPending("dismiss_team_notice", notice)) return;
     noticeErrors.delete(notice);
-    callServer("dismiss_team_notice", { notice }, notice, () => {
-      if (sessionState !== "active") return;
-      noticeDismissed.add(notice);
-      readTeam();
-    }, (message) => {
-      if (sessionState === "active") noticeErrors.set(notice, message);
-    });
+    callServer(
+      "dismiss_team_notice",
+      { notice },
+      notice,
+      () => {
+        if (sessionState !== "active") return;
+        noticeDismissed.add(notice);
+        readTeam();
+      },
+      (message) => {
+        if (sessionState === "active") noticeErrors.set(notice, message);
+      }
+    );
   }
 
-  // workerRecommendations appear beside worker selection, when their advice
-  // is relevant. They share the owner's persisted dismissals across views.
   function workerRecommendations(idPrefix: string): React.ReactNode {
     const snapshot = teamSnapshot;
     if (snapshot === null || teamFactsError() !== null) return null;
     const families = new Set((agentOptions?.agents ?? []).map((option) => option.client));
     const notices: { notice: TeamNotice; title: string; text: string }[] = [];
-    if (buildWorkerRoles().includes("test_writer") && families.size === 1) notices.push({
-      notice: "single_agent_family", title: "One coding-agent family is installed.",
-      text: "Highbay can use it for both workers. A second model family can give the builder and test writer different perspectives.",
-    });
-    return notices.filter(({ notice }) => !noticeDismissed.has(notice) &&
-      !snapshot.dismissed_notices.includes(notice)).map(({ notice, title, text }) =>
-      <Alert key={notice} id={idPrefix + "-notice-" + notice}>
-        <p><strong>{title}</strong></p><p>{text}</p>
-        {noticeErrors.has(notice) ? <p role="alert">Could not save this dismissal. {noticeErrors.get(notice)}</p> : null}
-        <Button id={idPrefix + "-notice-" + notice + "-dismiss"}
-          disabled={sessionState !== "active" || hasPending("dismiss_team_notice", notice)}
-          onClick={() => dismissTeamNotice(notice)}>
-          {hasPending("dismiss_team_notice", notice) ? "Saving…" : noticeErrors.has(notice) ? "Retry dismissal" : "Dismiss recommendation"}
-        </Button>
-      </Alert>);
+    if (buildWorkerRoles().includes("test_writer") && families.size === 1) {
+      notices.push({
+        notice: "single_agent_family",
+        title: "One coding-agent family is installed.",
+        text: "Highbay can use it for both workers. A second model family can give the builder and test writer different perspectives.",
+      });
+    }
+    return notices
+      .filter(
+        ({ notice }) => !noticeDismissed.has(notice) && !snapshot.dismissed_notices.includes(notice)
+      )
+      .map(({ notice, title, text }) => (
+        <Alert key={notice} id={idPrefix + "-notice-" + notice}>
+          <p>
+            <strong>{title}</strong>
+          </p>
+          <p>{text}</p>
+          {noticeErrors.has(notice) ? (
+            <p role="alert">Could not save this dismissal. {noticeErrors.get(notice)}</p>
+          ) : null}
+          <Button
+            id={idPrefix + "-notice-" + notice + "-dismiss"}
+            disabled={sessionState !== "active" || hasPending("dismiss_team_notice", notice)}
+            onClick={() => dismissTeamNotice(notice)}
+          >
+            {hasPending("dismiss_team_notice", notice)
+              ? "Saving…"
+              : noticeErrors.has(notice)
+              ? "Retry dismissal"
+              : "Dismiss recommendation"}
+          </Button>
+        </Alert>
+      ));
   }
 
-  // workerPicker renders controlled values for this action's required roles.
   function workerPicker(idPrefix: string, roles: readonly WorkerRole[]): React.ReactNode {
-    return <>{workerRecommendations(idPrefix)}<AgentPickerView idPrefix={idPrefix} roles={roles}
-      options={agentOptions?.agents ?? null} choices={workerChoices}
-      loading={hasPending("list_team_agent_options", "")} error={agentOptionsError}
-      disabled={sessionState !== "active" ||
-        hasPending("start_team_agents", "") || Array.from(pendingCalls).some((call) => call.op === "start_build")}
-      onChoiceChange={(role, choice) => {
-        workerChoices = { ...workerChoices, [role]: choice };
-        editedWorkerChoices.add(role);
-        proposeMissingWorkerChoices();
-        syncAllRegions();
-      }} onRefresh={readAgentOptions} onLoad={loadAgentOptions} /></>;
-  }
-
-  // teamFactsError distinguishes retained observations from currently followed
-  // facts when the read, the update chain or the session is unavailable.
-  function teamFactsError(): TeamFactsError | null {
-    if (teamReadError !== null) return teamReadError;
-    if (sessionState !== "active") return { readFailed: false, message: "The session ended; these are last-read facts." };
-    if (waitTroubleShown) return { readFailed: false, message: "Updates are unavailable; these are last-read facts." };
-    return null;
-  }
-
-  // connectedGuide finds a registered guide that can still follow the project.
-  function connectedGuide(): TeamRoleState | undefined {
-    return teamSnapshot?.roles.find((role) =>
-      role.role === "guide" && role.state !== "not_started" && role.state !== "ended"
+    return (
+      <>
+        {workerRecommendations(idPrefix)}
+        <AgentPickerView
+          idPrefix={idPrefix}
+          roles={roles}
+          options={agentOptions?.agents ?? null}
+          choices={workerChoices}
+          loading={hasPending("list_team_agent_options", "")}
+          error={agentOptionsError}
+          disabled={
+            sessionState !== "active" ||
+            hasPending("start_team_agents", "") ||
+            Array.from(pendingCalls).some((call) => call.op === "start_build")
+          }
+          onChoiceChange={(role, choice) => {
+            workerChoices = { ...workerChoices, [role]: choice };
+            editedWorkerChoices.add(role);
+            proposeMissingWorkerChoices();
+            syncAllRegions();
+          }}
+          onRefresh={readAgentOptions}
+          onLoad={loadAgentOptions}
+        />
+      </>
     );
   }
 
-  // pendingRoleOperations lists registered roles with an outstanding operation.
+  function teamFactsError(): TeamFactsError | null {
+    if (teamReadError !== null) return teamReadError;
+    if (sessionState !== "active") {
+      return { readFailed: false, message: "The session ended; these are last-read facts." };
+    }
+    if (waitTroubleShown) {
+      return { readFailed: false, message: "Updates are unavailable; these are last-read facts." };
+    }
+    return null;
+  }
+
+  function connectedGuide(): TeamRoleState | undefined {
+    return teamSnapshot?.roles.find(
+      (role) => role.role === "guide" && role.state !== "not_started" && role.state !== "ended"
+    );
+  }
+
   function pendingRoleOperations(
     op: "interrupt_team_role" | "stop_team_role" | "restart_team_role"
   ): TeamRoleState["role"][] {
@@ -2147,51 +2672,55 @@ export function bootstrapViewsPage() {
       .map((role) => role.role);
   }
 
-  // focusCurrentViewHeading recovers focus only when a focused view control
-  // disappears. Each rendered region starts with its current view's heading.
   function focusCurrentViewHeading() {
-    const region = activeResult !== null && activeResult.kind !== "cp1-incoming-card"
-      ? resultRegionEl : editorRegionEl;
-    const heading = region.querySelector<HTMLElement>("h2");
+    const heading = viewEl.querySelector<HTMLElement>("h2, h3");
     if (heading !== null) {
       heading.tabIndex = -1;
       heading.focus();
+    } else {
+      viewEl.focus();
     }
   }
 
-  // focusChangeDecisions is a stable removal callback for approval commands,
-  // including when their editor remains beside another view.
-  function focusChangeDecisions() {
-    editorRegionEl.focus();
-  }
-
-  // focusVerificationHeading keeps a removed result command in its own view.
-  // Its stable identity avoids ref cleanup during unrelated renders.
   function focusVerificationHeading() {
-    focusResult(activeResult?.kind === "cp5-approval" ? "#highbay-cp5-title" : "#highbay-cp4-title");
+    focusResult(
+      currentView.kind === "change" && currentView.stage === "approve"
+        ? "#highbay-cp5-title"
+        : "#highbay-cp4-title"
+    );
   }
 
-  // teamWorkersHaveWork reads the current work facts for registered workers.
-  function teamWorkersHaveWork() {
-    return teamSnapshot?.roles.some((role) => role.role !== "guide" &&
-      (role.assignment === "unread" || role.assignment === "nothing_owed")) ?? false;
+  function teamWorkersHaveWork(): boolean {
+    return (
+      teamSnapshot?.roles.some(
+        (role) =>
+          role.role !== "guide" &&
+          (role.assignment === "unread" || role.assignment === "nothing_owed")
+      ) ?? false
+    );
   }
 
-  // startTeamWorkers requests the project's default worker choices. The dated
-  // receipt records this request; readTeam supplies current role health.
   function startTeamWorkers() {
-    if (sessionState !== "active" || !teamWorkersHaveWork() ||
-        !workersReady(teamWorkerRoles()) || hasPending("start_team_agents", "")) return;
+    if (
+      sessionState !== "active" ||
+      !teamWorkersHaveWork() ||
+      !workersReady(teamWorkerRoles()) ||
+      hasPending("start_team_agents", "")
+    ) {
+      return;
+    }
     const begun = new Date().toISOString();
     teamActionError = null;
     callServer(
-      "start_team_agents", { choices: choicesForRoles(teamWorkerRoles(), workerChoices) }, "",
+      "start_team_agents",
+      { choices: choicesForRoles(teamWorkerRoles(), workerChoices) },
+      "",
       (result) => {
         if (sessionState !== "active") return;
         teamStartReceipt = { at: begun, result };
         buildStartReceipt = null;
-        statusEl.textContent = "This start (begun " + new Date(begun).toLocaleString() +
-          ") returned: " + result.step;
+        statusEl.textContent =
+          "This start (begun " + new Date(begun).toLocaleString() + ") returned: " + result.step;
         readTeam();
       },
       (message) => {
@@ -2202,10 +2731,28 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // readBuild retains one selected change's user projection. The update chain
-  // coalesces a later read instead of creating an independent polling loop.
-  function readBuild(changeId: string) {
-    if (sessionState !== "active" || activeEditor?.card.change_id !== changeId) return;
+  // resolveBuildWaiters notifies any callbacks awaiting changeId's build read.
+  function resolveBuildWaiters(changeId: string, build: ChangeBuild | null) {
+    const waiters = buildReadWaiters.get(changeId);
+    if (!waiters) {
+      return;
+    }
+    buildReadWaiters.delete(changeId);
+    for (const ready of waiters) {
+      ready(build);
+    }
+  }
+
+  function readBuild(changeId: string, onSettled?: (build: ChangeBuild | null) => void) {
+    if (onSettled !== undefined) {
+      const existing = buildReadWaiters.get(changeId) ?? [];
+      existing.push(onSettled);
+      buildReadWaiters.set(changeId, existing);
+    }
+    if (sessionState !== "active" || activeChangeId !== changeId) {
+      resolveBuildWaiters(changeId, null);
+      return;
+    }
     if (buildChangeId !== changeId) {
       buildChangeId = changeId;
       buildSnapshot = null;
@@ -2214,7 +2761,6 @@ export function bootstrapViewsPage() {
       buildStartReceipt = null;
       buildStartError = null;
       openBuildRefusal = null;
-      buildConfirmationRead = null;
       followBuildFindings();
       buildGeneration++;
     }
@@ -2224,25 +2770,29 @@ export function bootstrapViewsPage() {
     }
     buildReadAgain = false;
     const generation = buildGeneration;
-    const relevant = () => sessionState === "active" && buildChangeId === changeId &&
-      activeEditor?.card.change_id === changeId;
+    const relevant = () =>
+      sessionState === "active" && buildChangeId === changeId && activeChangeId === changeId;
     const done = () => {
       if (relevant() && buildReadAgain) readBuild(changeId);
     };
     callServer(
-      "get_build", { change_id: changeId }, changeId,
+      "get_build",
+      { change_id: changeId },
+      changeId,
       (result) => {
         if (relevant() && generation === buildGeneration) {
           if (result.change_id !== changeId) {
             buildReadError = "The server returned a build for a different change.";
+            resolveBuildWaiters(changeId, null);
           } else {
             const before = buildSnapshot;
             buildSnapshot = result.build;
             buildDraftedBeforeDrop = result.drafted_before_drop;
             buildReadError = null;
-            const replaced = before?.state === "started"
-              ? result.build.state !== "started" || before.started_at !== result.build.started_at
-              : result.build.state === "started";
+            const replaced =
+              before?.state === "started"
+                ? result.build.state !== "started" || before.started_at !== result.build.started_at
+                : result.build.state === "started";
             if (replaced) {
               buildStartReceipt = null;
               buildStartError = null;
@@ -2251,69 +2801,88 @@ export function bootstrapViewsPage() {
               verificationGeneration++;
               if (before !== null) refreshOpenCard(changeId);
             }
-            // An unchanged build still settles the dependency that held
-            // approval history back while this read was pending.
             refreshVerificationObservations(changeId);
             followBuildFindings();
             readBlockingBuild();
-            const ready = buildConfirmationRead;
-            buildConfirmationRead = null;
-            ready?.(result);
+            resolveBuildWaiters(changeId, result);
           }
+        } else if (!relevant()) {
+          resolveBuildWaiters(changeId, null);
         }
         done();
       },
       (message) => {
         if (relevant() && generation === buildGeneration) {
           buildReadError = message;
-          const ready = buildConfirmationRead;
-          buildConfirmationRead = null;
-          ready?.(null);
+          resolveBuildWaiters(changeId, null);
+        } else if (!relevant()) {
+          resolveBuildWaiters(changeId, null);
         }
         done();
       }
     );
   }
 
-  // readBlockingBuild follows the known blocking change through the existing
-  // build-read chain. A read of the selected change alone cannot clear it.
-  // A different open start invalidates the existing question's exact identity.
   function readBlockingBuild() {
     const refused = openBuildRefusal;
-    if (refused === null || refused.change_id === activeEditor?.card.change_id ||
-        sessionState !== "active" || hasPending("get_build", refused.change_id)) return;
-    const selected = activeEditor?.card.change_id;
-    callServer("get_build", { change_id: refused.change_id }, refused.change_id,
+    if (
+      refused === null ||
+      refused.change_id === activeChangeId ||
+      sessionState !== "active" ||
+      hasPending("get_build", refused.change_id)
+    ) {
+      return;
+    }
+    const selected = activeChangeId;
+    callServer(
+      "get_build",
+      { change_id: refused.change_id },
+      refused.change_id,
       (result) => {
-        if (sessionState !== "active" || activeEditor?.card.change_id !== selected ||
-            openBuildRefusal !== refused || result.change_id !== refused.change_id) return;
-        if (result.build.state !== "started" ||
-            (result.build.taking.state !== "building" && result.build.taking.state !== "passed")) {
+        if (
+          sessionState !== "active" ||
+          activeChangeId !== selected ||
+          openBuildRefusal !== refused ||
+          result.change_id !== refused.change_id
+        ) {
+          return;
+        }
+        if (
+          result.build.state !== "started" ||
+          (result.build.taking.state !== "building" && result.build.taking.state !== "passed")
+        ) {
           openBuildRefusal = null;
           buildStartError = null;
         } else {
           openBuildRefusal = { ...refused, build: result.build };
         }
       },
-      () => { /* Keep the last owner-reported blocker until a successful read. */ });
+      () => {
+        /* Keep last owner-reported blocker until a successful read. */
+      }
+    );
   }
 
-  // currentFindingsBasis names the exact saved verdict whose text is useful.
-  // Assignment reads can change independently without invalidating that text.
   function currentFindingsBasis(): string | null {
-    if (buildChangeId === null || buildSnapshot?.state !== "started" ||
-        (buildSnapshot.taking.state !== "building" && buildSnapshot.taking.state !== "passed") ||
-        buildSnapshot.test_writer.tests.state !== "needs_changes" ||
-        hasPending("start_build", buildChangeId)) return null;
+    if (
+      buildChangeId === null ||
+      buildSnapshot?.state !== "started" ||
+      (buildSnapshot.taking.state !== "building" && buildSnapshot.taking.state !== "passed") ||
+      buildSnapshot.test_writer.tests.state !== "needs_changes" ||
+      hasPending("start_build", buildChangeId)
+    ) {
+      return null;
+    }
     return JSON.stringify([
-      buildChangeId, buildSnapshot.request_revision, buildSnapshot.started_at,
-      buildSnapshot.test_writer.report, buildSnapshot.test_writer.tests.checked_at,
+      buildChangeId,
+      buildSnapshot.request_revision,
+      buildSnapshot.started_at,
+      buildSnapshot.test_writer.report,
+      buildSnapshot.test_writer.tests.checked_at,
       buildSnapshot.test_writer.tests.finding_count,
     ]);
   }
 
-  // followBuildFindings starts one user read per new verdict. Read failures
-  // remain explicit; an unchanged snapshot never becomes a retry loop.
   function followBuildFindings() {
     const next = currentFindingsBasis();
     if (next === findingsBasis) return;
@@ -2323,15 +2892,20 @@ export function bootstrapViewsPage() {
     if (next !== null) readBuildFindings();
   }
 
-  // readBuildFindings accepts text only when every owner-provided correlation
-  // field still matches. A late answer never selects a newer or earlier build.
   function readBuildFindings() {
     const expected = buildSnapshot;
     const changeId = buildChangeId;
     const basis = currentFindingsBasis();
-    if (sessionState !== "active" || changeId === null || basis === null ||
-        expected?.state !== "started" || expected.test_writer.tests.state !== "needs_changes" ||
-        activeEditor?.card.change_id !== changeId) return;
+    if (
+      sessionState !== "active" ||
+      changeId === null ||
+      basis === null ||
+      expected?.state !== "started" ||
+      expected.test_writer.tests.state !== "needs_changes" ||
+      activeChangeId !== changeId
+    ) {
+      return;
+    }
     if (hasPending("get_test_findings", changeId)) {
       findingsReadAgain = true;
       return;
@@ -2340,8 +2914,11 @@ export function bootstrapViewsPage() {
     findingsError = null;
     const generation = buildGeneration;
     const verdict = expected.test_writer.tests;
-    const relevant = () => sessionState === "active" && buildGeneration === generation &&
-      activeEditor?.card.change_id === changeId && findingsBasis === basis &&
+    const relevant = () =>
+      sessionState === "active" &&
+      buildGeneration === generation &&
+      activeChangeId === changeId &&
+      findingsBasis === basis &&
       currentFindingsBasis() === basis;
     const done = () => {
       if (findingsReadAgain) {
@@ -2350,13 +2927,21 @@ export function bootstrapViewsPage() {
       }
     };
     callServer(
-      "get_test_findings", { change_id: changeId }, changeId,
+      "get_test_findings",
+      { change_id: changeId },
+      changeId,
       (result) => {
         if (relevant()) {
-          if (result.change_id !== changeId || result.request_revision !== expected.request_revision ||
-              result.started_at !== expected.started_at || result.report !== expected.test_writer.report ||
-              result.checked_at !== verdict.checked_at || result.findings.length !== verdict.finding_count) {
-            findingsError = "The findings no longer match this build. Refresh the build to read its current verdict.";
+          if (
+            result.change_id !== changeId ||
+            result.request_revision !== expected.request_revision ||
+            result.started_at !== expected.started_at ||
+            result.report !== expected.test_writer.report ||
+            result.checked_at !== verdict.checked_at ||
+            result.findings.length !== verdict.finding_count
+          ) {
+            findingsError =
+              "The findings no longer match this build. Refresh the build to read its current verdict.";
             readBuild(changeId);
           } else {
             buildFindings = result;
@@ -2376,19 +2961,21 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // prepareBuildConfirmation reads the saved build before the control asks
-  // the user to replace it. A failed or invalidated read cannot ask.
   function prepareBuildConfirmation(ready: (build: ChangeBuild | null) => void) {
-    if (activeEditor === null || sessionState !== "active") return;
-    buildConfirmationRead = ready;
-    readBuild(activeEditor.card.change_id);
+    const ed = getActiveEditor();
+    if (ed === null || sessionState !== "active") return;
+    readBuild(ed.card.change_id, ready);
   }
 
-  // retainOpenBuild uses only a failure body validated by the generated route.
   function retainOpenBuild(failure: Failure) {
     const body = failure.body;
-    if (body !== undefined && "build" in body &&
-        (body.name === "previous_change_open" || body.name === "unfinished_build_open" || body.name === "build_changed")) {
+    if (
+      body !== undefined &&
+      "build" in body &&
+      (body.name === "previous_change_open" ||
+        body.name === "unfinished_build_open" ||
+        body.name === "build_changed")
+    ) {
       openBuildRefusal = body;
       if (body.change_id === buildChangeId) {
         buildSnapshot = { ...body.build, state: "started" };
@@ -2398,30 +2985,47 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // startBuild sends the revision displayed by the editor only after its
-  // Build control has obtained any required replacement confirmation.
   function startBuild(replaces?: ReplacedBuild) {
-    const ed = activeEditor;
-    if (ed === null || sessionState !== "active" || editorRequest !== null ||
-        ed.card.status !== "confirmed" || ed.incomingCard !== null || !workersReady(buildWorkerRoles()) ||
-        buildChangeId !== ed.card.change_id || buildSnapshot === null ||
-        buildReadError !== null || buildDraftedBeforeDrop !== false || hasPending("start_build", ed.card.change_id) ||
-        (openBuildRefusal !== null && openBuildRefusal.change_id !== ed.card.change_id)) return;
+    const ed = getActiveEditor();
+    if (
+      ed === null ||
+      sessionState !== "active" ||
+      editorRequestsByChangeId.has(ed.card.change_id) ||
+      ed.card.status !== "confirmed" ||
+      ed.incomingCard !== null ||
+      !workersReady(buildWorkerRoles()) ||
+      buildChangeId !== ed.card.change_id ||
+      buildSnapshot === null ||
+      buildReadError !== null ||
+      buildDraftedBeforeDrop !== false ||
+      hasPending("start_build", ed.card.change_id) ||
+      (openBuildRefusal !== null && openBuildRefusal.change_id !== ed.card.change_id)
+    ) {
+      return;
+    }
     const changeId = ed.card.change_id;
     const revision = ed.card.request_revision;
-    if (buildSnapshot.state === "started" && buildSnapshot.in_force &&
-        buildSnapshot.request_revision !== revision) return;
-    const listedRevision = changeList?.changes.find((item) => item.change_id === changeId)?.request_revision;
-    if (listedRevision !== undefined && listedRevision !== revision) return;
+    if (
+      buildSnapshot.state === "started" &&
+      buildSnapshot.in_force &&
+      buildSnapshot.request_revision !== revision
+    ) {
+      return;
+    }
+    const listedRevision = changeList?.changes.find((item) => item.change_id === changeId)
+      ?.request_revision;
+    if (listedRevision !== undefined && listedRevision !== revision) {
+      return;
+    }
     const request: Operations["start_build"]["request"] = {
       change_id: changeId,
       request_revision: revision,
       choices: choicesForRoles(buildWorkerRoles(), workerChoices),
     };
-    // The Build control binds its confirmation to this exact saved start;
-    // synchronous rendering invalidates that question when the start changes.
     if (buildSnapshot.state === "started" && buildSnapshot.taking.state === "building") {
-      if (replaces?.change_id !== changeId || replaces.started_at !== buildSnapshot.started_at) return;
+      if (replaces?.change_id !== changeId || replaces.started_at !== buildSnapshot.started_at) {
+        return;
+      }
       request.replaces = replaces;
     }
     const begun = new Date().toISOString();
@@ -2430,22 +3034,29 @@ export function bootstrapViewsPage() {
     buildStartReceipt = null;
     buildStartError = null;
     openBuildRefusal = null;
-    buildConfirmationRead = null;
+    resolveBuildWaiters(changeId, null);
     buildFindings = null;
     findingsBasis = null;
     findingsError = null;
     findingsReadAgain = false;
     callServer(
-      "start_build", request, changeId,
+      "start_build",
+      request,
+      changeId,
       (result) => {
-        if (sessionState !== "active" || activeEditor?.card.change_id !== changeId ||
-            activeEditor.card.request_revision !== revision) return;
-        // A read begun during the start may still describe its predecessor.
-        // The successful answer supersedes it, including transient receipts.
+        const currentEd = editorsByChangeId.get(changeId);
+        if (
+          sessionState !== "active" ||
+          activeChangeId !== changeId ||
+          currentEd?.card.request_revision !== revision
+        ) {
+          return;
+        }
         buildGeneration++;
         verificationGeneration++;
         if (result.build.request_revision !== revision) {
-          buildStartError = "The server returned a build for a different revision. Refresh the saved build.";
+          buildStartError =
+            "The server returned a build for a different revision. Refresh the saved build.";
           statusEl.textContent = buildStartError;
           readBuild(changeId);
           return;
@@ -2462,81 +3073,135 @@ export function bootstrapViewsPage() {
         readTeam();
       },
       (message, failure) => {
-        if (sessionState === "active" && activeEditor?.card.change_id === changeId) {
-          buildStartError = (failure.kind === "server"
-            ? "Build did not start. " : "Could not confirm whether the build started. ") + message;
+        if (sessionState === "active" && activeChangeId === changeId) {
+          buildStartError =
+            (failure.kind === "server"
+              ? "Build did not start. "
+              : "Could not confirm whether the build started. ") + message;
           retainOpenBuild(failure);
-          statusEl.textContent = openBuildRefusal !== null && openBuildRefusal.change_id !== changeId
-            ? "" : buildStartError;
+          statusEl.textContent =
+            openBuildRefusal !== null && openBuildRefusal.change_id !== changeId
+              ? ""
+              : buildStartError;
           readBuild(changeId);
         }
       }
     );
   }
 
-  // dropBuild submits only the start shown by the separate Drop question.
-  // The owner refuses stale consent and returns the current build's facts.
   function dropBuild(target: ReplacedBuild) {
-    if (sessionState !== "active" || editorRequest !== null || activeEditor === null ||
-        hasPending("drop_build", target.change_id)) return;
-    const shown = target.change_id === buildChangeId && buildSnapshot?.state === "started"
-      ? buildSnapshot : openBuildRefusal?.change_id === target.change_id ? openBuildRefusal.build : null;
-    if (shown === null || shown.started_at !== target.started_at ||
-        (shown.taking.state !== "building" && shown.taking.state !== "passed")) return;
-    const selected = activeEditor.card.change_id;
+    const ed = getActiveEditor();
+    if (
+      sessionState !== "active" ||
+      ed === null ||
+      editorRequestsByChangeId.has(ed.card.change_id) ||
+      hasPending("drop_build", target.change_id)
+    ) {
+      return;
+    }
+    const shown =
+      target.change_id === buildChangeId && buildSnapshot?.state === "started"
+        ? buildSnapshot
+        : openBuildRefusal?.change_id === target.change_id
+        ? openBuildRefusal.build
+        : null;
+    if (
+      shown === null ||
+      shown.started_at !== target.started_at ||
+      (shown.taking.state !== "building" && shown.taking.state !== "passed")
+    ) {
+      return;
+    }
+    const selected = ed.card.change_id;
     buildGeneration++;
-    buildConfirmationRead = null;
+    resolveBuildWaiters(selected, null);
     buildStartError = null;
-    callServer("drop_build", target, target.change_id,
+    callServer(
+      "drop_build",
+      target,
+      target.change_id,
       (result) => {
-        if (sessionState !== "active" || activeEditor?.card.change_id !== selected) return;
+        if (sessionState !== "active" || activeChangeId !== selected) return;
         buildGeneration++;
         openBuildRefusal = null;
         if (result.change_id === buildChangeId) {
           buildSnapshot = result.build;
           buildDraftedBeforeDrop = result.drafted_before_drop;
         }
-        statusEl.textContent = "The build was dropped. Ask your coding agent to refresh its draft and propose a revision. Adopt the revision before building again.";
+        statusEl.textContent =
+          "The build was dropped. Ask your coding agent to refresh its draft and propose a revision. Adopt the revision before building again.";
         readBuild(selected);
         refreshOpenCard(selected);
         refreshVerificationObservations(selected);
         readTeam();
       },
       (message, failure) => {
-        if (sessionState !== "active" || activeEditor?.card.change_id !== selected) return;
+        if (sessionState !== "active" || activeChangeId !== selected) return;
         buildStartError = "Could not drop the build. " + message;
         retainOpenBuild(failure);
-        statusEl.textContent = openBuildRefusal !== null && openBuildRefusal.change_id !== selected
-          ? "" : buildStartError;
+        statusEl.textContent =
+          openBuildRefusal !== null && openBuildRefusal.change_id !== selected
+            ? ""
+            : buildStartError;
         readBuild(selected);
-      });
+      }
+    );
   }
 
-  // openRoleTerminal attaches the on-demand TerminalDrawer to the selected role.
-  function openRoleTerminal(role: TeamRoleState["role"], invoker: HTMLElement | null) {
+  // openRoleTerminal opens the stage-docked terminal in observe=true passive
+  // watch mode unless the role is in needs_you or explicitObserve === false.
+  function openRoleTerminal(
+    role: TeamRoleState["role"],
+    invoker: HTMLElement | null,
+    explicitObserve?: boolean
+  ) {
     if (sessionState !== "active") return;
+    const roleState = teamSnapshot?.roles.find((r) => r.role === role) ?? null;
+    const nextObserve =
+      explicitObserve !== undefined ? explicitObserve : roleState?.state !== "needs_you";
     openTerminalRole = role;
+    terminalObserveMode = nextObserve;
+    if (terminalSize === "minimized") {
+      terminalSize = "default";
+    }
     terminalInvoker = invoker;
     terminalActionError = null;
+    if (isNarrowViewport()) {
+      mobileSurface = "terminal";
+      mobileSurfaceInvoker = invoker;
+    }
+    syncHistoryState("replace");
     syncAllRegions();
-    document.getElementById("highbay-terminal-drawer")?.scrollIntoView({ block: "nearest" });
+    if (isNarrowViewport()) {
+      if (nextObserve) {
+        (
+          document.getElementById("highbay-terminal-interactive") ??
+          document.getElementById("highbay-terminal-close")
+        )?.focus();
+      }
+    } else {
+      document.getElementById("highbay-terminal-drawer")?.scrollIntoView({ block: "nearest" });
+    }
   }
 
-  // closeRoleTerminal detaches the TerminalDrawer and restores keyboard focus.
   function closeRoleTerminal() {
-    const returnTo = terminalInvoker;
+    const returnTo = terminalInvoker ?? mobileSurfaceInvoker;
     openTerminalRole = null;
     terminalInvoker = null;
     terminalActionError = null;
+    if (mobileSurface === "terminal") {
+      mobileSurface = "stage";
+      mobileSurfaceInvoker = null;
+    }
+    syncHistoryState("replace");
     syncAllRegions();
-    if (returnTo !== null && document.contains(returnTo)) {
+    if (returnTo !== null && document.contains(returnTo) && returnTo.getClientRects().length >= 0) {
       returnTo.focus();
     } else {
       focusCurrentViewHeading();
     }
   }
 
-  // createTerminalTicket requests a single-use short-lived WebSocket upgrade ticket.
   async function createTerminalTicket(
     role: TeamRoleState["role"],
     signal: AbortSignal
@@ -2554,13 +3219,14 @@ export function bootstrapViewsPage() {
     return { ok: true, ticket: outcome.result.ticket };
   }
 
-  // interruptTeamRole sends Ctrl-C to a terminal-backed role in herdr-core.
   function interruptTeamRole(role: TeamRoleState["role"]) {
     if (sessionState !== "active" || hasPending("interrupt_team_role", role)) return;
     teamActionError = null;
     terminalActionError = null;
     callServer(
-      "interrupt_team_role", { role }, role,
+      "interrupt_team_role",
+      { role },
+      role,
       () => {
         if (sessionState !== "active") return;
         statusEl.textContent = "Sent interrupt signal to " + role.replaceAll("_", " ") + ".";
@@ -2574,13 +3240,14 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // stopTeamRole terminates and removes a managed role's herdr-core terminal.
   function stopTeamRole(role: TeamRoleState["role"]) {
     if (sessionState !== "active" || hasPending("stop_team_role", role)) return;
     teamActionError = null;
     terminalActionError = null;
     callServer(
-      "stop_team_role", { role }, role,
+      "stop_team_role",
+      { role },
+      role,
       () => {
         if (sessionState !== "active") return;
         statusEl.textContent = "Stopped " + role.replaceAll("_", " ") + " terminal.";
@@ -2594,8 +3261,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // restartTeamRole atomically stops any existing managed herdr-core terminal
-  // for role and launches a fresh managed terminal, reconnecting an open drawer.
   function restartTeamRole(role: TeamRoleState["role"]) {
     if (sessionState !== "active" || hasPending("restart_team_role", role)) return;
     teamActionError = null;
@@ -2626,8 +3291,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // mergeStagePrompt appends a suggested stage prompt without discarding any
-  // unsent text already drafted in the conversation rail.
   function mergeStagePrompt(existingText: string, stageText: string): string {
     const trimmedExisting = existingText.trimEnd();
     if (trimmedExisting.trim() === "") {
@@ -2639,29 +3302,152 @@ export function bootstrapViewsPage() {
     return trimmedExisting + "\n\n" + stageText;
   }
 
-  // focusComposerForRole opens the conversation rail targeting role, preserves
-  // unsent text, clears unrelated reply links on stage context actions, and focuses input.
+  // openConversationSurface reveals the Conversation dock/sheet and clears unread badges.
+  function openConversationSurface(invoker: HTMLElement | null = null) {
+    conversationOpen = true;
+    userCollapsedConversation = false;
+    seenMessageCount = teamConversation?.messages.length ?? seenMessageCount;
+    if (isNarrowViewport()) {
+      mobileSurface = "conversation";
+      mobileSurfaceInvoker = invoker;
+    }
+    syncHistoryState("replace");
+  }
+
+  // focusComposerForRole opens the conversation dock/sheet targeting role,
+  // detaching Guide-only contexts if switching away from Guide.
   function focusComposerForRole(
     role: ComposerRecipient,
     context: ComposerContext | null = null,
-    suggestedText = ""
+    suggestedText = "",
+    explicitReplyTo?: number | null
   ) {
-    conversationOpen = true;
+    openConversationSurface();
+    composerDetachedNotice = null;
+    const switchingAwayFromGuide = role !== "guide" && composerDraft.to === "guide";
+    const baseText = switchingAwayFromGuide
+      ? stripSeededBoilerplate(composerDraft.text, composerDraft.seededText)
+      : composerDraft.text;
+    const nextContext =
+      context !== null
+        ? context
+        : role !== "guide" && contextRequiresGuide(composerDraft.context)
+        ? null
+        : composerDraft.context;
+    if (
+      context === null &&
+      role !== "guide" &&
+      (contextRequiresGuide(composerDraft.context) || composerDraft.replyTo !== null)
+    ) {
+      composerDetachedNotice =
+        "Detached the previous Guide attachment when switching to " +
+        role.replaceAll("_", " ") +
+        ". Your typed message is preserved.";
+    }
     composerDraft = {
       to: role,
-      text:
+      text: suggestedText !== "" ? mergeStagePrompt(baseText, suggestedText) : baseText,
+      replyTo:
+        explicitReplyTo !== undefined
+          ? explicitReplyTo
+          : context !== null || switchingAwayFromGuide
+          ? null
+          : composerDraft.replyTo,
+      context: nextContext,
+      seededText:
         suggestedText !== ""
-          ? mergeStagePrompt(composerDraft.text, suggestedText)
-          : composerDraft.text,
-      replyTo: context !== null ? null : composerDraft.replyTo,
-      context: context !== null ? context : composerDraft.context,
+          ? suggestedText
+          : switchingAwayFromGuide
+          ? undefined
+          : composerDraft.seededText,
     };
     syncAllRegions();
     document.getElementById("highbay-composer-input")?.focus();
   }
 
-  // submitTeamMessage posts a message to Chorus through Highbay, auto-starting
-  // guide in herdr-core when needed while preserving unsent text on failure.
+  // handleSwitchComposerRecipient detaches Guide-only contexts/replies and
+  // action-seeded boilerplate while preserving user-typed text and informative contexts.
+  function handleSwitchComposerRecipient(nextTo: ComposerRecipient) {
+    if (nextTo === composerDraft.to) {
+      return;
+    }
+    let detached = false;
+    let nextContext = composerDraft.context;
+    let nextReplyTo = composerDraft.replyTo;
+    let nextText = composerDraft.text;
+    let nextSeeded = composerDraft.seededText;
+
+    if (nextTo !== "guide") {
+      if (contextRequiresGuide(nextContext)) {
+        nextContext = null;
+        detached = true;
+      }
+      if (nextReplyTo !== null) {
+        const replied = (teamConversation?.messages ?? []).find((m) => m.seq === nextReplyTo);
+        if (replied === undefined || replied.sender_role === "guide") {
+          nextReplyTo = null;
+          detached = true;
+        }
+      }
+      if (nextSeeded !== undefined) {
+        nextText = stripSeededBoilerplate(nextText, nextSeeded);
+        nextSeeded = undefined;
+        detached = true;
+      }
+    }
+
+    composerDetachedNotice = detached
+      ? "Detached the Guide-only revision attachment when switching recipient. Your message text is preserved."
+      : null;
+    composerDraft = {
+      to: nextTo,
+      text: nextText,
+      replyTo: nextReplyTo,
+      context: nextContext,
+      seededText: nextSeeded,
+    };
+    syncAllRegions();
+  }
+
+  // latestRevisionTargetForChange returns the newest known revision + ambiguities for changeId.
+  function latestRevisionTargetForChange(
+    changeId: string
+  ): { revision: string; ambiguities: readonly AmbiguityQuestion[] | undefined; knownAmbiguities: boolean } | null {
+    const ed = editorsByChangeId.get(changeId);
+    if (ed !== undefined) {
+      if (ed.card.proposed_revision !== undefined) {
+        return {
+          revision: ed.card.proposed_revision.request_revision,
+          ambiguities: ed.card.proposed_revision.ambiguities,
+          knownAmbiguities: true,
+        };
+      }
+      if (ed.incomingCard !== null) {
+        return {
+          revision: ed.incomingCard.request_revision,
+          ambiguities: ed.incomingCard.ambiguities,
+          knownAmbiguities: true,
+        };
+      }
+      return {
+        revision: ed.card.request_revision,
+        ambiguities: ed.card.ambiguities,
+        knownAmbiguities: true,
+      };
+    }
+    const listed = changeList?.changes.find((c) => c.change_id === changeId);
+    if (listed !== undefined) {
+      return {
+        revision: listed.proposed_revision ?? listed.request_revision,
+        ambiguities: undefined,
+        knownAmbiguities: false,
+      };
+    }
+    return null;
+  }
+
+  // submitTeamMessage posts a message to Chorus through Highbay, separating
+  // known pre-post 4xx refusals from uncertain transport/5xx/invalid-2xx outcomes.
   function submitTeamMessage(
     source: "rail" | "describe" | "agree",
     payload: SendTeamMessagePayload
@@ -2689,8 +3475,10 @@ export function bootstrapViewsPage() {
     };
     if (source === "describe") {
       describeSendError = null;
+      describeSendUncertain = false;
     } else {
       composerSendError = null;
+      composerDetachedNotice = null;
     }
     callServer(
       "send_team_message",
@@ -2700,10 +3488,17 @@ export function bootstrapViewsPage() {
         if (sessionState !== "active") return;
         if (source === "describe") {
           describeText = "";
+          describeSendUncertain = false;
+          describeSendError = null;
+          draftSentMessageId = posted.id;
+          syncHistoryState("replace");
         } else if (source === "rail") {
           composerDraft = { to: composerDraft.to, text: "", replyTo: null, context: null };
         }
-        if (teamConversation !== null && !teamConversation.messages.some((m) => m.id === posted.id)) {
+        if (
+          teamConversation !== null &&
+          !teamConversation.messages.some((m) => m.id === posted.id)
+        ) {
           teamConversation = {
             ...teamConversation,
             messages: [...teamConversation.messages, posted],
@@ -2713,37 +3508,46 @@ export function bootstrapViewsPage() {
         readConversation();
         readTeam();
       },
-      (message) => {
+      (message, failure) => {
         if (sessionState !== "active") return;
+        const knownPrePostRefusal = failure.status >= 400 && failure.status < 500;
         if (source === "describe") {
+          describeSendUncertain = !knownPrePostRefusal;
           describeSendError = message;
+          if (!knownPrePostRefusal) {
+            readConversation();
+            readTeam();
+          }
         } else {
-          conversationOpen = true;
-          composerSendError = message;
+          openConversationSurface();
+          composerSendError = knownPrePostRefusal
+            ? message
+            : "Send not confirmed — check Conversation before sending again. " + message;
+          if (!knownPrePostRefusal) {
+            readConversation();
+            readTeam();
+          }
         }
-        statusEl.textContent = "Could not send message. " + message;
+        statusEl.textContent = knownPrePostRefusal
+          ? "Could not send message. " + message
+          : "Send not confirmed — check Conversation before sending again.";
       }
     );
   }
 
-  // openLive shows the Live target view: the live target, read when it was
-  // never read or the change list's version moved since, and the model
-  // connection, read each time the view opens because no version covers it.
   function openLive() {
-    editorOpen = shouldRetainEditor();
-    activeResult = { kind: "live" };
-    rootEl.dataset.state = "live";
+    navigationSeq++;
+    mobileSurface = "stage";
+    currentView = { kind: "live" };
     statusEl.textContent = "Showing the live target and the model connection.";
     if (liveTarget === null || liveTargetStale) {
       readLiveTarget();
     }
     readModelConnection();
+    syncHistoryState("push");
     syncAllRegions();
   }
 
-  // readLiveTarget reads the live target. A read asked for while one is in
-  // flight runs once more after it, so the page never keeps an answer older
-  // than the last version it saw.
   function readLiveTarget() {
     if (hasPending("get_live_target", "")) {
       liveReadAgain = true;
@@ -2765,8 +3569,6 @@ export function bootstrapViewsPage() {
       (target) => {
         liveTarget = target;
         liveTargetError = null;
-        // A stop's message describes the state its answer left; it goes once
-        // that state changes.
         if (liveStopOutcome !== null && read > liveStopAfterRead) {
           const key = liveTargetKey(target);
           if (liveStopBasis === null) {
@@ -2781,7 +3583,7 @@ export function bootstrapViewsPage() {
       (message) => {
         liveTargetError = message;
         liveTargetStale = true;
-        if (activeResult?.kind === "live") {
+        if (currentView.kind === "live") {
           statusEl.textContent = "Could not read the live target.";
         }
         done();
@@ -2789,7 +3591,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // readModelConnection reads the model live targets started afterwards use.
   function readModelConnection() {
     if (hasPending("get_model_connection", "")) {
       return;
@@ -2808,8 +3609,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // stopLiveTarget sends the one stop request the user confirmed, shows the
-  // server's message, and reads the live target again.
   function stopLiveTarget() {
     if (hasPending("stop_live_target", "")) {
       return;
@@ -2828,8 +3627,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // showStopAnswer shows a stop's answer and reads the live target again;
-  // the first read issued from now on records the state the answer left.
   function showStopAnswer(answer: ServerAnswer) {
     liveStopOutcome = answer;
     liveStopBasis = null;
@@ -2837,20 +3634,16 @@ export function bootstrapViewsPage() {
     readLiveTarget();
   }
 
-  // updateModelDraft records input and refreshes discard and pending-link
-  // controls. The uncontrolled text fields retain focus and selection.
   function updateModelDraft(change: Partial<ModelDraft>) {
     const redraw = !modelDraftDirty || change.kind !== undefined;
     modelDraft = { ...modelDraft, ...change };
     modelDraftDirty = true;
     if (redraw) {
-      syncResultRegion();
+      syncViewRegion();
       syncNoticeRegion();
     }
   }
 
-  // discardModelDraft clears unsent model input locally, including after the
-  // session ends, without changing the server's model connection.
   function discardModelDraft() {
     if (hasPending("configure_model", "")) return;
     modelDraft = { kind: null, provider: "anthropic", modelName: "", gatewayAddr: "" };
@@ -2860,8 +3653,6 @@ export function bootstrapViewsPage() {
     document.getElementById("highbay-model-title")?.focus();
   }
 
-  // applyModel asks the server to use choice for live targets started
-  // afterwards, shows its answer or refusal, and reads the connection again.
   function applyModel(choice: ConfigureModelRequest) {
     if (hasPending("configure_model", "")) {
       return;
@@ -2882,17 +3673,20 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // openArchitecture shows the open change's architecture stage and asks the
-  // server for the architecture of the shown revision when none is loaded.
+  // openArchitecture opens Architecture: if unconfirmed, shows the Prerequisite
+  // Card with zero 409 POST /changes/preview RPC; if confirmed, previews the design.
   function openArchitecture() {
-    if (!activeEditor) {
+    const ed = getActiveEditor();
+    if (!ed) {
       return;
     }
-    const card = activeEditor.card;
-    editorOpen = shouldRetainEditor();
-    activeResult = { kind: "cp2-architecture-preview" };
-    rootEl.dataset.state = "cp2-architecture-preview";
-    if (
+    navigationSeq++;
+    mobileSurface = "stage";
+    const card = ed.card;
+    currentView = { kind: "change", changeId: card.change_id, stage: "arch" };
+    if (card.status !== "confirmed") {
+      statusEl.textContent = "Confirm the Change Card in Agree before previewing its architecture.";
+    } else if (
       previewState === null ||
       previewState.change_id !== card.change_id ||
       previewState.request_revision !== card.request_revision
@@ -2901,13 +3695,12 @@ export function bootstrapViewsPage() {
     } else {
       statusEl.textContent = "Showing architecture preview for " + previewState.system_name + ".";
     }
+    syncHistoryState("push");
     syncAllRegions();
   }
 
-  // requestArchitecture asks the server to evaluate the bound design for the
-  // card's exact revision.
   function requestArchitecture(card: ChangeCardResult) {
-    if (hasPending("preview_architecture", card.change_id)) {
+    if (card.status !== "confirmed" || hasPending("preview_architecture", card.change_id)) {
       return;
     }
     previewErrors.delete(card.change_id);
@@ -2925,43 +3718,582 @@ export function bootstrapViewsPage() {
           return;
         }
         previewState = preview;
-        if (activeResult?.kind === "cp2-architecture-preview") {
+        if (currentView.kind === "change" && currentView.stage === "arch") {
           statusEl.textContent = "Showing architecture preview for " + preview.system_name + ".";
         }
       },
       (message) => {
         previewErrors.set(card.change_id, message);
-        if (activeResult?.kind === "cp2-architecture-preview") {
+        if (currentView.kind === "change" && currentView.stage === "arch") {
           statusEl.textContent = "Could not preview the architecture.";
         }
       }
     );
   }
 
-  // openProof shows the open change's saved verification runs.
   function openProof() {
-    const changeId = activeEditor ? activeEditor.card.change_id : selectedVerificationChangeId;
+    const changeId = activeChangeId ?? selectedVerificationChangeId;
     if (!changeId) {
       return;
     }
+    navigationSeq++;
+    mobileSurface = "stage";
     if (selectedVerificationChangeId === changeId && lastLoadedListByChangeId.has(changeId)) {
-      editorOpen = shouldRetainEditor();
-      activeResult = { kind: "cp4-verification" };
-      rootEl.dataset.state = "cp4-verification";
+      currentView = { kind: "change", changeId, stage: "verify" };
       statusEl.textContent =
         selectedRunId !== null
           ? "Showing the saved verification result."
           : "Showing saved verification runs for Change Card " + changeId + ".";
       if (selectedRunId !== null) readVerification(selectedRunId, changeId);
+      syncHistoryState("push");
       syncAllRegions();
       return;
     }
     handleListVerifications(changeId);
   }
 
-  // syncNavRegion renders the stage navigation bar for an active session
-  // along with the displayed-subject context strip (#highbay-workspace-context).
-  function syncNavRegion() {
+  // resolvePrimaryAttentionRole orders needs_you roles by stage affinity, then
+  // guide -> builder -> test_writer, returning the first role whose terminal is not open.
+  function resolvePrimaryAttentionRole(): TeamRoleState["role"] | null {
+    const roles = teamSnapshot?.roles ?? [];
+    const buildCentric =
+      currentView.kind === "live" ||
+      (currentView.kind === "change" &&
+        (currentView.stage === "build" ||
+          currentView.stage === "verify" ||
+          currentView.stage === "approve"));
+    const order: readonly TeamRoleState["role"][] = buildCentric
+      ? ["builder", "test_writer", "guide"]
+      : ["guide", "builder", "test_writer"];
+    for (const roleName of order) {
+      const role = roles.find((item) => item.role === roleName && item.state === "needs_you");
+      if (role !== undefined && !(role.has_terminal && openTerminalRole === role.role)) {
+        return role.role;
+      }
+    }
+    return null;
+  }
+
+  // resolvePrimaryActionId computes the single page-wide control ID permitted
+  // to carry variant="primary" (data-primary-action="true").
+  function resolvePrimaryActionId(): {
+    attentionRole: TeamRoleState["role"] | null;
+    actionId: string | null;
+  } {
+    const attentionRole = resolvePrimaryAttentionRole();
+    if (attentionRole !== null) {
+      return { attentionRole, actionId: "attention:" + attentionRole };
+    }
+    const narrow = isNarrowViewport();
+    if (narrow && mobileSurface === "conversation") {
+      return { attentionRole: null, actionId: "highbay-composer-send" };
+    }
+    if (narrow && mobileSurface === "terminal") {
+      const roleState =
+        openTerminalRole !== null
+          ? teamSnapshot?.roles.find((r) => r.role === openTerminalRole) ?? null
+          : null;
+      const canRestart =
+        roleState !== null &&
+        !roleState.has_terminal &&
+        (roleState.state === "not_started" ||
+          roleState.state === "ended" ||
+          roleState.state === "error");
+      return {
+        attentionRole: null,
+        actionId: canRestart ? "highbay-terminal-restart" : null,
+      };
+    }
+
+    if (currentView.kind === "new" || (currentView.kind === "changes" && changeList !== null && changeList.changes.length === 0 && listError === null && (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)))) {
+      const isFirst = currentView.kind === "changes";
+      const guide = teamSnapshot?.roles.find((r) => r.role === "guide");
+      const sentMsg =
+        draftSentMessageId !== undefined
+          ? (teamConversation?.messages ?? []).find((m) => m.id === draftSentMessageId) ?? null
+          : null;
+      const hasLinkedReply =
+        guide?.state === "waiting" &&
+        sentMsg !== null &&
+        teamConversation !== null &&
+        teamConversation.messages.some(
+          (m) =>
+            m.target === teamConversation!.channel &&
+            m.sender_role === "guide" &&
+            m.reply_to === sentMsg.seq
+        );
+      if (!describeSendUncertain && hasLinkedReply) {
+        return { attentionRole: null, actionId: "highbay-draft-reply" };
+      }
+      if (
+        !describeSendUncertain &&
+        draftSentMessageId !== undefined &&
+        !hasPending("get_team", "") &&
+        teamSnapshot !== null &&
+        (guide === undefined ||
+          guide.state === "ended" ||
+          guide.state === "error" ||
+          guide.state === "not_started")
+      ) {
+        return { attentionRole: null, actionId: "highbay-draft-restart-guide" };
+      }
+      if (!describeSendUncertain && isFirst && changeList?.draft_state === "story_failed") {
+        return { attentionRole: null, actionId: "highbay-draft-reply" };
+      }
+      return { attentionRole: null, actionId: "highbay-describe-submit" };
+    }
+
+    if (currentView.kind === "changes") {
+      return {
+        attentionRole: null,
+        actionId: changeList !== null && changeList.changes.length > 0 ? "highbay-new-change" : null,
+      };
+    }
+
+    if (currentView.kind === "team") {
+      const err = teamFactsError();
+      if (err !== null) {
+        return { attentionRole: null, actionId: "highbay-team-refresh" };
+      }
+      const needsStart =
+        teamSnapshot !== null &&
+        teamSnapshot.roles.some(
+          (r) => r.role !== "guide" && (r.state === "not_started" || r.state === "ended")
+        );
+      return {
+        attentionRole: null,
+        actionId: needsStart && teamWorkersHaveWork() ? "highbay-team-start" : null,
+      };
+    }
+
+    if (currentView.kind === "live") {
+      return { attentionRole: null, actionId: "highbay-model-apply" };
+    }
+
+    if (currentView.kind === "story") {
+      return { attentionRole: null, actionId: null };
+    }
+
+    // currentView.kind === "change"
+    const ed = getActiveEditor();
+    if (currentView.stage === "agree" && ed !== null) {
+      const proposal = ed.card.proposed_revision;
+      if (proposal !== undefined) {
+        const needsProposalRev =
+          answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers).length > 0;
+        return {
+          attentionRole: null,
+          actionId: needsProposalRev
+            ? "highbay-proposal-revision-needed-send"
+            : "highbay-proposal-adopt",
+        };
+      }
+      if (answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers).length > 0) {
+        return { attentionRole: null, actionId: "highbay-confirm-revision-needed-send" };
+      }
+      if (ed.card.status === "needs_confirmation") {
+        if (unansweredQuestions(ed).length > 0) {
+          return { attentionRole: null, actionId: "highbay-cp1-next-question" };
+        }
+        if (firstIncompleteExample(ed) !== null) {
+          return { attentionRole: null, actionId: "highbay-cp1-next-example" };
+        }
+        return { attentionRole: null, actionId: "highbay-cp1-next-confirm" };
+      }
+      if (isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)) {
+        return { attentionRole: null, actionId: "highbay-confirm-submit" };
+      }
+      return { attentionRole: null, actionId: "highbay-agree-continue-build" };
+    }
+
+    if (currentView.stage === "arch" && ed !== null) {
+      return {
+        attentionRole: null,
+        actionId:
+          ed.card.status !== "confirmed"
+            ? "highbay-prerequisite-go-agree"
+            : "highbay-arch-continue-build",
+      };
+    }
+
+    if (currentView.stage === "build" && ed !== null) {
+      const saved =
+        buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
+          ? buildSnapshot
+          : null;
+      if (
+        ed.card.status !== "confirmed" &&
+        saved === null &&
+        !hasPending("get_build", ed.card.change_id) &&
+        buildReadError === null
+      ) {
+        return { attentionRole: null, actionId: "highbay-prerequisite-go-agree" };
+      }
+      if (hasPending("merge_change", ed.card.change_id)) {
+        return { attentionRole: null, actionId: "highbay-build-merge" };
+      }
+      if (
+        ed.incomingCard === null &&
+        sessionState === "active" &&
+        getEditorRequest(ed.card.change_id) === null &&
+        !cardLoadErrors.has(ed.card.change_id)
+      ) {
+        const proposal = ed.card.proposed_revision;
+        const revNeeded =
+          proposal !== undefined
+            ? answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers).length > 0
+            : answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers).length > 0;
+        if (revNeeded) {
+          return { attentionRole: null, actionId: "highbay-review-revision-request" };
+        }
+        if (proposal !== undefined && ed.card.status === "confirmed") {
+          return { attentionRole: null, actionId: "highbay-review-proposal" };
+        }
+      }
+      if (saved !== null && saved.in_force && saved.taking.state === "merged") {
+        return { attentionRole: null, actionId: "highbay-new-change" };
+      }
+      if (saved !== null && saved.in_force && saved.taking.state === "passed") {
+        const approved = buildApprovalRun(ed.card);
+        if (approved !== null && mergeControls(approved).eligible) {
+          return { attentionRole: null, actionId: "highbay-build-merge" };
+        }
+      }
+      const latestCheck = latestVerificationFor(ed.card.change_id);
+      const report =
+        latestCheck?.state.type === "completed" ? latestCheck.state.value.report : null;
+      const matchedCheck =
+        latestCheck !== null &&
+        runInputsKnown(latestCheck) &&
+        latestCheck.inputs_current &&
+        latestCheck.change_id === ed.card.change_id &&
+        latestCheck.request_revision === ed.card.request_revision;
+      const recordedCheck =
+        report !== null && ed.card.approval?.report_digest === report.report_digest;
+      const open =
+        saved !== null && (saved.taking.state === "building" || saved.taking.state === "passed");
+      const current = saved !== null && saved.in_force;
+      const replay = current && saved.taking.state === "merged";
+      const currentRev =
+        changeList?.changes.find((item) => item.change_id === ed.card.change_id)?.request_revision ??
+        ed.incomingCard?.request_revision ??
+        ed.card.request_revision;
+      const displayedCurrent =
+        currentRev === ed.card.request_revision &&
+        (!current || saved.request_revision === ed.card.request_revision);
+      const dirty = isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples);
+      const otherPrimary =
+        ed.card.status !== "confirmed" ||
+        !displayedCurrent ||
+        dirty ||
+        ed.card.proposed_revision !== undefined;
+      const sentBack = open && current && saved.test_writer.tests.state === "needs_changes";
+      const approvalAvail = approvalUnavailable === null && changeList?.approval_available === true;
+      const reviewPrimary =
+        open &&
+        approvalAvail &&
+        !otherPrimary &&
+        !sentBack &&
+        matchedCheck &&
+        report?.passed === true &&
+        !recordedCheck;
+      if (reviewPrimary) {
+        return { attentionRole: null, actionId: "highbay-build-review-check" };
+      }
+      const showDirect =
+        (!current || !open) &&
+        !replay &&
+        buildDraftedBeforeDrop === false &&
+        ed.card.status === "confirmed" &&
+        displayedCurrent &&
+        buildSnapshot !== null;
+      if (showDirect && !otherPrimary && !sentBack) {
+        return { attentionRole: null, actionId: "highbay-build-start" };
+      }
+      return { attentionRole: null, actionId: null };
+    }
+
+    if (currentView.stage === "verify") {
+      const displayedRun = resolveDisplayedVerificationRun();
+      if (
+        displayedRun !== null &&
+        (displayedRun.state.type === "running" ||
+          runRequestErrors.has(displayedRun.run_id) ||
+          !runInputsKnown(displayedRun))
+      ) {
+        return { attentionRole: null, actionId: "highbay-cp4-check-status" };
+      }
+      return { attentionRole: null, actionId: "highbay-verify-review-result" };
+    }
+
+    if (currentView.stage === "approve") {
+      const run = resolveDisplayedVerificationRun();
+      const review = displayedApprovalReview();
+      if (run !== null && hasPending("merge_change", run.change_id)) {
+        return { attentionRole: null, actionId: "highbay-cp5-merge" };
+      }
+      if (review?.approval.state === "available" && run !== null) {
+        return { attentionRole: null, actionId: "highbay-cp5-approve" };
+      }
+      if (review?.approval.state === "recorded" && run !== null) {
+        const build = knownTakingBuild(run.change_id);
+        if (build !== null && build.in_force && runBelongsToBuild(run.change_id, build, run)) {
+          if (build.taking.state === "passed") {
+            return { attentionRole: null, actionId: "highbay-cp5-merge" };
+          }
+          if (build.taking.state === "merged") {
+            return { attentionRole: null, actionId: "highbay-new-change" };
+          }
+        }
+      }
+      const newer = run !== null ? newerCheckFor(run) : null;
+      if (newer !== null && review?.approval.state !== "available" && review?.approval.state !== "recorded") {
+        return { attentionRole: null, actionId: "highbay-cp5-review-latest" };
+      }
+      return { attentionRole: null, actionId: null };
+    }
+
+    return { attentionRole: null, actionId: null };
+  }
+
+  // computeJourneySteps computes the 5-step Change Stepper statuses and glyphs.
+  function computeJourneySteps(): JourneyStep[] {
+    const ed = getActiveEditor();
+    const targetChangeId = ed?.card.change_id ?? selectedVerificationChangeId;
+    if (targetChangeId === null) {
+      return [];
+    }
+    const activeStage =
+      currentView.kind === "change" && currentView.changeId === targetChangeId
+        ? currentView.stage
+        : null;
+    const agreeUnsaved = ed !== null && isEditorDirtyState(ed);
+    const agreeAttention =
+      ed !== null &&
+      (ed.card.proposed_revision !== undefined ||
+        ed.incomingCard !== null ||
+        answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers).length > 0 ||
+        ed.formError !== null);
+    const agreeDone = ed !== null && ed.card.status === "confirmed" && !agreeAttention;
+
+    const inForce = ed !== null ? currentInForceBuild(ed.card) : null;
+    const savedBuild =
+      ed !== null && buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
+        ? buildSnapshot
+        : null;
+    const buildDone =
+      inForce !== null && (inForce.taking.state === "passed" || inForce.taking.state === "merged");
+    const buildAttention =
+      !buildDone &&
+      ed !== null &&
+      (buildReadError !== null ||
+        ed.card.proposed_revision !== undefined ||
+        (inForce !== null && inForce.test_writer.tests.state === "could_not_run"));
+
+    const latestRun = latestVerificationFor(targetChangeId);
+    const verifyDone =
+      ed !== null &&
+      inForce !== null &&
+      latestRun !== null &&
+      runInputsKnown(latestRun) &&
+      latestRun.inputs_current &&
+      runBelongsToBuild(ed.card.change_id, inForce, latestRun);
+    const verifyAttention =
+      !verifyDone &&
+      ed !== null &&
+      inForce !== null &&
+      latestRun !== null &&
+      runInputsKnown(latestRun) &&
+      latestRun.inputs_current &&
+      runStartedInCurrentBuild(ed.card, inForce, latestRun) &&
+      (latestRun.state.type === "not_completed" ||
+        (latestRun.state.type === "completed" && !latestRun.state.value.report.passed));
+
+    const latestReview = latestRun !== null ? reviewForRun(latestRun.run_id) : null;
+    const cardApprovalMatchesLatest =
+      ed?.card.approval !== undefined &&
+      latestRun !== null &&
+      latestRun.state.type === "completed" &&
+      ed.card.approval.report_digest === latestRun.state.value.report.report_digest &&
+      ed.card.approval.candidate_commit === latestRun.candidate_commit &&
+      ed.card.approval.suite_commit === latestRun.suite_commit;
+    const approveDone =
+      verifyDone &&
+      latestRun !== null &&
+      ((latestReview !== null &&
+        approvalReviewFresh(latestRun) &&
+        latestReview.approval.state === "recorded") ||
+        (latestReview === null && cardApprovalMatchesLatest));
+    const merged = inForce?.taking.state === "merged";
+
+    const steps: JourneyStep[] = [];
+    if (ed !== null) {
+      steps.push({
+        id: "highbay-nav-cp1",
+        label: "Agree",
+        active: activeStage === "agree",
+        status: agreeAttention ? "attention" : agreeDone ? "done" : "neutral",
+        glyph: agreeAttention ? "!" : agreeUnsaved ? "Unsaved" : agreeDone ? "✓" : undefined,
+        unsaved: agreeUnsaved,
+        onClick: handleReturnToChangeCard,
+      });
+      steps.push({
+        id: "highbay-nav-cp2",
+        label: "Architecture",
+        active: activeStage === "arch",
+        status: "neutral",
+        glyph: ed.card.status !== "confirmed" ? "(After Agree)" : "Optional",
+        onClick: openArchitecture,
+      });
+      steps.push({
+        id: "highbay-nav-build",
+        label: "Build",
+        active: activeStage === "build",
+        status: buildAttention ? "attention" : buildDone ? "done" : "neutral",
+        glyph:
+          ed.card.status !== "confirmed" && savedBuild === null
+            ? "(After Agree)"
+            : buildAttention
+            ? "!"
+            : buildDone
+            ? "✓"
+            : undefined,
+        onClick: () => {
+          showChangeEditor("build");
+          focusResult("#highbay-build-title, #highbay-prerequisite-title");
+        },
+      });
+    }
+    steps.push({
+      id: "highbay-nav-cp4",
+      label: "Verify",
+      active: activeStage === "verify",
+      status: verifyAttention ? "attention" : verifyDone ? "done" : "neutral",
+      glyph: verifyAttention ? "!" : verifyDone ? "✓" : undefined,
+      onClick: openProof,
+    });
+    steps.push({
+      id: "highbay-nav-cp5",
+      label: "Approve",
+      active: activeStage === "approve",
+      status: approveDone || merged ? "done" : "neutral",
+      glyph: merged ? "Merged" : approveDone ? "✓" : undefined,
+      onClick: openApproval,
+    });
+    return steps;
+  }
+
+  // describeDisplayedSubjects summarizes the single active stage for Current view details.
+  function describeDisplayedSubjects(): WorkspaceSubjectDescriptor[] {
+    const ed = getActiveEditor();
+    const out: WorkspaceSubjectDescriptor[] = [];
+    if (currentView.kind === "change") {
+      if (currentView.stage === "agree" && ed !== null) {
+        out.push({
+          role: "editor",
+          label: "Showing",
+          stage: "Agree",
+          changeId: ed.card.change_id,
+          requestRevision: ed.card.request_revision,
+          detail: ed.card.status === "confirmed" ? "confirmed" : "needs confirmation",
+        });
+        if (ed.incomingCard !== null) {
+          out.push({
+            role: "incoming",
+            label: "Incoming card",
+            stage: "Updated Change Card",
+            changeId: ed.incomingCard.change_id,
+            requestRevision: ed.incomingCard.request_revision,
+            detail: ed.incomingCard.status === "confirmed" ? "confirmed" : "needs confirmation",
+          });
+        }
+        return out;
+      }
+      if (currentView.stage === "build" && ed !== null) {
+        out.push({
+          role: "editor",
+          label: "Showing",
+          stage: "Build",
+          changeId: ed.card.change_id,
+          requestRevision: ed.card.request_revision,
+          detail: ed.card.status === "confirmed" ? "confirmed" : "needs confirmation",
+        });
+        return out;
+      }
+      if (currentView.stage === "arch") {
+        const shownPreview =
+          previewState !== null && ed !== null && previewState.change_id === ed.card.change_id
+            ? previewState
+            : null;
+        if (shownPreview !== null) {
+          out.push({
+            role: "result",
+            label: "Showing",
+            stage: "Architecture · " + shownPreview.system_name,
+            changeId: shownPreview.change_id,
+            requestRevision: shownPreview.request_revision,
+            detail: "design " + shownPreview.design_digest.slice(0, 15),
+          });
+        }
+        return out;
+      }
+      const displayedRun = resolveDisplayedVerificationRun();
+      const stageLabel = currentView.stage === "approve" ? "Approve" : "Verify";
+      if (displayedRun !== null) {
+        out.push({
+          role: "result",
+          label: "Showing",
+          stage: stageLabel,
+          changeId: displayedRun.change_id,
+          requestRevision: displayedRun.request_revision,
+          detail:
+            "run " +
+            displayedRun.run_id.slice(0, 8) +
+            " · commit " +
+            displayedRun.candidate_commit.slice(0, 7),
+        });
+      } else {
+        out.push({
+          role: "result",
+          label: "Showing",
+          stage: stageLabel,
+          changeId: selectedVerificationChangeId || undefined,
+          detail: "saved verification runs",
+        });
+      }
+      return out;
+    }
+    if (currentView.kind === "story") {
+      let draft = "current draft not read yet";
+      if (storyEvaluation !== null) {
+        draft = "current draft " + storyEvaluation.state;
+        if (storyEvaluation.snapshot_digest) {
+          draft += " · snapshot " + storyEvaluation.snapshot_digest.slice(0, 15);
+        }
+      }
+      out.push({
+        role: "result",
+        label: "Showing",
+        stage: "Story",
+        changeId: ed?.card.change_id,
+        requestRevision: ed?.card.request_revision,
+        detail: draft,
+      });
+      return out;
+    }
+    if (currentView.kind === "team") {
+      out.push({
+        role: "result",
+        label: "Showing",
+        stage: "Project team",
+        detail: teamSnapshot?.team,
+      });
+      return out;
+    }
+    return out;
+  }
+
+  function syncNavRegion(primaryActionId: string | null) {
     const approvalWasFocused = document.activeElement?.id === "highbay-cp5-approve";
     if (sessionState === "starting" || sessionState === "signed-out") {
       navEl.hidden = true;
@@ -2971,134 +4303,65 @@ export function bootstrapViewsPage() {
       return;
     }
 
-    const tabs: {
-      id: string;
-      label: string;
-      active: boolean;
-      onClick: () => void;
-    }[] = [];
-    const onDescribe = activeResult?.kind === "changes";
-    const changesLabel = changeList !== null && (changeList.changes.length > 0 || activeEditor !== null)
-      ? "Changes" : "Describe";
-    if (!onDescribe || changeList === null || changeList.changes.length > 0 || activeEditor !== null) {
-      tabs.push({ id: "highbay-nav-changes", label: changesLabel, active: onDescribe, onClick: showChanges });
-    }
-    tabs.push({
-      id: "highbay-nav-team",
-      label: "Team",
-      active: activeResult?.kind === "team",
-      onClick: openTeam,
-    });
-    tabs.push({
-      id: "highbay-nav-story",
-      label: "Story",
-      active: activeResult?.kind === "story",
-      onClick: openStory,
-    });
-    tabs.push({
-      id: "highbay-nav-live",
-      label: "Live target",
-      active: activeResult?.kind === "live",
-      onClick: openLive,
-    });
-    const cp1Active =
-      editorOpen && (!activeResult || activeResult.kind === "cp1-incoming-card");
-    if (activeEditor !== null) {
-      tabs.push({
-        id: "highbay-nav-cp1",
-        label: "Agree",
-        active: cp1Active && editorStage === "agree",
-        onClick: handleReturnToChangeCard,
-      });
-      tabs.push({
-        id: "highbay-nav-cp2",
-        label: "Architecture",
-        active: activeResult?.kind === "cp2-architecture-preview",
-        onClick: openArchitecture,
-      });
-      tabs.push({
-        id: "highbay-nav-build", label: "Build", active: cp1Active && editorStage === "build",
-        onClick: () => { showChangeEditor("build"); focusResult("#highbay-build-title"); },
-      });
-    }
-    if (activeEditor !== null || selectedVerificationChangeId !== null) {
-      tabs.push({
-        id: "highbay-nav-cp4",
-        label: "Check",
-        active: activeResult?.kind === "cp4-verification",
-        onClick: openProof,
-      });
-    }
-
-    if (activeEditor !== null || selectedVerificationChangeId !== null) {
-      tabs.push({ id: "highbay-nav-cp5", label: "Approve", active: activeResult?.kind === "cp5-approval", onClick: openApproval });
-    }
-
-    const bothRegionsShown =
-      activeEditor !== null &&
-      editorOpen &&
-      activeResult !== null &&
-      activeResult.kind !== "cp1-incoming-card";
-
-    const subjects: WorkspaceSubjectDescriptor[] = [];
-    if (activeEditor !== null && editorOpen) {
-      subjects.push({
-        role: "editor",
-        label: bothRegionsShown ? "Protected editor" : "Showing",
-        stage: editorStage === "build" ? "Build" : "Agree",
-        changeId: activeEditor.card.change_id,
-        requestRevision: activeEditor.card.request_revision,
-        detail:
-          activeEditor.card.status === "confirmed" ? "confirmed" : "needs confirmation",
-      });
-      if (activeResult?.kind === "cp1-incoming-card" && activeEditor.incomingCard) {
-        subjects.push({
-          role: "incoming",
-          label: "Incoming card",
-          stage: "Updated Change Card",
-          changeId: activeEditor.incomingCard.change_id,
-          requestRevision: activeEditor.incomingCard.request_revision,
-          detail:
-            activeEditor.incomingCard.status === "confirmed"
-              ? "confirmed"
-              : "needs confirmation",
-        });
-      }
-    }
-    const shownPreview =
-      previewState !== null &&
-      activeEditor !== null &&
-      previewState.change_id === activeEditor.card.change_id
-        ? previewState
+    const ed = getActiveEditor();
+    const activeEditorReq = getEditorRequest(ed?.card.change_id ?? null);
+    const onChanges = currentView.kind === "changes";
+    const hasChangesOrEditor =
+      changeList !== null && (changeList.changes.length > 0 || editorsByChangeId.size > 0);
+    const changesLabel = hasChangesOrEditor ? "Changes" : "Describe";
+    const changesNav =
+      !onChanges || changeList === null || hasChangesOrEditor
+        ? {
+            id: "highbay-nav-changes",
+            label: changesLabel,
+            active: onChanges,
+            onClick: showChanges,
+          }
         : null;
-    const resultSubject = describeActiveResultSubject(
-      activeResult,
-      shownPreview,
-      resolveDisplayedVerificationRun(),
-      selectedVerificationChangeId,
-      bothRegionsShown,
-      activeEditor !== null ? activeEditor.card : null,
-      storyEvaluation
-    );
-    if (resultSubject !== null) {
-      subjects.push(resultSubject);
-    }
-    if (activeResult?.kind === "team") {
-      subjects.push({
-        role: "result",
-        label: bothRegionsShown ? "Displayed view" : "Showing",
-        stage: "Project team",
-        detail: teamSnapshot?.team,
-      });
-    }
 
-    navEl.hidden = false;
-    const journeyIds = new Set([
-      "highbay-nav-changes", "highbay-nav-cp1", "highbay-nav-cp2", "highbay-nav-build", "highbay-nav-cp4", "highbay-nav-cp5",
-    ]);
+    const newChangeNav =
+      changeList !== null && changeList.changes.length > 0
+        ? {
+            active: currentView.kind === "new",
+            disabled: sessionState !== "active",
+            primary: primaryActionId === "highbay-new-change",
+            onClick: openNewChange,
+          }
+        : null;
+
+    // Team stays first inside Inspect so Tab from Inspect lands on #highbay-nav-team.
+    const references = [
+      {
+        id: "highbay-nav-team",
+        label: "Team",
+        active: currentView.kind === "team",
+        onClick: openTeam,
+      },
+      {
+        id: "highbay-nav-story",
+        label: "Story",
+        active: currentView.kind === "story",
+        onClick: openStory,
+      },
+      {
+        id: "highbay-nav-live",
+        label: "Live target",
+        active: currentView.kind === "live",
+        onClick: openLive,
+      },
+    ];
+
+    const journey = currentView.kind !== "new" ? computeJourneySteps() : [];
+
+    const subjects = describeDisplayedSubjects();
     const run = resolveDisplayedVerificationRun();
     const review = displayedApprovalReview();
-    const onApproval = activeResult?.kind === "cp5-approval";
+    const onApproval = currentView.kind === "change" && currentView.stage === "approve";
+    const onAgree = currentView.kind === "change" && currentView.stage === "agree";
+    const onBuild = currentView.kind === "change" && currentView.stage === "build";
+    const onArch = currentView.kind === "change" && currentView.stage === "arch";
+    const onVerify = currentView.kind === "change" && currentView.stage === "verify";
+
     const fresh = run !== null && approvalReviewFresh(run);
     const teamError = teamFactsError();
     const teamLoading = hasPending("get_team", "");
@@ -3107,44 +4370,103 @@ export function bootstrapViewsPage() {
     const guide = connectedGuide();
     const guideHasTerminal = guide?.has_terminal ?? false;
     const teamNeedsYou = teamRoles.find((role) => role.state === "needs_you");
-    const teamStatusUnknown = teamRoles.some((role) => role.state === "error" ||
-      (role.state === "unknown" && (role.role !== "guide" || guideHasTerminal)));
-    const proposal = activeEditor?.card.proposed_revision;
-    const revisionTarget = activeEditor === null ? null : proposal !== undefined
-      ? answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0
-        ? "#highbay-proposal-revision-needed" : null
-      : answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0
-        ? "#highbay-confirm-revision-needed" : null;
-    const showingInitialization = onDescribe && !editorOpen && listError === null &&
-      changeList?.initializing_phase !== undefined && changeList.changes.length === 0;
-    const storyDraftAttention = changeList?.draft_state === "story_failed" &&
-      guide?.state !== "working";
-    const showSlots = !showingInitialization && !(onDescribe && !editorOpen && listError === null &&
+    const teamStatusUnknown = teamRoles.some(
+      (role) => role.state === "error" || (role.state === "unknown" && (role.role !== "guide" || guideHasTerminal))
+    );
+
+    const proposal = ed?.card.proposed_revision;
+    const revisionTarget =
+      ed === null
+        ? null
+        : proposal !== undefined
+        ? answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers).length > 0
+          ? "#highbay-proposal-revision-needed"
+          : null
+        : answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers).length > 0
+        ? "#highbay-confirm-revision-needed"
+        : null;
+
+    const edHasUnsaved =
+      ed !== null &&
+      (isEditorDirtyState(ed) ||
+        ed.formError !== null ||
+        (activeEditorReq !== null && ROUTES[activeEditorReq].method !== "GET"));
+    const showingInitialization =
+      onChanges &&
+      !edHasUnsaved &&
+      listError === null &&
+      changeList?.initializing_phase !== undefined &&
+      changeList.changes.length === 0;
+    const storyDraftAttention =
+      changeList?.draft_state === "story_failed" && guide?.state !== "working";
+    const hideEmptyWelcomeSlots =
+      (onChanges || currentView.kind === "new") &&
+      !edHasUnsaved &&
+      listError === null &&
       (lastOpenAttempt === null || !cardLoadErrors.has(lastOpenAttempt)) &&
-      changeList !== null && changeList.changes.length === 0 && !storyDraftAttention && teamError === null &&
-      !teamLoading && !teamStarting && teamSnapshot !== null && teamNeedsYou === undefined &&
-      !teamStatusUnknown && (guide === undefined || guide.state !== "starting"));
+      (currentView.kind === "new" ||
+        (changeList !== null &&
+          changeList.changes.length === 0 &&
+          !storyDraftAttention &&
+          teamError === null &&
+          !teamLoading &&
+          !teamStarting &&
+          teamSnapshot !== null &&
+          teamNeedsYou === undefined &&
+          !teamStatusUnknown &&
+          (guide === undefined || guide.state !== "starting")));
+    const showSlots = !showingInitialization && !hideEmptyWelcomeSlots;
+
     let attention = "Nothing now.";
     let next: React.ReactNode = null;
     if (onApproval) {
-      attention = review?.approval.state === "blocked" ? "Approval unavailable."
-        : review?.approval.state === "unverified" ? "Saved approval needs checking." : review?.approval.state === "recorded"
-        ? "Your approval is recorded."
-        : fresh ? "Decide whether this verified result may be promoted." : "Check the owner’s current approval requirements.";
-      next = review?.approval.state === "available" && run !== null
-        ? <><Button id="highbay-cp5-approve" variant="primary" disabled={!fresh || editorRequest !== null}
-          aria-describedby={!fresh ? "highbay-cp5-observation-status" : undefined}
-          onClick={() => handleApprove(run)}>{editorRequest !== null ? "Approving…" : "Approve this result"}</Button>
-          <span className="highbay-frame-action-binding">Run {run.run_id.slice(0, 12)}</span></>
-        : review?.approval.state === "recorded" ? <span>Review the current build before merging.</span>
-        : review?.approval.state === "blocked"
-        ? <Button onClick={() => focusResult("#highbay-cp5-approve-blocked")}>Review requirements</Button>
-        : review?.approval.state === "unverified" ? <span>Check current approval.</span> : <span>Read current requirements.</span>;
+      attention =
+        review?.approval.state === "blocked"
+          ? "Approval unavailable."
+          : review?.approval.state === "unverified"
+          ? "Saved approval needs checking."
+          : review?.approval.state === "recorded"
+          ? "Your approval is recorded."
+          : fresh
+          ? "Decide whether this verified result may be promoted."
+          : "Check the owner’s current approval requirements.";
+      next =
+        review?.approval.state === "available" && run !== null ? (
+          <>
+            <Button
+              id="highbay-cp5-approve"
+              variant={primaryActionId === "highbay-cp5-approve" ? "primary" : "secondary"}
+              disabled={!fresh || activeEditorReq !== null}
+              aria-describedby={!fresh ? "highbay-cp5-observation-status" : undefined}
+              onClick={() => handleApprove(run)}
+            >
+              {activeEditorReq !== null ? "Approving…" : "Approve this result"}
+            </Button>
+            <span className="highbay-frame-action-binding">Run {run.run_id.slice(0, 12)}</span>
+          </>
+        ) : review?.approval.state === "recorded" ? (
+          <span>Review the current build before merging.</span>
+        ) : review?.approval.state === "blocked" ? (
+          <Button onClick={() => focusResult("#highbay-cp5-approve-blocked")}>
+            Review requirements
+          </Button>
+        ) : review?.approval.state === "unverified" ? (
+          <span>Check current approval.</span>
+        ) : (
+          <span>Read current requirements.</span>
+        );
+
       if (review?.approval.state === "recorded" && run !== null) {
         const build = knownTakingBuild(run.change_id);
         if (build === null) {
-          next = <Button disabled={editorRequest !== null || hasPending("get_build", run.change_id)}
-            onClick={() => readBuild(run.change_id)}>Read current build</Button>;
+          next = (
+            <Button
+              disabled={activeEditorReq !== null || hasPending("get_build", run.change_id)}
+              onClick={() => readBuild(run.change_id)}
+            >
+              Read current build
+            </Button>
+          );
         } else if (build.in_force && runBelongsToBuild(run.change_id, build, run)) {
           switch (build.taking.state) {
             case "merged":
@@ -3152,7 +4474,13 @@ export function bootstrapViewsPage() {
               next = <span>Describe the next change when you are ready.</span>;
               break;
             case "passed":
-              next = <MergePrimaryAction id="highbay-cp5-merge" controls={mergeControls(run)} />;
+              next = (
+                <MergePrimaryAction
+                  id="highbay-cp5-merge"
+                  primary={primaryActionId === "highbay-cp5-merge"}
+                  controls={mergeControls(run)}
+                />
+              );
               break;
             case "dropped":
               attention = "This build was dropped. Your saved approval remains readable.";
@@ -3163,33 +4491,82 @@ export function bootstrapViewsPage() {
       }
       const newer = run !== null ? newerCheckFor(run) : null;
       if (newer !== null) {
-        if (review?.approval.state === "blocked") attention = "A newer check is available.";
-        next = <><Button id="highbay-cp5-review-latest"
-          variant={review?.approval.state === "available" || review?.approval.state === "recorded" ? "default" : "primary"}
-          disabled={editorRequest !== null} onClick={() => reviewSavedCheck(newer)}>Review latest check</Button>{next}</>;
+        if (review?.approval.state === "blocked") {
+          attention = "A newer check is available.";
+        }
+        next = (
+          <>
+            <Button
+              id="highbay-cp5-review-latest"
+              variant={
+                primaryActionId === "highbay-cp5-review-latest" ? "primary" : "default"
+              }
+              disabled={activeEditorReq !== null}
+              onClick={() => reviewSavedCheck(newer)}
+            >
+              Review latest check
+            </Button>
+            {next}
+          </>
+        );
       }
       if (run !== null && hasPending("merge_change", run.change_id)) {
         attention = "Merging the approved result.";
-        next = <MergePrimaryAction id="highbay-cp5-merge" controls={mergeControls(run)} />;
+        next = (
+          <MergePrimaryAction
+            id="highbay-cp5-merge"
+            primary={primaryActionId === "highbay-cp5-merge"}
+            controls={mergeControls(run)}
+          />
+        );
       }
-    } else if (cp1Active && activeEditor !== null &&
-        (revisionTarget !== null || proposal !== undefined && activeEditor.card.status === "confirmed") &&
-        activeEditor.incomingCard === null &&
-        sessionState === "active" && editorRequest === null && !cardLoadErrors.has(activeEditor.card.change_id) &&
-        !hasPending("merge_change", activeEditor.card.change_id)) {
+    } else if (
+      (onAgree || onBuild) &&
+      ed !== null &&
+      (revisionTarget !== null || (proposal !== undefined && ed.card.status === "confirmed")) &&
+      ed.incomingCard === null &&
+      sessionState === "active" &&
+      activeEditorReq === null &&
+      !cardLoadErrors.has(ed.card.change_id) &&
+      !hasPending("merge_change", ed.card.change_id)
+    ) {
       if (revisionTarget !== null) {
         attention = "Ask your coding agent to revise the draft for your selected answers.";
-        next = <Button id="highbay-review-revision-request" variant="primary"
-          onClick={() => focusResult(revisionTarget)}>Review revision request</Button>;
+        next = (
+          <Button
+            id="highbay-review-revision-request"
+            variant={
+              primaryActionId === "highbay-review-revision-request" ? "primary" : "secondary"
+            }
+            onClick={() => {
+              if (!onAgree) showChangeEditor("agree");
+              focusResult(revisionTarget);
+            }}
+          >
+            Review revision request
+          </Button>
+        );
       } else {
         attention = "Adopt or decline the proposed revision.";
-        next = <Button id="highbay-review-proposal" variant="primary"
-          onClick={() => focusResult("#highbay-proposal")}>Review proposed revision</Button>;
+        next = (
+          <Button
+            id="highbay-review-proposal"
+            variant={primaryActionId === "highbay-review-proposal" ? "primary" : "secondary"}
+            onClick={() => {
+              if (!onAgree) showChangeEditor("agree");
+              focusResult("#highbay-proposal");
+            }}
+          >
+            Review proposed revision
+          </Button>
+        );
       }
-    } else if (cp1Active && editorStage === "build" && activeEditor !== null) {
-      const build = buildChangeId === activeEditor.card.change_id && buildSnapshot?.state === "started"
-        ? buildSnapshot : null;
-      if (buildReadError !== null && (activeEditor.card.status === "confirmed" || build !== null)) {
+    } else if (onBuild && ed !== null) {
+      const build =
+        buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
+          ? buildSnapshot
+          : null;
+      if (buildReadError !== null && (ed.card.status === "confirmed" || build !== null)) {
         attention = "Current build facts could not be read.";
         next = <span>Refresh Build below to read its current state.</span>;
       } else if (build !== null) {
@@ -3204,78 +4581,138 @@ export function bootstrapViewsPage() {
           attention = "The verified commits are merged.";
           next = <span>Describe the next change when you are ready.</span>;
         } else if (tests.state === "needs_changes") {
-          attention = teamError !== null || teamSnapshot === null || teamStatusUnknown
-            ? "Team status unknown." : "Nothing now.";
+          attention =
+            teamError !== null || teamSnapshot === null || teamStatusUnknown
+              ? "Team status unknown."
+              : "Nothing now.";
           next = <span>The test writer corrects the tests and reports again.</span>;
         } else if (tests.state === "could_not_run") {
           attention = "The tests could not be checked.";
           next = <span>{tests.step}</span>;
         } else if (build.taking.state === "passed") {
-          const approved = buildApprovalRun(activeEditor.card);
-          attention = approved !== null ? "Your approval is recorded." : "A verification of this build passed.";
-          next = approved !== null && mergeControls(approved).eligible
-            ? <MergePrimaryAction id="highbay-build-merge" controls={mergeControls(approved)} />
-            : approved !== null ? <Button onClick={() => refreshMergeState(approved)}>Check current approval</Button>
-            : <span>Review the saved result below before approving it.</span>;
+          const approved = buildApprovalRun(ed.card);
+          attention =
+            approved !== null ? "Your approval is recorded." : "A verification of this build passed.";
+          next =
+            approved !== null && mergeControls(approved).eligible ? (
+              <MergePrimaryAction
+                id="highbay-build-merge"
+                primary={primaryActionId === "highbay-build-merge"}
+                controls={mergeControls(approved)}
+              />
+            ) : approved !== null ? (
+              <Button onClick={() => refreshMergeState(approved)}>Check current approval</Button>
+            ) : (
+              <span>Review the saved result below before approving it.</span>
+            );
         } else if (tests.state === "reported") {
           attention = "Highbay is checking the reported tests.";
           next = <span>Wait for Highbay's verdict.</span>;
         } else {
-          const assignmentsRead = build.builder.read &&
+          const assignmentsRead =
+            build.builder.read &&
             (build.test_writer.read || tests.state === "accepted" || tests.state === "not_used");
-          attention = teamError !== null || teamSnapshot === null || teamStatusUnknown
-            ? "Team status unknown." : assignmentsRead ? "Nothing now." : "A worker assignment is unread.";
-          next = <span>{tests.state === "accepted" || tests.state === "not_used"
-            ? "The builder implements and verifies the change." : "The test writer prepares and reports the tests."}</span>;
+          attention =
+            teamError !== null || teamSnapshot === null || teamStatusUnknown
+              ? "Team status unknown."
+              : assignmentsRead
+              ? "Nothing now."
+              : "A worker assignment is unread.";
+          next = (
+            <span>
+              {tests.state === "accepted" || tests.state === "not_used"
+                ? "The builder implements and verifies the change."
+                : "The test writer prepares and reports the tests."}
+            </span>
+          );
         }
       }
-      if (hasPending("merge_change", activeEditor.card.change_id)) {
+      if (hasPending("merge_change", ed.card.change_id)) {
         attention = "Merging the approved result.";
-        next = <MergePrimaryAction id="highbay-build-merge" controls={mergeControls(buildApprovalRun(activeEditor.card))} />;
+        next = (
+          <MergePrimaryAction
+            id="highbay-build-merge"
+            primary={primaryActionId === "highbay-build-merge"}
+            controls={mergeControls(buildApprovalRun(ed.card))}
+          />
+        );
       }
       if (next !== null && teamError === null && teamNeedsYou !== undefined) {
-        attention = teamRoles.filter((role) => role.state === "needs_you")
-          .map((role) => teamAttentionText(role)).join(". ");
+        attention = teamRoles
+          .filter((role) => role.state === "needs_you")
+          .map((role) => teamAttentionText(role))
+          .join(". ");
       }
-    } else if (activeResult?.kind === "cp4-verification") {
-      next = <Button variant="primary" onClick={openApproval}>Review result</Button>;
+    } else if (onVerify) {
       attention = "Read the saved test evidence, then review the result for approval.";
+      next = (
+        <Button
+          id="highbay-verify-review-result"
+          variant={primaryActionId === "highbay-verify-review-result" ? "primary" : "secondary"}
+          onClick={openApproval}
+        >
+          Review result
+        </Button>
+      );
     }
+
     if (next === null) {
-      // Recovery takes precedence over guidance based on retained observations.
-      attention = teamNeedsYou !== undefined ? teamAttentionText(teamNeedsYou)
-        : teamLoading || teamSnapshot === null ? "Waiting for Team status."
-        : teamStatusUnknown ? "Team status unknown."
-        : "Nothing now.";
+      attention =
+        teamNeedsYou !== undefined
+          ? teamRoles
+              .filter((role) => role.state === "needs_you")
+              .map((role) => teamAttentionText(role))
+              .join(". ")
+          : teamLoading || teamSnapshot === null
+          ? "Waiting for Team status."
+          : teamStatusUnknown
+          ? "Team status unknown."
+          : "Nothing now.";
       let step: string | React.ReactElement;
       if (sessionState !== "active") {
         attention = "The session ended.";
-        step = "Run highbay in your project folder or invoke /highbay in your coding agent to open Highbay views.";
+        step =
+          "Run highbay in your project folder or invoke /highbay in your coding agent to open Highbay views.";
       } else if (listError !== null) {
         attention = "The changes could not be read.";
-        step = onDescribe ? "Choose Read the changes again below." : "Open " + changesLabel + " to retry reading changes.";
+        step = onChanges
+          ? "Choose Read the changes again below."
+          : "Open " + changesLabel + " to retry reading changes.";
       } else if (waitTroubleShown) {
         attention = "Updates are unavailable.";
         step = "Wait for Highbay to reconnect.";
       } else if (teamError !== null) {
         attention = "Team status could not be read.";
-        step = activeResult?.kind === "team" ? "Choose Retry team read below." : "Open Team to retry reading roles.";
-      } else if (lastOpenAttempt !== null && lastOpenAttempt !== activeEditor?.card.change_id && cardLoadErrors.has(lastOpenAttempt)) {
+        step =
+          currentView.kind === "team"
+            ? "Choose Retry team read below."
+            : "Open Team to retry reading roles.";
+      } else if (
+        lastOpenAttempt !== null &&
+        lastOpenAttempt !== ed?.card.change_id &&
+        cardLoadErrors.has(lastOpenAttempt)
+      ) {
         attention = "The Change Card could not be opened.";
-        step = onDescribe ? "Try opening the change again below." : "Open " + changesLabel + " and try opening the change again.";
-      } else if (activeEditor !== null && cardLoadErrors.has(activeEditor.card.change_id)) {
+        step = onChanges
+          ? "Try opening the change again below."
+          : "Open " + changesLabel + " and try opening the change again.";
+      } else if (ed !== null && cardLoadErrors.has(ed.card.change_id)) {
         attention = "The latest saved Change Card could not be read.";
-        step = editorRequest !== null ? "Wait for the current Change Card request."
-          : cp1Active && activeEditor.formError !== null
-          ? "Choose Load Latest Card to review the saved card alongside your edits."
-          : <Button onClick={handleLoadLatestCard}>Load Latest Card</Button>;
-      } else if (onDescribe) {
-        if (editorRequest === "get_change") {
+        step =
+          activeEditorReq !== null ? (
+            "Wait for the current Change Card request."
+          ) : (onAgree || onBuild) && ed.formError !== null ? (
+            "Choose Load Latest Card to review the saved card alongside your edits."
+          ) : (
+            <Button onClick={handleLoadLatestCard}>Load Latest Card</Button>
+          );
+      } else if (onChanges) {
+        if (activeEditorReq === "get_change") {
           step = "Wait for the Change Card to open.";
         } else if (changeList === null) {
           step = "Wait for Highbay to read the changes.";
         } else if (changeList.changes.length > 0) {
-          step = "Open a change from the list below.";
+          step = "Open a change from the list below, or start a new change.";
         } else if (changeList.initializing_phase !== undefined) {
           step = "Wait for Highbay to finish preparing the project.";
         } else if (teamLoading || teamSnapshot === null) {
@@ -3301,97 +4738,164 @@ export function bootstrapViewsPage() {
         } else if (changeList.draft_state !== undefined) {
           step = "Wait for Guide to propose the Change Card, or message Guide in Team conversation.";
         } else {
-          step = "Describe what you want to build below or in Team conversation.";
+          step = "Describe what you want to build below.";
         }
-      } else if (cp1Active && activeEditor !== null) {
-        const ed = activeEditor;
-        if (editorRequest !== null && editorRequest !== "confirm_intent") {
+      } else if (onAgree && ed !== null) {
+        if (activeEditorReq !== null && activeEditorReq !== "confirm_intent") {
           step = "Wait for the current Change Card request.";
         } else if (ed.incomingCard !== null) {
           attention = "A newer saved revision is available.";
           step = "Choose Switch to Incoming Card to review it and keep your unsaved edits.";
-        } else if (editorStage === "agree" && ed.card.proposed_revision !== undefined) {
+        } else if (ed.card.proposed_revision !== undefined) {
           attention = "A proposed revision is waiting for your decision.";
           step = "Review the proposal below, then choose Adopt or Decline.";
         } else if (ed.formError?.source === "request") {
           attention = "The Change Card request failed.";
           step = "Choose Load Latest Card to review the saved card alongside your edits.";
-        } else if (ed.card.status === "needs_confirmation" && editorStage === "agree") {
+        } else if (ed.card.status === "needs_confirmation") {
           const unanswered = unansweredQuestions(ed);
           const question = unanswered[0];
           const exampleIssue = firstIncompleteExample(ed);
-          const confirming = editorRequest === "confirm_intent";
+          const confirming = activeEditorReq === "confirm_intent";
           if (question !== undefined) {
-            attention = unanswered.length === 1 ? "1 question to answer." : unanswered.length + " questions to answer.";
-            step = <Button id="highbay-cp1-next-question" variant="primary"
-              onClick={() => focusDraftQuestion(question.id)}>Jump to unanswered question</Button>;
+            attention =
+              unanswered.length === 1
+                ? "1 question to answer."
+                : unanswered.length + " questions to answer.";
+            step = (
+              <Button
+                id="highbay-cp1-next-question"
+                variant={primaryActionId === "highbay-cp1-next-question" ? "primary" : "secondary"}
+                onClick={() => focusDraftQuestion(question.id)}
+              >
+                Jump to unanswered question
+              </Button>
+            );
           } else if (exampleIssue !== null) {
             attention = "An example needs " + exampleIssue.label + ".";
-            step = <Button id="highbay-cp1-next-example" variant="primary"
-              onClick={() => focusDraftExample(exampleIssue)}>Review example</Button>;
+            step = (
+              <Button
+                id="highbay-cp1-next-example"
+                variant={primaryActionId === "highbay-cp1-next-example" ? "primary" : "secondary"}
+                onClick={() => focusDraftExample(exampleIssue)}
+              >
+                Review example
+              </Button>
+            );
           } else {
             attention = confirming ? "Saving your agreement." : "Ready to confirm intent.";
-            step = <Button id="highbay-cp1-next-confirm" variant="primary" disabled={confirming}
-              onClick={handleConfirmSubmit}>{confirming ? "Confirming…" : "Confirm intent"}</Button>;
+            step = (
+              <Button
+                id="highbay-cp1-next-confirm"
+                variant={primaryActionId === "highbay-cp1-next-confirm" ? "primary" : "secondary"}
+                disabled={confirming}
+                onClick={handleConfirmSubmit}
+              >
+                {confirming ? "Confirming…" : "Confirm intent"}
+              </Button>
+            );
           }
-        } else if (ed.card.status === "needs_confirmation") {
-          attention = "This change needs confirmation.";
-          step = "Review the questions and examples below, then confirm the change.";
-        } else if (editorStage === "build") {
-          step = "Review the Build controls below for this change.";
         } else if (ed.preservedDraft !== null) {
           attention = "You have edits from an earlier revision.";
           step = "Review the saved card and reapply any of the preserved edits you still need.";
-        } else if (hasUnsavedEdits()) {
+        } else if (isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)) {
           attention = "You have unsaved refinements.";
           step = "Save or discard your refinements below.";
         } else {
-          step = "Review Agreement details, then open Build when you’re ready.";
+          step = (
+            <Button
+              id="highbay-agree-continue-build"
+              variant={primaryActionId === "highbay-agree-continue-build" ? "primary" : "secondary"}
+              onClick={() => {
+                showChangeEditor("build");
+                focusResult("#highbay-build-title");
+              }}
+            >
+              Review Agreement details, then Continue to Build
+            </Button>
+          );
         }
-      } else if (activeResult?.kind === "cp2-architecture-preview" && activeEditor !== null) {
-        const card = activeEditor.card;
-        if (hasPending("preview_architecture", card.change_id)) {
+      } else if (onBuild && ed !== null) {
+        if (ed.card.status !== "confirmed") {
+          attention = "This change needs confirmation.";
+          step = "Confirm the Change Card in Agree before starting a build.";
+        } else {
+          step = "Review the Build controls below for this change.";
+        }
+      } else if (onArch && ed !== null) {
+        const card = ed.card;
+        if (card.status !== "confirmed") {
+          attention = "This change needs confirmation.";
+          step = "Confirm the Change Card in Agree to preview its architecture.";
+        } else if (hasPending("preview_architecture", card.change_id)) {
           step = "Wait for Highbay to evaluate the design.";
         } else if (previewErrors.has(card.change_id)) {
           attention = "The architecture preview could not be loaded.";
-          step = card.status === "needs_confirmation" ? "Open Agree to confirm the change."
-            : "Use the Evaluate the design control below to try again.";
-        } else if (shownPreview?.request_revision === card.request_revision) {
-          step = "Review the architecture preview for this revision.";
+          step = "Use Evaluate the design below to try again.";
         } else {
-          step = "Evaluate the design below for the current revision.";
+          step = (
+            <Button
+              id="highbay-arch-continue-build"
+              variant={primaryActionId === "highbay-arch-continue-build" ? "primary" : "secondary"}
+              onClick={() => {
+                showChangeEditor("build");
+                focusResult("#highbay-build-title");
+              }}
+            >
+              Continue to Build
+            </Button>
+          );
         }
-      } else if (activeResult?.kind === "team") {
-        step = teamStarting ? "Wait for workers to start."
-          : teamLoading || teamSnapshot === null ? "Wait for Team status."
-          : teamNeedsYou === undefined && teamWorkersHaveWork() ? "Use Start workers to bring up missing build workers."
-          : guide === undefined ? "Send a message in Team conversation to start Guide."
+      } else if (currentView.kind === "team") {
+        step = teamStarting
+          ? "Wait for workers to start."
+          : teamLoading || teamSnapshot === null
+          ? "Wait for Team status."
+          : teamNeedsYou === undefined && teamWorkersHaveWork()
+          ? "Use Start workers to bring up missing build workers."
+          : guide === undefined
+          ? "Send a message in Team conversation to start Guide."
           : teamRoles.some((role) => role.has_terminal)
-            ? "Review role status and open a role terminal or message an agent."
+          ? "Review role status and open a role terminal or message an agent."
           : "Review role status below.";
-      } else if (activeResult?.kind === "story") {
+      } else if (currentView.kind === "story") {
         if (storyEvaluationError !== null) {
           attention = "The Story draft could not be read.";
           step = "Choose Read the draft again below.";
         } else {
-          step = storyEvaluation === null ? "Wait for Highbay to read the Story draft."
-            : storyEvaluation.state === "none" ? "Ask your coding agent to refresh the Story."
-            : storyEvaluation.state === "running" ? "Wait for the Story evaluation."
-            : storyEvaluation.state === "failed" ? "Ask your coding agent to fix the Story and refresh it."
-            : "Review the current draft and any saved Story below.";
+          step =
+            storyEvaluation === null
+              ? "Wait for Highbay to read the Story draft."
+              : storyEvaluation.state === "none"
+              ? "Ask your coding agent to refresh the Story."
+              : storyEvaluation.state === "running"
+              ? "Wait for the Story evaluation."
+              : storyEvaluation.state === "failed"
+              ? "Ask your coding agent to fix the Story and refresh it."
+              : "Review the current draft and any saved Story below.";
         }
-      } else if (activeResult?.kind === "live") {
+      } else if (currentView.kind === "live") {
         if (liveTargetError !== null || modelConnectionError !== null) {
-          attention = liveTargetError !== null ? "The live target could not be read." : "The model connection could not be read.";
-          step = liveTargetError !== null ? "Choose Read the live target again below."
-            : "Choose Read the model connection again below.";
+          attention =
+            liveTargetError !== null
+              ? "The live target could not be read."
+              : "The model connection could not be read.";
+          step =
+            liveTargetError !== null
+              ? "Choose Read the live target again below."
+              : "Choose Read the model connection again below.";
         } else {
           const target = liveTarget?.live_target;
-          step = target === undefined ? "Wait for Highbay to read the live target."
-            : target.state === "running" ? "Review the running service and its prompt drafts below."
-            : target.state === "starting" ? "Wait for the live target to start."
-            : target.state === "none" ? "Ask the builder to start a live target to try prompts."
-            : "Review the last live target’s status below.";
+          step =
+            target === undefined
+              ? "Wait for Highbay to read the live target."
+              : target.state === "running"
+              ? "Review the running service and its prompt drafts below."
+              : target.state === "starting"
+              ? "Wait for the live target to start."
+              : target.state === "none"
+              ? "Ask the builder to start a live target to try prompts."
+              : "Review the last live target’s status below.";
         }
       } else {
         step = "Open " + changesLabel + " to find a change.";
@@ -3399,62 +4903,129 @@ export function bootstrapViewsPage() {
       next = typeof step === "string" ? <span>{step}</span> : step;
     }
 
-    const agreedCard = (!onDescribe || editorOpen) && activeEditor?.card.status === "confirmed"
-      ? activeEditor.card : null;
+    const agreedCard =
+      ed !== null &&
+      ed.card.status === "confirmed" &&
+      ((currentView.kind !== "changes" && currentView.kind !== "new") || edHasUnsaved)
+        ? ed.card
+        : null;
+
+    const messages = teamConversation?.messages ?? [];
+    const unreadCount = Math.max(0, messages.length - seenMessageCount);
+    const anyTerminalRole =
+      openTerminalRole ??
+      teamRoles.find((r) => r.state === "needs_you" && r.has_terminal)?.role ??
+      teamRoles.find((r) => r.has_terminal)?.role ??
+      null;
+
+    navEl.hidden = false;
+    const hideNextForSheet = isNarrowViewport() && mobileSurface !== "stage";
+
     flushSync(() => {
       navRoot.render(
-        <WorkspaceFrame project={projectName ?? "Project"}
-          journey={tabs.filter((tab) => journeyIds.has(tab.id))}
-          references={tabs.filter((tab) => !journeyIds.has(tab.id))}
+        <WorkspaceFrame
+          project={projectName ?? "Project"}
+          changesNav={changesNav}
+          newChangeNav={newChangeNav}
+          journey={journey}
+          references={references}
+          mobileConversation={{
+            active: mobileSurface === "conversation",
+            unreadCount,
+            messageCount: messages.length,
+            onClick: (invoker) => {
+              if (mobileSurface === "conversation") {
+                mobileSurface = "stage";
+                syncHistoryState("replace");
+                syncAllRegions();
+                invoker.focus();
+              } else {
+                openConversationSurface(invoker);
+                syncAllRegions();
+                document.getElementById("highbay-composer-input")?.focus();
+              }
+            },
+          }}
+          mobileTerminal={
+            anyTerminalRole !== null
+              ? {
+                  active: mobileSurface === "terminal",
+                  label:
+                    mobileSurface === "terminal"
+                      ? "Back to stage"
+                      : (anyTerminalRole === "guide"
+                          ? "Guide"
+                          : anyTerminalRole === "builder"
+                          ? "Builder"
+                          : "Test writer") + " terminal",
+                  primary: false,
+                  onClick: (invoker) => {
+                    if (mobileSurface === "terminal") {
+                      mobileSurface = "stage";
+                      syncHistoryState("replace");
+                      syncAllRegions();
+                      invoker.focus();
+                    } else {
+                      openRoleTerminal(anyTerminalRole, invoker);
+                    }
+                  },
+                }
+              : null
+          }
           agreed={agreedCard?.summary ?? null}
           onReadFullSummary={agreedCard !== null ? handleReadFullSummary : null}
-          showSlots={showSlots} attention={attention} next={next}
-          diagnosticsOpen={traceOpen} onToggleDiagnostics={() => {
+          showSlots={showSlots}
+          hideNextForSheet={hideNextForSheet}
+          attention={attention}
+          next={next}
+          diagnosticsOpen={traceOpen}
+          onToggleDiagnostics={() => {
             traceOpen = !traceOpen;
             if (traceOpen && tracePage === null) loadTracePage();
             syncAllRegions();
           }}
-          details={subjects.length >= 1 ? (
-
-            <div
-              id="highbay-workspace-context"
-              className="highbay-workspace-context"
-              role="region"
-              aria-label="Displayed workspace subject"
-            >
-              {subjects.map((subj) => (
-                <div
-                  key={subj.role}
-                  id={"highbay-context-" + subj.role}
-                  className="highbay-subject-item"
-                  data-subject-role={subj.role}
-                  data-change-id={subj.changeId}
-                  data-request-revision={subj.requestRevision}
-                >
-                  <span className="highbay-subject-label">{subj.label}</span>{" "}
-                  <strong>{subj.stage}</strong>
-                  {subj.changeId ? (
-                    <>
-                      {" · "}
-                      <code>{subj.changeId}</code>
-                    </>
-                  ) : null}
-                  {subj.requestRevision ? (
-                    <>
-                      {" · "}
-                      <code>{subj.requestRevision.slice(0, 12)}</code>
-                    </>
-                  ) : null}
-                  {subj.detail ? (
-                    <>
-                      {" · "}
-                      <span>{subj.detail}</span>
-                    </>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
+          details={
+            subjects.length >= 1 ? (
+              <div
+                id="highbay-workspace-context"
+                className="highbay-workspace-context"
+                role="region"
+                aria-label="Displayed workspace subject"
+              >
+                {subjects.map((subj) => (
+                  <div
+                    key={subj.role}
+                    id={"highbay-context-" + subj.role}
+                    className="highbay-subject-item"
+                    data-subject-role={subj.role}
+                    data-change-id={subj.changeId}
+                    data-request-revision={subj.requestRevision}
+                  >
+                    <span className="highbay-subject-label">{subj.label}</span>{" "}
+                    <strong>{subj.stage}</strong>
+                    {subj.changeId ? (
+                      <>
+                        {" · "}
+                        <code>{subj.changeId}</code>
+                      </>
+                    ) : null}
+                    {subj.requestRevision ? (
+                      <>
+                        {" · "}
+                        <code>{subj.requestRevision.slice(0, 12)}</code>
+                      </>
+                    ) : null}
+                    {subj.detail ? (
+                      <>
+                        {" · "}
+                        <span>{subj.detail}</span>
+                      </>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null
+          }
         />
       );
     });
@@ -3463,12 +5034,10 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // projectTitle owns the tab's next-step contract using only page facts.
-  // Recovery outranks retained observations; saved run history does not prove
-  // that the current change can be built or approved.
   function projectTitle(): string {
     if (projectName === null) return "Highbay";
     let step: string;
+    const ed = getActiveEditor();
     if (sessionState !== "active") {
       step = "Reopen project";
     } else if (waitTroubleShown) {
@@ -3480,13 +5049,14 @@ export function bootstrapViewsPage() {
     } else if (lastOpenAttempt !== null && cardLoadErrors.has(lastOpenAttempt)) {
       step = "Retry opening change";
     } else {
-      const attention = ["guide", "builder", "test_writer"].map((role) =>
-        teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
-      ).find((role) => role !== undefined);
+      const attention = (["guide", "builder", "test_writer"] as const)
+        .map((role) =>
+          teamSnapshot?.roles.find((item) => item.role === role && item.state === "needs_you")
+        )
+        .find((role) => role !== undefined);
       if (attention !== undefined) {
         step = teamAttentionText(attention);
-      } else if (activeEditor !== null) {
-        const ed = activeEditor;
+      } else if (ed !== null && currentView.kind !== "new") {
         if (ed.incomingCard !== null || ed.card.proposed_revision !== undefined) {
           step = "Review proposed change";
         } else if (ed.card.status === "needs_confirmation") {
@@ -3498,7 +5068,7 @@ export function bootstrapViewsPage() {
         }
       } else if (changeList === null) {
         step = "Opening project";
-      } else if (changeList.changes.length === 0) {
+      } else if (changeList.changes.length === 0 || currentView.kind === "new") {
         const guide = connectedGuide();
         if (changeList.initializing_phase !== undefined) {
           step = "Preparing project";
@@ -3516,105 +5086,191 @@ export function bootstrapViewsPage() {
     return step + ": " + projectName;
   }
 
-  // syncNoticeRegion keeps the tab title, session notice and live role attention
-  // visible on every view.
-  function syncNoticeRegion() {
+  // collectAllUnsavedLines aggregates unsaved edits across all editorsByChangeId
+  // plus unsent composer/describe text for SessionEndedNotice.
+  function collectAllUnsavedLines(): string[] {
+    const lines: string[] = [];
+    for (const ed of editorsByChangeId.values()) {
+      const snap = snapshotUnsavedDraft(ed);
+      if (snap !== null) {
+        lines.push(...snap.lines);
+      }
+    }
+    if (describeText.trim() !== "") {
+      lines.push("[New change draft] " + describeText);
+    }
+    if (composerDraft.text.trim() !== "") {
+      lines.push("[Conversation draft to " + composerDraft.to + "] " + composerDraft.text);
+    }
+    return lines;
+  }
+
+  // waitingProposalItems lists Change Cards with unconfirmed intent or a waiting
+  // proposed_revision for the independent ProposalReviewQueue.
+  function waitingProposalItems(excludeChangeId: string | null) {
+    return (changeList?.changes ?? []).filter(
+      (item) =>
+        item.change_id !== excludeChangeId &&
+        (item.status === "needs_confirmation" || item.proposed_revision !== undefined)
+    );
+  }
+
+  function syncNoticeRegion(primaryAttentionRole: TeamRoleState["role"] | null = resolvePrimaryAttentionRole()) {
     document.title = projectTitle();
+    const dirtyIds = Array.from(dirtyChangeIds());
+    const showGlobalProposalQueue =
+      sessionState === "active" &&
+      currentView.kind !== "new" &&
+      currentView.kind !== "changes";
+    const globalQueueItems = showGlobalProposalQueue
+      ? waitingProposalItems(currentView.kind === "change" ? currentView.changeId : null)
+      : [];
+
     flushSync(() => {
       noticeRoot.render(
         <>
-        {sessionState === "active" || sessionState === "ended" ? (
-          <UpdateBanner
-            available={updateStatus}
-            progress={updateProgress}
-            uiBuildChanged={uiBuildChanged}
-            hasUnsavedInput={hasUnsavedPageInput()}
-            disabled={sessionState !== "active"}
-            onInstall={applyServerUpdate}
-            onCheckRestart={(targetVersion) => {
-              void waitForUpdatedServer(targetVersion);
-            }}
-            onReload={() => window.location.reload()}
-          />
-        ) : null}
-        {pendingLinkFragment !== null ? (
-          <Alert id="highbay-pending-link" role="status">
-            <p>You opened a new Highbay link in this tab. Save or discard your edits, then choose Open link.</p>
-            {hasPendingEditorSave() ? <p>Wait for the current save to finish.</p> : null}
-            {activeEditor !== null && Object.keys(activeEditor.proposalAnswers).length > 0 ? (
-              <p>For proposal answers, choose Adopt this revision or Discard proposal answers. Discard clears your answers without declining the proposal.</p>
-            ) : null}
-            {modelDraftDirty ? <p>For the model choice, choose Apply or Discard model edits.</p> : null}
-            <p>The link expires two minutes after it was printed, even while you finish your edits.</p>
-            <Button id="highbay-open-pending-link" disabled={hasUnsavedPageInput()} onClick={openPendingLink}>
-              Open link
-            </Button>
-          </Alert>
-        ) : null}
-        {sessionState === "ended" ? (
-          <SessionEndedNotice
-            unsavedLines={
-              activeEditor ? snapshotUnsavedDraft(activeEditor)?.lines ?? [] : []
-            }
-          />
-        ) : null}
-        {sessionState === "active" || sessionState === "ended" ? (
-          <GlobalTeamAttention
-            snapshot={teamSnapshot}
-            lastRead={teamFactsError() !== null}
-            disabled={sessionState !== "active"}
-            openTerminalRole={openTerminalRole}
-            onOpenTerminal={openRoleTerminal}
-            onMessageRole={(role) => focusComposerForRole(role)}
-            onFocusedControlRemoved={focusCurrentViewHeading}
-          />
-        ) : null}
-        {teamActionError !== null && activeResult?.kind !== "team" ? (
-          <Alert id="highbay-team-action-error" variant="destructive" role="alert">{teamActionError}</Alert>
-        ) : null}
+          {sessionState === "active" || sessionState === "ended" ? (
+            <UpdateBanner
+              available={updateStatus}
+              progress={updateProgress}
+              uiBuildChanged={uiBuildChanged}
+              hasUnsavedInput={hasUnsavedPageInput()}
+              disabled={sessionState !== "active"}
+              onInstall={applyServerUpdate}
+              onCheckRestart={(targetVersion) => {
+                void waitForUpdatedServer(targetVersion);
+              }}
+              onReload={() => window.location.reload()}
+            />
+          ) : null}
+          {pendingLinkFragment !== null ? (
+            <Alert id="highbay-pending-link" role="status">
+              <p>
+                You opened a new Highbay link in this tab. Save or discard your edits, then choose
+                Open link.
+              </p>
+              {hasPendingEditorSave() ? <p>Wait for the current save to finish.</p> : null}
+              {Array.from(editorsByChangeId.values()).some(
+                (entry) => Object.keys(entry.proposalAnswers).length > 0
+              ) ? (
+                <p>
+                  For proposal answers, choose Adopt this revision or Discard proposal answers.
+                  Discard clears your answers without declining the proposal.
+                </p>
+              ) : null}
+              {dirtyIds.length > 0 ? (
+                <div className="highbay-field-row">
+                  <span>Unsaved Change Card drafts:</span>
+                  {dirtyIds.map((id) => (
+                    <Button key={id} variant="ghost" onClick={() => openChange(id, "agree")}>
+                      {"Open " + id}
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+              {modelDraftDirty ? (
+                <p>For the model choice, choose Apply or Discard model edits.</p>
+              ) : null}
+              <p>
+                The link expires two minutes after it was printed, even while you finish your edits.
+              </p>
+              <div className="highbay-field-row">
+                <Button
+                  id="highbay-open-pending-link"
+                  disabled={hasUnsavedPageInput()}
+                  onClick={openPendingLink}
+                >
+                  Open link
+                </Button>
+                {hasUnsavedPageInput() && !hasPendingEditorSave() ? (
+                  <Button
+                    id="highbay-discard-all-drafts"
+                    variant="ghost"
+                    onClick={discardAllPageDrafts}
+                  >
+                    Discard all unsaved drafts
+                  </Button>
+                ) : null}
+              </div>
+            </Alert>
+          ) : null}
+          {sessionState === "ended" ? (
+            <SessionEndedNotice unsavedLines={collectAllUnsavedLines()} />
+          ) : null}
+          {sessionState === "active" || sessionState === "ended" ? (
+            <GlobalTeamAttention
+              snapshot={teamSnapshot}
+              lastRead={teamFactsError() !== null}
+              disabled={sessionState !== "active"}
+              openTerminalRole={openTerminalRole}
+              primaryRole={primaryAttentionRole}
+              onOpenTerminal={(role, invoker) => openRoleTerminal(role, invoker, false)}
+              onMessageRole={(role) => focusComposerForRole(role)}
+              onFocusedControlRemoved={focusCurrentViewHeading}
+            />
+          ) : null}
+          {globalQueueItems.length > 0 ? (
+            <ProposalReviewQueue
+              items={globalQueueItems}
+              disabled={sessionState !== "active"}
+              onOpenChange={(id) => openChange(id, "agree")}
+            />
+          ) : null}
+          {teamActionError !== null && currentView.kind !== "team" ? (
+            <Alert id="highbay-team-action-error" variant="destructive" role="alert">
+              {teamActionError}
+            </Alert>
+          ) : null}
         </>
       );
     });
   }
 
-  // revisionBuildNotice shares the build consequence beside both revision
-  // actions. An unread or failed read cannot establish that no build exists.
   function revisionBuildNotice(card: ChangeCardResult): string | null {
     if (card.status !== "confirmed") return null;
-    const known = buildChangeId === card.change_id && buildSnapshot !== null &&
-      buildReadError === null && !waitTroubleShown;
+    const known =
+      buildChangeId === card.change_id &&
+      buildSnapshot !== null &&
+      buildReadError === null &&
+      !waitTroubleShown;
     if (!known || buildSnapshot === null) {
-      return "Changing the agreed revision leaves any existing build on the earlier revision. " +
+      return (
+        "Changing the agreed revision leaves any existing build on the earlier revision. " +
         "Starting a new build replaces its assignments; when it uses a test writer, its report " +
-        "and verdict reset and its tests need acceptance again before verification.";
+        "and verdict reset and its tests need acceptance again before verification."
+      );
     }
-    if (buildSnapshot.state !== "started" || !buildSnapshot.in_force ||
-        buildSnapshot.request_revision !== card.request_revision) return null;
+    if (
+      buildSnapshot.state !== "started" ||
+      !buildSnapshot.in_force ||
+      buildSnapshot.request_revision !== card.request_revision
+    ) {
+      return null;
+    }
     if (buildSnapshot.test_writer.tests.state === "not_used") {
-      return "Changing the agreed revision leaves this build on the earlier revision. " +
+      return (
+        "Changing the agreed revision leaves this build on the earlier revision. " +
         "Start a new build to update the builder’s assignment. " +
-        "Verification keeps using the stored verification settings.";
+        "Verification keeps using the stored verification settings."
+      );
     }
-    return "Changing the agreed revision leaves this build on the earlier revision. " +
+    return (
+      "Changing the agreed revision leaves this build on the earlier revision. " +
       "A new build replaces both assignments and clears the test writer’s report and verdict. " +
-      "Its tests must be reported, checked and accepted again before verification.";
+      "Its tests must be reported, checked and accepted again before verification."
+    );
   }
 
-  // draftRevisionAid sends the user's selected ambiguity answers directly to
-  // Guide over Chorus (with structured revise_answers context) so Guide updates
-  // the draft without any clipboard copy-paste step.
   function draftRevisionAid(
     id: string,
     changeId: string,
     requestRevision: string,
     answers: Record<string, string>,
-    choices: ReturnType<typeof answersNeedingRevision>
+    choices: ReturnType<typeof answersNeedingRevision>,
+    primarySend: boolean
   ) {
     if (choices.length === 0) return null;
     const needsGuide = guideRoleNeedsStart(teamSnapshot);
-    if (needsGuide && agentOptions === null && agentOptionsError === null) {
-      queueMicrotask(loadAgentOptions);
-    }
     const sending = hasPending("send_team_message", "agree");
     const guideInvalid =
       needsGuide &&
@@ -3631,6 +5287,10 @@ export function bootstrapViewsPage() {
       " so the draft implements my attached answers, updating the design, Story, examples, and preserved behaviors as needed, then propose the revised change.";
     return (
       <Alert id={id} tabIndex={-1} variant="warning" role="region" aria-labelledby={id + "-label"}>
+        <DraftRevisionAidLoader
+          active={needsGuide && agentOptions === null && agentOptionsError === null}
+          onLoad={loadAgentOptions}
+        />
         <p id={id + "-label"}>
           Your selected answers differ from what this draft currently implements. Ask Guide to revise
           the draft for your answers, then review its proposed revision here.
@@ -3638,7 +5298,7 @@ export function bootstrapViewsPage() {
         <div className="highbay-field-row">
           <Button
             id={id + "-send"}
-            variant="primary"
+            variant={primarySend ? "primary" : "secondary"}
             disabled={sessionState !== "active" || sending || guideInvalid}
             onClick={() =>
               submitTeamMessage("agree", {
@@ -3662,371 +5322,674 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // syncEditorRegion renders saved values and drafts together when editorOpen
-  // is true, with editing disabled while a Change Card request is outstanding.
-  function syncEditorRegion() {
-    if (!activeEditor || !editorOpen) {
-      clearEditorDataset();
-      flushSync(() => {
-        editorRoot.render(null);
-      });
-      return;
-    }
-    const ed = activeEditor;
-    editorRegionEl.dataset.state = "cp1-change-card";
-    editorRegionEl.dataset.changeId = ed.card.change_id;
-    editorRegionEl.dataset.requestRevision = ed.card.request_revision;
-    const proposal = ed.card.proposed_revision;
-    const buildRevisionNotice = revisionBuildNotice(ed.card);
-    const latestCheck = latestVerificationFor(ed.card.change_id);
-    flushSync(() => {
-      editorRoot.render(
-        <>
-        {proposal !== undefined ? (
-          <ProposedRevisionView
-            card={ed.card}
-            proposal={proposal}
-            answers={ed.proposalAnswers}
-            busy={editorRequest !== null}
-            error={ed.proposalError}
-            revisionAid={draftRevisionAid(
-              "highbay-proposal-revision-needed",
-              ed.card.change_id,
-              proposal.request_revision,
-              ed.proposalAnswers,
-              answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers)
-            )}
-            buildRevisionNotice={buildRevisionNotice}
-            onAnswer={(questionId, option) => {
-              if (!activeEditor || editorRequest !== null) {
-                return;
-              }
-              activeEditor = {
-                ...activeEditor,
-                proposalAnswers: { ...activeEditor.proposalAnswers, [questionId]: option },
-              };
-              syncAllRegions();
-            }}
-            onAdopt={handleAdopt}
-            onDecline={handleDecline}
-            onDiscardAnswers={() => {
-              if (activeEditor === null || editorRequest !== null) return;
-              activeEditor = { ...activeEditor, proposalAnswers: {} };
-              syncAllRegions();
-              focusResult("#highbay-proposal");
-            }}
-          />
-        ) : null}
-        <CP1EditorView
-          card={ed.card}
-          buildRevisionNotice={buildRevisionNotice}
-          buildSection={
-            <BuildSectionView
-              key={activeResult?.kind ?? "decisions"}
-              card={ed.card}
-              currentRevision={changeList?.changes.find((item) => item.change_id === ed.card.change_id)?.request_revision ??
-                ed.incomingCard?.request_revision ?? ed.card.request_revision}
-              build={buildChangeId === ed.card.change_id ? buildSnapshot : null}
-              draftedBeforeDrop={buildChangeId === ed.card.change_id ? buildDraftedBeforeDrop : null}
-              loading={hasPending("get_build", ed.card.change_id)}
-              error={buildReadError}
-              actionError={buildStartError}
-              starting={hasPending("start_build", ed.card.change_id)}
-              dropping={Array.from(pendingCalls).some((call) => call.op === "drop_build")}
-              openBuildRefusal={openBuildRefusal}
-              disabled={sessionState !== "active" || editorRequest !== null}
-              dirty={isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)}
-              startReceipt={buildStartReceipt}
-              findingTexts={buildFindings?.findings ?? null}
-              findingsLoading={hasPending("get_test_findings", ed.card.change_id)}
-              findingsError={findingsError}
-              check={latestCheck}
-              checkKnown={latestCheck !== null && runInputsKnown(latestCheck)}
-              checkError={cardLoadErrors.get(ed.card.change_id) ??
-                (latestCheck !== null ? runRequestErrors.get(latestCheck.run_id) ?? null : null)}
-              approvalAvailable={approvalUnavailable === null && changeList?.approval_available === true}
-              agentPicker={workerPicker("highbay-build-agents", buildWorkerRoles())}
-              agentsReady={workersReady(buildWorkerRoles())}
-              mergeAction={mergePanel(buildApprovalRun(ed.card), "highbay-build-merge-feedback", knownTakingBuild(ed.card.change_id))}
-              onRefresh={() => readBuild(ed.card.change_id)}
-              onReadFindings={readBuildFindings}
-              onBuild={startBuild}
-              onPrepareBuild={prepareBuildConfirmation}
-              onDrop={dropBuild}
-              onOpenTeam={openTeam}
-              onOpenChange={openChange}
-              onReviewCheck={() => { if (latestCheck !== null) reviewSavedCheck(latestCheck); }}
+  // renderDraftWorkspace builds DraftChangeWorkspace for Moment 0 or + New change.
+  function renderDraftWorkspace(isFirstProjectChange: boolean, primaryActionId: string | null) {
+    const queueItems = isFirstProjectChange ? [] : waitingProposalItems(null);
+    return (
+      <DraftChangeWorkspace
+        isFirstProjectChange={isFirstProjectChange}
+        list={changeList}
+        loadingList={hasPending("list_changes", "")}
+        storyEvaluation={storyEvaluation}
+        snapshot={teamSnapshot}
+        teamLoading={hasPending("get_team", "")}
+        conversation={teamConversation}
+        sentMessageId={draftSentMessageId}
+        sendUncertain={describeSendUncertain}
+        sendError={describeSendError}
+        sending={hasPending("send_team_message", "describe")}
+        restartingGuide={hasPending("restart_team_role", "guide")}
+        disabled={sessionState !== "active"}
+        primarySubmit={primaryActionId === "highbay-describe-submit"}
+        primaryRestartGuide={primaryActionId === "highbay-draft-restart-guide"}
+        primaryReply={primaryActionId === "highbay-draft-reply"}
+        guideChoice={guideChoice}
+        agentOptions={agentOptions?.agents ?? null}
+        agentOptionsLoading={hasPending("list_team_agent_options", "")}
+        agentOptionsError={agentOptionsError}
+        draftText={describeText}
+        proposalsQueue={
+          queueItems.length > 0 ? (
+            <ProposalReviewQueue
+              items={queueItems}
+              disabled={sessionState !== "active"}
+              onOpenChange={(id) => openChange(id, "agree")}
             />
+          ) : null
+        }
+        onDraftTextChange={(next) => {
+          describeText = next;
+          if (describeSendError !== null && !describeSendUncertain) {
+            describeSendError = null;
           }
-          proposalWaiting={proposal !== undefined}
-          revisionAid={proposal === undefined ? draftRevisionAid(
-            "highbay-confirm-revision-needed",
-            ed.card.change_id,
-            ed.card.request_revision,
-            ed.draftAnswers,
-            answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers)
-          ) : null}
-          priorCard={ed.priorCard}
-          draftAnswers={ed.draftAnswers}
-          draftExamples={ed.draftExamples}
-          rpcInFlight={editorRequest !== null}
-          loadingVerifications={hasPending("list_verifications", ed.card.change_id)}
-          cp4Open={activeResult?.kind === "cp4-verification"}
-          preservedDraft={ed.preservedDraft}
-          formError={ed.formError?.message ?? null}
-          onSetAnswer={(ambId, opt) => {
-            if (!activeEditor || editorRequest !== null) {
-              return;
-            }
-            activeEditor = {
-              ...activeEditor,
-              draftAnswers: { ...activeEditor.draftAnswers, [ambId]: opt },
-              formError: activeEditor.formError?.source === "input" ? null : activeEditor.formError,
-            };
-            syncAllRegions();
-          }}
-          onSetExampleField={(exId, field, value) => {
-            if (!activeEditor || editorRequest !== null) {
-              return;
-            }
-            activeEditor = {
-              ...activeEditor,
-              draftExamples: activeEditor.draftExamples.map((item) =>
-                item.id === exId ? { ...item, [field]: value } : item
-              ),
-              formError: activeEditor.formError?.source === "input" ? null : activeEditor.formError,
-            };
-            syncAllRegions();
-          }}
-          onSubmitConfirm={handleConfirmSubmit}
-          onDiscardDraft={handleDiscardDraft}
-          onLoadLatestCard={ed.formError?.source === "input" ? null : handleLoadLatestCard}
-          onLoadVerifications={() => handleListVerifications(ed.card.change_id)}
-          onOpenStory={openStory}
-          onReviewApproval={openRecordedApproval}
-        />
-
-        </>
-      );
-    });
+          syncAllRegions();
+        }}
+        onGuideChoiceChange={(choice) => {
+          guideChoice = choice;
+          guideChoiceEdited = true;
+          syncAllRegions();
+        }}
+        onLoadAgentOptions={loadAgentOptions}
+        onRefreshAgentOptions={readAgentOptions}
+        onSubmit={() => {
+          if (describeText.trim() === "") return;
+          submitTeamMessage("describe", {
+            to: "guide",
+            text: describeText,
+            context: { type: "new_change", value: { scope: "separate_card" } },
+          });
+        }}
+        onReviewConversation={() => {
+          openConversationSurface();
+          syncAllRegions();
+          document.getElementById("highbay-conversation-title")?.focus();
+        }}
+        onReplyToGuide={(replySeq) => {
+          focusComposerForRole("guide", null, "", replySeq);
+        }}
+        onMessageGuide={() => {
+          focusComposerForRole("guide", null, "", null);
+        }}
+        onRestartGuide={() => restartTeamRole("guide")}
+        onResetRequest={() => {
+          draftSentMessageId = undefined;
+          describeSendUncertain = false;
+          describeSendError = null;
+          syncHistoryState("replace");
+          syncAllRegions();
+        }}
+        onWatchGuideTerminal={(invoker) => openRoleTerminal("guide", invoker)}
+      />
+    );
   }
 
-  // verificationDetailsView is the single owner of raw report/history wiring,
-  // shown in Check or in the approval stage's explicit detail disclosure.
-  function verificationDetailsView(displayedRun: VerificationStatusResult | null, effectiveChangeId: string) {
+  function verificationDetailsView(
+    displayedRun: VerificationStatusResult | null,
+    effectiveChangeId: string,
+    primaryActionId: string | null
+  ) {
     const build = knownTakingBuild(effectiveChangeId);
+    const onApproveStage = currentView.kind === "change" && currentView.stage === "approve";
     const listedIds = lastLoadedListByChangeId.get(effectiveChangeId);
-    const listedRuns = listedIds !== undefined
-      ? listedIds.map((id) => runsById.get(id)).filter((r): r is VerificationStatusResult => Boolean(r))
-      : null;
-    const loadedCard = activeEditor ? activeEditor.card : null;
+    const listedRuns =
+      listedIds !== undefined
+        ? listedIds
+            .map((id) => runsById.get(id))
+            .filter((r): r is VerificationStatusResult => Boolean(r))
+        : null;
+    const loadedCard = editorsByChangeId.get(effectiveChangeId)?.card ?? getActiveEditor()?.card ?? null;
     const current = changeList?.changes.find((item) => item.change_id === effectiveChangeId);
+    const cardForBuild = editorsByChangeId.get(effectiveChangeId)?.card ?? null;
+    const inForce = cardForBuild !== null ? currentInForceBuild(cardForBuild) : null;
+    const runNeedsBuilderFix =
+      !onApproveStage &&
+      displayedRun !== null &&
+      cardForBuild !== null &&
+      inForce !== null &&
+      runInputsKnown(displayedRun) &&
+      displayedRun.inputs_current &&
+      runStartedInCurrentBuild(cardForBuild, inForce, displayedRun) &&
+      (displayedRun.state.type === "not_completed" ||
+        (displayedRun.state.type === "completed" && !displayedRun.state.value.report.passed));
+
     return (
       <VerificationView
         changeId={effectiveChangeId}
-        build={activeResult?.kind === "cp5-approval" && build?.in_force === false ? null : build}
+        build={onApproveStage && build?.in_force === false ? null : build}
         run={displayedRun}
         inputsKnown={displayedRun !== null && runInputsKnown(displayedRun)}
-        review={displayedRun !== null && displayedRun.run_id === selectedRunId ? displayedApprovalReview() : null}
+        review={
+          displayedRun !== null && displayedRun.run_id === selectedRunId
+            ? displayedApprovalReview()
+            : null
+        }
         currentAgreementRevision={current?.status === "confirmed" ? current.request_revision : null}
         listedRuns={listedRuns}
         loadedCard={loadedCard}
-        checking={displayedRun ? hasPending("get_verification", displayedRun.run_id) || hasPending("review_verification", displayedRun.run_id) : false}
+        checking={
+          displayedRun
+            ? hasPending("get_verification", displayedRun.run_id) ||
+              hasPending("review_verification", displayedRun.run_id)
+            : false
+        }
         loadingList={hasPending("list_verifications", effectiveChangeId)}
-        loadingCard={editorRequest !== null || cardRefresh !== null}
+        loadingCard={
+          editorRequestsByChangeId.has(effectiveChangeId) || cardRefreshInFlight.has(effectiveChangeId)
+        }
         requestError={displayedRun ? runRequestErrors.get(displayedRun.run_id) ?? null : null}
         listError={listRequestErrors.get(effectiveChangeId) ?? null}
         cardLoadError={effectiveChangeId ? cardLoadErrors.get(effectiveChangeId) ?? null : null}
+        primaryCheckStatus={!onApproveStage && primaryActionId === "highbay-cp4-check-status"}
+        onMessageBuilder={
+          runNeedsBuilderFix && displayedRun !== null
+            ? () =>
+                focusComposerForRole(
+                  "builder",
+                  null,
+                  "Verification run " +
+                    displayedRun.run_id.slice(0, 12) +
+                    " on candidate " +
+                    displayedRun.candidate_commit.slice(0, 12) +
+                    " did not pass. Please inspect the verification report and run another check."
+                )
+            : null
+        }
         onCheckStatus={handleCheckVerificationStatus}
         onLoadVerifications={() => handleListVerifications(effectiveChangeId)}
         onSelectRun={handleSelectVerificationRun}
         onOpenChangeCard={() => {
-          if (activeEditor?.card.change_id === effectiveChangeId) handleLoadLatestCard();
-          else openChange(effectiveChangeId);
+          if (activeChangeId === effectiveChangeId && editorsByChangeId.has(effectiveChangeId)) {
+            handleLoadLatestCard();
+          } else {
+            openChange(effectiveChangeId);
+          }
         }}
         onReturnToChangeCard={handleReturnToChangeCard}
       />
     );
   }
 
-  // syncResultRegion replaces only the stage view beside the editor.
-  function syncResultRegion() {
-    clearResultDataset();
+  // syncViewRegion mounts the single active stage inside main#highbay-checkpoint-view[data-stage=...].
+  function syncViewRegion(primaryActionId: string | null = resolvePrimaryActionId().actionId) {
+    const hideForMobileSheet = isNarrowViewport() && mobileSurface !== "stage";
+    viewEl.hidden = hideForMobileSheet;
+    viewEl.inert = hideForMobileSheet;
+    if (currentView.kind === "change" && sessionState !== "starting" && sessionState !== "signed-out") {
+      const stageEd = editorsByChangeId.get(currentView.changeId) ?? null;
+      viewEl.dataset.changeId = currentView.changeId;
+      if (stageEd !== null) {
+        viewEl.dataset.requestRevision = stageEd.card.request_revision;
+      } else {
+        delete viewEl.dataset.requestRevision;
+      }
+    } else {
+      delete viewEl.dataset.changeId;
+      delete viewEl.dataset.requestRevision;
+    }
+
+    if (sessionState === "starting") {
+      viewEl.dataset.stage = "starting";
+      flushSync(() => {
+        viewRoot.render(null);
+      });
+      return;
+    }
+
     if (sessionState === "signed-out") {
-      resultRegionEl.dataset.state = "signed-out";
+      viewEl.dataset.stage = signedOutReason === "link-used" ? "link-used" : "signed-out";
       flushSync(() => {
-        resultRoot.render(<SignedOutView reason={signedOutReason} message={signedOutMessage} />);
+        viewRoot.render(
+          <div id="highbay-result-view" data-state="signed-out">
+            <SignedOutView reason={signedOutReason} message={signedOutMessage} />
+          </div>
+        );
       });
       return;
     }
-    if (!activeResult) {
+
+    if (currentView.kind === "changes") {
+      viewEl.dataset.stage = "changes";
       flushSync(() => {
-        resultRoot.render(null);
+        viewRoot.render(
+          <div id="highbay-result-view" data-state="changes">
+            <ChangeListView
+              list={changeList}
+              loading={hasPending("list_changes", "")}
+              error={listError}
+              openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
+              openChangeId={activeChangeId}
+              dirtyChangeIds={dirtyChangeIds()}
+              busy={editorRequestsByChangeId.size > 0}
+              disabled={sessionState !== "active"}
+              launchWorkspace={renderDraftWorkspace(true, primaryActionId)}
+              onNewChange={openNewChange}
+              onOpen={(id) => openChange(id)}
+              onRetry={() => void loadChanges()}
+            />
+          </div>
+        );
       });
       return;
     }
-    const res = activeResult;
-    resultRegionEl.dataset.state = res.kind;
-    if (res.kind === "changes") {
-      const guide = connectedGuide();
+
+    if (currentView.kind === "new") {
+      viewEl.dataset.stage = "new";
       flushSync(() => {
-        resultRoot.render(
-          <ChangeListView
-            list={changeList}
-            loading={hasPending("list_changes", "")}
-            error={listError}
-            openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
-            openChangeId={activeEditor ? activeEditor.card.change_id : null}
-            busy={editorRequest !== null}
-            guideConnected={guide !== undefined}
-            guideHasTerminal={guide?.has_terminal ?? false}
-            guideState={guide?.state ?? null}
-            disabled={sessionState !== "active"}
-            describeComposer={
-              <DescribeComposer
-                disabled={sessionState !== "active"}
-                sending={hasPending("send_team_message", "describe")}
-                sendError={describeSendError}
-                guideNeedsLaunch={guideRoleNeedsStart(teamSnapshot)}
-                guideChoice={guideChoice}
-                agentOptions={agentOptions?.agents ?? null}
-                agentOptionsLoading={hasPending("list_team_agent_options", "")}
-                agentOptionsError={agentOptionsError}
-                draftText={describeText}
-                onDraftTextChange={(next) => {
-                  describeText = next;
-                  syncAllRegions();
-                }}
-                onGuideChoiceChange={(choice) => {
-                  guideChoice = choice;
-                  guideChoiceEdited = true;
-                  syncAllRegions();
-                }}
-                onLoadAgentOptions={loadAgentOptions}
-                onRefreshAgentOptions={readAgentOptions}
-                onSubmit={() => {
-                  const trimmed = describeText.trim();
-                  if (trimmed === "") return;
-                  submitTeamMessage("describe", { to: "guide", text: describeText });
+        viewRoot.render(
+          <div id="highbay-result-view" data-state="new">
+            {renderDraftWorkspace(false, primaryActionId)}
+          </div>
+        );
+      });
+      return;
+    }
+
+    if (currentView.kind === "story") {
+      viewEl.dataset.stage = "story";
+      const openCard = getActiveEditor()?.card ?? null;
+      flushSync(() => {
+        viewRoot.render(
+          <div
+            id="highbay-result-view"
+            data-state="story"
+            data-change-id={openCard?.change_id}
+            data-request-revision={openCard?.request_revision}
+          >
+            <StoryStageView
+              card={openCard}
+              evaluation={storyEvaluation}
+              loading={hasPending("get_story_refresh", "")}
+              error={storyEvaluationError}
+              onRetry={readStoryEvaluation}
+              onAskAboutFlow={(storyName, flowKey) =>
+                focusComposerForRole("guide", {
+                  type: "story_flow",
+                  value: {
+                    ...(openCard !== null ? { change_id: openCard.change_id } : {}),
+                    story: storyName,
+                    ...(flowKey !== undefined ? { flow_key: flowKey } : {}),
+                  },
+                })
+              }
+            />
+          </div>
+        );
+      });
+      return;
+    }
+
+    if (currentView.kind === "team") {
+      viewEl.dataset.stage = "team";
+      flushSync(() => {
+        viewRoot.render(
+          <div id="highbay-result-view" data-state="team">
+            <TeamStageView
+              snapshot={teamSnapshot}
+              loading={hasPending("get_team", "")}
+              error={teamFactsError()}
+              starting={hasPending("start_team_agents", "")}
+              canStartWorkers={teamWorkersHaveWork()}
+              primaryStart={primaryActionId === "highbay-team-start"}
+              primaryRefresh={primaryActionId === "highbay-team-refresh"}
+              agentPicker={
+                teamWorkersHaveWork()
+                  ? workerPicker("highbay-team-agents", teamWorkerRoles())
+                  : workerRecommendations("highbay-team-agents")
+              }
+              agentsReady={workersReady(teamWorkerRoles())}
+              disabled={sessionState !== "active"}
+              interruptingRoles={pendingRoleOperations("interrupt_team_role")}
+              stoppingRoles={pendingRoleOperations("stop_team_role")}
+              restartingRoles={pendingRoleOperations("restart_team_role")}
+              openTerminalRole={openTerminalRole}
+              startReceipt={teamStartReceipt}
+              actionError={teamActionError}
+              onRefresh={readTeam}
+              onStartWorkers={startTeamWorkers}
+              onOpenTerminal={(role, invoker) => openRoleTerminal(role, invoker)}
+              onInterruptRole={interruptTeamRole}
+              onStopRole={stopTeamRole}
+              onRestartRole={restartTeamRole}
+              onMessageRole={(role) => focusComposerForRole(role)}
+              onFocusedControlRemoved={focusCurrentViewHeading}
+            />
+          </div>
+        );
+      });
+      return;
+    }
+
+    if (currentView.kind === "live") {
+      viewEl.dataset.stage = "live";
+      flushSync(() => {
+        viewRoot.render(
+          <div id="highbay-result-view" data-state="live">
+            <LiveTargetStageView
+              target={liveTarget}
+              targetLoading={hasPending("get_live_target", "")}
+              targetError={liveTargetError}
+              onRetryTarget={readLiveTarget}
+              stopping={hasPending("stop_live_target", "")}
+              stopOutcome={liveStopOutcome}
+              onStop={stopLiveTarget}
+              model={modelConnection}
+              modelLoading={hasPending("get_model_connection", "")}
+              modelError={modelConnectionError}
+              onRetryModel={readModelConnection}
+              applying={hasPending("configure_model", "")}
+              applyOutcome={modelApplyOutcome}
+              onApply={applyModel}
+              draft={modelDraft}
+              onDraft={updateModelDraft}
+              draftDirty={modelDraftDirty}
+              draftReset={modelDraftReset}
+              primaryApply={primaryActionId === "highbay-model-apply"}
+              onDiscardDraft={discardModelDraft}
+            />
+          </div>
+        );
+      });
+      return;
+    }
+
+    // currentView.kind === "change"
+    viewEl.dataset.stage = currentView.stage;
+    const ed = editorsByChangeId.get(currentView.changeId) ?? null;
+    const editorReq = getEditorRequest(currentView.changeId);
+
+    if (currentView.stage === "agree") {
+      if (ed === null) {
+        flushSync(() => {
+          viewRoot.render(
+            <Card className="highbay-card" role="status">
+              Reading Change Card…
+            </Card>
+          );
+        });
+        return;
+      }
+      const proposal = ed.card.proposed_revision;
+      const buildRevisionNotice = revisionBuildNotice(ed.card);
+      flushSync(() => {
+        viewRoot.render(
+          <div
+            id="highbay-cp1-editor"
+            data-state="cp1-change-card"
+            data-change-id={ed.card.change_id}
+            data-request-revision={ed.card.request_revision}
+            tabIndex={-1}
+            aria-label="Change decisions"
+          >
+            {ed.incomingCard !== null ? (
+              <IncomingChangeCardView
+                incomingCard={ed.incomingCard}
+                onSwitch={() => {
+                  const currentEd = editorsByChangeId.get(ed.card.change_id);
+                  if (!currentEd?.incomingCard) return;
+                  if (editorRequestsByChangeId.has(ed.card.change_id)) {
+                    statusEl.textContent =
+                      "Wait for the pending CP1 Change Card request to finish before switching cards.";
+                    return;
+                  }
+                  const preserved = snapshotUnsavedDraft(currentEd);
+                  const prior = nextPriorCard(currentEd, currentEd.incomingCard);
+                  mountChangeCard(currentEd.incomingCard, preserved, prior, "agree");
                 }}
               />
-            }
-            onOpenGuideTerminal={(invoker) => openRoleTerminal("guide", invoker)}
-            onOpen={openChange}
-            onRetry={() => void loadChanges()}
-          />
+            ) : null}
+            {proposal !== undefined ? (
+              <ProposedRevisionView
+                card={ed.card}
+                proposal={proposal}
+                answers={ed.proposalAnswers}
+                busy={editorReq !== null}
+                error={ed.proposalError}
+                revisionAid={draftRevisionAid(
+                  "highbay-proposal-revision-needed",
+                  ed.card.change_id,
+                  proposal.request_revision,
+                  ed.proposalAnswers,
+                  answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers),
+                  primaryActionId === "highbay-proposal-revision-needed-send"
+                )}
+                buildRevisionNotice={buildRevisionNotice}
+                primaryAdopt={primaryActionId === "highbay-proposal-adopt"}
+                onAnswer={(questionId, option) => {
+                  const currentEd = editorsByChangeId.get(ed.card.change_id);
+                  if (!currentEd || editorRequestsByChangeId.has(ed.card.change_id)) {
+                    return;
+                  }
+                  editorsByChangeId.set(ed.card.change_id, {
+                    ...currentEd,
+                    proposalAnswers: { ...currentEd.proposalAnswers, [questionId]: option },
+                  });
+                  syncAllRegions();
+                }}
+                onAdopt={handleAdopt}
+                onDecline={handleDecline}
+                onAskGuideToRevise={() =>
+                  focusComposerForRole("guide", {
+                    type: "refine_change",
+                    value: {
+                      change_id: ed.card.change_id,
+                      request_revision: proposal.request_revision,
+                    },
+                  })
+                }
+                onDiscardAnswers={() => {
+                  const currentEd = editorsByChangeId.get(ed.card.change_id);
+                  if (!currentEd || editorRequestsByChangeId.has(ed.card.change_id)) return;
+                  editorsByChangeId.set(ed.card.change_id, { ...currentEd, proposalAnswers: {} });
+                  syncAllRegions();
+                  focusResult("#highbay-proposal");
+                }}
+              />
+            ) : null}
+            <CP1EditorView
+              card={ed.card}
+              buildRevisionNotice={buildRevisionNotice}
+              proposalWaiting={proposal !== undefined}
+              primaryConfirm={primaryActionId === "highbay-confirm-submit"}
+              revisionAid={
+                proposal === undefined
+                  ? draftRevisionAid(
+                      "highbay-confirm-revision-needed",
+                      ed.card.change_id,
+                      ed.card.request_revision,
+                      ed.draftAnswers,
+                      answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers),
+                      primaryActionId === "highbay-confirm-revision-needed-send"
+                    )
+                  : null
+              }
+              priorCard={ed.priorCard}
+              draftAnswers={ed.draftAnswers}
+              draftExamples={ed.draftExamples}
+              rpcInFlight={editorReq !== null}
+              loadingVerifications={hasPending("list_verifications", ed.card.change_id)}
+              cp4Open={false}
+              preservedDraft={ed.preservedDraft}
+              formError={ed.formError?.message ?? null}
+              onSetAnswer={(ambId, opt) => {
+                const currentEd = editorsByChangeId.get(ed.card.change_id);
+                if (!currentEd || editorRequestsByChangeId.has(ed.card.change_id)) {
+                  return;
+                }
+                editorsByChangeId.set(ed.card.change_id, {
+                  ...currentEd,
+                  draftAnswers: { ...currentEd.draftAnswers, [ambId]: opt },
+                  formError: currentEd.formError?.source === "input" ? null : currentEd.formError,
+                });
+                syncAllRegions();
+              }}
+              onSetExampleField={(exId, field, value) => {
+                const currentEd = editorsByChangeId.get(ed.card.change_id);
+                if (!currentEd || editorRequestsByChangeId.has(ed.card.change_id)) {
+                  return;
+                }
+                editorsByChangeId.set(ed.card.change_id, {
+                  ...currentEd,
+                  draftExamples: currentEd.draftExamples.map((item) =>
+                    item.id === exId ? { ...item, [field]: value } : item
+                  ),
+                  formError: currentEd.formError?.source === "input" ? null : currentEd.formError,
+                });
+                syncAllRegions();
+              }}
+              onSubmitConfirm={handleConfirmSubmit}
+              onDiscardDraft={handleDiscardDraft}
+              onLoadLatestCard={ed.formError?.source === "input" ? null : handleLoadLatestCard}
+              onLoadVerifications={() => handleListVerifications(ed.card.change_id)}
+              onAskGuideToRevise={() =>
+                focusComposerForRole("guide", {
+                  type: "refine_change",
+                  value: {
+                    change_id: ed.card.change_id,
+                    request_revision: ed.card.request_revision,
+                  },
+                })
+              }
+              onContinueToBuild={() => {
+                showChangeEditor("build");
+                focusResult("#highbay-build-title");
+              }}
+              onOpenStory={openStory}
+              onReviewApproval={openRecordedApproval}
+            />
+          </div>
         );
       });
       return;
     }
-    if (res.kind === "story") {
-      const openCard = activeEditor !== null ? activeEditor.card : null;
-      flushSync(() => {
-        resultRoot.render(
-          <StoryStageView
-            card={openCard}
-            evaluation={storyEvaluation}
-            loading={hasPending("get_story_refresh", "")}
-            error={storyEvaluationError}
-            onRetry={readStoryEvaluation}
-            onAskAboutFlow={(storyName, flowKey) =>
-              focusComposerForRole("guide", {
-                type: "story_flow",
-                value: {
-                  ...(openCard !== null ? { change_id: openCard.change_id } : {}),
-                  story: storyName,
-                  ...(flowKey !== undefined ? { flow_key: flowKey } : {}),
-                },
-              })
-            }
-          />
-        );
-      });
-      if (openCard !== null) {
-        resultRegionEl.dataset.changeId = openCard.change_id;
-        resultRegionEl.dataset.requestRevision = openCard.request_revision;
+
+    if (currentView.stage === "build") {
+      if (ed === null) {
+        flushSync(() => {
+          viewRoot.render(
+            <Card className="highbay-card" role="status">
+              Reading Change Card…
+            </Card>
+          );
+        });
+        return;
       }
-      return;
-    }
-    if (res.kind === "team") {
+      const saved =
+        buildChangeId === ed.card.change_id && buildSnapshot?.state === "started"
+          ? buildSnapshot
+          : null;
+      const showPrerequisite =
+        ed.card.status !== "confirmed" &&
+        saved === null &&
+        !hasPending("get_build", ed.card.change_id) &&
+        buildReadError === null;
+      const latestCheck = latestVerificationFor(ed.card.change_id);
       flushSync(() => {
-        resultRoot.render(
-          <TeamStageView
-            snapshot={teamSnapshot}
-            loading={hasPending("get_team", "")}
-            error={teamFactsError()}
-            starting={hasPending("start_team_agents", "")}
-            canStartWorkers={teamWorkersHaveWork()}
-            agentPicker={teamWorkersHaveWork() ? workerPicker("highbay-team-agents", teamWorkerRoles()) : workerRecommendations("highbay-team-agents")}
-            agentsReady={workersReady(teamWorkerRoles())}
-            disabled={sessionState !== "active"}
-            interruptingRoles={pendingRoleOperations("interrupt_team_role")}
-            stoppingRoles={pendingRoleOperations("stop_team_role")}
-            restartingRoles={pendingRoleOperations("restart_team_role")}
-            openTerminalRole={openTerminalRole}
-            startReceipt={teamStartReceipt}
-            actionError={teamActionError}
-            onRefresh={readTeam}
-            onStartWorkers={startTeamWorkers}
-            onOpenTerminal={openRoleTerminal}
-            onInterruptRole={interruptTeamRole}
-            onStopRole={stopTeamRole}
-            onRestartRole={restartTeamRole}
-            onMessageRole={(role) => focusComposerForRole(role)}
-            onFocusedControlRemoved={focusCurrentViewHeading}
-          />
+        viewRoot.render(
+          <div
+            id="highbay-result-view"
+            data-state="build"
+            data-change-id={ed.card.change_id}
+            data-request-revision={ed.card.request_revision}
+          >
+            {showPrerequisite ? (
+              <StagePrerequisiteCard
+                stageTitle="Build"
+                explanation="Confirm the open questions and concrete examples in Agree before starting a build."
+                primaryGoAgree={primaryActionId === "highbay-prerequisite-go-agree"}
+                onGoAgree={handleReturnToChangeCard}
+              />
+            ) : (
+              <>
+                <BuildSectionView
+                  card={ed.card}
+                  currentRevision={
+                    changeList?.changes.find((item) => item.change_id === ed.card.change_id)
+                      ?.request_revision ??
+                    ed.incomingCard?.request_revision ??
+                    ed.card.request_revision
+                  }
+                  build={buildChangeId === ed.card.change_id ? buildSnapshot : null}
+                  draftedBeforeDrop={
+                    buildChangeId === ed.card.change_id ? buildDraftedBeforeDrop : null
+                  }
+                  loading={hasPending("get_build", ed.card.change_id)}
+                  error={buildReadError}
+                  actionError={buildStartError}
+                  starting={hasPending("start_build", ed.card.change_id)}
+                  dropping={Array.from(pendingCalls).some((call) => call.op === "drop_build")}
+                  openBuildRefusal={openBuildRefusal}
+                  disabled={sessionState !== "active" || editorReq !== null}
+                  dirty={isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)}
+                  startReceipt={buildStartReceipt}
+                  findingTexts={buildFindings?.findings ?? null}
+                  findingsLoading={hasPending("get_test_findings", ed.card.change_id)}
+                  findingsError={findingsError}
+                  check={latestCheck}
+                  checkKnown={latestCheck !== null && runInputsKnown(latestCheck)}
+                  checkError={
+                    cardLoadErrors.get(ed.card.change_id) ??
+                    (latestCheck !== null ? runRequestErrors.get(latestCheck.run_id) ?? null : null)
+                  }
+                  approvalAvailable={
+                    approvalUnavailable === null && changeList?.approval_available === true
+                  }
+                  primaryBuildAction={primaryActionId === "highbay-build-start"}
+                  primaryReviewAction={primaryActionId === "highbay-build-review-check"}
+                  agentPicker={workerPicker("highbay-build-agents", buildWorkerRoles())}
+                  agentsReady={workersReady(buildWorkerRoles())}
+                  mergeAction={mergePanel(
+                    buildApprovalRun(ed.card),
+                    "highbay-build-merge-feedback",
+                    knownTakingBuild(ed.card.change_id)
+                  )}
+                  onRefresh={() => readBuild(ed.card.change_id)}
+                  onReadFindings={readBuildFindings}
+                  onBuild={startBuild}
+                  onPrepareBuild={prepareBuildConfirmation}
+                  onDrop={dropBuild}
+                  onOpenTeam={openTeam}
+                  onOpenAgree={handleReturnToChangeCard}
+                  onOpenArchitecture={openArchitecture}
+                  onOpenLive={openLive}
+                  onOpenChange={(id) => openChange(id)}
+                  onReviewCheck={() => {
+                    if (latestCheck !== null) reviewSavedCheck(latestCheck);
+                  }}
+                />
+                <ReadOnlyAgreementSummary
+                  card={ed.card}
+                  onOpenAgree={handleReturnToChangeCard}
+                  onReviewApproval={openRecordedApproval}
+                />
+              </>
+            )}
+          </div>
         );
       });
       return;
     }
-    if (res.kind === "live") {
-      flushSync(() => {
-        resultRoot.render(
-          <LiveTargetStageView
-            target={liveTarget}
-            targetLoading={hasPending("get_live_target", "")}
-            targetError={liveTargetError}
-            onRetryTarget={readLiveTarget}
-            stopping={hasPending("stop_live_target", "")}
-            stopOutcome={liveStopOutcome}
-            onStop={stopLiveTarget}
-            model={modelConnection}
-            modelLoading={hasPending("get_model_connection", "")}
-            modelError={modelConnectionError}
-            onRetryModel={readModelConnection}
-            applying={hasPending("configure_model", "")}
-            applyOutcome={modelApplyOutcome}
-            onApply={applyModel}
-            draft={modelDraft}
-            onDraft={updateModelDraft}
-            draftDirty={modelDraftDirty}
-            draftReset={modelDraftReset}
-            onDiscardDraft={discardModelDraft}
-          />
-        );
-      });
-      return;
-    }
-    if (res.kind === "cp2-architecture-preview") {
-      const card = activeEditor ? activeEditor.card : null;
-      const changeId = card ? card.change_id : "";
+
+    if (currentView.stage === "arch") {
+      const card = ed ? ed.card : null;
+      const changeId = card ? card.change_id : currentView.changeId;
+      if (card !== null && card.status !== "confirmed") {
+        flushSync(() => {
+          viewRoot.render(
+            <div
+              id="highbay-result-view"
+              data-state="cp2-architecture-preview"
+              data-change-id={card.change_id}
+              data-request-revision={card.request_revision}
+            >
+              <StagePrerequisiteCard
+                stageTitle="Architecture"
+                explanation="Architecture previews the saved Goa design of an agreed revision. Confirm your intent in Agree first."
+                primaryGoAgree={primaryActionId === "highbay-prerequisite-go-agree"}
+                onGoAgree={handleReturnToChangeCard}
+              />
+            </div>
+          );
+        });
+        return;
+      }
       const preview =
         previewState !== null && previewState.change_id === changeId ? previewState : null;
       const loading = hasPending("preview_architecture", changeId);
       const error = previewErrors.get(changeId) ?? null;
-      if (preview) {
-        resultRegionEl.dataset.changeId = preview.change_id;
-        resultRegionEl.dataset.requestRevision = preview.request_revision;
-        resultRegionEl.dataset.designDigest = preview.design_digest;
-      }
       flushSync(() => {
-        resultRoot.render(
-          <>
+        viewRoot.render(
+          <div
+            id="highbay-result-view"
+            data-state="cp2-architecture-preview"
+            data-change-id={preview?.change_id}
+            data-request-revision={preview?.request_revision}
+            data-design-digest={preview?.design_digest}
+          >
             {preview ? (
               <ArchitecturePreviewView
                 preview={preview}
                 loadedCard={card}
-                loadingCard={editorRequest !== null}
+                loadingCard={editorReq !== null}
                 cardLoadError={cardLoadErrors.get(preview.change_id) ?? null}
                 onOpenChangeCard={() => openChange(preview.change_id)}
                 onAskAboutElement={(elementId, elementName) =>
@@ -4063,100 +6026,269 @@ export function bootstrapViewsPage() {
                 </Button>
               </div>
             ) : null}
-          </>
+          </div>
         );
       });
       return;
     }
-    if (res.kind === "cp5-approval") {
+
+    if (currentView.stage === "approve") {
       const run = resolveDisplayedVerificationRun();
-      const recordCard = activeEditor?.card;
+      const recordCard = ed?.card;
       const recordApproval = recordCard?.approval ?? recordCard?.unverified_approval?.approval;
-      if (run !== null) {
-        resultRegionEl.dataset.runId = run.run_id;
-        resultRegionEl.dataset.changeId = run.change_id;
-        resultRegionEl.dataset.requestRevision = run.request_revision;
-      }
-      flushSync(() => resultRoot.render(<ApprovalStage
-        rawDetails={verificationDetailsView(run, selectedVerificationChangeId ?? "")}
-        run={run} newerCheck={run !== null && newerCheckFor(run) !== null}
-        review={displayedApprovalReview()} fresh={run !== null && approvalReviewFresh(run)}
-        loading={run !== null && hasPending("review_verification", run.run_id)} busy={editorRequest !== null}
-        error={run !== null ? runRequestErrors.get(run.run_id) ?? null : cardLoadErrors.get(selectedVerificationChangeId ?? "") ?? null}
-        historyLoading={hasPending("list_verifications", selectedVerificationChangeId ?? "")}
-        historyError={listRequestErrors.get(selectedVerificationChangeId ?? "") ?? null}
-        approvalError={run !== null ? approveErrors.get(run.run_id) ?? null : null}
-        unavailableReason={approvalUnavailable}
-        build={run !== null ? knownTakingBuild(run.change_id) : null} unsaved={hasUnsavedEdits()}
-        mergeAction={mergePanel(run, "highbay-cp5-merge-feedback")}
-        savedRecord={recordCard !== undefined && recordCard.change_id === selectedVerificationChangeId && recordApproval !== undefined
-          ? { approval: recordApproval, requestRevision: recordCard.request_revision, reason: recordCard.unverified_approval?.reason ?? null } : null}
-        onRefresh={() => { if (run !== null) readApprovalReview(run.run_id, run.change_id); else handleLoadLatestCard(); }}
-        onOpenProof={openProof} onOpenAgreement={handleReturnToChangeCard}
-      />));
-      return;
-    }
-    if (res.kind === "cp4-verification") {
-      const changeId = selectedVerificationChangeId || "";
-      const displayedRun = resolveDisplayedVerificationRun();
-      if (displayedRun) {
-        resultRegionEl.dataset.runId = displayedRun.run_id;
-        resultRegionEl.dataset.changeId = displayedRun.change_id;
-        resultRegionEl.dataset.requestRevision = displayedRun.request_revision;
-      } else if (changeId) {
-        resultRegionEl.dataset.changeId = changeId;
-      }
-      const effectiveChangeId = displayedRun ? displayedRun.change_id : changeId;
-      flushSync(() => resultRoot.render(verificationDetailsView(displayedRun, effectiveChangeId)));
-      return;
-    }
-    const incoming = activeEditor ? activeEditor.incomingCard : null;
-    if (!incoming) {
-      flushSync(() => {
-        resultRoot.render(null);
-      });
-      return;
-    }
-    resultRegionEl.dataset.changeId = incoming.change_id;
-    resultRegionEl.dataset.requestRevision = incoming.request_revision;
-    flushSync(() => {
-      resultRoot.render(
-        <IncomingChangeCardView
-          incomingCard={incoming}
-          onSwitch={() => {
-            if (editorRequest !== null) {
-              statusEl.textContent =
-                "Wait for the pending CP1 Change Card request to finish before switching cards.";
-              return;
-            }
-            const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
-            const prior = nextPriorCard(activeEditor, incoming);
-            activeResult = null;
-            mountChangeCard(incoming, preserved, prior);
-          }}
-        />
+      const effectiveChangeId = selectedVerificationChangeId ?? currentView.changeId;
+      flushSync(() =>
+        viewRoot.render(
+          <div
+            id="highbay-result-view"
+            data-state="cp5-approval"
+            data-run-id={run?.run_id}
+            data-change-id={run?.change_id}
+            data-request-revision={run?.request_revision}
+          >
+            <ApprovalStage
+              rawDetails={verificationDetailsView(run, effectiveChangeId, primaryActionId)}
+              run={run}
+              newerCheck={run !== null && newerCheckFor(run) !== null}
+              review={displayedApprovalReview()}
+              fresh={run !== null && approvalReviewFresh(run)}
+              loading={run !== null && hasPending("review_verification", run.run_id)}
+              busy={editorReq !== null}
+              error={
+                run !== null
+                  ? runRequestErrors.get(run.run_id) ?? null
+                  : cardLoadErrors.get(effectiveChangeId) ?? null
+              }
+              historyLoading={hasPending("list_verifications", effectiveChangeId)}
+              historyError={listRequestErrors.get(effectiveChangeId) ?? null}
+              approvalError={run !== null ? approveErrors.get(run.run_id) ?? null : null}
+              unavailableReason={approvalUnavailable}
+              build={run !== null ? knownTakingBuild(run.change_id) : null}
+              unsaved={ed !== null && isEditorDirtyState(ed)}
+              mergeAction={mergePanel(run, "highbay-cp5-merge-feedback")}
+              savedRecord={
+                recordCard !== undefined &&
+                recordCard.change_id === effectiveChangeId &&
+                recordApproval !== undefined
+                  ? {
+                      approval: recordApproval,
+                      requestRevision: recordCard.request_revision,
+                      reason: recordCard.unverified_approval?.reason ?? null,
+                    }
+                  : null
+              }
+              onRefresh={() => {
+                if (run !== null) readApprovalReview(run.run_id, run.change_id);
+                else handleLoadLatestCard();
+              }}
+              onOpenProof={openProof}
+              onOpenAgreement={handleReturnToChangeCard}
+            />
+          </div>
+        )
       );
-    });
+      return;
+    }
+
+    // currentView.stage === "verify"
+    const changeId = selectedVerificationChangeId || currentView.changeId;
+    const displayedRun = resolveDisplayedVerificationRun();
+    const effectiveChangeId = displayedRun ? displayedRun.change_id : changeId;
+    flushSync(() =>
+      viewRoot.render(
+        <div
+          id="highbay-result-view"
+          data-state="cp4-verification"
+          data-run-id={displayedRun?.run_id}
+          data-change-id={displayedRun ? displayedRun.change_id : changeId || undefined}
+          data-request-revision={displayedRun?.request_revision}
+        >
+          {verificationDetailsView(displayedRun, effectiveChangeId, primaryActionId)}
+        </div>
+      )
+    );
   }
 
-  // syncConversationRegion renders the persistent Chorus conversation rail.
-  function syncConversationRegion() {
+  // buildStaleContextGuard checks whether composerDraft.context targets a
+  // superseded request_revision (e.g. R2 -> R3), holding Send until reviewed.
+  function buildStaleContextGuard(): {
+    staleHold: boolean;
+    banner: React.ReactNode;
+  } {
+    const ctx = composerDraft.context;
+    if (ctx === null || (ctx.type !== "refine_change" && ctx.type !== "revise_answers")) {
+      return { staleHold: false, banner: null };
+    }
+    const latest = latestRevisionTargetForChange(ctx.value.change_id);
+    if (latest === null || latest.revision === ctx.value.request_revision) {
+      return { staleHold: false, banner: null };
+    }
+
+    if (ctx.type === "refine_change") {
+      const updatedContext: ComposerContext = {
+        type: "refine_change",
+        value: { change_id: ctx.value.change_id, request_revision: latest.revision },
+      };
+      return {
+        staleHold: true,
+        banner: (
+          <Alert id="highbay-composer-stale-context" variant="warning" role="status">
+            <p>
+              Change <code>{ctx.value.change_id}</code> moved to revision{" "}
+              <code>{latest.revision.slice(0, 12)}</code> while you were writing.
+            </p>
+            <div className="highbay-field-row">
+              <Button
+                id="highbay-composer-update-send"
+                variant="secondary"
+                disabled={
+                  sessionState !== "active" ||
+                  hasPending("send_team_message", "rail") ||
+                  composerDraft.text.trim() === ""
+                }
+                onClick={() => {
+                  composerDraft = { ...composerDraft, context: updatedContext };
+                  submitTeamMessage("rail", {
+                    to: composerDraft.to,
+                    text: composerDraft.text,
+                    ...(composerDraft.replyTo !== null ? { reply_to: composerDraft.replyTo } : {}),
+                    context: updatedContext,
+                  });
+                }}
+              >
+                Update target &amp; send
+              </Button>
+              <Button
+                id="highbay-composer-update-pill"
+                variant="ghost"
+                onClick={() => {
+                  composerDraft = { ...composerDraft, context: updatedContext };
+                  syncAllRegions();
+                }}
+              >
+                {"Target " + latest.revision.slice(0, 12)}
+              </Button>
+            </div>
+          </Alert>
+        ),
+      };
+    }
+
+    // ctx.type === "revise_answers": reconcile selected answers against latest.ambiguities.
+    const reconciled: Record<string, string> = {};
+    if (latest.knownAmbiguities) {
+      for (const q of latest.ambiguities ?? []) {
+        const chosen = ctx.value.answers[q.id];
+        if (chosen !== undefined && q.options.includes(chosen)) {
+          reconciled[q.id] = chosen;
+        }
+      }
+    }
+    const keptCount = Object.keys(reconciled).length;
+    const reconciledContext: ComposerContext = {
+      type: "revise_answers",
+      value: {
+        change_id: ctx.value.change_id,
+        request_revision: latest.revision,
+        answers: reconciled,
+      },
+    };
+    return {
+      staleHold: true,
+      banner: (
+        <Alert id="highbay-composer-stale-context" variant="warning" role="status">
+          <p id="highbay-composer-review-reconciled">
+            Revision <code>{latest.revision.slice(0, 12)}</code> arrived while composing.{" "}
+            {!latest.knownAmbiguities
+              ? "Open Agree to load the new revision's questions before sending."
+              : keptCount > 0
+              ? keptCount +
+                (keptCount === 1 ? " compatible answer was" : " compatible answers were") +
+                " kept; removed questions or options were dropped."
+              : "None of your earlier answer selections exist on the new revision."}
+          </p>
+          <div className="highbay-field-row">
+            {latest.knownAmbiguities && keptCount > 0 ? (
+              <Button
+                id="highbay-composer-send-reconciled"
+                variant="secondary"
+                disabled={
+                  sessionState !== "active" ||
+                  hasPending("send_team_message", "rail") ||
+                  composerDraft.text.trim() === ""
+                }
+                onClick={() => {
+                  composerDraft = { ...composerDraft, context: reconciledContext };
+                  submitTeamMessage("rail", {
+                    to: composerDraft.to,
+                    text: composerDraft.text,
+                    ...(composerDraft.replyTo !== null ? { reply_to: composerDraft.replyTo } : {}),
+                    context: reconciledContext,
+                  });
+                }}
+              >
+                Send reconciled answers
+              </Button>
+            ) : null}
+            <Button
+              id="highbay-composer-open-agree"
+              variant="ghost"
+              onClick={() => {
+                if (latest.knownAmbiguities && keptCount > 0) {
+                  composerDraft = { ...composerDraft, context: reconciledContext };
+                } else {
+                  composerDraft = { ...composerDraft, context: null, seededText: undefined };
+                }
+                openChange(ctx.value.change_id, "agree");
+              }}
+            >
+              Review on Agree
+            </Button>
+          </div>
+        </Alert>
+      ),
+    };
+  }
+
+  function syncConversationRegion(primaryActionId: string | null = resolvePrimaryActionId().actionId) {
     if (sessionState === "starting" || sessionState === "signed-out") {
       conversationRegionEl.hidden = true;
       columnsEl.dataset.rail = "hidden";
       flushSync(() => conversationRoot.render(null));
       return;
     }
+    const narrow = isNarrowViewport();
+    const visibleInNarrow = mobileSurface === "conversation";
+    if (narrow && !visibleInNarrow) {
+      conversationRegionEl.hidden = true;
+      columnsEl.dataset.rail = "collapsed";
+      return;
+    }
     conversationRegionEl.hidden = false;
-    columnsEl.dataset.rail = conversationOpen ? "open" : "collapsed";
+    const effectiveOpen = narrow ? true : conversationOpen;
+    columnsEl.dataset.rail = effectiveOpen ? "open" : "collapsed";
+    const messages = teamConversation?.messages ?? [];
+    if (effectiveOpen) {
+      seenMessageCount = messages.length;
+    }
+    const unreadCount = effectiveOpen ? 0 : Math.max(0, messages.length - seenMessageCount);
+    const staleGuard = buildStaleContextGuard();
+
     flushSync(() =>
       conversationRoot.render(
         <ConversationRail
-          open={conversationOpen}
+          open={effectiveOpen}
+          unreadCount={unreadCount}
+          primarySend={primaryActionId === "highbay-composer-send"}
+          staleHold={staleGuard.staleHold}
+          staleContextBanner={staleGuard.banner}
+          detachedNotice={composerDetachedNotice}
           conversation={teamConversation}
           snapshot={teamSnapshot}
           loading={hasPending("get_team_conversation", "")}
-          sending={hasPending("send_team_message", "rail") || hasPending("send_team_message", "agree")}
+          sending={
+            hasPending("send_team_message", "rail") || hasPending("send_team_message", "agree")
+          }
           error={conversationError}
           sendError={composerSendError}
           disabled={sessionState !== "active"}
@@ -4167,7 +6299,24 @@ export function bootstrapViewsPage() {
           agentOptionsError={agentOptionsError}
           openTerminalRole={openTerminalRole}
           onToggleOpen={() => {
+            if (isNarrowViewport()) {
+              const returnTo = mobileSurfaceInvoker;
+              mobileSurface = "stage";
+              mobileSurfaceInvoker = null;
+              syncHistoryState("replace");
+              syncAllRegions();
+              if (returnTo !== null && document.contains(returnTo)) {
+                returnTo.focus();
+              } else {
+                document.getElementById("highbay-mobile-conversation-toggle")?.focus();
+              }
+              return;
+            }
             conversationOpen = !conversationOpen;
+            userCollapsedConversation = !conversationOpen;
+            if (conversationOpen) {
+              seenMessageCount = teamConversation?.messages.length ?? seenMessageCount;
+            }
             syncAllRegions();
           }}
           onRefresh={readConversation}
@@ -4175,9 +6324,11 @@ export function bootstrapViewsPage() {
             composerDraft = { ...composerDraft, ...patch };
             if (patch.text !== undefined) {
               composerSendError = null;
+              composerDetachedNotice = null;
             }
             syncAllRegions();
           }}
+          onSwitchRecipient={handleSwitchComposerRecipient}
           onGuideChoiceChange={(choice) => {
             guideChoice = choice;
             guideChoiceEdited = true;
@@ -4186,7 +6337,7 @@ export function bootstrapViewsPage() {
           onLoadAgentOptions={loadAgentOptions}
           onRefreshAgentOptions={readAgentOptions}
           onSend={() => {
-            if (composerDraft.text.trim() === "") return;
+            if (composerDraft.text.trim() === "" || staleGuard.staleHold) return;
             submitTeamMessage("rail", {
               to: composerDraft.to,
               text: composerDraft.text,
@@ -4194,27 +6345,36 @@ export function bootstrapViewsPage() {
               ...(composerDraft.context !== null ? { context: composerDraft.context } : {}),
             });
           }}
-          onOpenTerminal={openRoleTerminal}
+          onOpenTerminal={(role, invoker) => openRoleTerminal(role, invoker)}
         />
       )
     );
   }
 
-  // syncTerminalRegion renders the on-demand @xterm/xterm role terminal drawer.
-  function syncTerminalRegion() {
-    if (sessionState === "starting" || sessionState === "signed-out" || openTerminalRole === null) {
+  // syncTerminalRegion keeps a single TerminalDrawer instance mounted across
+  // viewport width transitions so resizing never drops a WebSocket or mints a second ticket.
+  function syncTerminalRegion(primaryActionId: string | null = resolvePrimaryActionId().actionId) {
+    if (
+      sessionState === "starting" ||
+      sessionState === "signed-out" ||
+      openTerminalRole === null
+    ) {
       terminalRegionEl.hidden = true;
       flushSync(() => terminalRoot.render(null));
       return;
     }
     const role = openTerminalRole;
-    terminalRegionEl.hidden = false;
+    const hideOnMobile = isNarrowViewport() && mobileSurface !== "terminal";
+    terminalRegionEl.hidden = hideOnMobile;
     const roleState = teamSnapshot?.roles.find((r) => r.role === role) ?? null;
     flushSync(() =>
       terminalRoot.render(
         <TerminalDrawer
           role={role}
           roleState={roleState}
+          observeMode={terminalObserveMode}
+          size={terminalSize}
+          primaryRestart={primaryActionId === "highbay-terminal-restart"}
           disabled={sessionState !== "active"}
           interrupting={hasPending("interrupt_team_role", role)}
           stopping={hasPending("stop_team_role", role)}
@@ -4222,6 +6382,14 @@ export function bootstrapViewsPage() {
           restartSeq={terminalRestartSeq[role]}
           actionError={terminalActionError}
           onCreateTicket={createTerminalTicket}
+          onSwitchInteractive={() => {
+            terminalObserveMode = false;
+            syncAllRegions();
+          }}
+          onChangeSize={(next) => {
+            terminalSize = next;
+            syncAllRegions();
+          }}
           onInterrupt={interruptTeamRole}
           onStop={stopTeamRole}
           onRestart={restartTeamRole}
@@ -4231,57 +6399,88 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // syncAllRegions synchronizes the notice, editor, result, conversation, terminal, nav, and trace regions.
-  function syncAllRegions() {
-    statusEl.toggleAttribute("data-connection-warning", waitTroubleShown);
-    viewEl.classList.toggle(
-      "highbay-split-workspace",
-      Boolean(activeEditor !== null && editorOpen && activeResult !== null)
-    );
-    syncNoticeRegion();
-    syncEditorRegion();
-    syncResultRegion();
-    syncConversationRegion();
-    syncTerminalRegion();
-    syncNavRegion();
-    syncTraceRegion();
-    syncOpenedCheckStatus();
-    statusEl.hidden = (activeResult?.kind === "cp5-approval" ||
-      editorOpen && editorStage === "build" && (!activeResult || activeResult.kind === "cp1-incoming-card")) && [
-      "Review the build and its next step. The agreed details stay available below.",
-      "Review the saved check before approving it.",
-      "Showing the saved verification result.",
-    ].includes(statusEl.textContent ?? "");
+  function syncSkipLink() {
+    if (skipEl === null) return;
+    if (isNarrowViewport() && mobileSurface === "conversation") {
+      skipEl.href = "#highbay-conversation-panel";
+    } else if (isNarrowViewport() && mobileSurface === "terminal") {
+      skipEl.href = "#highbay-terminal-drawer";
+    } else {
+      skipEl.href = "#highbay-checkpoint-view";
+    }
   }
 
-  // syncOpenedCheckStatus names the user's decision on the opened change,
-  // without replacing an agent's attention or an operation's failure message.
+  function syncAllRegions() {
+    if (syncingRegions) {
+      syncAgain = true;
+      return;
+    }
+    syncingRegions = true;
+    try {
+      do {
+        syncAgain = false;
+        statusEl.toggleAttribute("data-connection-warning", waitTroubleShown);
+        syncSkipLink();
+        const { attentionRole, actionId } = resolvePrimaryActionId();
+        syncNoticeRegion(attentionRole);
+        syncViewRegion(actionId);
+        syncConversationRegion(actionId);
+        syncTerminalRegion(actionId);
+        syncNavRegion(actionId);
+        syncTraceRegion();
+        syncOpenedCheckStatus();
+        statusEl.hidden =
+          currentView.kind === "change" &&
+          (currentView.stage === "approve" || currentView.stage === "build") &&
+          [
+            "Review the build and its next step. The agreed details stay available below.",
+            "Review the saved check before approving it.",
+            "Showing the saved verification result.",
+          ].includes(statusEl.textContent ?? "");
+      } while (syncAgain);
+    } finally {
+      syncingRegions = false;
+    }
+  }
+
   function syncOpenedCheckStatus() {
-    const ed = activeEditor;
-    if (sessionState !== "active" || activeResult !== null || ed?.card.status !== "confirmed" ||
-        editorRequest !== null || buildStartError !== null || buildReadError !== null ||
-        listError !== null || waitTroubleShown || cardLoadErrors.has(ed.card.change_id) ||
-        (teamSnapshot?.roles.some((role) => role.state === "needs_you") ?? false) ||
-        isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)) return;
+    const ed = getActiveEditor();
+    if (
+      sessionState !== "active" ||
+      currentView.kind !== "change" ||
+      (currentView.stage !== "agree" && currentView.stage !== "build") ||
+      ed?.card.status !== "confirmed" ||
+      editorRequestsByChangeId.has(ed.card.change_id) ||
+      buildStartError !== null ||
+      buildReadError !== null ||
+      listError !== null ||
+      waitTroubleShown ||
+      cardLoadErrors.has(ed.card.change_id) ||
+      (teamSnapshot?.roles.some((role) => role.state === "needs_you") ?? false) ||
+      isDraftDirty(ed.card, ed.draftAnswers, ed.draftExamples)
+    ) {
+      return;
+    }
     const run = latestVerificationFor(ed.card.change_id);
     if (run === null || !runInputsKnown(run)) return;
     let next: string;
     if (!run.inputs_current) {
-      next = "The saved check describes earlier inputs. The builder checks the current agreement and tests again before you approve.";
+      next =
+        "The saved check describes earlier inputs. The builder checks the current agreement and tests again before you approve.";
     } else if (run.state.type === "running") {
-      next = "Highbay is checking the builder’s code. Your next decision is approval after the check passes.";
+      next =
+        "Highbay is checking the builder’s code. Your next decision is approval after the check passes.";
     } else if (run.state.type === "completed" && run.state.value.report.passed) {
-      next = ed.card.approval?.report_digest === run.state.value.report.report_digest
-        ? "The check passed and your approval is recorded."
-        : "The check passed. Review the result.";
+      next =
+        ed.card.approval?.report_digest === run.state.value.report.report_digest
+          ? "The check passed and your approval is recorded."
+          : "The check passed. Review the result.";
     } else {
       next = "The check needs the builder’s attention. Review its saved result.";
     }
     if (statusEl.textContent !== next) statusEl.textContent = next;
   }
 
-  // loadTracePage reads one diagnostics page without taking the editor's
-  // request slot. Filtering and paging are serialized by their own pending call.
   function loadTracePage(cursor?: string) {
     if (hasPending("list_traces", "")) return;
     traceError = null;
@@ -4298,12 +6497,13 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // syncTraceRegion updates only diagnostics; the CP1 editor stays mounted.
   function syncTraceRegion() {
     if (sessionState === "starting" || sessionState === "signed-out") {
+      traceRegionEl.hidden = true;
       flushSync(() => traceRoot.render(null));
       return;
     }
+    traceRegionEl.hidden = !traceOpen;
     flushSync(() =>
       traceRoot.render(
         <TraceDrawer
@@ -4329,26 +6529,23 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // markRunReadPending makes every older response unable to restore a match.
   function markRunReadPending(runId: string, order: number) {
     runObservationOrder.set(runId, order);
     runObservationGeneration.delete(runId);
   }
 
-  // upsertRunSnapshot preserves a terminal report while accepting only a
-  // current, non-older observation of its input match.
   function upsertRunSnapshot(
     run: VerificationStatusResult,
     generation: number,
     order: number
   ): VerificationStatusResult {
     const existing = runsById.get(run.run_id);
-    const observed = generation === verificationGeneration &&
-      order >= (runObservationOrder.get(run.run_id) ?? -1);
+    const observed =
+      generation === verificationGeneration && order >= (runObservationOrder.get(run.run_id) ?? -1);
     const evidence = existing && existing.state.type !== "running" ? existing : run;
     const snapshot = {
       ...evidence,
-      inputs_current: observed ? run.inputs_current : (existing?.inputs_current ?? false),
+      inputs_current: observed ? run.inputs_current : existing?.inputs_current ?? false,
       candidate_binaries_dir: observed
         ? run.candidate_binaries_dir
         : existing?.candidate_binaries_dir,
@@ -4362,40 +6559,43 @@ export function bootstrapViewsPage() {
     return snapshot;
   }
 
-  // handleSelectVerificationRun switches the displayed run inside CP4.
   function handleSelectVerificationRun(runId: string) {
     const target = runsById.get(runId);
     if (!target) {
       return;
     }
+    navigationSeq++;
     if (hasPending("list_verifications", target.change_id)) {
       selectionTouchedDuringList.set(target.change_id, true);
     }
+    activeChangeId = target.change_id;
     selectedVerificationChangeId = target.change_id;
     selectedRunId = target.run_id;
-    const reviewing = activeResult?.kind === "cp5-approval";
-    const stage = reviewing ? "cp5-approval" : "cp4-verification";
-    activeResult = { kind: stage };
-    rootEl.dataset.state = stage;
+    const reviewing = currentView.kind === "change" && currentView.stage === "approve";
+    currentView = {
+      kind: "change",
+      changeId: target.change_id,
+      stage: reviewing ? "approve" : "verify",
+    };
     statusEl.textContent = "Showing the saved verification result.";
     if (reviewing || !runInputsKnown(target) || displayedApprovalReview() === null) {
       readVerification(target.run_id, target.change_id);
     }
+    syncHistoryState("push");
     syncAllRegions();
   }
 
-  // handleCheckVerificationStatus reads the displayed run and never starts a
-  // new verification. A late answer belongs only to that run, even if a
-  // different run is displayed by then.
   function handleCheckVerificationStatus() {
     const run = resolveDisplayedVerificationRun();
-    if ((activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") && run !== null) {
+    if (
+      currentView.kind === "change" &&
+      (currentView.stage === "verify" || currentView.stage === "approve") &&
+      run !== null
+    ) {
       readVerification(run.run_id, run.change_id);
     }
   }
 
-  // readVerification coalesces a read invalidated while pending into one
-  // replacement. A same-generation failure waits for an explicit retry.
   function readVerification(runID: string, changeId: string) {
     if (isViewingSelectedRun(runID)) {
       readApprovalReview(runID, changeId);
@@ -4412,8 +6612,11 @@ export function bootstrapViewsPage() {
     markRunReadPending(runID, order);
     const finish = () => {
       const again = runReadAgain.delete(runID) || generation !== verificationGeneration;
-      if (again && sessionState === "active" &&
-          (activeEditor?.card.change_id === changeId || selectedVerificationChangeId === changeId)) {
+      if (
+        again &&
+        sessionState === "active" &&
+        (activeChangeId === changeId || selectedVerificationChangeId === changeId)
+      ) {
         readVerification(runID, changeId);
       }
     };
@@ -4424,23 +6627,39 @@ export function bootstrapViewsPage() {
       runID,
       (run) => {
         if (run.run_id !== runID || run.change_id !== changeId) {
-          if (generation === verificationGeneration && order >= (runObservationOrder.get(runID) ?? -1)) {
+          if (
+            generation === verificationGeneration &&
+            order >= (runObservationOrder.get(runID) ?? -1)
+          ) {
             runRequestErrors.set(runID, "The server returned a different verification run.");
           }
           finish();
           return;
         }
         upsertRunSnapshot(run, generation, order);
-        if (generation === verificationGeneration && activeResult?.kind === "cp4-verification" && selectedRunId === runID) {
+        if (
+          generation === verificationGeneration &&
+          currentView.kind === "change" &&
+          currentView.stage === "verify" &&
+          selectedRunId === runID
+        ) {
           statusEl.textContent = "Showing the saved verification result.";
         }
         finish();
       },
       (message) => {
-        if (generation === verificationGeneration && order >= (runObservationOrder.get(runID) ?? -1)) {
+        if (
+          generation === verificationGeneration &&
+          order >= (runObservationOrder.get(runID) ?? -1)
+        ) {
           runRequestErrors.set(runID, message);
-          if (activeResult?.kind === "cp4-verification" && selectedRunId === runID) {
-            statusEl.textContent = "Could not check verification status; the last result is preserved.";
+          if (
+            currentView.kind === "change" &&
+            currentView.stage === "verify" &&
+            selectedRunId === runID
+          ) {
+            statusEl.textContent =
+              "Could not check verification status; the last result is preserved.";
           }
         }
         finish();
@@ -4448,8 +6667,6 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // readApprovalReview coalesces invalidated reads and accepts a response only
-  // for its exact requested run, selection, generation and request order.
   function readApprovalReview(runId: string, changeId: string) {
     if (sessionState !== "active") return;
     if (hasPending("review_verification", runId)) {
@@ -4463,60 +6680,84 @@ export function bootstrapViewsPage() {
     runRequestErrors.delete(runId);
     const finish = () => {
       const again = runReadAgain.delete(runId) || generation !== verificationGeneration;
-      if (again && sessionState === "active" && isViewingSelectedRun(runId)) {
+      if (
+        again &&
+        sessionState === "active" &&
+        (isViewingSelectedRun(runId) || activeChangeId === changeId)
+      ) {
         readApprovalReview(runId, changeId);
       }
     };
-    callServer("review_verification", { run_id: runId }, runId, (result) => {
-      if (result.run_id !== runId || result.change_id !== changeId) {
-        if (generation === verificationGeneration) runRequestErrors.set(runId, "The server returned a different verification run.");
+    callServer(
+      "review_verification",
+      { run_id: runId },
+      runId,
+      (result) => {
+        if (result.run_id !== runId || result.change_id !== changeId) {
+          if (generation === verificationGeneration) {
+            runRequestErrors.set(runId, "The server returned a different verification run.");
+          }
+          finish();
+          return;
+        }
+        if (
+          result.review.approval.state === "available" &&
+          (result.state.type !== "completed" || !result.state.value.report.passed)
+        ) {
+          if (generation === verificationGeneration) {
+            runRequestErrors.set(
+              runId,
+              "The owner returned approval availability without a passed report. Refresh this result."
+            );
+          }
+          finish();
+          return;
+        }
+        upsertRunSnapshot(result, generation, order);
+        if (
+          generation === verificationGeneration &&
+          order >= (runObservationOrder.get(runId) ?? -1)
+        ) {
+          approvalUnavailable = null;
+          reviewsByRunId.set(runId, { generation, order, review: result.review });
+        }
         finish();
-        return;
-      }
-      if (result.review.approval.state === "available" &&
-          (result.state.type !== "completed" || !result.state.value.report.passed)) {
-        if (generation === verificationGeneration) runRequestErrors.set(runId, "The owner returned approval availability without a passed report. Refresh this result.");
+      },
+      (message, failure) => {
+        if (
+          generation === verificationGeneration &&
+          order >= (runObservationOrder.get(runId) ?? -1)
+        ) {
+          if (failure.status === 501 && selectedRunId === runId) {
+            approvalUnavailable = message;
+          }
+          runRequestErrors.set(runId, message);
+        }
         finish();
-        return;
       }
-      upsertRunSnapshot(result, generation, order);
-      if (generation === verificationGeneration && order >= (runObservationOrder.get(runId) ?? -1) && selectedRunId === runId) {
-        approvalUnavailable = null;
-        selectedReview = { runId, generation, order, review: result.review };
-      }
-      finish();
-    }, (message, failure) => {
-      if (generation === verificationGeneration && order >= (runObservationOrder.get(runId) ?? -1)) {
-        if (failure.status === 501 && selectedRunId === runId) approvalUnavailable = message;
-        runRequestErrors.set(runId, message);
-      }
-      finish();
-    });
+    );
   }
 
-  // handleListVerifications loads the saved verification runs for requestedChangeId,
-  // enforcing at most one in-flight list_verifications request per change_id.
   function handleListVerifications(requestedChangeId: string) {
     if (!requestedChangeId || hasPending("list_verifications", requestedChangeId)) {
       return;
     }
-    const reviewing = activeResult?.kind === "cp5-approval";
+    navigationSeq++;
+    mobileSurface = "stage";
+    const reviewing = currentView.kind === "change" && currentView.stage === "approve";
     selectionTouchedDuringList.set(requestedChangeId, false);
     listRequestErrors.delete(requestedChangeId);
-    if (!shouldRetainEditor()) {
-      editorOpen = false;
-    }
     const nextRunId =
-      selectedRunId !== null &&
-      runsById.get(selectedRunId)?.change_id !== requestedChangeId
-        ? (lastLoadedListByChangeId.get(requestedChangeId)?.[0] ?? null)
+      selectedRunId !== null && runsById.get(selectedRunId)?.change_id !== requestedChangeId
+        ? lastLoadedListByChangeId.get(requestedChangeId)?.[0] ?? null
         : selectedRunId;
+    activeChangeId = requestedChangeId;
     selectedVerificationChangeId = requestedChangeId;
     selectedRunId = nextRunId;
-    const stage = reviewing ? "cp5-approval" : "cp4-verification";
-    activeResult = { kind: stage };
-    rootEl.dataset.state = stage;
+    const stage: ChangeStageName = reviewing ? "approve" : "verify";
+    currentView = { kind: "change", changeId: requestedChangeId, stage };
     statusEl.textContent = "Loading saved verification runs...";
+    syncHistoryState("push");
     const generation = verificationGeneration;
     const order = ++verificationReadOrder;
     for (const run of runsById.values()) {
@@ -4534,7 +6775,8 @@ export function bootstrapViewsPage() {
         if (mismatchErr !== null) {
           listRequestErrors.set(requestedChangeId, mismatchErr);
           if (
-            (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") &&
+            currentView.kind === "change" &&
+            (currentView.stage === "verify" || currentView.stage === "approve") &&
             selectedVerificationChangeId === requestedChangeId
           ) {
             statusEl.textContent = "Could not load saved verification runs.";
@@ -4549,7 +6791,8 @@ export function bootstrapViewsPage() {
         listRequestErrors.delete(requestedChangeId);
 
         if (
-          (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") &&
+          currentView.kind === "change" &&
+          (currentView.stage === "verify" || currentView.stage === "approve") &&
           selectedVerificationChangeId === requestedChangeId
         ) {
           if (
@@ -4557,9 +6800,9 @@ export function bootstrapViewsPage() {
             selectedRunId !== null &&
             runsById.get(selectedRunId)?.change_id === requestedChangeId
           ) {
-            // Preserve the run explicitly selected during the list read.
+            // Preserve run explicitly selected during list read.
           } else if (selectedRunId !== null && loadedIds.includes(selectedRunId)) {
-            // Preserve the selected run when it remains in the loaded list.
+            // Preserve selected run when still in loaded list.
           } else {
             selectedRunId = loadedIds.length > 0 ? loadedIds[0] : null;
           }
@@ -4567,8 +6810,12 @@ export function bootstrapViewsPage() {
             loadedIds.length > 0
               ? "Showing saved verification runs for Change Card " + requestedChangeId + "."
               : "No saved verification runs found for Change Card " + requestedChangeId + ".";
+          syncHistoryState("replace");
         }
-        if (selectedRunId !== null && (generation !== verificationGeneration || isViewingSelectedRun(selectedRunId))) {
+        if (
+          selectedRunId !== null &&
+          (generation !== verificationGeneration || isViewingSelectedRun(selectedRunId))
+        ) {
           readVerification(selectedRunId, requestedChangeId);
         }
       },
@@ -4576,7 +6823,8 @@ export function bootstrapViewsPage() {
         selectionTouchedDuringList.delete(requestedChangeId);
         listRequestErrors.set(requestedChangeId, message);
         if (
-          (activeResult?.kind === "cp4-verification" || activeResult?.kind === "cp5-approval") &&
+          currentView.kind === "change" &&
+          (currentView.stage === "verify" || currentView.stage === "approve") &&
           selectedVerificationChangeId === requestedChangeId
         ) {
           statusEl.textContent = "Could not load saved verification runs.";
@@ -4585,14 +6833,10 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // handleReturnToChangeCard switches the view back to the retained Change Card
-  // and restores any pending incoming Change Card banner.
   function handleReturnToChangeCard() {
     showChangeEditor("agree");
   }
 
-  // handleReadFullSummary reveals the saved text in its existing owner without
-  // replacing the retained editor or submitting its unsaved refinement.
   function handleReadFullSummary() {
     showChangeEditor("agree");
     const details = document.getElementById("highbay-agreement-details");
@@ -4601,17 +6845,16 @@ export function bootstrapViewsPage() {
     document.getElementById("highbay-agreement-summary")?.scrollIntoView({ block: "start" });
   }
 
-  // showChangeEditor restores retained form state and names the chosen stage.
   function showChangeEditor(stage: "agree" | "build") {
-    if (!activeEditor) {
+    const ed = getActiveEditor();
+    if (!ed) {
       return;
     }
-    editorStage = stage;
-    editorOpen = true;
-    activeResult = activeEditor.incomingCard ? { kind: "cp1-incoming-card" } : null;
-    rootEl.dataset.state = "cp1-change-card";
-    const card = activeEditor.card;
-    statusEl.textContent = activeEditor.incomingCard
+    navigationSeq++;
+    mobileSurface = "stage";
+    currentView = { kind: "change", changeId: ed.card.change_id, stage };
+    const card = ed.card;
+    statusEl.textContent = ed.incomingCard
       ? "A newer Change Card arrived while you were editing; your unsaved draft is preserved."
       : card.proposed_revision !== undefined
       ? "Review the proposed revision, then choose whether to adopt or decline it."
@@ -4620,24 +6863,207 @@ export function bootstrapViewsPage() {
         ? "Showing the recorded approval for these inputs."
         : card.unverified_approval
         ? "Showing the saved approval record (current promotion inputs could not be verified)."
-        : stage === "build" ? "Review the build and its next step. The agreed details stay available below."
+        : stage === "build"
+        ? "Review the build and its next step. The agreed details stay available below."
         : "Review the current agreement."
       : "Review the open questions and examples below, then confirm your intent.";
+    syncHistoryState("push");
     syncAllRegions();
   }
 
-  // openChange shows requestedChangeId, reading it with get_change when it is
-  // not the card already open. A reply that arrives after the user moved to
-  // another view, or that names another card, never replaces what is shown.
-  function openChange(requestedChangeId: string) {
-    if (!requestedChangeId || editorRequest !== null) {
+  // computeDefaultStageForConfirmed chooses the truthful opening stage after
+  // both get_change and get_build have settled, without flashing Agree first.
+  function computeDefaultStageForConfirmed(
+    ed: ActiveEditorState,
+    build: ChangeBuild["build"] | null
+  ): ChangeStageName {
+    if (
+      ed.card.status !== "confirmed" ||
+      ed.card.proposed_revision !== undefined ||
+      ed.incomingCard !== null ||
+      isEditorDirtyState(ed)
+    ) {
+      return "agree";
+    }
+    if (
+      build !== null &&
+      build.state === "started" &&
+      build.in_force &&
+      build.request_revision === ed.card.request_revision
+    ) {
+      if (build.taking.state === "passed" || build.taking.state === "merged") {
+        return "approve";
+      }
+      const listedVer = changeList?.changes.find((c) => c.change_id === ed.card.change_id)
+        ?.latest_verification;
+      const latestRun = latestVerificationFor(ed.card.change_id);
+      if (
+        latestRun !== null &&
+        runStartedInCurrentBuild(ed.card, build, latestRun) &&
+        (latestRun.state.type === "not_completed" ||
+          (latestRun.state.type === "completed" && !latestRun.state.value.report.passed))
+      ) {
+        return "verify";
+      }
+      if (
+        latestRun === null &&
+        listedVer !== undefined &&
+        listedVer.inputs_current &&
+        (listedVer.state === "failed" || listedVer.state === "not_completed")
+      ) {
+        return "verify";
+      }
+    }
+    return "build";
+  }
+
+  // activateChangeStage enters the chosen stage for an already-stored editor.
+  function activateChangeStage(changeId: string, stage: ChangeStageName, historyMode: "push" | "replace") {
+    activeChangeId = changeId;
+    mobileSurface = "stage";
+    const ed = editorsByChangeId.get(changeId);
+    if (stage === "approve") {
+      selectedVerificationChangeId = changeId;
+      const approval = ed?.card.approval ?? ed?.card.unverified_approval?.approval;
+      const savedRun =
+        ed !== undefined && approval !== undefined
+          ? savedApprovalEvidenceRun(ed.card, approval)
+          : null;
+      const currentSelectedForChange =
+        selectedRunId !== null && runsById.get(selectedRunId)?.change_id === changeId
+          ? selectedRunId
+          : null;
+      const run = savedRun ?? latestVerificationFor(changeId);
+      selectedRunId = run?.run_id ?? currentSelectedForChange;
+      currentView = { kind: "change", changeId, stage: "approve" };
+      statusEl.textContent = "Review the saved check before approving it.";
+      if (!lastLoadedListByChangeId.has(changeId)) {
+        refreshVerificationsInBackground(changeId);
+      }
+      if (selectedRunId !== null) {
+        readApprovalReview(selectedRunId, changeId);
+      }
+      syncHistoryState(historyMode);
+      syncAllRegions();
       return;
     }
-    if (activeEditor && activeEditor.card.change_id === requestedChangeId) {
-      handleReturnToChangeCard();
+    if (stage === "verify") {
+      selectedVerificationChangeId = changeId;
+      const currentSelectedForChange =
+        selectedRunId !== null && runsById.get(selectedRunId)?.change_id === changeId
+          ? selectedRunId
+          : null;
+      const run = latestVerificationFor(changeId);
+      selectedRunId =
+        currentSelectedForChange ??
+        run?.run_id ??
+        lastLoadedListByChangeId.get(changeId)?.[0] ??
+        null;
+      currentView = { kind: "change", changeId, stage: "verify" };
+      statusEl.textContent =
+        selectedRunId !== null
+          ? "Showing the saved verification result."
+          : "Loading saved verification runs...";
+      if (!lastLoadedListByChangeId.has(changeId)) {
+        refreshVerificationsInBackground(changeId);
+      }
+      if (selectedRunId !== null) {
+        readVerification(selectedRunId, changeId);
+      }
+      syncHistoryState(historyMode);
+      syncAllRegions();
       return;
     }
-    const initialActiveResult = activeResult;
+    if (stage === "arch") {
+      currentView = { kind: "change", changeId, stage: "arch" };
+      if (ed !== undefined && ed.card.status === "confirmed") {
+        if (
+          previewState === null ||
+          previewState.change_id !== changeId ||
+          previewState.request_revision !== ed.card.request_revision
+        ) {
+          requestArchitecture(ed.card);
+        }
+      }
+      syncHistoryState(historyMode);
+      syncAllRegions();
+      return;
+    }
+    currentView = { kind: "change", changeId, stage };
+    if (ed !== undefined) {
+      const card = ed.card;
+      statusEl.textContent = ed.incomingCard
+        ? "A newer Change Card arrived while you were editing; your unsaved draft is preserved."
+        : card.proposed_revision !== undefined
+        ? "Review the proposed revision, then choose whether to adopt or decline it."
+        : card.status === "confirmed"
+        ? card.approval
+          ? "Showing the recorded approval for these inputs."
+          : card.unverified_approval
+          ? "Showing the saved approval record (current promotion inputs could not be verified)."
+          : stage === "build"
+          ? "Review the build and its next step. The agreed details stay available below."
+          : "Review the current agreement."
+        : "Review the open questions and examples below, then confirm your intent.";
+    }
+    syncHistoryState(historyMode);
+    syncAllRegions();
+  }
+
+  // openChange opens requestedChangeId in editorsByChangeId, preserving any
+  // unsaved drafts on other cards and awaiting get_build before mounting a
+  // confirmed card's default stage so it never flashes Agree then jumps.
+  function openChange(requestedChangeId: string, explicitStage?: ChangeStageName) {
+    if (!requestedChangeId || editorRequestsByChangeId.has(requestedChangeId)) {
+      return;
+    }
+    const existing = editorsByChangeId.get(requestedChangeId);
+    if (existing !== undefined) {
+      const openSeq = ++navigationSeq;
+      activeChangeId = requestedChangeId;
+      refreshOpenCard(requestedChangeId);
+      if (explicitStage !== undefined) {
+        readBuild(requestedChangeId);
+        refreshVerificationObservations(requestedChangeId);
+        activateChangeStage(requestedChangeId, explicitStage, "push");
+        return;
+      }
+      if (
+        existing.card.status !== "confirmed" ||
+        existing.card.proposed_revision !== undefined ||
+        existing.incomingCard !== null ||
+        isEditorDirtyState(existing)
+      ) {
+        readBuild(requestedChangeId);
+        refreshVerificationObservations(requestedChangeId);
+        activateChangeStage(requestedChangeId, "agree", "push");
+        return;
+      }
+      if (buildChangeId === requestedChangeId && buildSnapshot !== null && buildReadError === null) {
+        refreshVerificationObservations(requestedChangeId);
+        activateChangeStage(
+          requestedChangeId,
+          computeDefaultStageForConfirmed(existing, buildSnapshot),
+          "push"
+        );
+        return;
+      }
+      refreshVerificationObservations(requestedChangeId);
+      activateChangeStage(requestedChangeId, "build", "push");
+      readBuild(requestedChangeId, (settled) => {
+        if (navigationSeq !== openSeq || sessionState !== "active") {
+          return;
+        }
+        const latestEd = editorsByChangeId.get(requestedChangeId) ?? existing;
+        const target = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
+        if (target !== "build") {
+          activateChangeStage(requestedChangeId, target, "replace");
+        }
+      });
+      return;
+    }
+
+    const openSeq = ++navigationSeq;
     lastOpenAttempt = requestedChangeId;
     cardLoadErrors.delete(requestedChangeId);
     statusEl.textContent = "Loading Change Card " + requestedChangeId + "...";
@@ -4655,69 +7081,120 @@ export function bootstrapViewsPage() {
               requestedChangeId +
               "."
           );
-          if (activeResult === initialActiveResult && isViewingChangeResult(requestedChangeId)) {
+          if (navigationSeq === openSeq) {
             statusEl.textContent = "Could not load the requested Change Card.";
           }
           return;
         }
         cardLoadErrors.delete(requestedChangeId);
-        if (
-          initialActiveResult !== null &&
-          (activeResult !== initialActiveResult || !isViewingChangeResult(requestedChangeId))
-        ) {
+        const newEd: ActiveEditorState = {
+          card: loadedCard,
+          priorCard: null,
+          incomingCard: null,
+          ...editorDraftFrom(loadedCard),
+          preservedDraft: null,
+          formError: null,
+        };
+        editorsByChangeId.set(loadedCard.change_id, newEd);
+        if (navigationSeq !== openSeq) {
           return;
         }
-        let preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
-        // Different-card navigation keeps unsent proposal choices as existing
-        // preserved text. Adoption does not run this navigation-only capture.
-        if (activeEditor !== null && activeEditor.card.change_id !== loadedCard.change_id) {
-          const proposal = activeEditor.card.proposed_revision;
-          const lines: string[] = [];
-          if (proposal !== undefined) for (const question of proposal.ambiguities ?? []) {
-            const answer = activeEditor.proposalAnswers[question.id];
-            if (answer !== undefined) lines.push("[Proposed " + proposal.request_revision + "] " +
-              question.id + " (" + question.question + ")=" + answer);
+        activeChangeId = loadedCard.change_id;
+        if (
+          explicitStage !== undefined ||
+          loadedCard.status !== "confirmed" ||
+          loadedCard.proposed_revision !== undefined
+        ) {
+          const targetStage = explicitStage ?? "agree";
+          readBuild(loadedCard.change_id);
+          refreshVerificationObservations(loadedCard.change_id);
+          activateChangeStage(loadedCard.change_id, targetStage, "push");
+          return;
+        }
+        // Confirmed card without explicit stage: immediately show Build's loading
+        // state (never Agree), then transition via replace if get_build reveals
+        // a passed/merged or failed-verification default stage.
+        refreshVerificationObservations(loadedCard.change_id);
+        activateChangeStage(loadedCard.change_id, "build", "push");
+        readBuild(loadedCard.change_id, (settled) => {
+          if (navigationSeq !== openSeq || sessionState !== "active") {
+            return;
           }
-          if (lines.length > 0) preserved = {
-            fromRevision: preserved?.fromRevision ?? activeEditor.card.request_revision,
-            lines: [...(preserved?.lines ?? []), ...lines],
-          };
-        }
-        const prior = nextPriorCard(activeEditor, loadedCard);
-        if (activeEditor) {
-          activeEditor = {
-            ...activeEditor,
-            incomingCard: null,
-          };
-        }
-        activeResult = null;
-        mountChangeCard(loadedCard, preserved, prior);
+          const latestEd = editorsByChangeId.get(loadedCard.change_id) ?? newEd;
+          const targetStage = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
+          if (targetStage !== "build") {
+            activateChangeStage(loadedCard.change_id, targetStage, "replace");
+          }
+        });
       },
       (message) => {
         cardLoadErrors.set(requestedChangeId, "Could not load Change Card: " + message);
-        if (activeResult === initialActiveResult && isViewingChangeResult(requestedChangeId)) {
+        if (navigationSeq === openSeq) {
           statusEl.textContent = "Could not load the requested Change Card.";
         }
       }
     );
   }
 
-  // showFormError reports a failed read, save or input check without changing
-  // the saved snapshot or discarding draft text.
+  // applyHistoryViewState restores opaque navigation state on Back/Forward or reload.
+  function applyHistoryViewState(state: HistoryViewState) {
+    handlingPopState = true;
+    try {
+      mobileSurface = state.mobileSurface ?? "stage";
+      draftSentMessageId = state.newDraft?.sentMessageId;
+      switch (state.view) {
+        case "changes":
+          showChanges();
+          break;
+        case "new":
+          openNewChange();
+          break;
+        case "team":
+          openTeam();
+          break;
+        case "story":
+          if (state.changeId !== undefined && editorsByChangeId.has(state.changeId)) {
+            activeChangeId = state.changeId;
+          }
+          openStory();
+          break;
+        case "live":
+          if (state.changeId !== undefined && editorsByChangeId.has(state.changeId)) {
+            activeChangeId = state.changeId;
+          }
+          openLive();
+          break;
+        case "change":
+          if (state.changeId !== undefined) {
+            if (state.runId !== undefined) {
+              selectedRunId = state.runId;
+              selectedVerificationChangeId = state.changeId;
+            }
+            openChange(state.changeId, state.stage);
+          } else {
+            showChanges();
+          }
+          break;
+      }
+    } finally {
+      handlingPopState = false;
+    }
+  }
+
   function showFormError(message: string, source: "input" | "request" = "request") {
-    if (!activeEditor) {
+    const ed = getActiveEditor();
+    if (!ed) {
       return;
     }
-    statusEl.textContent = source === "input" ? message : "Change Card request failed; unsaved edits preserved.";
-    activeEditor = {
-      ...activeEditor,
+    statusEl.textContent =
+      source === "input" ? message : "Change Card request failed; unsaved edits preserved.";
+    editorsByChangeId.set(ed.card.change_id, {
+      ...ed,
       formError: { message, source },
-    };
+    });
     syncAllRegions();
   }
 
-  // focusResult moves keyboard focus to the element that shows an action's
-  // result, after the regions rendered it.
   function focusResult(selector: string) {
     const target = document.querySelector(selector);
     if (target instanceof HTMLElement) {
@@ -4725,70 +7202,79 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // unansweredQuestions is shared by Next's progress and confirmation
-  // validation, including questions rendered by a decision instrument.
   function unansweredQuestions(editor: ActiveEditorState) {
-    return (editor.card.ambiguities ?? []).filter((question) =>
-      !Object.prototype.hasOwnProperty.call(editor.draftAnswers, question.id) || !editor.draftAnswers[question.id]
+    return (editor.card.ambiguities ?? []).filter(
+      (question) =>
+        !Object.prototype.hasOwnProperty.call(editor.draftAnswers, question.id) ||
+        !editor.draftAnswers[question.id]
     );
   }
 
-  // focusDraftQuestion locates whichever renderer owns the current question.
   function focusDraftQuestion(questionId: string) {
-    Array.from(editorRegionEl.querySelectorAll<HTMLButtonElement>("button[data-ambiguity-id]"))
-      .find((option) => option.dataset.ambiguityId === questionId)?.focus();
+    Array.from(viewEl.querySelectorAll<HTMLButtonElement>("button[data-ambiguity-id]"))
+      .find((option) => option.dataset.ambiguityId === questionId)
+      ?.focus();
   }
 
-  // firstIncompleteExample locates the field blocking confirmation in the
-  // same order that the user reads the example.
   function firstIncompleteExample(editor: ActiveEditorState) {
     for (const [index, example] of editor.draftExamples.entries()) {
-      const blank = !example.scenario.trim() ? { field: "scenario", label: "a scenario" }
-        : !example.input_summary.trim() ? { field: "input_summary", label: "an input" }
-        : !example.expected_outcome.trim() ? { field: "expected_outcome", label: "an expected result" } : null;
+      const blank = !example.scenario.trim()
+        ? { field: "scenario", label: "a scenario" }
+        : !example.input_summary.trim()
+        ? { field: "input_summary", label: "an input" }
+        : !example.expected_outcome.trim()
+        ? { field: "expected_outcome", label: "an expected result" }
+        : null;
       if (blank !== null) return { ...blank, exampleId: example.id, number: index + 1 };
     }
     return null;
   }
 
-  // focusDraftExample locates a bound example field without interpolating its
-  // owner-provided ID into a selector.
   function focusDraftExample(issue: { exampleId: string; field: string }) {
-    Array.from(editorRegionEl.querySelectorAll<HTMLTextAreaElement>("textarea[data-example-id]"))
-      .find((field) => field.dataset.exampleId === issue.exampleId && field.dataset.field === issue.field)?.focus();
+    Array.from(viewEl.querySelectorAll<HTMLTextAreaElement>("textarea[data-example-id]"))
+      .find(
+        (field) =>
+          field.dataset.exampleId === issue.exampleId && field.dataset.field === issue.field
+      )
+      ?.focus();
   }
 
-  // handleConfirmSubmit sends complete answers and examples for the displayed
-  // saved revision after checking that the user filled every required value.
   function handleConfirmSubmit() {
-    if (!activeEditor || editorRequest !== null) {
+    const ed = getActiveEditor();
+    if (!ed || editorRequestsByChangeId.has(ed.card.change_id)) {
       return;
     }
-    if (answersNeedingRevision(activeEditor.card.ambiguities, activeEditor.draftAnswers).length > 0) {
+    if (answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers).length > 0) {
       focusResult("#highbay-confirm-revision-needed");
       return;
     }
-    const unanswered = unansweredQuestions(activeEditor)[0];
+    const unanswered = unansweredQuestions(ed)[0];
     if (unanswered !== undefined) {
-      showFormError("Choose an answer for “" + unanswered.question + "” before confirming.", "input");
+      showFormError(
+        "Choose an answer for “" + unanswered.question + "” before confirming.",
+        "input"
+      );
       focusDraftQuestion(unanswered.id);
       return;
     }
-    const exampleIssue = firstIncompleteExample(activeEditor);
+    const exampleIssue = firstIncompleteExample(ed);
     if (exampleIssue !== null) {
-      showFormError("Enter " + exampleIssue.label + " for example " + exampleIssue.number + ".", "input");
+      showFormError(
+        "Enter " + exampleIssue.label + " for example " + exampleIssue.number + ".",
+        "input"
+      );
       focusDraftExample(exampleIssue);
       return;
     }
-    activeEditor = {
-      ...activeEditor,
+    editorsByChangeId.set(ed.card.change_id, {
+      ...ed,
       formError: null,
-    };
+    });
     statusEl.textContent = "Saving your confirmed answers and examples...";
 
-    const submittedCard = activeEditor.card;
-    const submittedAnswers = { ...activeEditor.draftAnswers };
-    const submittedExamples = activeEditor.draftExamples.map((item) => ({
+    const submittedCard = ed.card;
+    const submittedAnswers = { ...ed.draftAnswers };
+    const submittedExamples = ed.draftExamples.map((item) => ({
       id: item.id,
       scenario: item.scenario,
       input_summary: item.input_summary,
@@ -4806,38 +7292,44 @@ export function bootstrapViewsPage() {
       },
       submittedCard.change_id,
       (updatedCard) => {
-        mountChangeCard(updatedCard, null, nextPriorCard(activeEditor, updatedCard));
+        const currentEd = editorsByChangeId.get(submittedCard.change_id) ?? null;
+        mountChangeCard(
+          updatedCard,
+          null,
+          nextPriorCard(currentEd, updatedCard),
+          "agree"
+        );
         focusResult("#highbay-cp1-editor");
       },
-      (message) => {
+      (message, failure) => {
         showFormError(message);
         focusResult("#highbay-confirm-error");
+        if (failure.status === 0) {
+          refreshOpenCard(submittedCard.change_id);
+        }
       }
     );
   }
 
-  // handleAdopt confirms the waiting proposal with the user's answers and its
-  // examples: the proposal becomes the agreed revision and the earlier agreed
-  // revision is shown as the prior one. Unsaved edits made on the earlier
-  // agreed revision are kept as preserved lines, as switching to an incoming
-  // revision keeps them. A refused adoption, such as one the guide's newer
-  // proposal overtook, reads the change again.
+  // handleAdopt confirms the waiting proposal and subtracts fields already
+  // matching adopted.answers / adopted.examples before snapshotUnsavedDraft.
   function handleAdopt() {
-    if (!activeEditor || editorRequest !== null) {
+    const ed = getActiveEditor();
+    if (!ed || editorRequestsByChangeId.has(ed.card.change_id)) {
       return;
     }
-    const card = activeEditor.card;
+    const card = ed.card;
     const proposal = card.proposed_revision;
     if (proposal === undefined) {
       return;
     }
-    if (answersNeedingRevision(proposal.ambiguities, activeEditor.proposalAnswers).length > 0) {
+    if (answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers).length > 0) {
       focusResult("#highbay-proposal-revision-needed");
       return;
     }
     const answers: Record<string, string> = {};
     for (const question of proposal.ambiguities ?? []) {
-      answers[question.id] = activeEditor.proposalAnswers[question.id];
+      answers[question.id] = ed.proposalAnswers[question.id];
     }
     statusEl.textContent = "Adopting the proposed revision...";
     callEditorServer(
@@ -4850,8 +7342,9 @@ export function bootstrapViewsPage() {
       },
       card.change_id,
       (adopted) => {
-        const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
-        mountChangeCard(adopted, preserved, nextPriorCard(activeEditor, adopted));
+        const currentEd = editorsByChangeId.get(card.change_id) ?? null;
+        const preserved = currentEd ? snapshotUnsavedDraft(currentEd, adopted) : null;
+        mountChangeCard(adopted, preserved, nextPriorCard(currentEd, adopted), "agree");
         statusEl.textContent = "Adopted the proposed revision; it is now the agreed revision.";
         focusResult("#highbay-cp1-editor");
       },
@@ -4861,13 +7354,12 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // handleDecline removes the waiting proposal; the agreed revision and the
-  // user's drafts on it stay as they are.
   function handleDecline() {
-    if (!activeEditor || editorRequest !== null) {
+    const ed = getActiveEditor();
+    if (!ed || editorRequestsByChangeId.has(ed.card.change_id)) {
       return;
     }
-    const card = activeEditor.card;
+    const card = ed.card;
     const proposal = card.proposed_revision;
     if (proposal === undefined) {
       return;
@@ -4878,12 +7370,24 @@ export function bootstrapViewsPage() {
       { change_id: card.change_id, request_revision: proposal.request_revision },
       card.change_id,
       (declined) => {
-        if (activeEditor && activeEditor.card.request_revision === declined.request_revision) {
-          activeEditor = { ...activeEditor, card: declined, proposalAnswers: {}, proposalError: null };
+        const currentEd = editorsByChangeId.get(card.change_id);
+        if (currentEd && currentEd.card.request_revision === declined.request_revision) {
+          editorsByChangeId.set(card.change_id, {
+            ...currentEd,
+            card: declined,
+            proposalAnswers: {},
+            proposalError: null,
+          });
         } else {
-          mountChangeCard(declined, null, nextPriorCard(activeEditor, declined));
+          mountChangeCard(
+            declined,
+            null,
+            nextPriorCard(currentEd ?? null, declined),
+            "agree"
+          );
         }
-        statusEl.textContent = "Declined the proposed revision; the agreed revision stays in force.";
+        statusEl.textContent =
+          "Declined the proposed revision; the agreed revision stays in force.";
         syncAllRegions();
         focusResult("#highbay-cp1-editor");
       },
@@ -4893,99 +7397,122 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // failProposal shows a refused adopt or decline beside the proposal and,
-  // when the change moved on meanwhile, reads it again.
   function failProposal(message: string, failure: Failure, changeId: string) {
-    if (activeEditor) {
-      activeEditor = { ...activeEditor, proposalError: message };
+    const currentEd = editorsByChangeId.get(changeId);
+    if (currentEd) {
+      editorsByChangeId.set(changeId, { ...currentEd, proposalError: message });
     }
     statusEl.textContent = "The proposed revision was not changed.";
     syncAllRegions();
     focusResult("#highbay-proposal-error");
-    if (failure.status === 409) {
+    if (failure.status === 0 || failure.status === 409) {
       refreshOpenCard(changeId);
     }
   }
 
-  // handleApprove submits the selected owner's available observation, bound to
-  // its exact run. Agreement/test/build admission is never recomputed here.
   function handleApprove(run: VerificationStatusResult) {
     const current = runsById.get(run.run_id);
     const review = displayedApprovalReview();
-    if (current === undefined || current.run_id !== selectedRunId || editorRequest !== null ||
-        !approvalReviewFresh(current) || review?.approval.state !== "available" ||
-        current.state.type !== "completed") return;
+    if (
+      current === undefined ||
+      current.run_id !== selectedRunId ||
+      editorRequestsByChangeId.has(current.change_id) ||
+      !approvalReviewFresh(current) ||
+      review?.approval.state !== "available" ||
+      current.state.type !== "completed"
+    ) {
+      return;
+    }
     const report = current.state.value.report;
     approveErrors.delete(current.run_id);
     statusEl.textContent = "Recording approval of this result…";
-    callEditorServer("approve_merge", {
-      change_id: current.change_id, request_revision: current.request_revision,
-      candidate_commit: current.candidate_commit, report_digest: report.report_digest,
-    }, current.change_id, (approved) => {
-      // Preserve unrelated editors and their drafts; a saved approval is an
-      // owner fact, not permission to mount another card over the user's work.
-      if (activeEditor?.card.change_id === approved.change_id) receiveLatestCard(approved);
-      if (selectedReview?.runId === current.run_id && approved.approval !== undefined) {
-        selectedReview = { ...selectedReview, review: {
-          ...selectedReview.review, approval: { ...approved.approval, state: "recorded" },
-        } };
-      }
-      statusEl.textContent = "Approval recorded. Highbay did not merge or deploy anything.";
-      syncAllRegions();
-      if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) focusResult("#highbay-cp5-approval");
-    }, (message, failure) => {
-      approveErrors.set(current.run_id, message);
-      if (failure.status === 501) {
-        approvalUnavailable = message;
-        runObservationGeneration.delete(current.run_id);
-        if (selectedReview?.runId === current.run_id) {
-          selectedReview = { ...selectedReview, review: {
-            ...selectedReview.review, approval: { state: "blocked", reason: message },
-          } };
+    callEditorServer(
+      "approve_merge",
+      {
+        change_id: current.change_id,
+        request_revision: current.request_revision,
+        candidate_commit: current.candidate_commit,
+        report_digest: report.report_digest,
+      },
+      current.change_id,
+      (approved) => {
+        if (editorsByChangeId.has(approved.change_id)) {
+          receiveLatestCard(approved);
         }
+        const existingReview = reviewsByRunId.get(current.run_id);
+        if (existingReview !== undefined && approved.approval !== undefined) {
+          reviewsByRunId.set(current.run_id, {
+            ...existingReview,
+            review: {
+              ...existingReview.review,
+              approval: { ...approved.approval, state: "recorded" },
+            },
+          });
+        }
+        statusEl.textContent = "Approval recorded. Highbay did not merge or deploy anything.";
+        syncAllRegions();
+        if (
+          currentView.kind === "change" &&
+          currentView.stage === "approve" &&
+          selectedRunId === current.run_id
+        ) {
+          focusResult("#highbay-cp5-approval");
+        }
+      },
+      (message, failure) => {
+        approveErrors.set(current.run_id, message);
+        if (failure.status === 501) {
+          approvalUnavailable = message;
+          runObservationGeneration.delete(current.run_id);
+          const existingReview = reviewsByRunId.get(current.run_id);
+          if (existingReview !== undefined) {
+            reviewsByRunId.set(current.run_id, {
+              ...existingReview,
+              review: {
+                ...existingReview.review,
+                approval: { state: "blocked", reason: message },
+              },
+            });
+          }
+        }
+        statusEl.textContent = "Approval was not recorded.";
+        syncAllRegions();
+        if (
+          currentView.kind === "change" &&
+          currentView.stage === "approve" &&
+          selectedRunId === current.run_id
+        ) {
+          if (failure.status !== 501) readApprovalReview(current.run_id, current.change_id);
+          focusResult("#highbay-cp5-approve-error");
+        }
+        if (failure.status === 409) refreshOpenCard(current.change_id);
       }
-      statusEl.textContent = "Approval was not recorded.";
-      syncAllRegions();
-      if (activeResult?.kind === "cp5-approval" && selectedRunId === current.run_id) {
-        if (failure.status !== 501) readApprovalReview(current.run_id, current.change_id);
-        focusResult("#highbay-cp5-approve-error");
-      }
-      if (failure.status === 409) refreshOpenCard(current.change_id);
-    });
+    );
   }
 
-  // handleDiscardDraft restores saved values on the retained card and closes
-  // the split-screen editor when another stage is displayed beside it.
   function handleDiscardDraft() {
-    if (!activeEditor || editorRequest !== null) {
+    const ed = getActiveEditor();
+    if (!ed || editorRequestsByChangeId.has(ed.card.change_id)) {
       return;
     }
-    const savedCard = activeEditor.card;
-    if (activeResult && activeResult.kind !== "cp1-incoming-card") {
-      activeEditor = {
-        card: savedCard,
-        priorCard: activeEditor.priorCard,
-        incomingCard: activeEditor.incomingCard,
-        ...editorDraftFrom(savedCard),
-        preservedDraft: null,
-        formError: null,
-      };
-      editorOpen = false;
-      rootEl.dataset.state = activeResult.kind;
-      syncAllRegions();
-      return;
-    }
-    mountChangeCard(savedCard, null, activeEditor.priorCard);
+    const savedCard = ed.card;
+    editorsByChangeId.set(savedCard.change_id, {
+      card: savedCard,
+      priorCard: ed.priorCard,
+      incomingCard: ed.incomingCard,
+      ...editorDraftFrom(savedCard),
+      preservedDraft: null,
+      formError: null,
+    });
+    syncAllRegions();
   }
 
-  // handleLoadLatestCard refreshes saved values and approval through get_change.
-  // The same revision keeps editable drafts; a different revision preserves
-  // their text for reconciliation instead of applying it to changed examples.
   function handleLoadLatestCard() {
-    if (!activeEditor || editorRequest !== null) {
+    const ed = getActiveEditor();
+    if (!ed || editorRequestsByChangeId.has(ed.card.change_id)) {
       return;
     }
-    const changeId = activeEditor.card.change_id;
+    const changeId = ed.card.change_id;
     listRequestErrors.delete(changeId);
     statusEl.textContent = "Loading the latest saved Change Card...";
     callEditorServer(
@@ -5000,19 +7527,13 @@ export function bootstrapViewsPage() {
           return;
         }
         cardLoadErrors.delete(changeId);
-        if (
-          activeEditor &&
-          latestCard.change_id === activeEditor.card.change_id &&
-          latestCard.request_revision === activeEditor.card.request_revision
-        ) {
-          activeEditor = {
-            ...activeEditor,
+        const currentEd = editorsByChangeId.get(changeId);
+        if (currentEd && latestCard.request_revision === currentEd.card.request_revision) {
+          editorsByChangeId.set(changeId, {
+            ...currentEd,
             card: latestCard,
             formError: null,
-          };
-          if (!activeResult && activeEditor.incomingCard) {
-            activeResult = { kind: "cp1-incoming-card" };
-          }
+          });
           statusEl.textContent = latestCard.approval
             ? "Showing the recorded approval for these inputs."
             : latestCard.unverified_approval
@@ -5021,9 +7542,9 @@ export function bootstrapViewsPage() {
           refreshVerificationObservations(changeId);
           return;
         }
-        const preserved = activeEditor ? snapshotUnsavedDraft(activeEditor) : null;
-        const prior = nextPriorCard(activeEditor, latestCard);
-        mountChangeCard(latestCard, preserved, prior);
+        const preserved = currentEd ? snapshotUnsavedDraft(currentEd) : null;
+        const prior = nextPriorCard(currentEd ?? null, latestCard);
+        mountChangeCard(latestCard, preserved, prior, "agree");
       },
       (message) => {
         const error = "Could not load the current card and approval: " + message;
@@ -5033,28 +7554,26 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // mountChangeCard starts an editor from a received saved card and optionally
-  // shows draft text or the immediately prior saved revision. Any distinct
-  // incomingCard that arrived while an editor request was in flight remains.
   function mountChangeCard(
     card: ChangeCardResult,
     preservedDraft: PreservedDraft | null,
-    priorCard: ChangeCardResult | null = null
+    priorCard: ChangeCardResult | null = null,
+    explicitStage?: ChangeStageName
   ) {
-    if (activeEditor?.card.change_id !== card.change_id ||
-        activeEditor.card.request_revision !== card.request_revision) verificationGeneration++;
+    const existing = editorsByChangeId.get(card.change_id);
+    if (!existing || existing.card.request_revision !== card.request_revision) {
+      verificationGeneration++;
+    }
     cardLoadErrors.delete(card.change_id);
-    const existingIncoming = activeEditor ? activeEditor.incomingCard : null;
+    const existingIncoming = existing?.incomingCard ?? null;
     const keepIncoming =
       existingIncoming !== null &&
-      (existingIncoming.change_id !== card.change_id ||
-        existingIncoming.request_revision !== card.request_revision)
+      existingIncoming.change_id === card.change_id &&
+      existingIncoming.request_revision !== card.request_revision
         ? existingIncoming
         : null;
-    if (!keepIncoming && activeResult?.kind === "cp1-incoming-card") {
-      activeResult = null;
-    }
-    activeEditor = {
+
+    const nextEd: ActiveEditorState = {
       card,
       priorCard,
       incomingCard: keepIncoming,
@@ -5062,25 +7581,41 @@ export function bootstrapViewsPage() {
       preservedDraft,
       formError: null,
     };
-    editorOpen = true;
-    editorStage = card.status === "confirmed" ? "build" : "agree";
+    editorsByChangeId.set(card.change_id, nextEd);
+    activeChangeId = card.change_id;
+    const stage: ChangeStageName =
+      explicitStage ??
+      (card.status === "confirmed" && card.proposed_revision === undefined ? "build" : "agree");
+    currentView = { kind: "change", changeId: card.change_id, stage };
     statusEl.textContent =
       card.proposed_revision !== undefined
         ? "Review the proposed revision, then choose whether to adopt or decline it."
-      : card.status === "confirmed"
+        : card.status === "confirmed"
         ? card.approval
           ? "Showing the recorded approval for these inputs."
           : card.unverified_approval
           ? "Showing the saved approval record (current promotion inputs could not be verified)."
-          : "Review the build and its next step. The agreed details stay available below."
+          : stage === "build"
+          ? "Review the build and its next step. The agreed details stay available below."
+          : "Review the current agreement."
         : "Review the open questions and examples below, then confirm your intent.";
-    rootEl.dataset.state = "cp1-change-card";
     readBuild(card.change_id);
     refreshVerificationObservations(card.change_id);
+    syncHistoryState("replace");
     syncAllRegions();
   }
 
-  // The tab's visibility pauses the waiting read; a hidden tab asks nothing.
+  // Re-sync regions cleanly when crossing the 1080px responsive breakpoint.
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    const narrowMql = window.matchMedia("(max-width: 1079px)");
+    narrowMql.addEventListener("change", () => {
+      if (!narrowMql.matches) {
+        mobileSurface = "stage";
+      }
+      syncAllRegions();
+    });
+  }
+
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       verificationGeneration++;
@@ -5091,11 +7626,12 @@ export function bootstrapViewsPage() {
       return;
     }
     probeUiBuildAfterReconnect();
-    if (activeEditor !== null) refreshVerificationObservations(activeEditor.card.change_id);
+    if (activeChangeId !== null) {
+      refreshVerificationObservations(activeChangeId);
+    }
     startWaiting();
   });
 
-  // Leaving the page loses edits the server never saved, so the browser asks first.
   window.addEventListener("beforeunload", (event) => {
     if (hasUnsavedPageInput()) {
       event.preventDefault();
@@ -5103,8 +7639,26 @@ export function bootstrapViewsPage() {
     }
   });
 
-  // Pasting another one-use link in this tab must run the same first-load
-  // exchange, but never discard unsaved input or leave a deferred link in history.
+  // Navigating to /views#link=<fresh> fires popstate before hashchange:
+  // return immediately whenever a #link= fragment is present or session !== active,
+  // and never call pushState inside popstate.
+  window.addEventListener("popstate", (event) => {
+    if (readLinkFromFragment(window.location.hash) !== null) {
+      return;
+    }
+    if (sessionState !== "active") {
+      if (window.location.hash === "") {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      return;
+    }
+    if (isHistoryViewState(event.state)) {
+      applyHistoryViewState(event.state);
+    }
+  });
+
+  // Defer #link= when unsaved page input exists, preserving currentHistoryState(),
+  // active focus, and text selection.
   window.addEventListener("hashchange", () => {
     const fragment = window.location.hash;
     if (readLinkFromFragment(fragment) === null) return;
@@ -5112,9 +7666,14 @@ export function bootstrapViewsPage() {
       window.location.reload();
       return;
     }
-    history.replaceState(null, "", window.location.pathname + window.location.search);
+    window.history.replaceState(
+      currentHistoryState(),
+      "",
+      window.location.pathname + window.location.search
+    );
     pendingLinkFragment = fragment;
-    statusEl.textContent = "You opened a new Highbay link. Save or discard your edits, or wait for the save to finish, then choose Open link.";
+    statusEl.textContent =
+      "You opened a new Highbay link. Save or discard your edits, or wait for the save to finish, then choose Open link.";
     syncNoticeRegion();
     document.getElementById("highbay-pending-link")?.scrollIntoView({ block: "nearest" });
   });

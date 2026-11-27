@@ -569,9 +569,13 @@ async function phoneScenario(input, facts, views) {
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
   const takingState = input.taking_state === "replay" ? "merged" : input.taking_state === "dropped_stale" ? "dropped" : input.taking_state;
+  const navReady = await until(views, "document.getElementById('highbay-nav-build') !== null || document.querySelector('#highbay-build-taking[data-state=" + takingState + "]') !== null");
+  if (!navReady.timed_out) {
+    await evaluate(views, "if (!document.getElementById('highbay-build-taking')) document.getElementById('highbay-nav-build')?.click(), true");
+  }
   const ready = await until(views, "document.querySelector('#highbay-build-taking[data-state=" + takingState + "]') !== null");
   if (ready.timed_out) {
-    const state = await evaluate(views, "({ state: document.getElementById('highbay-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
+    const state = await evaluate(views, "({ state: document.getElementById('highbay-checkpoint-view')?.dataset.stage, text: document.body.innerText.slice(0, 6000) })");
     throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
       JSON.stringify(views.requests.filter(to(input.origin, "GET", "/changes/taking-layout/build")).map((request) => ({ status: request.status, failure: request.failure }))));
   }
@@ -1167,6 +1171,7 @@ async function onboardingScenario(input, views) {
 // keyboard focus escape, and one-click server-owned role Restart) in Chromium.
 async function workspaceScenario(input, facts, views) {
   await views.dt.send("Page.bringToFront", {}, views.sessionId);
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, views.sessionId);
   const bannerShown = await until(
     views,
     "document.getElementById('highbay-update-banner') !== null && document.getElementById('highbay-update-install') !== null && document.getElementById('highbay-composer-input') !== null"
@@ -1279,6 +1284,62 @@ async function workspaceScenario(input, facts, views) {
   await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
   const closedByPlainEscape = await until(views, "document.getElementById('highbay-terminal-drawer') === null");
 
+  // Open waiting Guide terminal from ConversationRail: attaches in passive observe=true
+  // mode (zero input or resize frames), then promotes to interactive on #highbay-terminal-interactive.
+  await evaluate(views, "document.getElementById('highbay-rail-terminal-guide')?.click(), true");
+  const guideObserveConnected = await until(
+    views,
+    "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'guide' && document.getElementById('highbay-terminal-drawer')?.dataset.observe === 'true' && document.getElementById('highbay-terminal-drawer')?.dataset.status === 'connected' && document.getElementById('highbay-terminal-interactive') !== null"
+  );
+  if (guideObserveConnected.timed_out) {
+    throw new Error("Guide terminal did not connect in passive observe=true mode");
+  }
+  await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
+  await views.dt.send("Input.insertText", { text: "z" }, views.sessionId);
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 820, deviceScaleFactor: 1, mobile: false }, views.sessionId);
+  await evaluate(views, "new Promise((r) => setTimeout(r, 80))");
+
+  await evaluate(views, "document.getElementById('highbay-terminal-interactive').click(), true");
+  const guideInteractiveConnected = await until(
+    views,
+    "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'guide' && document.getElementById('highbay-terminal-drawer')?.dataset.observe === 'false' && document.getElementById('highbay-terminal-drawer')?.dataset.status === 'connected'"
+  );
+  if (guideInteractiveConnected.timed_out) {
+    throw new Error("Type in terminal did not reconnect Guide interactively");
+  }
+  await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
+  await views.dt.send("Input.insertText", { text: "g" }, views.sessionId);
+  await evaluate(views, "new Promise((r) => setTimeout(r, 80))");
+  await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
+  await until(views, "document.getElementById('highbay-terminal-drawer') === null");
+
+  // Verify zero horizontal overflow and <= 1 primary action across 320, 375, 768, 1024, and 1280 px viewports.
+  let viewportsClean = true;
+  for (const width of [320, 375, 768, 1024, 1280]) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 }, views.sessionId);
+    await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+    const ok = await evaluate(
+      views,
+      "document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
+    );
+    if (!ok) {
+      viewportsClean = false;
+    }
+    if (width === 375) {
+      await evaluate(views, "document.getElementById('highbay-mobile-conversation-toggle')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const sheetOk = await evaluate(
+        views,
+        "document.getElementById('highbay-conversation-panel') !== null && document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
+      );
+      if (!sheetOk) {
+        viewportsClean = false;
+      }
+      await evaluate(views, "document.getElementById('highbay-conversation-toggle')?.click(), true");
+    }
+  }
+  await views.dt.send("Emulation.clearDeviceMetricsOverride", {}, views.sessionId);
+
   facts.workspace = {
     release_href: releaseHref,
     update_ready: !updateReady.timed_out,
@@ -1290,6 +1351,9 @@ async function workspaceScenario(input, facts, views) {
     builder_kept_across_guide_restart: builderKeptAcrossGuideRestart,
     terminal_restarted: !restarted.timed_out,
     plain_escape_outside_closed: !closedByPlainEscape.timed_out,
+    guide_observe_connected: !guideObserveConnected.timed_out,
+    guide_interactive_connected: !guideInteractiveConnected.timed_out,
+    viewports_clean: viewportsClean,
     browser_cookies: (await views.dt.send("Storage.getCookies", {})).cookies.length,
   };
 }
@@ -1521,7 +1585,7 @@ async function main(input, facts) {
     await reload(views);
     const liveReloaded = await until(
       views,
-      "document.querySelectorAll('#highbay-change-list [data-change-id]').length >= " + input.change_ids.length
+      "(document.getElementById('highbay-live-target') !== null && document.getElementById('highbay-live-target').dataset.state !== 'unread') || document.querySelectorAll('#highbay-change-list [data-change-id]').length >= " + input.change_ids.length
     );
     await settle(views, to(input.origin, "GET", "/project/browser-session"), 1);
     const liveRequests = views.requests.slice(beforeLiveReload).filter(server).map((r) => ({ ...r }));

@@ -1,5 +1,6 @@
 // team.tsx presents the server's registered team facts, terminal attachment
-// controls, and role lifecycle actions.
+// controls, and role lifecycle actions while honoring page-wide primary-action
+// arbitration so at most one control on the page carries data-primary-action="true".
 
 import React, { useCallback, useLayoutEffect, useRef } from "react";
 import type { ProjectTeam, TeamRoleState, TeamSnapshot } from "../types";
@@ -21,6 +22,8 @@ export interface TeamStageProps {
   error: TeamFactsError | null;
   starting: boolean;
   canStartWorkers: boolean;
+  primaryStart: boolean;
+  primaryRefresh: boolean;
   agentPicker: React.ReactNode;
   agentsReady: boolean;
   disabled: boolean;
@@ -41,12 +44,13 @@ export interface TeamStageProps {
 }
 
 // GlobalTeamAttentionProps uses the retained snapshot to surface roles needing
-// user input on every stage.
+// user input on every stage, marking only primaryRole as variant="primary".
 export interface GlobalTeamAttentionProps {
   snapshot: TeamSnapshot | null;
   lastRead: boolean;
   disabled: boolean;
   openTerminalRole: Role | null;
+  primaryRole: Role | null;
   onOpenTerminal: (role: Role, invoker: HTMLElement | null) => void;
   onMessageRole: (role: Role) => void;
   onFocusedControlRemoved: () => void;
@@ -105,6 +109,8 @@ export function TeamStageView({
   error,
   starting,
   canStartWorkers,
+  primaryStart,
+  primaryRefresh,
   agentPicker,
   agentsReady,
   disabled,
@@ -123,14 +129,6 @@ export function TeamStageView({
   onMessageRole,
   onFocusedControlRemoved,
 }: TeamStageProps) {
-  const needsStart =
-    error === null &&
-    snapshot !== null &&
-    snapshot.roles.some(
-      (role) => role.role !== "guide" && (role.state === "not_started" || role.state === "ended")
-    ) &&
-    !snapshot.roles.some((role) => role.state === "needs_you");
-
   return (
     <Card id="highbay-team-stage" className="highbay-card" role="region" aria-labelledby="highbay-team-title">
       <div className="highbay-region-header">
@@ -141,7 +139,7 @@ export function TeamStageView({
           {canStartWorkers || starting ? (
             <Button
               id="highbay-team-start"
-              variant={needsStart ? "primary" : "default"}
+              variant={primaryStart ? "primary" : "default"}
               disabled={disabled || starting || !agentsReady}
               aria-busy={starting}
               onClick={onStartWorkers}
@@ -151,7 +149,7 @@ export function TeamStageView({
           ) : null}
           <Button
             id="highbay-team-refresh"
-            variant={error !== null ? "primary" : "default"}
+            variant={primaryRefresh ? "primary" : "default"}
             disabled={disabled || loading}
             onClick={onRefresh}
           >
@@ -234,6 +232,7 @@ export function TeamStageView({
                           role={role}
                           disabled={disabled}
                           active={openTerminalRole === role.role}
+                          primary={false}
                           global={false}
                           onOpenTerminal={onOpenTerminal}
                           onFocusedControlRemoved={onFocusedControlRemoved}
@@ -311,12 +310,13 @@ export function TeamStageView({
 }
 
 // GlobalTeamAttention renders one line per needs_you role with direct terminal
-// or conversation controls.
+// or conversation controls. Only primaryRole receives variant="primary".
 export function GlobalTeamAttention({
   snapshot,
   lastRead,
   disabled,
   openTerminalRole,
+  primaryRole,
   onOpenTerminal,
   onMessageRole,
   onFocusedControlRemoved,
@@ -331,33 +331,37 @@ export function GlobalTeamAttention({
           still wait for assignments through Highbay.
         </p>
       ) : null}
-      {roles.map((role) => (
-        <div key={role.role} className="highbay-field-row" id={"highbay-team-attention-" + role.role}>
-          <span className="highbay-live-wrap">
-            {lastRead ? "Last read: " : ""}
-            {teamAttentionText(role)}
-          </span>
-          {role.has_terminal ? (
-            <TerminalActionButton
-              role={role}
-              disabled={disabled}
-              active={openTerminalRole === role.role}
-              global={true}
-              onOpenTerminal={onOpenTerminal}
-              onFocusedControlRemoved={onFocusedControlRemoved}
-            />
-          ) : (
-            <Button
-              id={"highbay-team-attention-message-" + role.role}
-              variant="primary"
-              disabled={disabled}
-              onClick={() => onMessageRole(role.role)}
-            >
-              Message {shortRoleLabels[role.role]}
-            </Button>
-          )}
-        </div>
-      ))}
+      {roles.map((role) => {
+        const isPrimary = primaryRole === role.role;
+        return (
+          <div key={role.role} className="highbay-field-row" id={"highbay-team-attention-" + role.role}>
+            <span className="highbay-live-wrap">
+              {lastRead ? "Last read: " : ""}
+              {teamAttentionText(role)}
+            </span>
+            {role.has_terminal ? (
+              <TerminalActionButton
+                role={role}
+                disabled={disabled}
+                active={openTerminalRole === role.role}
+                primary={isPrimary}
+                global={true}
+                onOpenTerminal={onOpenTerminal}
+                onFocusedControlRemoved={onFocusedControlRemoved}
+              />
+            ) : (
+              <Button
+                id={"highbay-team-attention-message-" + role.role}
+                variant={isPrimary ? "primary" : "secondary"}
+                disabled={disabled}
+                onClick={() => onMessageRole(role.role)}
+              >
+                Message {shortRoleLabels[role.role]}
+              </Button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -368,6 +372,7 @@ function TerminalActionButton({
   role,
   disabled,
   active,
+  primary,
   global,
   onOpenTerminal,
   onFocusedControlRemoved,
@@ -375,6 +380,7 @@ function TerminalActionButton({
   role: TeamRoleState;
   disabled: boolean;
   active: boolean;
+  primary: boolean;
   global: boolean;
   onOpenTerminal: (role: Role, invoker: HTMLElement | null) => void;
   onFocusedControlRemoved: () => void;
@@ -400,12 +406,18 @@ function TerminalActionButton({
     <span ref={attachControl}>
       <Button
         id={(global ? "highbay-team-attention-terminal-" : "highbay-team-terminal-") + role.role}
-        variant={role.state === "needs_you" ? "primary" : "default"}
+        variant={primary ? "primary" : role.state === "needs_you" ? "secondary" : "default"}
         aria-pressed={active}
         disabled={disabled}
         onClick={(event) => onOpenTerminal(role.role, event.currentTarget)}
       >
-        {active ? label + " terminal open" : "Open " + label + " terminal"}
+        {active
+          ? label + " terminal open"
+          : role.state === "needs_you"
+          ? "Open " + label + " terminal"
+          : global
+          ? "Open " + label + " terminal"
+          : "Watch " + label + " terminal"}
       </Button>
     </span>
   );

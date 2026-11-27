@@ -44,6 +44,9 @@ type (
 		BuilderKeptAcrossGuideRestart bool   `json:"builder_kept_across_guide_restart"`
 		TerminalRestarted             bool   `json:"terminal_restarted"`
 		PlainEscapeOutsideClosed      bool   `json:"plain_escape_outside_closed"`
+		GuideObserveConnected         bool   `json:"guide_observe_connected"`
+		GuideInteractiveConnected     bool   `json:"guide_interactive_connected"`
+		ViewportsClean                bool   `json:"viewports_clean"`
 		BrowserCookies                int    `json:"browser_cookies"`
 	}
 
@@ -60,6 +63,10 @@ type (
 		restartedRole []string
 		tickets       map[string]string
 		ticketCounts  map[string]int
+		observeModes  map[string][]bool
+		observeInputs int
+		observeResize int
+		guideInputs   [][]byte
 		attachCount   atomic.Int32
 		credits       atomic.Int64
 		inputs        [][]byte
@@ -89,6 +96,7 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 		uiBuild:      controlplane.ViewsPageScriptSHA256,
 		tickets:      map[string]string{},
 		ticketCounts: map[string]int{},
+		observeModes: map[string][]bool{},
 	}
 
 	appMux := http.NewServeMux()
@@ -227,6 +235,9 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	assert.True(t, facts.Workspace.BuilderKeptAcrossGuideRestart, "restarting guide disconnected the open builder TerminalDrawer")
 	assert.True(t, facts.Workspace.TerminalRestarted, "Restart button did not restart role and reconnect TerminalDrawer")
 	assert.True(t, facts.Workspace.PlainEscapeOutsideClosed, "plain Escape on a drawer header control outside xterm did not close TerminalDrawer")
+	assert.True(t, facts.Workspace.GuideObserveConnected, "waiting Guide terminal did not open in passive observe=true mode")
+	assert.True(t, facts.Workspace.GuideInteractiveConnected, "Type in terminal did not reconnect Guide interactively with observe=false")
+	assert.True(t, facts.Workspace.ViewportsClean, "responsive viewports (320..1280px) overflowed horizontally or rendered >1 primary action")
 	assert.Zero(t, facts.Workspace.BrowserCookies, "browser cookie store must remain empty")
 
 	assert.GreaterOrEqual(t, fixture.credits.Load(), int64(len("Allow tool? [y/N] ")), "xterm did not replenish stream byte credit")
@@ -237,13 +248,21 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	for role, count := range fixture.ticketCounts {
 		ticketCounts[role] = count
 	}
+	guideModes := append([]bool{}, fixture.observeModes["guide"]...)
+	observeInputs := fixture.observeInputs
+	observeResize := fixture.observeResize
+	guideInputs := append([][]byte{}, fixture.guideInputs...)
 	sentCount := len(fixture.sentPayloads)
 	inputs := append([][]byte{}, fixture.inputs...)
 	fixture.mu.Unlock()
 
 	assert.Equal(t, "v0.5.0", applied)
 	assert.Equal(t, []string{"guide", "builder"}, restartedRoles)
-	assert.Equal(t, map[string]int{"builder": 2}, ticketCounts, "guide restart must not request another builder terminal ticket")
+	assert.Equal(t, map[string]int{"builder": 2, "guide": 2}, ticketCounts, "builder and guide each mint 2 tickets (initial + restart / Type in terminal)")
+	assert.Equal(t, []bool{true, false}, guideModes, "Guide terminal must attach passive observe=true first, then observe=false after Type in terminal")
+	assert.Zero(t, observeInputs, "passive observe=true terminal sent input frames")
+	assert.Zero(t, observeResize, "passive observe=true terminal sent resize frames")
+	assert.NotEmpty(t, guideInputs, "interactive Guide terminal did not deliver keystrokes after Type in terminal")
 	assert.Equal(t, 1, sentCount)
 	assert.NotEmpty(t, inputs, "keystrokes typed in xterm were not delivered over WebSocket")
 	var flatInputs []byte
@@ -366,6 +385,9 @@ func (f *workspaceBrowserFixture) AttachRoleTerminal(
 	f.mu.Lock()
 	wantRole, ok := f.tickets[p.Ticket]
 	delete(f.tickets, p.Ticket)
+	if ok && wantRole == p.Role {
+		f.observeModes[p.Role] = append(f.observeModes[p.Role], p.Observe)
+	}
 	f.mu.Unlock()
 	if !ok || wantRole != p.Role {
 		return genhighbay.MakeUnprocessable(errors.New("invalid or already-consumed terminal ticket"))
@@ -377,7 +399,9 @@ func (f *workspaceBrowserFixture) AttachRoleTerminal(
 	}()
 	attaches := f.attachCount.Add(1)
 	banner := []byte("Allow tool? [y/N] ")
-	if attaches >= 2 {
+	if p.Role == "guide" {
+		banner = []byte("Guide session output\r\n")
+	} else if attaches >= 2 {
 		banner = []byte("Restarted builder session\r\n")
 	}
 	if err := stream.SendWithContext(ctx, &genhighbay.TerminalServerFrame{
@@ -393,9 +417,20 @@ func (f *workspaceBrowserFixture) AttachRoleTerminal(
 		if credit, ok := frame.ClientFrame.AsCredit(); ok {
 			f.credits.Add(int64(credit.Bytes))
 		}
+		if _, ok := frame.ClientFrame.AsResize(); ok && p.Observe {
+			f.mu.Lock()
+			f.observeResize++
+			f.mu.Unlock()
+		}
 		if input, ok := frame.ClientFrame.AsInput(); ok {
 			f.mu.Lock()
-			f.inputs = append(f.inputs, append([]byte{}, input.Data...))
+			if p.Observe {
+				f.observeInputs++
+			} else if p.Role == "guide" {
+				f.guideInputs = append(f.guideInputs, append([]byte{}, input.Data...))
+			} else {
+				f.inputs = append(f.inputs, append([]byte{}, input.Data...))
+			}
 			f.mu.Unlock()
 		}
 	}

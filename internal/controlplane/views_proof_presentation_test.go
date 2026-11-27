@@ -105,7 +105,7 @@ func TestViewsPageProofPresentsOneSavedVerdict(t *testing.T) {
 				"showCounts": tc.showCounts, "notice": writtenTestsNotice,
 			}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === input.change, "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === input.change, "the change did not open");
 page.$("#highbay-nav-cp4").click();
 await until(() => page.$("#highbay-result-view").dataset.runId === input.run.run_id, "the saved run did not open");
 expect(page.text("#highbay-cp4-title") === input.heading, "the saved verdict or denominator changed");

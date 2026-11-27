@@ -74,10 +74,19 @@ if (input.read === "held") await control(origin, "hold", { key: "GET " + buildPa
 if (input.read === "failed") await control(origin, "reply", { key: "GET " + buildPath, status: 503,
   body: { name: "unavailable", id: "warning-read", message: "Build read unavailable.", fault: false, temporary: true, timeout: false } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-warning", "the agreed card did not open");
-if (input.read === "held") await until(() => page.$("#highbay-build-loading"), "the build read was not held");
-else if (input.read === "failed") await until(() => page.$("#highbay-build-error"), "the build read did not fail");
-else await until(() => page.$("#highbay-build-section")?.dataset.state === (input.build ? "started" : "not_started") && !page.$("#highbay-build-loading"), "the saved build read did not settle");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-warning", "the agreed card did not open");
+if (!input.adopt) {
+  if (input.read === "held") await until(() => page.$("#highbay-build-loading"), "the build read was not held");
+  else if (input.read === "failed") await until(() => page.$("#highbay-build-error"), "the build read did not fail");
+  else await until(() => page.$("#highbay-build-section")?.dataset.state === (input.build ? "started" : "not_started") && !page.$("#highbay-build-loading"), "the saved build read did not settle");
+  page.$("#highbay-nav-cp1").click();
+  await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-warning", "Agree did not open");
+  page.$("#highbay-refine-agreement").open = true;
+} else {
+  if (input.read === "held") await until(() => page.sent("GET", buildPath).length === 1 && page.sent("GET", buildPath)[0].status === undefined, "the build read was not held");
+  else if (input.read === "failed") await until(() => page.sent("GET", buildPath).some((r) => r.status === 503), "the build read did not fail");
+  else await until(() => page.sent("GET", buildPath).some((r) => r.status === 200), "the saved build read did not settle");
+}
 
 let previousSaves = 0;
 let warningId = "highbay-proposal-build-consequence";
@@ -117,6 +126,7 @@ page.$("#" + actionId).click();
 await until(() => page.$("#highbay-cp1-editor")?.dataset.requestRevision !== input.revision, "the explicit revision action did not save");
 expect(page.sent("POST", "/changes/confirm").length === previousSaves + 1 && page.sent("POST", buildPath).length === 0, "the action was repeated or rebuilt automatically");
 if (input.read === "held") await control(origin, "release", { key: "GET " + buildPath });
+page.$("#highbay-nav-build").click();
 if (input.build) await until(() => page.text(".highbay-build-badges").includes("Earlier built agreement " + input.revision.slice(0, 12)),
   "the earlier build did not identify the agreement it built");
 page.close();

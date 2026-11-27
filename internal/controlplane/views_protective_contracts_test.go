@@ -53,8 +53,19 @@ func TestViewsPageTeamInterruptStopRestartChoiceAndMessageContracts(t *testing.T
 	}
 	team.send = func(_ context.Context, p *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error) {
 		if sendFail.Load() {
-			return nil, genhighbay.MakeTeamUnavailable(errors.New("Chorus temporarily unreachable."))
+			return nil, genhighbay.MakeUnprocessable(errors.New("Guide client is not supported."))
 		}
+		team.mu.Lock()
+		next := team.snapshot
+		roles := make([]*genhighbay.TeamRoleState, len(next.Roles))
+		for i, r := range next.Roles {
+			copied := *r
+			roles[i] = &copied
+		}
+		roles[0].State = "working"
+		next.Roles = roles
+		team.snapshot = next
+		team.mu.Unlock()
 		return fixtureTeamMessage(p.Text), nil
 	}
 
@@ -118,24 +129,24 @@ await control(origin, "act", { key: "restore-options" });
 Array.from(page.$$("#highbay-describe-form button")).find((b) => b.textContent.includes("refresh installed agents")).click();
 await until(() => !page.$("#highbay-describe-submit").disabled, "valid agent options did not enable Describe send");
 
-// (c) Failure preserves draft; success attaches guide_choice and clears draft.
+// (c) Pre-post 422 refusal preserves draft in #highbay-describe-error; success attaches guide_choice + new_change and transitions to receipt.
 await control(origin, "act", { key: "send-fail" });
 page.$("#highbay-describe-submit").click();
 await until(() => page.sent("POST", "/team/messages").length === 1 && page.$("#highbay-describe-error"), "failed send did not surface #highbay-describe-error");
 const firstSent = page.sent("POST", "/team/messages")[0].body;
-expect(firstSent.to === "guide" && Boolean(firstSent.guide_choice?.client) && Boolean(firstSent.guide_choice?.program), "Describe omitted guide_choice when Guide needed startup: " + JSON.stringify(firstSent));
+expect(firstSent.to === "guide" && Boolean(firstSent.guide_choice?.client) && Boolean(firstSent.guide_choice?.program) && firstSent.context?.type === "new_change" && firstSent.context.value?.scope === "separate_card", "Describe omitted guide_choice or new_change context: " + JSON.stringify(firstSent));
 expect(page.$("#highbay-describe-input").value === "Draft an incident triage workflow", "failed Describe send cleared the user's draft");
 
 await control(origin, "act", { key: "send-ok" });
 page.$("#highbay-describe-submit").click();
-await until(() => page.sent("POST", "/team/messages").length === 2 && page.$("#highbay-describe-input").value === "", "successful Describe send did not clear the draft");
+await until(() => page.sent("POST", "/team/messages").length === 2 && page.$("#highbay-draft-receipt"), "successful Describe send did not transition to receipt");
 
 // Seed a running Guide + confirmed Story Change Card to exercise Team controls and Story Ask Guide.
 await control(origin, "act", { key: "guide-running-with-story-card" });
-await until(() => page.$("#highbay-open-change-chg-protect") || page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-protect", "confirmed card did not arrive");
-if (page.$("#highbay-cp1-editor")?.dataset.changeId !== "chg-protect") {
+await until(() => page.$("#highbay-open-change-chg-protect") || page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-protect", "confirmed card did not arrive");
+if (page.$("#highbay-checkpoint-view")?.dataset.changeId !== "chg-protect") {
   page.$("#highbay-open-change-chg-protect").click();
-  await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-protect", "confirmed card did not open");
+  await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-protect", "confirmed card did not open");
 }
 
 // (a) Interrupt refusal -> #highbay-team-action-error, then successful Interrupt and Stop.
@@ -152,12 +163,17 @@ await until(() => page.sent("POST", "/team/roles/builder/interrupt").length === 
 page.$("#highbay-team-stop-builder").click();
 await until(() => page.sent("POST", "/team/roles/builder/stop").length === 1 && page.status().includes("Stopped builder terminal"), "stop_team_role did not run and announce status");
 
-// (b) Restart sends choice ONLY when edited by the user.
-await until(() => page.$("#highbay-team-restart-guide") && !page.$("#highbay-team-restart-guide").disabled, "guide restart button missing");
+// (b) Restart sends choice ONLY when edited by the user (for both guide and worker roles).
+await until(() => page.$("#highbay-team-restart-guide") && !page.$("#highbay-team-restart-guide").disabled && page.$("#highbay-team-restart-builder") && !page.$("#highbay-team-restart-builder").disabled, "restart buttons missing");
 page.$("#highbay-team-restart-guide").click();
 await until(() => page.sent("POST", "/team/roles/guide/restart").length === 1, "guide restart request was not sent");
 const uneditedRestart = page.sent("POST", "/team/roles/guide/restart")[0].body;
-expect(!uneditedRestart || !("choice" in uneditedRestart), "unedited restart sent an explicit choice override: " + JSON.stringify(uneditedRestart));
+expect(!uneditedRestart || !("choice" in uneditedRestart), "unedited guide restart sent an explicit choice override: " + JSON.stringify(uneditedRestart));
+
+page.$("#highbay-team-restart-builder").click();
+await until(() => page.sent("POST", "/team/roles/builder/restart").length === 1, "unedited builder restart request was not sent");
+const uneditedBuilderRestart = page.sent("POST", "/team/roles/builder/restart")[0].body;
+expect(!uneditedBuilderRestart || !("choice" in uneditedBuilderRestart), "unedited builder restart sent an explicit choice override: " + JSON.stringify(uneditedBuilderRestart));
 
 page.$("#highbay-nav-build").click();
 await until(() => page.$("#highbay-build-agents-builder-model"), "Build worker picker did not load");
@@ -165,8 +181,8 @@ setVal(page, page.$("#highbay-build-agents-builder-model"), "custom-builder-mode
 page.$("#highbay-nav-team").click();
 await until(() => page.$("#highbay-team-restart-builder") && !page.$("#highbay-team-restart-builder").disabled, "builder restart button missing");
 page.$("#highbay-team-restart-builder").click();
-await until(() => page.sent("POST", "/team/roles/builder/restart").length === 1, "builder restart request was not sent");
-const editedRestart = page.sent("POST", "/team/roles/builder/restart")[0].body;
+await until(() => page.sent("POST", "/team/roles/builder/restart").length === 2, "edited builder restart request was not sent");
+const editedRestart = page.sent("POST", "/team/roles/builder/restart")[1].body;
 expect(editedRestart?.choice?.model === "custom-builder-model", "edited worker choice was omitted from restart_team_role: " + JSON.stringify(editedRestart));
 
 // (i) Story Ask Guide focuses #highbay-composer-input and sends story_flow context.
@@ -388,8 +404,8 @@ await until(() => page.status().includes("Could not confirm whether the build st
 page.$("#highbay-nav-changes").click();
 await until(() => page.$("#highbay-open-change-chg-merge-a"), "chg-merge-a missing");
 page.$("#highbay-open-change-chg-merge-a").click();
-await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-merge-a" && page.$("#highbay-review-approval"), "chg-merge-a review-approval button did not appear");
-page.$("#highbay-review-approval").click();
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-merge-a" && (page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval")), "chg-merge-a approval did not appear");
+if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
 await until(() => page.$("#highbay-cp5-merge") && !page.$("#highbay-cp5-merge").disabled, "chg-merge-a merge button did not enable");
 
 await control(origin, "reply", { key: "POST /changes/chg-merge-a/merge", status: 200, body: { branch: "main", head_commit: "9".repeat(40) } });
@@ -400,8 +416,8 @@ await until(() => page.$("#highbay-cp5-merge-feedback-pending"), "chg-merge-a me
 page.$("#highbay-nav-changes").click();
 await until(() => page.$("#highbay-open-change-chg-merge-b"), "chg-merge-b missing");
 page.$("#highbay-open-change-chg-merge-b").click();
-await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-merge-b" && page.$("#highbay-review-approval"), "chg-merge-b review-approval button did not appear");
-page.$("#highbay-review-approval").click();
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-merge-b" && (page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval")), "chg-merge-b approval did not appear");
+if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
 await until(() => page.$("#highbay-approval-stage") && page.text("#highbay-approval-stage").includes("Another change is being merged. Wait for that operation to finish."), "concurrent merge block was not shown on chg-merge-b: " + page.text("#highbay-approval-stage"));
 expect(!page.$("#highbay-cp5-merge") || page.$("#highbay-cp5-merge").disabled, "chg-merge-b offered an active merge while chg-merge-a merge was pending");
 

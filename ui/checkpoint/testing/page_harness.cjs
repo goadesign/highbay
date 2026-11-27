@@ -160,7 +160,7 @@ async function openPage(origin, { link, hidden, storage } = {}) {
     $: (selector) => doc.querySelector(selector),
     $$: (selector) => Array.from(doc.querySelectorAll(selector)),
     text: (selector) => (doc.querySelector(selector) || { textContent: "" }).textContent,
-    state: () => doc.getElementById("highbay-checkpoint-root").dataset.state,
+    state: () => doc.getElementById("highbay-checkpoint-view").dataset.stage,
     status: () => doc.getElementById("highbay-checkpoint-status").textContent,
     // sent returns the recorded requests to method and path, in order.
     sent: (method, pathname) => requests.filter((r) => r.method === method && r.path === pathname),

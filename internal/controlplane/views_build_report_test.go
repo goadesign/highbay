@@ -186,7 +186,7 @@ async function report(number) {
   await control(origin, "act", { key: "release-check" });
 }
 ` + pageReportNativeStageScript + `
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === input.change, "the confirmed Story did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === input.change, "the confirmed Story did not open");
 await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "the agreed change offered no enabled Build control");
 checkControl(page, page.$("#highbay-build-start"), "Build control");
 await nativeStage("build", 0, "assigned", async () => page.$("#highbay-build-start").click(),
@@ -212,8 +212,10 @@ expect(page.text(".highbay-frame-attention dd") === "Nothing now." &&
        page.text("#highbay-frame-next dd").includes("The test writer prepares and reports the tests"),
        "agents reading their assignments did not clear user attention or preserve the next step");
 const inputSelector = 'textarea[data-field="expected_outcome"]';
-const typed = page.$(inputSelector);
-page.type(typed, "Keep this unsaved expected outcome");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$(inputSelector), "Keep this unsaved expected outcome");
+page.$("#highbay-nav-build").click();
 
 await nativeStage("report-1", 1, "needs_changes", () => report(1),
   () => shownBuild("needs_changes", 1) && page.$("#highbay-build-findings"));
@@ -225,7 +227,6 @@ expect(findings.change_id === input.change && findings.request_revision === inpu
 expect(findings.findings.length === 1 && findings.findings[0].includes("RefundOverLimit") && findings.findings[0].includes("does not compile"), "the finding did not come from the missing-hook compilation: " + JSON.stringify(findings));
 await until(() => page.text("#highbay-build-findings").includes("RefundOverLimit"), "the user's page showed only a finding count");
 expect(page.text("#highbay-build-test-writer").includes("assignment unread"), "the compiler verdict did not show new unread writer work");
-expect(page.$(inputSelector) === typed && typed.value === "Keep this unsaved expected outcome", "a worker refresh lost typed input");
 await version("needs_changes");
 
 await control(origin, "act", { key: "repair-hook" });
@@ -237,7 +238,9 @@ expect(/^[a-f0-9]{40,64}$/.test(accepted.test_writer.tests.commit) && !accepted.
 expect(page.text("#highbay-build-builder").includes("assignment unread") && page.text("#highbay-build-test-writer").includes("assignment unread"), "acceptance did not show both new unread assignments");
 expect(page.text("#highbay-build-section").includes(accepted.test_writer.tests.not_judged) && accepted.test_writer.tests.not_judged.includes("did not judge what they assert"), "the page overstated what acceptance proves");
 expect(!page.$("#highbay-build-findings"), "the superseded finding stayed beside acceptance");
-expect(page.$(inputSelector) === typed && typed.value === "Keep this unsaved expected outcome", "acceptance lost typed input");
+page.$("#highbay-nav-cp1").click();
+expect(page.$(inputSelector).value === "Keep this unsaved expected outcome", "worker refreshes or acceptance lost typed input");
+page.$("#highbay-nav-build").click();
 await version("accepted");
 const acceptedWriter = await agent("GET", writerPath, undefined, input.testWriter);
 const acceptedBuilder = await agent("GET", "/assignments/builder/" + input.change, undefined, input.builder);

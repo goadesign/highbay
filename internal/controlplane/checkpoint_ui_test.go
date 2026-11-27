@@ -51,7 +51,7 @@ const outcome = () => page.$('textarea[data-example-id="check_01"][data-field="e
 const pill = (option) => page.$('[data-ambiguity-id="chg-ui-test-ambiguity-01"][data-option="' + option + '"]');
 const confirms = () => page.sent("POST", "/changes/confirm");
 await until(() => editor().dataset.changeId === "chg-ui-test", "the change did not open");
-expect(page.state() === "cp1-change-card" && editor().dataset.requestRevision === input.r1, "unexpected CP1 dataset: " + JSON.stringify(editor().dataset));
+expect(page.state() === "agree" && editor().dataset.requestRevision === input.r1, "unexpected CP1 dataset: " + JSON.stringify(editor().dataset));
 const cp1Text = page.text("#highbay-checkpoint-view");
 expect(cp1Text.includes(input.r1) && cp1Text.includes("Does the $50 limit include tax?"), "CP1 view missing the revision or question");
 for (const [field, label] of [["scenario", "Scenario"], ["input_summary", "Input"], ["expected_outcome", "Expected result"]]) {
@@ -109,8 +109,8 @@ try {
   console.error("cross-change update: " + JSON.stringify(crossChangeDiagnostics()));
   throw err;
 }
-expect(outcome().value === "post-confirm draft edit", "a list change overwrote a post-confirm edit");
 page.$("#highbay-nav-cp1").click();
+expect(outcome().value === "post-confirm draft edit", "a list change overwrote a post-confirm edit");
 
 // Refining without edits keeps multiline, space-padded text and the revision.
 page.type(outcome(), "  Instant store credit\nup to $50.00  ");
@@ -171,7 +171,7 @@ expect(page.$("#highbay-replace-incoming-card").textContent.includes("Keep Unsav
 page.$("#highbay-replace-incoming-card").click();
 const switched = page.$("#highbay-preserved-draft");
 const switchedText = switched ? switched.textContent : "";
-expect(editor().dataset.requestRevision === r4card.request_revision && editor().dataset.changeId === "chg-ui-recovery" && page.$("#highbay-result-view").dataset.state === undefined && !page.$("#highbay-replace-incoming-card"), "switching did not show the incoming card alone");
+expect(editor().dataset.requestRevision === r4card.request_revision && editor().dataset.changeId === "chg-ui-recovery" && !page.$("#highbay-incoming-change-card") && !page.$("#highbay-replace-incoming-card"), "switching did not show the incoming card alone");
 expect(switchedText.includes("Edited outcome preserved across stale error") && switchedText.includes("Dirty edit on confirmed card before incoming switch") && switchedText.includes(r3card.request_revision), "switching did not preserve earlier and new unsaved lines: " + switchedText);
 expect(outcome().value === r4card.examples[0].expected_outcome, "the switched form did not start from the incoming card's saved values");
 page.$("#highbay-discard-draft").click();
@@ -188,7 +188,7 @@ page.$("#highbay-replace-incoming-card").click();
 expect(page.status().includes("Wait for the pending CP1 Change Card request"), "switching during a pending confirmation did not ask to wait");
 await control(origin, "release", { key: "POST /changes/confirm" });
 await until(() => page.$("#highbay-confirm-error"), "confirming a replaced revision was not refused");
-expect(page.$("#highbay-replace-incoming-card") && page.$("#highbay-result-view").dataset.requestRevision === r5card.request_revision, "the confirmation's answer dropped the held revision");
+expect(page.$("#highbay-replace-incoming-card") && page.$("#highbay-incoming-change-card").dataset.requestRevision === r5card.request_revision, "the confirmation's answer dropped the held revision");
 page.$("#highbay-replace-incoming-card").click();
 expect(editor().dataset.requestRevision === r5card.request_revision && page.$("#highbay-prior-revision") && page.text("#highbay-prior-revision").includes(r4card.request_revision) && page.text("#highbay-preserved-draft").includes("Edit on R4 before the guide's revision"), "switching after the answer did not keep the previous revision and the unsaved edit");
 page.$("#highbay-discard-draft").click();
@@ -233,9 +233,10 @@ func TestCheckpointUIArchitecturePreviewOfTheBoundDesign(t *testing.T) {
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-arch", "the change did not open");
 page.$("#highbay-nav-cp2").click();
-await until(() => page.$("#highbay-cp2-error"), "an unconfirmed card's architecture showed no refusal", 60000);
-expect(page.text("#highbay-cp2-error").includes("must be confirmed before architecture preview"), "the page did not show the server's own error: " + page.text("#highbay-cp2-error"));
-page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-stage-prerequisite"), "an unconfirmed card's architecture showed no prerequisite guidance");
+expect(page.sent("POST", "/changes/preview").length === 0 && page.text("#highbay-stage-prerequisite").includes("Confirm your intent in Agree first"), "unconfirmed Architecture fired preview RPC or omitted prerequisite copy");
+page.$("#highbay-prerequisite-go-agree").click();
+await until(() => page.state() === "agree", "Go to Agree did not return to Agree");
 page.$('[data-ambiguity-id="chg-arch-ambiguity-01"][data-option="subtotal_only"]').click();
 page.$("#highbay-confirm-submit").click();
 await until(() => page.$("#highbay-agreement-details"), "confirmation did not finish");
@@ -247,7 +248,7 @@ expect(JSON.stringify(previews[previews.length - 1].body) === JSON.stringify({ c
 const result = page.$("#highbay-result-view");
 await until(() => result.dataset.designDigest, "the architecture was not drawn", 120000);
 const cp2Text = page.text("#highbay-checkpoint-view");
-expect(page.state() === "cp2-architecture-preview" && result.dataset.requestRevision === revision, "unexpected CP2 dataset: " + JSON.stringify(result.dataset));
+expect(page.state() === "arch" && result.dataset.requestRevision === revision, "unexpected CP2 dataset: " + JSON.stringify(result.dataset));
 expect(cp2Text.includes(revision) && cp2Text.includes(result.dataset.designDigest) && cp2Text.includes("Inject: tenant_id") && cp2Text.includes("Confirmation"), "CP2 view missing digests or guardrails: " + cp2Text);
 const wrap = page.$$(".highbay-graph-wrap");
 const nodes = page.$$("#highbay-c4-svg .highbay-svg-node");
@@ -255,7 +256,7 @@ const texts = page.$$("#highbay-c4-svg text");
 expect(wrap.length === 1 && wrap[0].getAttribute("role") === "region" && wrap[0].getAttribute("aria-label") === "C4 architecture diagram" && wrap[0].getAttribute("tabindex") === "0", "the graph is not a focusable region");
 expect(nodes.length > 0 && nodes.length === page.$$("#highbay-result-view .highbay-arch-grid .highbay-compact-list")[0].children.length, "the graph does not draw every container");
 expect(texts.length > 0 && texts.every((text) => text.getAttribute("fill") === "currentColor"), "SVG text does not follow the theme color");
-expect(!page.$("#highbay-cp1-editor").dataset.changeId, "a clean editor stayed beside the architecture");
+expect(!page.$("#highbay-cp1-editor"), "a clean editor stayed beside the architecture");
 page.close();
 `)
 }
@@ -266,7 +267,12 @@ page.close();
 func TestCheckpointUIArchitectureDrawingGeometry(t *testing.T) {
 	cp := pageControlPlane(t, Options{})
 	guide := WithPrincipal(context.Background(), Principal{ID: pageOwner, CallerID: "guide", Kind: CallerGuide})
-	mustPropose(t, cp, guide, "chg-geometry", "Draw a large architecture.", refundAnalysis("Draw a large architecture."))
+	proposed := mustPropose(t, cp, guide, "chg-geometry", "Draw a large architecture.", refundAnalysis("Draw a large architecture."))
+	_, err := cp.ConfirmIntent(asCaller(pageOwner, CallerUser), &genhighbay.ConfirmIntentPayload{
+		ChangeID: proposed.ChangeID, RequestRevision: proposed.RequestRevision,
+		Answers: map[string]string{}, Examples: proposed.Examples,
+	})
+	require.NoError(t, err)
 	containers := make([]*genhighbay.C4ContainerItem, 0, 15)
 	for i := 1; i <= 15; i++ {
 		kind := "container"
@@ -299,7 +305,7 @@ func TestCheckpointUIArchitectureDrawingGeometry(t *testing.T) {
 	}})
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-geometry", "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-geometry", "the change did not open");
 page.$("#highbay-nav-cp2").click();
 await until(() => page.$("#highbay-c4-svg"), "the architecture was not drawn");
 const svg = page.$$("#highbay-c4-svg");

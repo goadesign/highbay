@@ -143,8 +143,8 @@ if (input.mode === "history_failure") await control(origin, "reply", { key: "GET
   body: { name: "unavailable", id: "history-read", message: "Saved verification history unavailable.", fault: false, temporary: true, timeout: false } });
 else await control(origin, "hold", { key: "GET " + history });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-review-approval") && page.sent("GET", history).length === 1, "initial saved approval did not automatically read its verification history");
-page.$("#highbay-review-approval").click();
+await until(() => (page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval")) && page.sent("GET", history).length === 1, "initial saved approval did not automatically read its verification history");
+if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
 await until(() => page.$("#highbay-cp5-approval"), "the saved approval stage did not open");
 if (input.mode !== "history_failure") {
   expect(page.text("#highbay-approval-stage").includes("Reading saved verification runs"), "held history was not explained");
@@ -263,11 +263,11 @@ if (input.mode === "eligible") {
   page.$("#highbay-nav-changes").click();
   await until(() => page.$("#highbay-open-change-chg-other-merge"), "another change was not listed during the pending merge");
   page.$("#highbay-open-change-chg-other-merge").click();
-  await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-other-merge" && !page.$("#highbay-build-loading"), "another change did not open during the pending merge");
+  await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-other-merge" && page.$("#highbay-build-section") && !page.$("#highbay-build-loading"), "another change did not open during the pending merge");
   expect(!page.$("#highbay-build-merge") && !page.$("#highbay-build-merge-feedback") && !page.text("#highbay-frame-next").includes("Merging"), "pending merge progress leaked to another change");
   page.$("#highbay-nav-changes").click();
   page.$("#highbay-open-change-chg-history").click();
-  await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-history", "original approved change did not reopen");
+  await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-history", "original approved change did not reopen");
   page.$("#highbay-nav-cp5").click();
   await until(() => page.$("#highbay-cp5-merge-feedback-pending"), "returning to the original change lost its pending merge");
   await control(origin, "release", { key: "POST " + mergePath });
@@ -355,8 +355,8 @@ func TestViewsPageApprovalFollowsTheRealMerge(t *testing.T) {
 	})
 	runPageScript(t, ps, map[string]any{"run": runID, "otherRun": otherRunID, "candidate": candidate, "otherCandidate": otherCandidate, "tests": tests, "revision": card.RequestRevision}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-review-approval"), "saved approval did not load");
-page.$("#highbay-review-approval").click();
+await until(() => page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval"), "saved approval did not load");
+if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
 await until(() => page.$("#highbay-cp5-approval") && page.$("#highbay-cp5-merge") && !page.$("#highbay-cp5-merge").disabled, "approval did not show the open build's merge action");
 const verifyMerged = () => page.$("#highbay-cp5-merge-feedback-verify-merged");
 expect(!verifyMerged(), "post-merge verification was offered before the merge");

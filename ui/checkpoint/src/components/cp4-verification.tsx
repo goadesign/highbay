@@ -50,6 +50,10 @@ export interface VerificationViewProps {
   listError: string | null;
   // cardLoadError reports a failed get_change request from CP4.
   cardLoadError: string | null;
+  // primaryCheckStatus marks Check status as the page's single primary action.
+  primaryCheckStatus: boolean;
+  // onMessageBuilder focuses the Builder conversation composer when a current check failed.
+  onMessageBuilder: (() => void) | null;
   // onCheckStatus reads this exact run; it never restarts verification.
   onCheckStatus: () => void;
   // onLoadVerifications loads the saved verification runs for changeId.
@@ -125,6 +129,8 @@ export function VerificationView({
   requestError,
   listError,
   cardLoadError,
+  primaryCheckStatus,
+  onMessageBuilder,
   onCheckStatus,
   onLoadVerifications,
   onSelectRun,
@@ -397,11 +403,16 @@ export function VerificationView({
         {state.type === "running" || requestError !== null || !inputsKnown ? (
           <Button
             id="highbay-cp4-check-status"
-            variant="primary"
+            variant={primaryCheckStatus ? "primary" : "default"}
             disabled={checking}
             onClick={onCheckStatus}
           >
             {checking ? "Checking status..." : "Check status"}
+          </Button>
+        ) : null}
+        {onMessageBuilder !== null ? (
+          <Button id="highbay-cp4-message-builder" variant="secondary" onClick={onMessageBuilder}>
+            Message Builder
           </Button>
         ) : null}
         <Button

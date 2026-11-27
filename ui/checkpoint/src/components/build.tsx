@@ -41,6 +41,8 @@ export interface BuildSectionProps {
   checkKnown: boolean;
   checkError: string | null;
   approvalAvailable: boolean;
+  primaryBuildAction: boolean;
+  primaryReviewAction: boolean;
   agentPicker: React.ReactNode;
   agentsReady: boolean;
   mergeAction: React.ReactNode;
@@ -50,6 +52,9 @@ export interface BuildSectionProps {
   onBuild: (replaces?: ReplacedBuild) => void;
   onDrop: (build: ReplacedBuild) => void;
   onOpenTeam: () => void;
+  onOpenAgree: () => void;
+  onOpenArchitecture: () => void;
+  onOpenLive: () => void;
   onOpenChange: (changeId: string) => void;
   onReviewCheck: () => void;
 }
@@ -77,6 +82,8 @@ export function BuildSectionView({
   checkKnown,
   checkError,
   approvalAvailable,
+  primaryBuildAction,
+  primaryReviewAction,
   agentPicker,
   agentsReady,
   mergeAction,
@@ -86,6 +93,9 @@ export function BuildSectionView({
   onPrepareBuild,
   onDrop,
   onOpenTeam,
+  onOpenAgree,
+  onOpenArchitecture,
+  onOpenLive,
   onOpenChange,
   onReviewCheck,
 }: BuildSectionProps) {
@@ -314,17 +324,20 @@ export function BuildSectionView({
   const primaryBuild = showDirect ? <>
     {!confirming ? agentPicker : null}
     <span ref={triggerRef}>
-      <Button id="highbay-build-start" variant={otherPrimary || sentBack || reviewPrimary ? "default" : "primary"}
+      <Button id="highbay-build-start" variant={primaryBuildAction ? "primary" : "default"}
         disabled={blocked || questionBusy} aria-describedby={blockingBuild !== null ? "highbay-build-start-explanation highbay-build-action-error" : "highbay-build-start-explanation"}
         onClick={requiresConfirmation ? ask : start}>{directLabel}</Button>
     </span></> : null;
   const actions = <>
     {blockingBuild !== null || saved === null ? primaryBuild : null}
-    {check !== null ? <Button id="highbay-build-review-check" variant={reviewPrimary ? "primary" : "default"}
+    {check !== null ? <Button id="highbay-build-review-check" variant={primaryReviewAction ? "primary" : "default"}
       disabled={disabled || starting} onClick={onReviewCheck}>
       {reviewPrimary ? "Review result" : "Review saved check"}
     </Button> : null}
     <Button id="highbay-build-view-team" disabled={disabled || starting} onClick={onOpenTeam}>View team</Button>
+    <Button id="highbay-build-open-arch" variant="ghost" disabled={disabled || starting} onClick={onOpenArchitecture}>Architecture</Button>
+    <Button id="highbay-build-open-live" variant="ghost" disabled={disabled || starting} onClick={onOpenLive}>Live target</Button>
+    <Button id="highbay-build-open-agree" variant="ghost" disabled={disabled || starting} onClick={onOpenAgree}>Agreement</Button>
     {current && (open || replay) && draftedBeforeDrop === false && confirmed && displayedCurrent ? <>
       {!confirming ? agentPicker : null}
       <span ref={triggerRef}>
@@ -631,7 +644,7 @@ export function runBelongsToBuild(changeId: string, build: StartedBuild, run: Ve
 // buildTimestampNanos preserves the owner's nanosecond boundary. Date.parse
 // supplies the epoch milliseconds; the validated RFC3339 fraction supplies the
 // remaining six digits that JavaScript's Date would otherwise discard.
-function buildTimestampNanos(at: string): bigint {
+export function buildTimestampNanos(at: string): bigint {
   const fraction = at.match(/\.(\d{1,9})/)?.[1] ?? "";
   return BigInt(Date.parse(at)) * 1_000_000n + BigInt(fraction.padEnd(9, "0").slice(3));
 }
