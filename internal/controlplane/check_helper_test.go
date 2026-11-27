@@ -774,7 +774,7 @@ func runTestCheckHelper() int {
 }
 
 // checkHost is TestMain's check-host role: a server on cardsDir bound to
-// workspace, as hbay serve is, that runs tool once. Tests kill it while the
+// workspace, as highbay serve is, that runs tool once. Tests kill it while the
 // operation runs.
 func checkHost(cardsDir, workspace, tool string) int {
 	self, err := os.Executable()

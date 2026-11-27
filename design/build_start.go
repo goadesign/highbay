@@ -5,26 +5,14 @@ import . "goa.design/goa/v3/dsl"
 
 // BuildStartStep gives the user one bounded action after a refusal or warning.
 var BuildStartStep = Type("BuildStartStep", String, func() {
+	Description("Plain-English recovery step shown when starting a build's worker terminals cannot finish immediately.")
 	MinLength(1)
 	MaxLength(512)
 })
 
-// BuildTeamWindowBusy leaves the saved build intact while the user closes a dialog.
-var BuildTeamWindowBusy = Type("BuildTeamWindowBusy", func() {
-	Attribute("step", BuildStartStep, "Close the open dialog, then start the team agents.")
-	Required("step")
-})
-
-// BuildTeamAmbiguousSpace leaves the saved build intact while the user closes
-// the duplicate spaces.
-var BuildTeamAmbiguousSpace = Type("BuildTeamAmbiguousSpace", func() {
-	Attribute("count", Int, "Number of spaces matching this project.", func() { Minimum(2) })
-	Attribute("step", BuildStartStep, "Close the duplicate Herdr spaces, then start the agents.")
-	Required("count", "step")
-})
-
 // BuildTeamUnavailable leaves the saved build intact when team admission cannot finish.
 var BuildTeamUnavailable = Type("BuildTeamUnavailable", func() {
+	Description("Warning returned alongside a saved build when launching its worker terminals could not complete immediately.")
 	Attribute("step", BuildStartStep, "What the user does to make the team ready for the saved build.")
 	Required("step")
 })
@@ -37,8 +25,6 @@ var StartBuildResult = Type("StartBuildResult", func() {
 		Meta("oneof:json:flatten")
 		Meta("oneof:type:field", "state")
 		Attribute("ready", ProjectTeam)
-		Attribute("window_busy", BuildTeamWindowBusy)
-		Attribute("ambiguous_space", BuildTeamAmbiguousSpace)
 		Attribute("unavailable", BuildTeamUnavailable)
 	})
 	Required("build", "team")

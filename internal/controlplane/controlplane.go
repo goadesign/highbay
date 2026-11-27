@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,6 +36,7 @@ import (
 	"github.com/goadesign/highbay/internal/traceview"
 	"github.com/goadesign/highbay/internal/verify"
 	"github.com/goadesign/highbay/verify/candidate"
+	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -152,7 +154,7 @@ type (
 		// PromotionTarget is nil.
 		ResolvePromotionTarget func(ctx context.Context, workspaceDir string) (PromotionTarget, error)
 		// Verification is the operator's stored evaluator: the CP4
-		// configuration stored with `hbay verification set`. Every change
+		// configuration stored with `highbay verification set`. Every change
 		// verifies with it and needs no build; New refuses it together with
 		// WrittenTestRuns, because a project verifies with one source.
 		Verification *VerificationConfig
@@ -195,6 +197,23 @@ type (
 		// reads return then, so an open wait never holds the host's shutdown.
 		// Nil never ends.
 		Stopping context.Context
+		// Model is the model state this control plane starts with: the one
+		// a server that replaced itself with a newer build took from its
+		// predecessor with ModelState. The zero value holds nothing and
+		// chooses no model, as every other start does.
+		Model ModelState
+	}
+
+	// ModelState is what a control plane holds about models in memory only:
+	// the provider request settings handed over to it and the model choice
+	// live targets receive. It carries setting values, so it is never
+	// returned by an operation, saved or logged; a server that replaces
+	// itself with a newer build passes it to the next process directly.
+	ModelState struct {
+		// Settings are the held request settings, one per provider.
+		Settings []modelsettings.Settings
+		// Connection is the model choice; the zero value chooses none.
+		Connection genhighbay.Connection
 	}
 
 	// storedChangeCard holds a versioned Change Card alongside its authenticated
@@ -302,7 +321,7 @@ type (
 		// none until a hand-over brings a provider's default or
 		// configure_model replaces it. get_model_connection reports it.
 		liveModel genhighbay.Connection
-		// heldSettings maps each provider whose request settings the hbay
+		// heldSettings maps each provider whose request settings the highbay
 		// command handed over to those settings. It lives in memory only,
 		// never shrinks while the server runs, and is never returned.
 		heldSettings map[string]modelsettings.Settings
@@ -534,7 +553,7 @@ func newWithWorkspaceGitTimeout(
 	}
 	highbayVersion := strings.TrimSpace(opts.HighbayVersion)
 	if highbayVersion != "" && !scaffold.ValidVersion(highbayVersion) {
-		err := fmt.Errorf("hbay version %q must be a canonical semantic version such as v0.1.0", opts.HighbayVersion)
+		err := fmt.Errorf("highbay version %q must be a canonical semantic version such as v0.1.0", opts.HighbayVersion)
 		return nil, errors.Join(err, cleanupFailedNew())
 	}
 	wsRoot, wsDev, wsIno, err := openWorkspaceRootAndStat(opts.WorkspaceDir)
@@ -643,6 +662,9 @@ func newWithWorkspaceGitTimeout(
 	if opts.Stopping != nil {
 		cp.stopping = opts.Stopping.Done()
 	}
+	if err := cp.startWithModel(opts.Model); err != nil {
+		return nil, errors.Join(err, cp.Close())
+	}
 	if err := cp.restoreWorkspace(); err != nil {
 		return nil, errors.Join(err, cp.Close())
 	}
@@ -678,7 +700,11 @@ func newWithWorkspaceGitTimeout(
 // tool codecs already refuse undeclared argument fields.
 // auth is required and is supplied by the project credential owner. A request
 // sent with GET carries a private mark the diagnostics history uses to leave
-// out the user's reads that succeed or are refused.
+// out the user's reads that succeed or are refused. A WebSocket upgrade is
+// also sent with GET but is not a read: it opens a terminal stream that can
+// type, so it carries no such mark. The terminal route answers only such an
+// upgrade from a page loaded from this server's own address, and refuses
+// anything else as forbidden before the team owner is asked.
 func NewHTTPHandler(svc genhighbay.Service, auth RequestAuthenticator) http.Handler {
 	mux := goahttp.NewMuxer()
 	endpoints := genhighbay.NewEndpoints(svc)
@@ -694,7 +720,10 @@ func NewHTTPHandler(svc genhighbay.Service, auth RequestAuthenticator) http.Hand
 		goahttp.ResponseEncoder,
 		nil,
 		nil,
+		&terminalUpgrader{upgrader: websocket.Upgrader{CheckOrigin: sameOriginUpgrade, HandshakeTimeout: terminalWriteWait}},
+		nil,
 	)
+	httpServer.AttachRoleTerminal = terminalUpgradeOnly(httpServer.AttachRoleTerminal)
 	genhighbayhttp.Mount(mux, httpServer)
 
 	mcpAdapter := genmcpadapter.NewMCPAdapter(endpoints, &genmcpadapter.MCPAdapterOptions{
@@ -723,17 +752,49 @@ func NewHTTPHandler(svc genhighbay.Service, auth RequestAuthenticator) http.Hand
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), genhighbay.MakeForbidden(errors.New("session or credential is no longer valid; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")))); encodeErr != nil {
+			if encodeErr := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), genhighbay.MakeForbidden(errors.New("session or credential is no longer valid; run highbay in the project folder, or ask your coding agent to open Highbay views")))); encodeErr != nil {
 				otel.Handle(encodeErr)
 			}
 			return
 		}
 		ctx := WithPrincipal(r.Context(), principal)
-		if r.Method == http.MethodGet {
+		if r.Method == http.MethodGet && !websocket.IsWebSocketUpgrade(r) {
 			ctx = context.WithValue(ctx, httpReadKey{}, true)
 		}
 		mux.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// terminalUpgradeOnly guards the terminal stream's route. The generated
+// handler upgrades the connection only when the stream is first used, after
+// the team owner has consumed the request's ticket and attached the terminal,
+// so the upgrader's own origin check would come too late. This refuses,
+// before any of that, a request that is not a WebSocket upgrade from the
+// server's own page.
+func terminalUpgradeOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if websocket.IsWebSocketUpgrade(r) && sameOriginUpgrade(r) {
+			// The holder receives the connection when the stream upgrades.
+			ctx := context.WithValue(r.Context(), terminalConnKey{}, &terminalConn{})
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+		refusal := genhighbay.MakeForbidden(errors.New("a role's terminal opens only from this project's Highbay page"))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		if err := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), refusal)); err != nil {
+			otel.Handle(err)
+		}
+	})
+}
+
+// sameOriginUpgrade accepts a WebSocket upgrade only from a page loaded from
+// the address the request was sent to. A browser always names the page's
+// origin on an upgrade; a request without one is not from the views page.
+func sameOriginUpgrade(r *http.Request) bool {
+	origin, err := url.Parse(r.Header.Get("Origin"))
+	return err == nil && origin.Scheme == "http" && origin.Host != "" && origin.Host == r.Host
 }
 
 // GoldenPath returns the Markdown `highbay://golden-path` serves: the Golden

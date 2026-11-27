@@ -62,33 +62,33 @@ func ToolSchema(name tools.Ident) (*genregistry.ToolSchema, bool) {
 	case "highbay.open_views":
 		return declarations.schema1314(), true
 	case "highbay.preview_architecture":
-		return declarations.schema1323(), true
+		return declarations.schema1326(), true
 	case "highbay.propose_change":
-		return declarations.schema1381(), true
+		return declarations.schema1384(), true
 	case "highbay.read_check_output":
-		return declarations.schema1588(), true
+		return declarations.schema1591(), true
 	case "highbay.refresh_story":
-		return declarations.schema1603(), true
+		return declarations.schema1606(), true
 	case "highbay.report_tests_finished":
-		return declarations.schema1652(), true
+		return declarations.schema1655(), true
 	case "highbay.review_verification":
-		return declarations.schema1701(), true
+		return declarations.schema1704(), true
 	case "highbay.revise_change":
-		return declarations.schema1872(), true
+		return declarations.schema1875(), true
 	case "highbay.start_live_target":
-		return declarations.schema2089(), true
+		return declarations.schema2092(), true
 	case "highbay.stop_live_target":
-		return declarations.schema2103(), true
+		return declarations.schema2106(), true
 	case "highbay.update_dependencies":
-		return declarations.schema2112(), true
+		return declarations.schema2115(), true
 	case "highbay.update_draft":
-		return declarations.schema2123(), true
+		return declarations.schema2126(), true
 	case "highbay.verify_change":
-		return declarations.schema2140(), true
+		return declarations.schema2143(), true
 	case "highbay.wait_for_builder_assignment":
-		return declarations.schema2198(), true
+		return declarations.schema2201(), true
 	case "highbay.wait_for_test_writer_assignment":
-		return declarations.schema2224(), true
+		return declarations.schema2227(), true
 	default:
 		return nil, false
 	}

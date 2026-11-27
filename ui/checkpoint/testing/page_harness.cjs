@@ -107,8 +107,10 @@ function browserFetch(win, origin, requests, tab, input, init) {
 }
 
 // openPage loads origin/views (with #link=<link> when link is given) and runs
-// the page. hidden starts the tab hidden.
-async function openPage(origin, { link, hidden } = {}) {
+// the page. hidden starts the tab hidden; storage copies origin-scoped
+// localStorage entries into the new window before bootstrap (modeling reload
+// or a sibling tab on the same origin).
+async function openPage(origin, { link, hidden, storage } = {}) {
   const shell = await fetch(origin + "/views", {
     headers: { "Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document" },
   });
@@ -122,12 +124,23 @@ async function openPage(origin, { link, hidden } = {}) {
     runScripts: "dangerously",
     pretendToBeVisual: true,
     beforeParse(win) {
+      if (storage) {
+        for (let i = 0; i < storage.length; i++) {
+          const key = storage.key(i);
+          if (key !== null) {
+            win.localStorage.setItem(key, storage.getItem(key));
+          }
+        }
+      }
       // jsdom has no layout. These interaction checks use a desktop media
       // observation; real-browser tests own viewport and reflow evidence.
       win.matchMedia = (query) => ({ matches: false, media: query, onchange: null,
         addEventListener() {}, removeEventListener() {} });
       // jsdom has no scroll layout; the native browser owner proves visibility.
       win.HTMLElement.prototype.scrollIntoView = () => {};
+      win.HTMLCanvasElement.prototype.getContext = () => null;
+      win.TextEncoder = TextEncoder;
+      win.TextDecoder = TextDecoder;
       Object.defineProperty(win.document, "hidden", { configurable: true, get: () => isHidden });
       Object.defineProperty(win.document, "visibilityState", {
         configurable: true,

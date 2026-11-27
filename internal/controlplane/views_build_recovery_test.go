@@ -270,12 +270,13 @@ page.close();
 }
 
 // TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere proves a
-// later successful Start agents supersedes a busy-window Build receipt in both
-// the card and global status, while retaining the saved build's identity.
+// later successful Start agents supersedes the receipt of a Build whose team
+// could not be started, in both the card and global status, while retaining
+// the saved build's identity.
 func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.T) {
 	f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
 	f.start = func(context.Context) (*genhighbay.ProjectTeam, error) {
-		return nil, genhighbay.MakeWindowBusy(errors.New("simulated open agent dialog"))
+		return nil, genhighbay.MakeTeamUnavailable(errors.New("simulated terminal failure"))
 	}
 	cp := newBuildControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	cp.changesWait = 400 * time.Millisecond
@@ -287,20 +288,21 @@ func TestViewsPageBuildTeamRecoveryClearsTheOldInstructionEverywhere(t *testing.
 		defer f.mu.Unlock()
 		f.start = func(context.Context) (*genhighbay.ProjectTeam, error) {
 			return &genhighbay.ProjectTeam{
-				Team: "page-team", Space: "page-space", HerdrMode: "attached",
+				Team: "page-team",
 				Step: "The project agents have started.", Roles: []*genhighbay.ProjectTeamRole{},
 			}, nil
 		}
 	})
 
-	runPageScript(t, ps, nil, `
+	// An error without a typed cause gets the step for no cause.
+	runPageScript(t, ps, map[string]any{"unavailableStep": buildTeamStep("")}, `
 const path = "/changes/chg/build";
-const oldStep = "Close the open Herdr dialog, then start the team agents.";
+const oldStep = input.unavailableStep;
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "the first Build did not become available");
 page.$("#highbay-build-start").click();
-await until(() => page.$("#highbay-build-start-team-receipt") && page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "the busy-window build did not finish");
-expect(page.text("#highbay-build-start-team-receipt").includes("the build was saved and the team window was busy") && page.text("#highbay-build-start-team-receipt").includes(oldStep), "the busy-window result was not shown as a historical receipt");
+await until(() => page.$("#highbay-build-start-team-receipt") && page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "the build without a team did not finish");
+expect(page.text("#highbay-build-start-team-receipt").includes("the build was saved and team startup was unavailable") && page.text("#highbay-build-start-team-receipt").includes(oldStep), "the unavailable team was not shown as a historical receipt");
 const savedStart = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
 expect(page.text("#highbay-build-details").includes(savedStart), "the saved Build identity is missing");
 expect(!page.$("#highbay-build-start-copy-receipt"), "the removed working-copy receipt returned");
@@ -313,7 +315,7 @@ await until(() => page.$("#highbay-team-start-receipt") && page.text("#highbay-t
 expect(!page.doc.body.textContent.includes(oldStep), "the superseded Build instruction remained visible in Team");
 page.$("#highbay-nav-cp1").click();
 await until(() => page.$("#highbay-build-again") && page.text("#highbay-build-details").includes(savedStart), "returning to the card lost the saved Build");
-expect(!page.$("#highbay-build-start-team-receipt") && !page.doc.body.textContent.includes(oldStep), "the old busy-window instruction returned on the card or global status");
+expect(!page.$("#highbay-build-start-team-receipt") && !page.doc.body.textContent.includes(oldStep), "the old team instruction returned on the card or global status");
 expect(page.text("#highbay-build-details").includes(savedStart), "Team recovery rewrote the saved Build identity");
 expect(!page.$("#highbay-build-start-copy-receipt"), "Team recovery restored the removed working-copy receipt");
 page.$("#highbay-nav-team").click();

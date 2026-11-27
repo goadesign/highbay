@@ -329,7 +329,7 @@ func TestInitWritesABlankProjectByDefault(t *testing.T) {
 	assert.Contains(t, readme, "`starts_and_listens`", "the README names the one scenario")
 	assert.Contains(t, readme, "-suite-command ./gen/cmd/bakery-evals")
 	first := between(t, readme, "## Next steps", "For each change:")
-	assertInOrder(t, first, "git commit -m", "\nhbay\n```", "views page")
+	assertInOrder(t, first, "git commit -m", "\nhighbay\n```", "views page")
 	for _, f := range []string{design, read("design/model.go"), read("design/story.go"), main, evalDesign, acceptance, readme} {
 		for _, example := range []string{"price", "Price", "helper", "catalog", "cookie", "model-gateway", "override_prompt"} {
 			assert.NotContains(t, f, example, "the blank project holds nothing of the worked example")
@@ -507,7 +507,7 @@ func TestInitLeavesNoProjectWhenGenerationFails(t *testing.T) {
 }
 
 // TestInitReadmeFirstRunSnippetsMatchTheProject verifies the example's declared
-// scenarios, a first run that ends by starting hbay, the roles in the
+// scenarios, a first run that ends by starting highbay, the roles in the
 // build-before-commit tool journey, private verification reports, and the
 // ignore file.
 func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
@@ -535,12 +535,12 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	assert.Contains(t, readme, "-report-dir \"$REPORT_DIR\" -builder-view")
 	assert.Contains(t, readme, "while `-builder-view` hides holdout scenario names and checks\nin the completed report JSON and summary line (if a run fails before writing a\nreport, `stderr` prints operator setup/execution failure diagnostics).")
 	assert.Contains(t, readme, "planner.ToolFailureProvider")
-	// A project created with hbay init is committed and then started with
-	// hbay, which opens the views page; the operator's hbay verify comes
+	// A project created with highbay init is committed and then started with
+	// highbay, which opens the views page; the operator's highbay verify comes
 	// after that, not as a first step.
 	first := between(t, readme, "## Next steps", "For each change:")
-	assertInOrder(t, first, "git commit -m", "\nhbay\n```", "views page")
-	assert.NotContains(t, first, "hbay verify", "hbay verify is an operator tool listed after the change steps")
+	assertInOrder(t, first, "git commit -m", "\nhighbay\n```", "views page")
+	assert.NotContains(t, first, "highbay verify", "highbay verify is an operator tool listed after the change steps")
 	// Each change is proposed by the guide and confirmed by the user on the
 	// views page, then regenerated, built and tested uncommitted with
 	// check_project, committed, and verified by the builder, in that order;
@@ -548,11 +548,11 @@ func TestInitReadmeFirstRunSnippetsMatchTheProject(t *testing.T) {
 	// browser session may call confirm_intent, so the README never tells a
 	// reader to call it.
 	steps := between(t, readme, "For each change:", "## Change checkpoints")
-	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits on its own branch,", "`verify_change`", "operator tools", "hbay verify")
+	assertInOrder(t, steps, "The guide", "`propose_change`", "You confirm it on the views page", "The builder", "`generate_code`", "`check_project`", "`update_dependencies`", "`read_check_output`", "The builder commits on its own branch,", "`verify_change`", "operator tools", "highbay verify")
 	assert.NotContains(t, readme, "`confirm_intent`")
 	draft := between(t, readme, "To try prompt wording on a running", "the confirmed Change Card")
 	assertInOrder(t, draft, "builder calls `start_live_target`", "the builder writes", "`check_project`", "commits,", "`verify_change`")
-	cli := between(t, readme, "`hbay verify` checks a commit.", "## Change checkpoints")
+	cli := between(t, readme, "`highbay verify` checks a commit.", "## Change checkpoints")
 	assertInOrder(t, cli, "The builder", "`check_project`", "before it commits")
 
 	candDesign, err := os.ReadFile(filepath.Join(dir, "design", "design.go"))

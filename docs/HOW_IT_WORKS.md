@@ -20,8 +20,8 @@ Each has its own credential, so the server always knows who is calling.
 | The test writer | The coding agent that writes the tests for a build, in its own working copy of the project. | Nothing on its word: its tests count only when Highbay's check accepts them. |
 | The server | The project's Highbay server. The guide's first Highbay call starts or attaches to one for each project folder. It keeps the record of what was agreed, built, accepted and approved, and it runs every check. | Deciding, from the files the agents produce, whether work is done. |
 | The page | A page in your browser that the server serves; the reference calls it the views page. It talks to the server as you. | Carrying your decisions. No agent has your identity. |
-| Herdr | The optional workspace for running the agents in side-by-side panes. | Running and showing the terminals. |
-| Chorus | The service that launches panes for the project's Herdr team and carries its agents' messages. | Conversation only: a message never makes work count as done. |
+| Herdr Core | The local process that runs the agents in interactive terminals. | Keeping the terminals alive while you move between views. |
+| Chorus | The local service that carries messages between you and the project's agents. | Carrying conversation. Work counts when Highbay verifies it. |
 
 Highbay runs the code the agents write (the design at each refresh, the
 builder's programs and the test writer's tests) as ordinary processes on this
@@ -62,11 +62,11 @@ published as the resource `highbay://golden-path`.
 
 | Caller | Connects through | What it may do |
 | --- | --- | --- |
-| You | The views page or the user API | Confirm a change, adopt or decline a proposed revision, start or drop a build, approve a result, request a merge, choose the model live targets use, stop a live target, start the agents and bring a pane forward. You read everything the page shows. |
+| You | The views page or the user API | Confirm a change, adopt or decline a proposed revision, start or drop a build, approve a result, request a merge, choose the model live targets use, stop a live target, start agents, send them messages, and interact with their terminals. You read everything the page shows. |
 | The guide | Its `highbay` MCP connection | Create a starter project, have the Story evaluated, propose and revise changes, and open the page for you. It reads the changes, builds and verification runs. |
 | The builder | Its `highbay` MCP connection | Read its assignments, generate code, check the project, update its dependencies, run a live target and send prompt drafts to it, and ask the server to verify a commit. It reads the changes, builds and verification runs. |
 | The test writer | Its `highbay` MCP connection | Read its test assignments and report its tests finished. It reads the build, and the verification runs of the changes it has an assignment for. |
-| Local project integrations, including the `hbay` command | The server's management credential | Read project status, attach a guide, open the page and stop the server. It makes no decision about the application. |
+| Local project integrations, including the `highbay` command | The server's management credential | Read project status, attach a guide, open the page and stop the server. It makes no decision about the application. |
 
 The reference lists [every operation and who may call it](REFERENCE.md#mcp-tools--resources)
 and describes [each operation](REFERENCE.md#mcp-tools).
@@ -79,7 +79,7 @@ says so.
 
 ```mermaid
 flowchart TD
-    A["One-time setup: hbay up"] --> B["You invoke /highbay or $highbay in your coding agent"]
+    A["One-time setup: highbay up"] --> B["You open the workspace with highbay or /highbay"]
     B --> C["You describe the change to the guide"]
     C --> D["The guide writes the Story and proposes a Change Card"]
     D --> E["You answer its questions and confirm it on the page"]
@@ -107,54 +107,40 @@ Tool descriptions and the server's terminal name these steps by checkpoint:
 Approval records the verified work you accepted. Merging is a separate
 decision, with a local branch as its destination.
 
-## Starting: `hbay`, the team and the page
+## Starting: `highbay`, the team and the page
 
-After installing Highbay, run [`hbay up`](REFERENCE.md#hbay-up) once. It
-registers the `hbay stdio` MCP server and `/highbay` skill with detected coding
-agents and starts Chorus when installed. `hbay setup -global` performs only
-the registration. Reload the coding agent's MCP configuration or open a new
-session if it has not discovered the integration yet.
+After [installing Highbay](../README.md#install), run [`highbay up`](REFERENCE.md#highbay-up)
+once. It checks dependencies, registers Highbay with detected coding agents,
+and starts its companion services. Run `highbay` in your project folder to open
+the browser workspace. On **Describe**, choose an installed coding agent and
+send your request. Highbay starts that agent as the project's guide and posts
+your message to **Conversation**. In an empty folder, the guide creates a
+blank Go project and first commit before it drafts a change.
 
-Open your project folder in the agent and invoke `/highbay` (`$highbay` in
-Codex). Its first Highbay tool call starts or attaches to the server for that
-physical folder and attaches the current session as the project's guide (the
-internal role Highbay assigns to your coding agent). Discovery alone starts no
-server. If you invoke `/highbay` without a request yet, your coding agent opens
-the browser window and asks what you would like to build. Once you state a
-goal in an empty folder, your coding agent can call
-[`init_project`](REFERENCE.md#init_project) with `dir: "."` to create the
-starter and its first Git commit in place, deriving a default Go module path
-from the folder name unless you gave one, and puts open product questions on
-the Change Card rather than asking a checklist in chat.
+If you already have a coding session in the project, invoke `/highbay`
+(`$highbay` in Codex) with your request. Its first Highbay tool call starts
+or connects to the project server and registers that session as the guide.
+The guide opens the workspace and uses Chorus for project messages. When
+Highbay can match the session to a live Herdr Core terminal, you can also
+open its **Terminal** in the browser. An external IDE session keeps its
+terminal in the IDE.
 
-In Herdr, when the client's terminal identity or process lineage matches its
-live pane inside a Herdr app tab in the project folder, Highbay can adopt your
-coding agent's existing local pane and space if their project and team labels
-are compatible. You keep the conversation already open. When no Herdr pane is
-linked, your coding agent still works through Highbay's MCP server and appears on
-**Team** as **Coding agent registered · No Herdr pane linked**; open a project
-tab in Herdr with compatible ownership and run `/highbay` there when you want
-Highbay to link that pane. Without
-Herdr, the server runs in the background; the same MCP tools and browser
-decisions remain available. Bare `hbay` remains an operator entrypoint that
-opens the page without starting agents or a team launcher.
+After a reload, the browser uses its existing session while the project
+server is running. To reopen the workspace, run `highbay` again or ask the guide
+to open it. On the first change, the welcome view shows the progress of
+[`init_project`](REFERENCE.md#init_project) and the first proposal.
 
-Your coding agent calls [`open_views`](REFERENCE.md#open_views) to open a fresh
-session in your default browser. While [`init_project`](REFERENCE.md#init_project)
-runs in an empty folder, the welcome card shows the current initialization phase
-live. Ask your coding agent to open the page again after a reload or close (the
-signed-out view also offers a one-click copyable prompt). The Herdr companion
-(`Cmd+Alt+Shift+H` on macOS) offers **Open Highbay Window**, alongside the current
-stage, role attention and pane focus buttons; focusing a pane or opening the window
-dismisses the overlay. Setup installs the companion as a
-floating window; it does not change Herdr's workspace layout.
+When a release is available, **Update & Restart** installs the version
+shown and waits for the project server to return. The browser keeps your
+current workspace and offers **Reload** when the new page is ready. You
+can also check from the terminal with [`highbay update -check`](REFERENCE.md#highbay-update).
 
-For terminal operation and browser automation, `hbay --print-link` prints
-the one-use URL and expiry as JSON, and `hbay status --json` reads the
+For terminal operation and browser automation, `highbay --print-link` prints
+the one-use URL and expiry as JSON, and `highbay status --json` reads the
 server's current stage and role states. If you open a fresh link in a tab
 with unsaved input, save or discard your edits and then choose **Open link**.
 The two-minute expiry starts when the link is issued. See
-[startup and recovery](REFERENCE.md#hbay-and-hbay-stop).
+[startup and recovery](REFERENCE.md#highbay-and-highbay-stop).
 
 The frame names the journey Describe → Agree → Architecture → Build → Check →
 Approve. **Inspect** opens Story, Team, Live target and Diagnostics.
@@ -167,7 +153,8 @@ On Describe, with no change open for editing, it shows no agreement.
 | View | What it is for |
 | --- | --- |
 | Describe | The project's Change Cards, most recently saved first, each with its latest saved verification run. |
-| Team | Each role's observed state, its Chorus watcher (the agent's background wait for messages), its assignment and inline agent choices. **Start workers** starts missing workers with work on the build. **Show … pane** brings a role's pane forward in Herdr. |
+| Conversation | The project's messages and pinned instructions. Send a message to the team or mention a role to ask it directly. |
+| Team | Each role's status, assignment, and saved coding-agent choices. **Start workers** starts missing workers with work on the build. Open a role's **Terminal** to see and answer its prompts. |
 | Story | The Story of the change shown, and the guide's latest Story draft. |
 | Live target | The running copy of your application that the builder tries prompts on, and the model connection it uses. |
 | Agree | The Change Card: its questions, your answers, confirmation and a proposed revision. Unsaved edits stay available when you move to another stage. |
@@ -178,15 +165,15 @@ On Describe, with no change open for editing, it shows no agreement.
 
 A **Diagnostics** drawer shows the server's [operation diagnostics](REFERENCE.md#operation-diagnostics).
 The [views page reference](REFERENCE.md#views-page) describes each view in
-full. `hbay stop` stops the server in order; see
-[the `hbay` command](REFERENCE.md#hbay-and-hbay-stop).
+full. `highbay stop` stops the server in order; see
+[the `highbay` command](REFERENCE.md#highbay-and-highbay-stop).
 
 ## Agreeing on a change
 
-You type your request in the guide's pane, for example "Build a multi-tenant
-incident platform: a triage agent and remediation agent with MCP tools to
-search pod logs, correlate deploys, and roll back services with on-call
-approval."
+You send your request to the guide in **Conversation**, for example "Build a
+multi-tenant incident platform: a triage agent and remediation agent with MCP
+tools to search pod logs, correlate deploys, and roll back services with
+on-call approval."
 
 1. **The guide writes the Story.** It calls `refresh_story`, which makes the
    guide's `.highbay-draft` copy in the project folder when needed, returns that
@@ -258,7 +245,7 @@ you and the test writer, not an automatic per-example model judge.
 Verification runs the test module's scenarios, not the card's examples
 directly, and needs no model API key: a test of an agent plans with a
 scripted model kept in the test module. A
-stored custom [verification evaluator](REFERENCE.md#hbay-verification-and-hbay-promotion)
+stored custom [verification evaluator](REFERENCE.md#highbay-verification-and-highbay-promotion)
 can use configured model provider credentials: the label
 does not select how or whether a scenario runs, and configuring a **Live
 target** model lets the builder try prompt wording live rather than
@@ -294,7 +281,7 @@ calls the tool's method; it does not show that the service delivers the
 request to the right person and continues after the answer. The
 [`examples/orders`](../examples/orders/README.md) platform implements that
 workflow for a manager approving refunds. To read a design without a Change
-Card, run `hbay preview -dir <module>`.
+Card, run `highbay preview -dir <module>`.
 
 ## Building
 
@@ -305,17 +292,11 @@ the builder and test writer. One installed family can fill both roles. A
 project with configured tests needs only a builder. Only the roles needed
 for this start need choices; a running guide keeps its session.
 
-When Herdr is unavailable, choose a supported background agent and explicitly
-allow it to run without interactive permission prompts. Enable each available
-**Skip permission prompts (YOLO)** switch and confirm **I agree to run these
-workers in the background.** Clients without that switch use their configured
-permissions. Build explains the selected client's permission effect before
-starting. If no suitable agent is installed, the picker asks you to install
-a coding agent, or a client with background execution support, and then
-refresh installed agents.
-Herdr recommendations can be dismissed, as can the recommendation for a
-second family when a build needs both workers and only one suitable family
-is available. Those preferences persist for this project.
+Coding agents start in interactive terminals. Build explains the selected
+client's permission mode before starting. If a client needs your approval,
+open its **Terminal** to respond. A missing client produces an installation
+step in the picker. You can dismiss the recommendation to use different
+agent families when the project needs both workers.
 
 The saved agreement stays below the build under **Agreed:** and your request. Open **Agreement details** to review it or **Refine agreed
 answers and examples** to edit it. The build control explains which agents
@@ -324,7 +305,7 @@ machine as ordinary programs, with your access to files and the network;
 nothing confines them, and approval decides only what merges. **Stored
 verification settings**
 name a test suite of your own, an **evaluator**, at
-one exact commit; you save them with `hbay verification set <file>`, and
+one exact commit; you save them with `highbay verification set <file>`, and
 they apply when the server starts again. Building always uses the agreed
 revision, including while a proposed revision waits.
 The reference gives the exact contract of
@@ -340,7 +321,7 @@ The reference gives the exact contract of
    build's base commit was changed outside Highbay (`design_changed_outside`), when
    the card is not confirmed or the revision is not the agreed one, or when
    the project lacks a Git repository with at least one commit, a Git name and
-   address, the test module `hbay init` makes (`eval/` in the project folder,
+   address, the test module `highbay init` makes (`eval/` in the project folder,
    unless verification settings are stored), `.highbay-build` and `.highbay-tests`
    folders and `highbay/build-<n>` and `highbay/tests-<n>` branches that nothing
    else uses, or when another build start, an assignment read, one of the
@@ -365,25 +346,21 @@ The reference gives the exact contract of
    Draft flows require none. The Build section shows the count, for example
    "3 required Story tests."
 5. **It starts missing workers.** The server uses each worker's saved choice
-   when it is available, or selects an installed default. In Herdr, it places
-   the builder to the right of a running guide and the test writer below the
-   builder. Without Herdr, the server runs workers in the background and
-   starts further invocations when there is new work, up to three per role
-   during the running server's supervision of a build.
+   when it is available or selects an installed default. You can see status
+   in **Team**, send questions in **Conversation**, and open a worker's
+   **Terminal** when it needs you.
 
 The work belongs to the server and continues if you close the page. Saving
-the build and making missing working copies have a five-minute limit. Team
-startup has its own 45-second limit, and an individual background worker
-invocation can run for up to 30 minutes. The test writer has a separate
-five-minute limit for preparing the required tests on its first assignment
-read. A team startup failure leaves the build saved. After resolving the
-reported cause, use **Start workers** in Team to retry the worker start.
+the build and making missing working copies have a five-minute limit. The
+test writer has a separate five-minute limit for preparing the required
+tests on the first assignment read. A team startup failure leaves the build
+saved. Resolve the reported cause, then choose **Start workers** in Team.
 
 With stored verification settings, the project verifies with the evaluator
 those settings name. Building then adds only the builder in its `.highbay-build`
 working copy (it uses no `.highbay-tests` working copy), and the Build section
 shows `Test writer: not needed; this project uses its configured tests`. See
-[`hbay verification`](REFERENCE.md#hbay-verification-and-hbay-promotion).
+[`highbay verification`](REFERENCE.md#highbay-verification-and-highbay-promotion).
 
 ### What appears in the project folder
 
@@ -420,7 +397,7 @@ marks an assigned build's assignment read and again at each report; the test
 writer leaves that file as it is, and regenerating the
 module keeps the required tests. After changing the module's design, the
 test writer reports to have it generated again or runs
-`hbay gen -dir eval` in its working copy first. It checks
+`highbay gen -dir eval` in its working copy first. It checks
 its work with `GOWORK=off go build ./...` in `eval/`, which fails naming any required
 method not yet written, and does not compile or start the candidate service
 binary itself—Highbay's verification builds and runs the candidate.
@@ -525,9 +502,9 @@ In the Live target view you see the target's state and commit, the prompts it
 changed (never their text), and **Stop live target**. Under **Model
 connection** you choose the model that live targets started afterwards use: a
 provider and model name, whose key and request settings the guide's
-`hbay stdio` connection received from its client and handed over, or a
+`highbay stdio` connection received from its client and handed over, or a
 running model gateway. Real-client environment forwarding has not been
-live-verified; see [stdio integration](REFERENCE.md#hbay-stdio). Bare `hbay`
+live-verified; see [stdio integration](REFERENCE.md#highbay-stdio). Bare `highbay`
 can hand over the same settings from an operator's shell. While no model is
 chosen, a hand-over picks the default model of the provider whose
 settings it holds, `anthropic` first when it holds both, in the order of the
@@ -646,7 +623,7 @@ hidden, because Highbay's check refuses the tag.
 With stored verification settings, a verification run uses the evaluator those
 settings name and still requires the change's open, undropped build for the
 builder's working copy and branch. Outside the journey, the
-[`hbay verify`](REFERENCE.md#hbay-verify) command runs one verification from
+[`highbay verify`](REFERENCE.md#highbay-verify) command runs one verification from
 the command line.
 
 ## Approving and merging
@@ -708,7 +685,7 @@ accepted one: after another report or another build, it reappears only if Highba
 accepts that same commit again.
 
 Approval needs no settings. A project can store promotion settings with
-`hbay promotion set <file>`: a release folder, where your own release step
+`highbay promotion set <file>`: a release folder, where your own release step
 publishes the builder's binaries for each commit, and the binaries' names.
 Like verification settings, they apply when the server starts again.
 Approval then makes one more check: the files in the release folder must be
@@ -720,7 +697,7 @@ the promotion settings". For a completed run, the Check view shows you its
 actual binary folder under **Binaries built by this run**, as selectable
 code. Use that folder for the selected run; the approval error panel repeats
 it. Agents never receive this path. See
-[`hbay promotion`](REFERENCE.md#hbay-verification-and-hbay-promotion) and
+[`highbay promotion`](REFERENCE.md#highbay-verification-and-highbay-promotion) and
 [`approve_merge`](REFERENCE.md#approve_merge).
 
 A change to the agreed revision drops its approval; see
@@ -728,33 +705,16 @@ A change to the agreed revision drops its approval; see
 
 ## When an agent needs you
 
-Agents can stop at questions and permission prompts. When you use Herdr,
-the server follows each registered role's pane and shows, on every view of the page, one line
-per role that waits for you, for example "Builder needs you: permission",
-with a **Show builder pane** action that brings that pane forward. You answer
-in the pane.
+The page identifies a role that needs help, for example **Builder needs
+you** when the builder is waiting for permission. Open that role's
+**Terminal** and answer the prompt. The drawer also lets you interrupt a
+running turn and restart a managed role. An attached agent without a managed
+terminal takes input in the coding client where it was started.
 
-While the builder or the test writer has work on the open build and has an
-assignment it has not read, the server sends that agent one fixed Chorus direct
-message asking it to read its assignments; nothing is typed into its pane. When
-Chorus is unavailable, workers wait on Highbay's `wait_for_builder_assignment` and
-`wait_for_test_writer_assignment` tools instead of busy-polling, **Team** states
-that Chorus cannot be reached for the team, and an idle worker with an unread
-assignment raises **Needs you** after 15 seconds (90 seconds when Chorus is
-connected) with a copyable nudge.
-
-The Team view shows each role's pane state (**Coding agent registered · No
-Herdr pane linked** when the guide registered without a Herdr app tab, or Not
-started, Starting, Working, Waiting, Needs you, Ended,
-Error or Status unknown), whether its Chorus watcher is held, and its assignment
-status (No assignments for the guide, and Assignment unread, No unread
-assignment, No work now—when the open build needs nothing from that role—or
-Assignment status unknown for a worker role). **Build** also shows the builder's
-branch, live branch tip while building (and saved verified commit once passed),
-and latest `check_project` outcome.
-**Start workers** starts missing workers that still have work on the open
-build, pre-populating missing user-scoped folder trust while honoring explicit
-untrusted folder rules. Facts the server cannot observe stay unknown. See
+The server uses Chorus to tell workers about unread assignments. **Team**
+shows each role's observed state and assignment, and **Build** shows the
+builder's branch, its current commit, and the latest project check. If the
+server cannot observe a role, the state reads **Status unknown**. See
 [team supervision](REFERENCE.md#team-supervision).
 
 ## Going back

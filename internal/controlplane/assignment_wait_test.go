@@ -139,7 +139,7 @@ func TestAssignmentWaitReturnsTheListAndItsVersion(t *testing.T) {
 	}
 }
 
-// TestAssignmentWaitEndsWhenTheServerStops keeps hbay stop from waiting on a
+// TestAssignmentWaitEndsWhenTheServerStops keeps highbay stop from waiting on a
 // worker's open call: when the host signals that the stop has begun, or the
 // server's own lifetime ends, an open wait returns the unchanged list at
 // once, without its bounded wait or another read.

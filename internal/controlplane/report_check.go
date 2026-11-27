@@ -133,7 +133,7 @@ const (
 	// the same download, with the settings Highbay's go commands use, where
 	// its output can be read. A check and a build start each end it with
 	// their own way to run again.
-	stepDependencies = "In the terminal hbay was started from, run " +
+	stepDependencies = "In the terminal highbay was started from, run " +
 		"GOTOOLCHAIN=local GOWORK=off GOFLAGS= go mod download in the project's " + scaffold.SuiteDir +
 		" folder and fix what it reports, such as no network, proxy or private-module settings " +
 		"missing there, or a Go older than the module requires"
@@ -159,11 +159,14 @@ func (e *openCopyError) Unwrap() error {
 	return e.err
 }
 
-// startReportChecker starts the report checker on the server's context for a
-// project; Close ends it before the stores close.
+// startReportChecker snapshots any reported builds already on disk at startup
+// before launching the background worker, so startup recovery runs deterministically
+// and post-startup callers never race with an unscheduled initial directory scan.
+// Close ends the worker before the stores close.
 func (c *ControlPlane) startReportChecker() {
 	c.reports = newReportChecker(c)
-	c.reportWorker.Go(func() { c.reports.run(c.serverCtx) })
+	initial := c.reports.reported(c.serverCtx)
+	c.reportWorker.Go(func() { c.reports.run(c.serverCtx, initial) })
 }
 
 // newReportChecker returns the report checker of cp, judging within
@@ -183,10 +186,18 @@ func newReportChecker(cp *ControlPlane) *reportChecker {
 // which a card or a build could not be read may have missed a reported build,
 // so the checker wakes itself to read again (retryReads). Once ctx ends no
 // judgment starts, even when a wake is waiting too.
-func (r *reportChecker) run(ctx context.Context) {
+func (r *reportChecker) run(ctx context.Context, initial []string) {
+	first := true
 	for ctx.Err() == nil {
-		r.readFailed = false
-		for _, changeID := range r.reported(ctx) {
+		var pending []string
+		if first {
+			first = false
+			pending = initial
+		} else {
+			r.readFailed = false
+			pending = r.reported(ctx)
+		}
+		for _, changeID := range pending {
 			if ctx.Err() != nil {
 				return
 			}

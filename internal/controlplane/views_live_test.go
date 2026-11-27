@@ -127,7 +127,9 @@ reloaded.close();
 const reads = page.sent("GET", "/live-target").length;
 const lists = page.sent("GET", "/changes").length;
 expect(reads <= lists + 1, "the live target was read " + reads + " times for " + lists + " list reads: it is read only when the version moves");
-const others = page.requests.filter((r) => !["/changes", "/change-updates", "/changes/chg-live", "/changes/chg-live/build", "/live-target", "/cp1/model", "/project/browser-session", "/team"].includes(r.path));
+// The conversation rail reads the team's conversation with the team, and
+// reads the installed coding agents when no guide is running to write to.
+const others = page.requests.filter((r) => !["/changes", "/change-updates", "/changes/chg-live", "/changes/chg-live/build", "/live-target", "/cp1/model", "/project/browser-session", "/team", "/team/conversation", "/team/agent-options"].includes(r.path));
 expect(others.length === 0, "the page sent other requests: " + JSON.stringify(others.map((r) => r.method + " " + r.path)));
 const history = await api(origin, "GET", "/traces?status=all&limit=100", undefined, input.guide);
 expect(history.status === 200, "diagnostics could not be read: " + JSON.stringify(history));
@@ -446,7 +448,7 @@ await until(() => page.$("#highbay-model-name"), "the Live target view did not o
 expect(page.$("#highbay-model-name").value === "gpt-5.4-mini" && page.$("#highbay-model-provider").value === "openai", "leaving the view lost the typed text: " + page.$("#highbay-model-name").value + " / " + page.$("#highbay-model-provider").value);
 page.$("#highbay-model-apply").click();
 await until(() => page.$("#highbay-model-outcome"), "the refusal was not shown");
-expect(page.text("#highbay-model-outcome").includes("provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway."), "the refusal is not shown verbatim: " + page.text("#highbay-model-outcome"));
+expect(page.text("#highbay-model-outcome").includes("provider openai needs OPENAI_API_KEY: export it, with any OPENAI_ request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run highbay; the project server keeps running. Or choose a model gateway."), "the refusal is not shown verbatim: " + page.text("#highbay-model-outcome"));
 expect(page.$("#highbay-model-outcome").getAttribute("role") === "alert", "the refusal is not an alert");
 expect(page.text("#highbay-model-current").includes("anthropic / claude-sonnet-4-6"), "a refused change replaced the shown choice");
 expect(page.beforeUnload() && page.$("#highbay-open-pending-link").disabled, "a refused model Apply cleared its unsaved guard");

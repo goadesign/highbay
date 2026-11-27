@@ -404,6 +404,44 @@ func TestWaitForChangesReturnsOnChangeOrAfterItsBound(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "a caller that goes away ends the wait")
 }
 
+// TestWaitForChangesEndsWhenTheServerStops checks that an open waiting read
+// returns the unchanged version as soon as the host begins to stop, long
+// before its own bound, so the views page's open call never holds a stop or
+// an update.
+func TestWaitForChangesEndsWhenTheServerStops(t *testing.T) {
+	stopping, stop := context.WithCancel(context.Background())
+	defer stop()
+	cp := newControlPlane(t, Options{Stopping: stopping})
+	cp.changesWait = time.Minute
+	cp.changesPoll = 10 * time.Millisecond
+	user := WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "session", Kind: CallerUser})
+	list, err := cp.ListChanges(user)
+	require.NoError(t, err)
+
+	type answer struct {
+		version *genhighbay.ChangeListVersion
+		err     error
+	}
+	answered := make(chan answer, 1)
+	go func() {
+		version, err := cp.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: list.Version})
+		answered <- answer{version, err}
+	}()
+	select {
+	case early := <-answered:
+		t.Fatalf("the wait ended before the stop: %+v", early)
+	case <-time.After(50 * time.Millisecond):
+	}
+	stop()
+	select {
+	case got := <-answered:
+		require.NoError(t, got.err)
+		assert.Equal(t, list.Version, got.version.Version, "the stop is not a change")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the wait outlived the stop")
+	}
+}
+
 // TestWaitForChangesIsTracedButNotSaved checks that the waiting read's span
 // is exported while the diagnostics history keeps only other operations.
 func TestWaitForChangesIsTracedButNotSaved(t *testing.T) {

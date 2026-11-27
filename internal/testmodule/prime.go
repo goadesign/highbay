@@ -6,7 +6,7 @@
 // scaffold.RunCommand on internal/scaffold/templates/{blank,example}) is
 // intentionally out of scope: those paths exercise a user's real networked
 // first run and belong to the non-PR Full / starter (-tags=scaffold
-// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/hbay) jobs in
+// ./internal/scaffold) and Full / generation (-tags=e2e ./cmd/highbay) jobs in
 // .github/workflows/integration.yml, while ordinary-partition tests in
 // internal/scaffold and internal/controlplane substitute fake runners and
 // generators.
@@ -205,12 +205,15 @@ func PrimeProfiles() ([]PrimeProfile, error) {
 		if historicalGoa.withGoaCmd {
 			extra = [][]string{{"list", "-deps", "goa.design/goa/v3/cmd/goa"}}
 		}
+		designFiles := map[string]string{
+			"design/design.go": blankImports("goa.design/goa/v3/dsl"),
+		}
 		profiles = append(profiles,
 			PrimeProfile{
 				Name: "snapshot-" + historicalGoa.label,
 				Files: map[string]string{
-					"go.mod":           moduleGoMod("example.com/design", historicalGoa.version, goaAIVer, modelVer),
-					"design/design.go": blankImports("goa.design/goa/v3/dsl"),
+					"go.mod":           moduleGoMod("example.com/design", historicalGoa.version, goaAIVer, modelVer, designFiles),
+					"design/design.go": designFiles["design/design.go"],
 				},
 				ExtraCommands: extra,
 			},

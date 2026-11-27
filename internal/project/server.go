@@ -1,4 +1,5 @@
-// This file implements project management, persistent agent authentication, and memory-only browser sessions.
+// This file implements project management, persistent agent authentication, and
+// browser sessions that live only in this server's memory.
 package project
 
 import (
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,15 +18,19 @@ import (
 	"sync"
 	"time"
 
+	genhighbayserver "github.com/goadesign/highbay/gen/http/highbay/server"
 	genprojectserver "github.com/goadesign/highbay/gen/http/project/server"
 	genproject "github.com/goadesign/highbay/gen/project"
 	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/otel"
 	goahttp "goa.design/goa/v3/http"
 )
 
 type (
-	// Server is the sole owner of credentials for a running project. Browser credentials never leave memory.
+	// Server is the sole owner of credentials for a running project. Browser
+	// credentials stay in memory; the only place they go is the memory of
+	// the process that replaces this server (BrowserSessions).
 	Server struct {
 		// state holds durable owner identity and agent credential metadata for this server.
 		state *State
@@ -36,7 +42,10 @@ type (
 		management string
 		// links maps single-use credentials to their expiration, only for this server lifetime.
 		links map[string]time.Time
-		// sessions maps random session credentials to separately generated attribution caller IDs.
+		// sessions maps random session credentials to separately generated
+		// attribution caller IDs. The page keeps its credential in storage only
+		// its own origin can read and sends it as a bearer header, so it is
+		// never sent to another address on this machine, as a cookie would be.
 		sessions map[string]string
 		// team owns serialized, bounded team effects.
 		team teamOperation
@@ -49,6 +58,12 @@ type (
 		// build is the BuildIdentity read when the server was created, before any later
 		// replacement of its executable file can change what that path names.
 		build string
+		// updates reports this executable's version and installs a newer
+		// release; the zero value reports a development build.
+		updates UpdateDependencies
+		// updating admits one update at a time and stays held once the
+		// server is being replaced.
+		updating sync.Mutex
 	}
 )
 
@@ -66,10 +81,11 @@ func BuildIdentity() (string, error) { return buildIdentity() }
 
 // NewServer creates fresh management authority for one server lifetime.
 // The caller publishes it only after binding the listener and revokes it before closing that listener.
-// The team connector is required but is called only when the caller starts the team.
+// The herdr-core dialer and the Chorus connector are required but are called
+// only when the team is first used.
 func NewServer(state *State, stop func(), team TeamDependencies) (*Server, error) {
-	if team.Lifetime == nil || team.Host == nil || team.Connect == nil || !filepath.IsAbs(team.RosterDirectory) {
-		return nil, errors.New("project server requires team lifetime, host, connector and absolute roster directory")
+	if team.Lifetime == nil || team.DialTerminals == nil || team.ConnectChorus == nil || team.AgentCommand == nil {
+		return nil, errors.New("project server requires a team lifetime, a herdr-core dialer, a Chorus connector and an agent command builder")
 	}
 	credential, err := randomCredential()
 	if err != nil {
@@ -89,6 +105,35 @@ func NewServer(state *State, stop func(), team TeamDependencies) (*Server, error
 		sessions:   map[string]string{},
 		now:        time.Now,
 	}, nil
+}
+
+// BrowserSessions returns a copy of the open browser sessions, each session
+// credential with its session id. Only the composition root calls it, to
+// pass them to the process that replaces this server, so that pages already
+// open stay signed in. The credentials are secrets: never save or log them.
+func (s *Server) BrowserSessions() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return maps.Clone(s.sessions)
+}
+
+// RestoreBrowserSessions makes the sessions of the server this one replaces
+// valid here. It is called once, before the server listens. It refuses, and
+// restores nothing, when an entry is not a credential and session id as this
+// package issues them, or when two credentials share a session id.
+func (s *Server) RestoreBrowserSessions(sessions map[string]string) error {
+	ids := make(map[string]bool, len(sessions))
+	for credential, id := range sessions {
+		random, user := strings.CutPrefix(id, "user-")
+		if !user || !issuedCredential(credential) || !issuedCredential(random) || ids[id] {
+			return errors.New("the browser sessions to restore are not sessions a project server issued")
+		}
+		ids[id] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	maps.Copy(s.sessions, sessions)
+	return nil
 }
 
 // PublishRunning atomically publishes this server's private management credential after Listen.
@@ -111,13 +156,28 @@ func (s *Server) RevokeManagement() error {
 	return s.state.RemoveRunning()
 }
 
-// Authenticate derives ownership and caller purpose solely from a trusted credential.
+// Authenticate derives ownership and caller purpose solely from a trusted
+// credential: a bearer credential on every request but one. A browser cannot
+// put a header on a WebSocket upgrade, so the terminal stream's upgrade is
+// authenticated by its single-use ticket instead, which names the session
+// that asked for it and signs nothing but the upgrade of its own role's
+// terminal route.
 func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
+	owner := s.state.Record.Owner
+	if websocket.IsWebSocketUpgrade(r) {
+		// A ticket signs one request only: the upgrade that opens its own
+		// role's terminal from the project's page.
+		grant, ok := s.team.tickets.grant(r.URL.Query().Get("ticket"), s.now())
+		if !ok || r.URL.Path != genhighbayserver.AttachRoleTerminalHighbayPath(grant.role) ||
+			r.Header.Get("Origin") != s.state.Origin() {
+			return controlplane.Principal{}, errors.New("the terminal ticket is used, expired or not from the project's page")
+		}
+		return controlplane.Principal{ID: owner, CallerID: grant.caller, Kind: controlplane.CallerUser}, nil
+	}
 	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || token == "" {
-		return controlplane.Principal{}, errors.New("open the project's views with hbay")
+		return controlplane.Principal{}, errors.New("open the project's views with highbay")
 	}
-	owner := s.state.Record.Owner
 	s.mu.Lock()
 	caller := ""
 	for credential, id := range s.sessions {
@@ -128,7 +188,11 @@ func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
 	management := s.management != "" && credentialEqual(token, s.management)
 	s.mu.Unlock()
 	if caller != "" {
-		if r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+		// Only the project's own page may use a browser session. A request
+		// that changes something must also name that page as its origin,
+		// which a browser adds to every such request.
+		reads := r.Method == http.MethodGet || r.Method == http.MethodHead
+		if r.Header.Get("Sec-Fetch-Site") != "same-origin" || !reads && r.Header.Get("Origin") != s.state.Origin() {
 			return controlplane.Principal{}, errors.New("browser session requires a same-origin page request")
 		}
 		return controlplane.Principal{ID: owner, CallerID: caller, Kind: controlplane.CallerUser}, nil
@@ -150,7 +214,7 @@ func (s *Server) Authenticate(r *http.Request) (controlplane.Principal, error) {
 			return controlplane.Principal{ID: owner, CallerID: id, Kind: controlplane.CallerKind(role.Role)}, nil
 		}
 	}
-	return controlplane.Principal{}, errors.New("session or credential is no longer valid; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")
+	return controlplane.Principal{}, errors.New("session or credential is no longer valid; run highbay in the project folder, or ask your coding agent to open Highbay views")
 }
 
 // Handler mounts the generated project contract and guards every page, HTTP, and MCP response.
@@ -174,19 +238,19 @@ func (s *Server) Handler(application http.Handler) http.Handler {
 		navigation := shell && r.Header.Get("Sec-Fetch-Mode") == "navigate" &&
 			r.Header.Get("Sec-Fetch-Dest") == "document"
 		if site != "" && site != "same-origin" && !navigation && !(shell && (site == "none" || site == "same-site")) {
-			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion")
+			writeAccessError(w, r, http.StatusForbidden, "forbidden", "request must come from the project's own page; run highbay in the project folder, or ask your coding agent to open Highbay views")
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/project/") {
 			if r.URL.Path == "/project/browser-session" && r.Method == http.MethodPost {
 				if site != "same-origin" {
-					writeAccessError(w, r, http.StatusForbidden, "forbidden", "open the project's views with hbay")
+					writeAccessError(w, r, http.StatusForbidden, "forbidden", "open the project's views with highbay")
 					return
 				}
 			} else {
 				principal, err := s.Authenticate(r)
 				if err != nil {
-					writeAccessError(w, r, http.StatusUnauthorized, "unauthorized", "open the project's views with hbay")
+					writeAccessError(w, r, http.StatusUnauthorized, "unauthorized", "open the project's views with highbay")
 					return
 				}
 				r = r.WithContext(controlplane.WithPrincipal(r.Context(), principal))
@@ -206,7 +270,8 @@ func (s *Server) Identity(ctx context.Context) (*genproject.ProjectIdentity, err
 	s.state.mu.Lock()
 	r := s.state.Record
 	s.state.mu.Unlock()
-	return &genproject.ProjectIdentity{ProjectID: r.ID, Directory: r.Directory, Owner: r.Owner, Build: &s.build}, nil
+	version := s.version()
+	return &genproject.ProjectIdentity{ProjectID: r.ID, Directory: r.Directory, Owner: r.Owner, Build: &s.build, Version: &version}, nil
 }
 
 // Stop requests the composition root's ordered shutdown without blocking its own HTTP request.
@@ -224,26 +289,6 @@ func (s *Server) BrowserLink(ctx context.Context) (*genproject.BrowserLinkResult
 		return nil, err
 	}
 	return s.newBrowserLink()
-}
-
-// newBrowserLink mints a browser-only authority shared by the CLI and fixed
-// opener paths. The opener's caller never receives the credential.
-func (s *Server) newBrowserLink() (*genproject.BrowserLinkResult, error) {
-	token, err := randomCredential()
-	if err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	for link, expires := range s.links {
-		if !now.Before(expires) {
-			delete(s.links, link)
-		}
-	}
-	expires := now.Add(2 * time.Minute)
-	s.links[token] = expires
-	return &genproject.BrowserLinkResult{URL: s.state.Origin() + "/views#link=" + token, ExpiresAt: expires.Format(time.RFC3339Nano)}, nil
 }
 
 // BindStatusReader installs the read-only project view before the server listens.
@@ -284,8 +329,10 @@ func (s *Server) OpenViews(ctx context.Context) error {
 	return nil
 }
 
-// ExchangeBrowserLink atomically consumes one valid link and creates a random memory-only session.
-func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBrowserLinkPayload) (*genproject.ExchangeBrowserLinkResult, error) {
+// ExchangeBrowserLink atomically consumes one valid link and creates a random
+// session that exists only in this server's memory. The page stores the
+// returned credential and sends it as a bearer header.
+func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBrowserLinkPayload) (*genproject.BrowserSessionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var expires time.Time
@@ -298,7 +345,7 @@ func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBr
 	exists := link != ""
 	if !exists || !s.now().Before(expires) {
 		delete(s.links, link)
-		return nil, genproject.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with hbay"))
+		return nil, genproject.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with highbay"))
 	}
 	token, err := randomCredential()
 	if err != nil {
@@ -310,17 +357,46 @@ func (s *Server) ExchangeBrowserLink(_ context.Context, p *genproject.ExchangeBr
 	}
 	delete(s.links, link)
 	s.sessions[token] = "user-" + id
-	return &genproject.ExchangeBrowserLinkResult{
-		Session:     token,
-		ProjectName: filepath.Base(s.state.Record.Directory),
-	}, nil
+	return s.sessionResult(token), nil
+}
+
+// GetBrowserSession tells a reloaded page or a sibling tab that the session
+// credential it stored is still valid, returning that credential and the
+// project's name. Any other caller, and a credential this server does not
+// know (every one issued before a restart), is unauthorized.
+func (s *Server) GetBrowserSession(ctx context.Context) (*genproject.BrowserSessionResult, error) {
+	principal, ok := controlplane.PrincipalFromContext(ctx)
+	if ok && controlplane.OperationAllowed(principal.Kind, "get_browser_session") {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for token, caller := range s.sessions {
+			if caller == principal.CallerID {
+				return s.sessionResult(token), nil
+			}
+		}
+	}
+	return nil, genproject.MakeUnauthorized(errors.New("open the project's views with highbay"))
+}
+
+// issuedCredential reports whether value has the form randomCredential
+// returns: 64 lowercase hexadecimal characters.
+func issuedCredential(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, c := range value {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // managementOnly checks trusted caller purpose rather than naming conventions or payload claims.
 func managementOnly(ctx context.Context, operation string) error {
 	p, ok := controlplane.PrincipalFromContext(ctx)
 	if !ok || !controlplane.OperationAllowed(p.Kind, operation) {
-		return genproject.MakeForbidden(errors.New("this operation requires the hbay command's management credential"))
+		return genproject.MakeForbidden(errors.New("this operation requires the highbay command's management credential"))
 	}
 	return nil
 }
@@ -337,6 +413,56 @@ func writeAccessError(w http.ResponseWriter, r *http.Request, status int, name, 
 	w.WriteHeader(status)
 	if err := goahttp.ResponseEncoder(r.Context(), w).Encode(response); err != nil {
 		otel.Handle(err)
+	}
+}
+
+// readBuildIdentity hashes the file this process's executable path names.
+func readBuildIdentity() (build string, err error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("find the highbay executable: %w", err)
+	}
+	f, err := os.Open(self)
+	if err != nil {
+		return "", fmt.Errorf("read the highbay executable: %w", err)
+	}
+	defer func() { err = errors.Join(err, f.Close()) }()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return "", fmt.Errorf("read the highbay executable %s: %w", self, err)
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+// newBrowserLink mints a browser-only authority shared by the CLI and fixed
+// opener paths. The opener's caller never receives the credential.
+func (s *Server) newBrowserLink() (*genproject.BrowserLinkResult, error) {
+	token, err := randomCredential()
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	for link, expires := range s.links {
+		if !now.Before(expires) {
+			delete(s.links, link)
+		}
+	}
+	expires := now.Add(2 * time.Minute)
+	s.links[token] = expires
+	return &genproject.BrowserLinkResult{URL: s.state.Origin() + "/views#link=" + token, ExpiresAt: expires.Format(time.RFC3339Nano)}, nil
+}
+
+// sessionResult is what a page learns with its session credential: the
+// project's name, and the server's version and page build, which let an open
+// page notice that the server was replaced by a newer one.
+func (s *Server) sessionResult(credential string) *genproject.BrowserSessionResult {
+	return &genproject.BrowserSessionResult{
+		Session:     credential,
+		ProjectName: filepath.Base(s.state.Record.Directory),
+		Version:     s.version(),
+		UIBuild:     controlplane.ViewsPageScriptSHA256,
 	}
 }
 
@@ -388,22 +514,4 @@ func (s *Server) registerAgent(handle string, agent agentRecord) (string, error)
 		return "", errors.Join(s.recordWriteFailure(err), os.Remove(s.state.AgentFile(handle)))
 	}
 	return handle, nil
-}
-
-// readBuildIdentity hashes the file this process's executable path names.
-func readBuildIdentity() (build string, err error) {
-	self, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("find the hbay executable: %w", err)
-	}
-	f, err := os.Open(self)
-	if err != nil {
-		return "", fmt.Errorf("read the hbay executable: %w", err)
-	}
-	defer func() { err = errors.Join(err, f.Close()) }()
-	sum := sha256.New()
-	if _, err := io.Copy(sum, f); err != nil {
-		return "", fmt.Errorf("read the hbay executable %s: %w", self, err)
-	}
-	return hex.EncodeToString(sum.Sum(nil)), nil
 }

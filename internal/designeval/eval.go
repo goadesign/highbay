@@ -147,7 +147,7 @@ type (
 	harnessProgram func(loaded map[string]bool) map[string]string
 
 	// Evaluator evaluates design snapshots for one owner, such as a
-	// ControlPlane or one `hbay preview` or `hbay diff` command. Its
+	// ControlPlane or one `highbay preview` or `highbay diff` command. Its
 	// evaluations share one private build workspace for compiler scratch. By
 	// default the package cache lives there too; NewEvaluatorWithCache instead
 	// selects retained storage supplied by the owner. The first admitted call
@@ -300,7 +300,7 @@ func (e *Evaluator) Evaluate(ctx context.Context, files map[string]string) (Resu
 
 // Generate returns every path and its bytes that `goa gen` writes for the
 // design in a module snapshot, including gen/goa.json, with each generated
-// file's header naming "$ hbay gen". It compiles and runs a generation
+// file's header naming "$ highbay gen". It compiles and runs a generation
 // program as Evaluate does, with the target module's own
 // dependency versions, and calls Goa's generator.CompleteSources, which fails
 // when a generated file would be changed after it is written, such as a gRPC
@@ -335,7 +335,7 @@ func (e *Evaluator) Close() error {
 // Summary returns a one-line count of what r declares, such as
 // `"orders": 3 container(s), 2 boundary edge(s), 1 agent policy(s), 4 tool contract(s)`.
 // The system name is Go-quoted, so the line stays a single line whatever the
-// design names its system. `hbay preview` prints it to stderr, and
+// design names its system. `highbay preview` prints it to stderr, and
 // preview_architecture returns it as its banner.
 func (r Result) Summary() string {
 	return fmt.Sprintf(
@@ -378,7 +378,7 @@ func generate(
 		},
 		func(stateDir string) []string {
 			// One literal argument, which Goa copies into generated headers.
-			return []string{"-sources", filepath.Join(stateDir, "sources.json"), "--cmd=$ hbay gen"}
+			return []string{"-sources", filepath.Join(stateDir, "sources.json"), "--cmd=$ highbay gen"}
 		},
 		func(stateDir string) error {
 			var err error
@@ -392,8 +392,8 @@ func generate(
 	// can lack the function whatever its version string.
 	if build := (*buildError)(nil); errors.As(err, &build) {
 		return nil, fmt.Errorf("%w\nIf that output shows that generator.CompleteSources is undefined, the "+
-			"goa.design/goa/v3 this module builds with (%s) lacks it; hbay gen needs %s or later. Update the "+
-			"module's goa.design/goa/v3 requirement, or its replace directive, and go.sum, then run hbay gen again",
+			"goa.design/goa/v3 this module builds with (%s) lacks it; highbay gen needs %s or later. Update the "+
+			"module's goa.design/goa/v3 requirement, or its replace directive, and go.sum, then run highbay gen again",
 			err, describe(goa), completeSourcesGoa)
 	}
 	return out, err
@@ -697,7 +697,7 @@ func resolveToolchainEnv(ctx context.Context) (toolchainEnv, error) {
 // evaluatorGoMod returns the go.mod Highbay was built from (highbay.GoMod), which
 // supplies the generator versions a target that does not require them is
 // evaluated with. It is compiled into the binary, so the result is the same
-// whatever directory hbay runs in.
+// whatever directory highbay runs in.
 func evaluatorGoMod() (*modfile.File, error) {
 	mod, err := modfile.Parse("go.mod", []byte(highbay.GoMod()), nil)
 	if err != nil {

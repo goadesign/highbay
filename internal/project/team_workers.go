@@ -1,4 +1,5 @@
-// This file starts and stops only the workers belonging to an accepted build.
+// This file starts and stops the team's coding agents in herdr-core
+// terminals: the guide and a build's workers.
 package project
 
 import (
@@ -9,47 +10,18 @@ import (
 	"slices"
 
 	genhighbay "github.com/goadesign/highbay/gen/highbay"
-	genproject "github.com/goadesign/highbay/gen/project"
 	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/hc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
-type (
-	// liveRole identifies an owned terminal and its actual model pane in one space.
-	liveRole struct {
-		tab  string
-		pane string
-	}
-)
-
-// EnsureTeam is the existing management view of saved team metadata. It
-// performs no preparation; the guide attaches and users start workers explicitly.
-func (s *Server) EnsureTeam(ctx context.Context) (*genproject.ProjectTeam, error) {
-	if err := managementOnly(ctx, "ensure_team"); err != nil {
-		return nil, err
-	}
-	result, err := s.ReadTeam(ctx)
-	if err != nil {
-		return nil, err
-	}
-	selection := s.teamSelection()
-	roles := make([]*genproject.ProjectTeamRole, 0, len(result.Roles))
-	for _, role := range result.Roles {
-		roles = append(roles, &genproject.ProjectTeamRole{
-			Role: role.Role, Handle: role.Handle, Running: activeTeamState(role.State),
-		})
-	}
-	return &genproject.ProjectTeam{
-		Team: result.Team, Space: localSpace(selection.Space),
-		HerdrMode: result.HerdrMode, Roles: roles, Step: workersStep,
-	}, nil
-}
-
-// StartAgents snapshots the current build and admits only workers with work.
-// The control plane authorizes the user once. A disconnected request can
-// repeat the operation without replacing a running guide or worker.
+// StartAgents starts the agents that are missing: the guide when the caller
+// names a choice for it, and each worker role that has work on the open
+// build. It never replaces a running agent: a guide choice for a running
+// guide is refused, and a running worker is left alone. The control plane
+// authorizes the user once. A disconnected request can repeat the operation.
 func (s *Server) StartAgents(ctx context.Context, requested map[string]*genhighbay.RoleAgentChoice) (*genhighbay.ProjectTeam, error) {
 	ctx, cancel := s.acceptedTeamContext(ctx)
 	defer cancel()
@@ -65,56 +37,38 @@ func (s *Server) StartAgents(ctx context.Context, requested map[string]*genhighb
 	if err != nil {
 		return nil, userTeamError(stateUnavailable(ctx, "assignments", err))
 	}
-	var requestedRoles []launcherRole
-	if choice, explicit := requested["guide"]; explicit {
-		if !s.team.dependencies.HerdrAvailable || choice == nil {
+	var wanted []teamRole
+	choice, explicitGuide := requested["guide"]
+	if explicitGuide {
+		if choice == nil {
 			return nil, invalidWorkerChoice()
 		}
-		guide, found := guideRole(roles)
-		if !found {
-			title, message := roleFirstMessage("guide")
-			guide = launcherRole{Role: "guide", Handle: teamName("guide", record.ID),
-				Folder: record.Directory, Title: title, FirstMessage: message}
-			roles = append([]launcherRole{guide}, roles...)
-		}
-		requestedRoles = append(requestedRoles, guide)
+		wanted = append(wanted, s.guide(record, roles))
 	}
 	if assignments.BuildIdentity != nil && !assignments.Merged && !assignments.Dropped {
 		for _, role := range roles {
-			if assignments.HasWork(role.Role) {
-				requestedRoles = append(requestedRoles, role)
+			if workerRole(role.Role) && assignments.HasWork(role.Role) {
+				wanted = append(wanted, role)
 			}
 		}
 	}
-	choices, err := s.resolveChoices(ctx, requestedRoles, requested)
+	choices, err := s.resolveChoices(ctx, wanted, requested)
 	if err != nil {
 		return nil, err
 	}
-	span.SetAttributes(attribute.Int("team.launch_roles", len(requestedRoles)))
-	if len(requestedRoles) == 0 {
-		return startResult(record, s.herdrMode(record.Tab), roles, nil, "No build workers need work."), nil
+	if len(wanted) == 0 {
+		return s.teamResult(record, roles, "No build workers need work."), nil
 	}
-	if !s.team.dependencies.HerdrAvailable {
-		if err := s.prepareWorkerTrust(ctx, record, requestedRoles, choices, false); err != nil {
-			return nil, err
-		}
-		if err := s.saveChoices(ctx, choices); err != nil {
-			return nil, err
-		}
-		if err := s.startHeadless(ctx, requestedRoles, choices, assignments); err != nil {
-			return nil, userTeamError(err)
-		}
-		result := startResult(record, herdrUnavailable, roles, nil, "Build workers run in the background.")
-		for _, role := range result.Roles {
-			role.Running = s.team.headless.running(role.Role)
-		}
-		return result, nil
+	if err := s.startRoles(ctx, record, wanted, choices, explicitGuide); err != nil {
+		return nil, err
 	}
-	return s.startHerdrWorkers(ctx, record, roles, requestedRoles, choices)
+	record, roles = s.currentTeam()
+	return s.teamResult(record, roles, "The team's agents are starting. Follow them on the Highbay page."), nil
 }
 
-// StopWorkers rechecks the current owner's terminal build and closes only the
-// two owned worker roles. A missed or delayed call cannot stop a newer build.
+// StopWorkers ends the worker terminals of a build that was merged or
+// dropped. It does nothing for any other build, for a build whose workers it
+// already stopped, or while a worker still has work.
 func (s *Server) StopWorkers(ctx context.Context, build controlplane.BuildIdentity) error {
 	ctx, cancel := s.acceptedTeamContext(ctx)
 	defer cancel()
@@ -122,451 +76,402 @@ func (s *Server) StopWorkers(ctx context.Context, build controlplane.BuildIdenti
 	defer span.End()
 	s.team.Lock()
 	defer s.team.Unlock()
-	if s.team.closed || ctx.Err() != nil || sameBuild(s.team.lastStopped, build) {
+	if s.team.closed || sameBuild(s.team.lastStopped, build) {
 		return nil
 	}
-	current, err := s.readAssignments(ctx)
+	assignments, err := s.readAssignments(ctx)
 	if err != nil {
-		return teamUnavailable(ctx, "read_assignments", "project_state")
+		return stateUnavailable(ctx, "assignments", err)
 	}
-	if current.BuildIdentity == nil || !sameBuild(*current.BuildIdentity, build) ||
-		!current.Merged && !current.Dropped || current.BuilderHasWork || current.TestWriterHasWork {
+	current := assignments.BuildIdentity
+	if current == nil || !sameBuild(*current, build) || !assignments.Merged && !assignments.Dropped ||
+		assignments.BuilderHasWork || assignments.TestWriterHasWork {
 		return nil
 	}
-	if !s.team.dependencies.HerdrAvailable {
-		err = s.stopHeadless(build)
-	} else {
-		err = s.stopHerdrWorkers(ctx)
-	}
+	client, err := s.team.terminals.client(ctx, s.team.dependencies.DialTerminals)
 	if err != nil {
-		cause := "herdr"
-		if !s.team.dependencies.HerdrAvailable {
-			cause = "project_state"
+		return teamUnavailable(ctx, "dial_terminals", "hc")
+	}
+	for _, role := range []string{"builder", "test_writer"} {
+		if _, _, err := s.removeManagedRoleTerminals(ctx, client, role); err != nil {
+			return teamUnavailable(ctx, "stop_workers", "hc")
 		}
-		return teamUnavailable(ctx, "stop_workers", cause)
 	}
 	s.team.lastStopped = build
 	return nil
 }
 
-// Close drains server-managed workers before the composition root closes the
-// assignment/store owner. Interactive Herdr panes have their own lifetime.
-func (s *Server) Close() error {
+// InterruptRole presses the stop key in the role's running terminal. It
+// returns role_not_running when the role has no running terminal.
+func (s *Server) InterruptRole(ctx context.Context, role string) error {
+	ctx, cancel := s.acceptedTeamContext(ctx)
+	defer cancel()
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.interrupt_role")
+	defer span.End()
+	span.SetAttributes(attribute.String("team.role", role))
+	if s.teamClosed() || ctx.Err() != nil {
+		return userTeamError(teamUnavailable(ctx, "lifetime", "stopping"))
+	}
+	client, err := s.team.terminals.client(ctx, s.team.dependencies.DialTerminals)
+	if err != nil {
+		return userTeamError(teamUnavailable(ctx, "dial_terminals", "hc"))
+	}
+	terminals, err := s.listRoleTerminals(ctx, client, role)
+	if err != nil {
+		return userTeamError(teamUnavailable(ctx, "list_terminals", "hc"))
+	}
+	for _, terminal := range terminals {
+		if terminal.State != hc.StateLive {
+			continue
+		}
+		_, err := client.Interrupt(ctx, terminal.Address)
+		switch {
+		case err == nil:
+			return nil
+		case errors.Is(err, hc.ErrFinished), errors.Is(err, hc.ErrNotFound):
+			// It ended between the list and the key press.
+		default:
+			return userTeamError(teamUnavailable(ctx, "interrupt", "hc"))
+		}
+	}
+	return genhighbay.MakeRoleNotRunning(errors.New("that role has no running terminal to interrupt"))
+}
+
+// StopRole ends and removes the terminal Highbay started for role, so the
+// role can be started again. It returns role_not_running when Highbay runs no
+// terminal for the role; a session the user attached is theirs to end, and
+// is left exactly as it is.
+func (s *Server) StopRole(ctx context.Context, role string) error {
+	ctx, cancel := s.acceptedTeamContext(ctx)
+	defer cancel()
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.stop_role")
+	defer span.End()
+	span.SetAttributes(attribute.String("team.role", role))
 	s.team.Lock()
 	defer s.team.Unlock()
-	return s.closeHeadless()
-}
-
-// workersStep is the management read's stable next action.
-const workersStep = "Start build workers from the Highbay page."
-
-// startHerdrWorkers rereads the active team, uses an attached guide as a
-// reference, and passes only missing worker choices to Chorus.
-func (s *Server) startHerdrWorkers(
-	ctx context.Context, record Record, roles, workers []launcherRole,
-	choices map[string]*genhighbay.RoleAgentChoice,
-) (*genhighbay.ProjectTeam, error) {
-	host := s.team.dependencies.Host
-	connection, err := s.team.dependencies.Connect(ctx)
+	if s.team.closed || ctx.Err() != nil {
+		return userTeamError(teamUnavailable(ctx, "lifetime", "stopping"))
+	}
+	client, err := s.team.terminals.client(ctx, s.team.dependencies.DialTerminals)
 	if err != nil {
-		return nil, userTeamError(teamUnavailable(ctx, "chorus_status", "chorus"))
+		return userTeamError(teamUnavailable(ctx, "dial_terminals", "hc"))
 	}
-	explicitGuide := choices["guide"] != nil
-	if explicitGuide {
-		guide, _ := guideRole(roles)
-		if connection.Observer == nil {
-			return nil, userTeamError(teamUnavailable(ctx, "guide_watcher", "chorus"))
-		}
-		watchers, err := connection.Observer.ReadWatchers(ctx, record.Team, "", []TeamRole{{Role: "guide", Handle: guide.Handle}})
-		if err != nil {
-			return nil, userTeamError(teamUnavailable(ctx, "guide_watcher", "chorus"))
-		}
-		if watchers.Held[guide.Handle] {
-			return nil, guideAlreadyRunning()
-		}
-	}
-	space, spaceExists, err := s.findWorkerSpace(ctx, record)
+	removed, _, err := s.removeManagedRoleTerminals(ctx, client, role)
 	if err != nil {
-		return nil, userTeamError(err)
+		return userTeamError(teamUnavailable(ctx, "stop_role", "hc"))
 	}
-	var live map[string]liveRole
-	if spaceExists {
-		live, err = s.liveTeam(ctx, record, space, roles)
-		if err != nil {
-			return nil, userTeamError(teamUnavailable(ctx, "terminals", "herdr"))
-		}
-	}
-	var rosterRoles []launcherRole
-	tab := ""
-	if guide, ok := live["guide"]; ok {
-		if explicitGuide {
-			return nil, guideAlreadyRunning()
-		}
-		tab = guide.tab
-		role, _ := guideRole(roles)
-		rosterRoles = append(rosterRoles, role)
-	}
-	rosterRoles = append(rosterRoles, workers...)
-	missing := make(map[string]*genhighbay.RoleAgentChoice, len(choices))
-	var missingRoles []launcherRole
-	for _, role := range rosterRoles {
-		choice, ok := choices[role.Role]
-		if !ok || choice == nil {
-			continue
-		}
-		if _, running := live[role.Role]; !running {
-			missing[role.Role] = choice
-			missingRoles = append(missingRoles, role)
-		}
-	}
-	if len(missing) > 0 {
-		if err := s.prepareWorkerTrust(ctx, record, missingRoles, missing, true); err != nil {
-			return nil, err
-		}
-	}
-	if !spaceExists {
-		space, err = s.createWorkerSpace(ctx, record)
-		if err != nil {
-			return nil, userTeamError(err)
-		}
-	}
-	if explicitGuide {
-		guide, _ := guideRole(roles)
-		if _, err := s.registerAgent(guide.Handle, agentRecord{Role: "guide", Folder: guide.Folder}); err != nil {
-			return nil, userTeamError(stateUnavailable(ctx, "register_guide", err))
-		}
-	}
-	if err := s.saveChoices(ctx, choices); err != nil {
-		return nil, err
-	}
-	roster, err := teamRoster(record, rosterRoles)
-	if err != nil {
-		return nil, userTeamError(teamUnavailable(ctx, "roster", "role_folder"))
-	}
-	if err := s.writeTeamRoster(ctx, space.ID, roster); err != nil {
-		return nil, userTeamError(err)
-	}
-	if err := s.saveTeamLocation(record.Team, space.ID, tab); err != nil {
-		return nil, userTeamError(stateUnavailable(ctx, "save_team", err))
-	}
-	if safeSpaceID(record.Space) && record.Space != space.ID {
-		oldPath := filepath.Join(s.team.dependencies.RosterDirectory, record.Space+".json")
-		if err := os.Remove(oldPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, userTeamError(teamUnavailable(ctx, "remove_roster", "roster_folder"))
-		}
-	}
-	s.setTeamConnection(connection)
-	if len(missing) > 0 {
-		if err := host.LaunchWorkers(ctx, space.ID, missing); err != nil {
-			return nil, userTeamError(teamUnavailable(ctx, "launch_workers", "chorus"))
-		}
-		// Fresh observations confirm which processes reached a live model pane.
-		if spaces, err := host.Spaces(ctx); err == nil {
-			for _, actual := range spaces {
-				if actual.ID == space.ID && actual.Machine == nil {
-					if observed, err := s.liveTeam(ctx, record, actual, roles); err == nil {
-						live = observed
-					}
-					break
-				}
-			}
-		}
-	}
-	if guide, ok := live["guide"]; ok && explicitGuide {
-		tab = guide.tab
-		if err := s.saveTeamLocation(record.Team, space.ID, tab); err != nil {
-			return nil, userTeamError(stateUnavailable(ctx, "save_guide_tab", err))
-		}
-	}
-	record.Space, record.Tab = space.ID, tab
-	return startResult(record, s.herdrMode(tab), roles, live, "Build workers were requested in Herdr."), nil
-}
-
-// findWorkerSpace locates the saved local space or its unique named replacement without creating one.
-func (s *Server) findWorkerSpace(ctx context.Context, record Record) (TeamSpace, bool, error) {
-	host := s.team.dependencies.Host
-	spaces, err := host.Spaces(ctx)
-	if err != nil {
-		return TeamSpace{}, false, teamUnavailable(ctx, "spaces", "herdr")
-	}
-	var matched TeamSpace
-	matches := 0
-	for _, space := range spaces {
-		if space.Machine != nil {
-			continue
-		}
-		if record.Space != "" && space.ID == record.Space {
-			if !safeSpaceID(space.ID) {
-				return TeamSpace{}, false, teamUnavailable(ctx, "saved_space", "saved_space")
-			}
-			return space, true, nil
-		}
-		if safeSpaceID(space.ID) && space.Name == record.Team && space.Folder == record.Directory {
-			matched, matches = space, matches+1
-		}
-	}
-	if matches > 1 {
-		return TeamSpace{}, false, &controlplane.TeamSpaceConflict{Count: matches}
-	}
-	if matches == 1 {
-		return matched, true, nil
-	}
-	return TeamSpace{}, false, nil
-}
-
-// createWorkerSpace creates a new local space for record once launch admission succeeds.
-func (s *Server) createWorkerSpace(ctx context.Context, record Record) (TeamSpace, error) {
-	created, err := s.team.dependencies.Host.CreateSpace(ctx, record.Team, record.Directory)
-	if err != nil || !safeSpaceID(created.ID) || created.Machine != nil {
-		return TeamSpace{}, teamUnavailable(ctx, "create_space", "herdr")
-	}
-	return created, nil
-}
-
-// liveTeam accepts only exact registered role labels on model panes and a
-// single team tab. Unclear terminal ownership prevents launching a duplicate.
-func (s *Server) liveTeam(ctx context.Context, record Record, space TeamSpace, roles []launcherRole) (map[string]liveRole, error) {
-	handles := make([]string, 0, len(roles))
-	for _, role := range roles {
-		handles = append(handles, role.Handle)
-	}
-	terminals, err := s.team.dependencies.Host.Terminals(ctx, record.Directory, space.ID, handles)
-	if err != nil {
-		return nil, err
-	}
-	live := make(map[string]liveRole, len(roles))
-	teamTab := ""
-	for _, terminal := range terminals {
-		if terminal.Labels["chorus.project"] != record.Directory || terminal.Labels["herdr.space"] != space.ID {
-			continue
-		}
-		if terminal.State != "live" {
-			continue
-		}
-		tab, pane := modelPane(space, terminal)
-		if pane == "" {
-			continue
-		}
-		if terminal.Labels["chorus.swarm"] != record.Team || teamTab != "" && teamTab != tab {
-			return nil, errors.New("Herdr labels identify a conflicting team")
-		}
-		teamTab = tab
-		if !roleRunning(terminal, s.team.dependencies.Shell) {
-			continue
-		}
-		for _, role := range roles {
-			if terminal.Labels["chorus.handle"] != role.Handle {
-				continue
-			}
-			if terminal.Labels["chorus.role"] != role.Role || terminal.Labels["chorus.agent"] == "" || live[role.Role].pane != "" {
-				return nil, errors.New("Herdr labels do not identify one registered role")
-			}
-			live[role.Role] = liveRole{tab: tab, pane: pane}
-		}
-	}
-	return live, nil
-}
-
-// stopHerdrWorkers resolves exact pane identities from owned labels. It
-// rechecks fresh terminal labels immediately before asking Herdr to close
-// each pane and never includes the guide in the lookup.
-func (s *Server) stopHerdrWorkers(ctx context.Context) error {
-	record, roles := s.currentTeam()
-	if !safeSpaceID(record.Space) {
-		return nil
-	}
-	workers := slices.DeleteFunc(roles, func(role launcherRole) bool { return !workerRole(role.Role) })
-	if len(workers) == 0 {
-		return nil
-	}
-	host := s.team.dependencies.Host
-	spaces, err := host.Spaces(ctx)
-	if err != nil {
-		return err
-	}
-	var space TeamSpace
-	for _, candidate := range spaces {
-		if candidate.ID == record.Space && candidate.Machine == nil {
-			space = candidate
-			break
-		}
-	}
-	if space.ID == "" {
-		return nil
-	}
-	handles := make([]string, 0, len(workers))
-	for _, worker := range workers {
-		handles = append(handles, worker.Handle)
-	}
-	terminals, err := host.Terminals(ctx, record.Directory, space.ID, handles)
-	if err != nil {
-		return err
-	}
-	teamTab := record.Tab
-	for _, terminal := range terminals {
-		for _, worker := range workers {
-			if !ownsWorker(record, terminal, worker) {
-				continue
-			}
-			tab, pane := modelPane(space, terminal)
-			if pane == "" {
-				continue
-			}
-			if teamTab != "" && tab != teamTab {
-				return errors.New("worker panes span several team tabs")
-			}
-			teamTab = tab
-		}
-	}
-	var failures error
-	for _, terminal := range terminals {
-		for _, worker := range workers {
-			if !ownsWorker(record, terminal, worker) {
-				continue
-			}
-			tab, pane := modelPane(space, terminal)
-			if pane == "" || tab != teamTab {
-				continue
-			}
-			fresh, err := host.ReadTerminal(ctx, terminal.Address)
-			if err != nil {
-				failures = errors.Join(failures, err)
-				continue
-			}
-			if fresh.Address == terminal.Address && ownsWorker(record, fresh, worker) && fresh.Labels["herdr.tab"] == tab {
-				failures = errors.Join(failures, host.ClosePane(ctx, pane))
-			}
-		}
-	}
-	return failures
-}
-
-// modelPane ties label claims to Herdr's actual space/tab/pane membership.
-func modelPane(space TeamSpace, terminal TeamTerminal) (string, string) {
-	for _, tab := range space.Tabs {
-		if tab.ID != terminal.Labels["herdr.tab"] {
-			continue
-		}
-		for _, pane := range tab.Terminals {
-			if pane.Terminal == terminal.Address && pane.Pane != "" {
-				return tab.ID, pane.Pane
-			}
-		}
-	}
-	return "", ""
-}
-
-// ownsWorker requires all owner labels that Chorus writes for a roster role.
-func ownsWorker(record Record, terminal TeamTerminal, worker launcherRole) bool {
-	labels := terminal.Labels
-	return terminal.Address != "" && labels["chorus.project"] == record.Directory &&
-		labels["chorus.swarm"] == record.Team && labels["herdr.space"] == record.Space &&
-		labels["chorus.handle"] == worker.Handle && labels["chorus.role"] == worker.Role &&
-		labels["chorus.agent"] != ""
-}
-
-// currentTeam copies persisted role and routing facts while concurrent auth
-// and preference operations may be active.
-func (s *Server) currentTeam() (Record, []launcherRole) {
-	s.state.mu.Lock()
-	defer s.state.mu.Unlock()
-	record := s.state.Record
-	if record.Team == "" {
-		record.Team = teamName(filepath.Base(record.Directory), record.ID)
-	}
-	return record, registeredTeamRoles(record.Agents)
-}
-
-// teamRoster constructs Chorus's closed schema with globally resolved MCP
-// registration. It does not place a worker to the right when no guide is running.
-func teamRoster(record Record, roles []launcherRole) (launcherRoster, error) {
-	roster := launcherRoster{Root: record.Directory, Swarm: record.Team, Roles: make([]launcherRole, 0, len(roles))}
-	for _, role := range roles {
-		info, err := os.Stat(role.Folder)
-		if err != nil || !filepath.IsAbs(role.Folder) || !info.IsDir() {
-			return launcherRoster{}, errors.New("a role working folder cannot be used")
-		}
-		if workerRole(role.Role) {
-			role.FirstMessage += " Keep your Chorus watcher running. Highbay messages you there when you have an unread assignment; read your assignments when asked. If you cannot join Chorus or its watcher fails, do not stop and do not inspect, start, stop or reconfigure Chorus or any other service or process on this computer: carry on through your highbay connection alone."
-		}
-		if i := len(roster.Roles); i > 0 {
-			direction := "down"
-			if i == 1 && roster.Roles[0].Role == "guide" && role.Role == "builder" {
-				direction = "right"
-			}
-			role.Place = &launcherPlace{Beside: roster.Roles[i-1].Handle, Direction: direction}
-		}
-		roster.Roles = append(roster.Roles, role)
-	}
-	return roster, nil
-}
-
-// writeTeamRoster publishes one whole roster for the exact local space.
-func (s *Server) writeTeamRoster(ctx context.Context, space string, roster launcherRoster) error {
-	dir := s.team.dependencies.RosterDirectory
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return teamUnavailable(ctx, "roster_directory", "roster_folder")
-	}
-	if err := writeJSON(filepath.Join(dir, space+".json"), roster); err != nil {
-		return teamUnavailable(ctx, "write_roster", "roster_folder")
+	if removed == 0 {
+		return genhighbay.MakeRoleNotRunning(errors.New("Highbay runs no terminal for that role"))
 	}
 	return nil
 }
 
-// startResult projects registered actors and current launch observations.
-func startResult(record Record, mode string, roles []launcherRole, live map[string]liveRole, step string) *genhighbay.ProjectTeam {
-	result := &genhighbay.ProjectTeam{
-		Team: record.Team, Space: localSpace(record.Space), HerdrMode: mode, Step: step,
-		Roles: make([]*genhighbay.ProjectTeamRole, 0, len(roles)),
+// RestartRole ends the terminal Highbay started for role, if any, and starts
+// the role again in a new one, keeping its handle and credential. The coding
+// agent is requested, else the role's saved choice, else an installed
+// default. A role whose terminal already ended, or that never started, is
+// simply started.
+//
+// It returns role_not_running, and changes nothing, when the role runs in a
+// session Highbay did not start (a terminal the user attached, or a guide
+// that is present in Chorus without a terminal) or is a worker no build has
+// registered. The choice is resolved and the coding client's settings are
+// checked before the running terminal is ended, so a refusal leaves the
+// role running.
+func (s *Server) RestartRole(ctx context.Context, role string, requested *genhighbay.RoleAgentChoice) error {
+	ctx, cancel := s.acceptedTeamContext(ctx)
+	defer cancel()
+	ctx, span := otel.Tracer("highbay/project").Start(ctx, "highbay.project.restart_role")
+	defer span.End()
+	span.SetAttributes(attribute.String("team.role", role))
+	s.team.Lock()
+	defer s.team.Unlock()
+	if s.team.closed || ctx.Err() != nil {
+		return userTeamError(teamUnavailable(ctx, "lifetime", "stopping"))
 	}
-	for _, role := range roles {
-		_, running := live[role.Role]
-		result.Roles = append(result.Roles, &genhighbay.ProjectTeamRole{Role: role.Role, Handle: role.Handle, Running: running})
+	record, roles := s.currentTeam()
+	var target teamRole
+	if role == "guide" {
+		target = s.guide(record, roles)
+	} else if at := slices.IndexFunc(roles, func(registered teamRole) bool { return registered.Role == role }); at >= 0 {
+		target = roles[at]
+	} else {
+		return genhighbay.MakeRoleNotRunning(errors.New("that role is not part of this project's team yet; it joins when a build starts"))
 	}
-	return result
+	client, err := s.team.terminals.client(ctx, s.team.dependencies.DialTerminals)
+	if err != nil {
+		return userTeamError(teamUnavailable(ctx, "dial_terminals", "hc"))
+	}
+	terminals, err := s.listRoleTerminals(ctx, client, role)
+	if err != nil {
+		return userTeamError(teamUnavailable(ctx, "list_terminals", "hc"))
+	}
+	attached := slices.ContainsFunc(terminals, func(terminal hc.Terminal) bool {
+		return terminal.Labels[labelManaged] != "true" && terminal.State == hc.StateLive
+	})
+	if attached || role == "guide" && len(terminals) == 0 && s.team.observed.guidePresent(s.now(), target.Handle) {
+		return genhighbay.MakeRoleNotRunning(errors.New("that role runs in a session Highbay did not start; restart it there"))
+	}
+	explicit := map[string]*genhighbay.RoleAgentChoice{}
+	if requested != nil {
+		explicit[role] = requested
+	}
+	choices, err := s.resolveChoices(ctx, []teamRole{target}, explicit)
+	if err != nil {
+		return err
+	}
+	if err := s.prepareWorkerTrust(ctx, record, []teamRole{target}, choices, true); err != nil {
+		return err
+	}
+	if _, _, err := s.removeManagedRoleTerminals(ctx, client, role); err != nil {
+		return userTeamError(teamUnavailable(ctx, "stop_role", "hc"))
+	}
+	return s.startRoles(ctx, record, []teamRole{target}, choices, false)
 }
 
-// localSpace sanitizes empty or obsolete IDs that cannot name a local space.
-func localSpace(space string) string {
-	if !safeSpaceID(space) {
-		return ""
-	}
-	return space
+// Close ends the connection to herdr-core and refuses further team work. The
+// agents keep running in their terminals: they belong to the user's session
+// with herdr-core, not to this server process.
+func (s *Server) Close() error {
+	s.team.Lock()
+	defer s.team.Unlock()
+	s.team.closed = true
+	return s.team.terminals.close()
 }
 
-// guideRole selects the sole registered or explicitly requested guide row.
-func guideRole(roles []launcherRole) (launcherRole, bool) {
-	for _, role := range roles {
-		if role.Role == "guide" {
-			return role, true
-		}
+// roleLabels are the labels that make a terminal stand for role: Highbay's
+// own, which the supervisor follows, and Chorus's, which let Chorus keep the
+// agent present and wake it at a turn boundary.
+func roleLabels(record Record, role teamRole) map[string]string {
+	return map[string]string{
+		labelProject:     record.ID,
+		labelRole:        role.Role,
+		"chorus.project": record.Directory,
+		"chorus.swarm":   record.Team,
+		"chorus.role":    role.Role,
+		"chorus.handle":  role.Handle,
 	}
-	return launcherRole{}, false
 }
 
-// guideAlreadyRunning preserves the active guide pane or external session.
+// clearedRoleLabels removes every label roleLabels sets: herdr-core deletes a
+// label that is set to the empty string.
+func clearedRoleLabels() map[string]string {
+	return map[string]string{
+		labelProject: "", labelRole: "", "chorus.project": "", "chorus.swarm": "", "chorus.role": "", "chorus.handle": "",
+	}
+}
+
+// guideAlreadyRunning preserves the running guide session.
 func guideAlreadyRunning() error {
 	return genhighbay.MakeUnprocessable(errors.New("the current guide session is already running"))
 }
 
-// activeTeamState describes snapshots whose states establish a running agent.
-func activeTeamState(state string) bool {
-	switch state {
-	case "starting", "needs_you", "working", "waiting":
-		return true
+// sameBuild compares the saved change and timestamp, regardless of time location.
+func sameBuild(a, b controlplane.BuildIdentity) bool {
+	return a.ChangeID == b.ChangeID && a.StartedAt.Equal(b.StartedAt)
+}
+
+// guide returns the registered guide, or the guide this project would
+// register: its handle is derived from the project, and it works in the
+// project folder.
+func (s *Server) guide(record Record, roles []teamRole) teamRole {
+	if guide, found := guideRole(roles); found {
+		return guide
 	}
-	return false
+	return teamRole{Role: "guide", Handle: teamName("guide", record.ID), Folder: record.Directory}
+}
+
+// startRoles starts a terminal for each wanted role that has no running
+// agent. choices names the coding agent for each wanted role. With
+// refuseRunningGuide, a running guide is an error instead of being left
+// alone. The team lock is held.
+func (s *Server) startRoles(
+	ctx context.Context, record Record, wanted []teamRole,
+	choices map[string]*genhighbay.RoleAgentChoice, refuseRunningGuide bool,
+) error {
+	client, err := s.team.terminals.client(ctx, s.team.dependencies.DialTerminals)
+	if err != nil {
+		return userTeamError(teamUnavailable(ctx, "dial_terminals", "hc"))
+	}
+	var missing []teamRole
+	for _, role := range wanted {
+		terminals, err := s.listRoleTerminals(ctx, client, role.Role)
+		if err != nil {
+			return userTeamError(teamUnavailable(ctx, "list_terminals", "hc"))
+		}
+		running := slices.ContainsFunc(terminals, func(terminal hc.Terminal) bool {
+			return hc.RoleRunning(terminal, s.team.dependencies.Shell)
+		})
+		// A guide session outside herdr-core has no terminal; Chorus is
+		// the only place it shows.
+		running = running || role.Role == "guide" && len(terminals) == 0 && s.team.observed.guidePresent(s.now(), role.Handle)
+		switch {
+		case running && role.Role == "guide" && refuseRunningGuide:
+			return guideAlreadyRunning()
+		case !running:
+			missing = append(missing, role)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	if err := s.prepareWorkerTrust(ctx, record, missing, choices, true); err != nil {
+		return err
+	}
+	if err := s.saveTeamName(ctx, record.Team); err != nil {
+		return userTeamError(err)
+	}
+	started := make(map[string]*genhighbay.RoleAgentChoice, len(missing))
+	for _, role := range missing {
+		if role.Role == "guide" {
+			if _, err := s.registerAgent(role.Handle, agentRecord{Role: role.Role, Folder: role.Folder}); err != nil {
+				return userTeamError(stateUnavailable(ctx, "register_guide", err))
+			}
+		}
+		started[role.Role] = choices[role.Role]
+	}
+	if err := s.saveChoices(ctx, started); err != nil {
+		return err
+	}
+	for _, role := range missing {
+		if err := s.startRole(ctx, client, record, role, choices[role.Role]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// startRole clears what is left of the role's earlier terminals and starts a
+// new one running the chosen coding agent in the role's folder. The terminal
+// has no parent and outlives this server, so the agent keeps working across a
+// server restart.
+func (s *Server) startRole(
+	ctx context.Context, client TeamTerminals, record Record, role teamRole, choice *genhighbay.RoleAgentChoice,
+) error {
+	info, err := os.Stat(role.Folder)
+	if err != nil || !filepath.IsAbs(role.Folder) || !info.IsDir() {
+		return userTeamError(teamUnavailable(ctx, "role_folder", "role_folder"))
+	}
+	if err := s.replaceRoleTerminals(ctx, client, role.Role, ""); err != nil {
+		return userTeamError(teamUnavailable(ctx, "clear_role", "hc"))
+	}
+	argv, err := s.team.dependencies.AgentCommand(choice, roleFirstMessage(role, record.Team))
+	if err != nil {
+		return invalidWorkerChoice()
+	}
+	labels := roleLabels(record, role)
+	labels[labelManaged] = "true"
+	_, err = client.Run(ctx, hc.RunRequest{
+		Argv:          argv,
+		Cwd:           role.Folder,
+		Env:           s.team.dependencies.AgentEnv,
+		Labels:        labels,
+		NoParent:      true,
+		OutliveParent: true,
+		NoNotify:      true,
+	})
+	if err != nil {
+		trace.SpanFromContext(ctx).SetAttributes(attribute.String("team.role", role.Role))
+		return userTeamError(teamUnavailable(ctx, "run_terminal", "hc"))
+	}
+	if role.Role == "guide" {
+		s.team.observed.guideBegan()
+	}
+	return nil
+}
+
+// listRoleTerminals asks herdr-core for this project's terminals labeled for
+// role, finished ones included. It asks the core rather than the supervisor's
+// view so a start or stop decides on the core's state at that moment.
+func (s *Server) listRoleTerminals(ctx context.Context, client TeamTerminals, role string) ([]hc.Terminal, error) {
+	return client.List(ctx, hc.ListRequest{All: true, Labels: map[string]string{
+		labelProject: s.state.Record.ID,
+		labelRole:    role,
+	}})
+}
+
+// replaceRoleTerminals makes the terminal at keep the only one that stands
+// for role, or none when keep is empty: every other terminal Highbay started
+// for the role is ended and removed, and a terminal the user attached keeps
+// running but loses the role's labels. The terminal at keep is not touched.
+func (s *Server) replaceRoleTerminals(ctx context.Context, client TeamTerminals, role, keep string) error {
+	terminals, err := s.listRoleTerminals(ctx, client, role)
+	if err != nil {
+		return err
+	}
+	for _, terminal := range terminals {
+		switch {
+		case terminal.Address == keep:
+		case terminal.Labels[labelManaged] == "true":
+			if err := s.removeTerminal(ctx, client, terminal); err != nil {
+				return err
+			}
+		default:
+			if _, err := client.Label(ctx, terminal.Address, clearedRoleLabels()); err != nil && !errors.Is(err, hc.ErrNotFound) {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// removeManagedRoleTerminals ends and removes the terminals Highbay started
+// for role and reports how many it removed. It touches no other terminal: a
+// session the user attached keeps running and keeps its labels. attached
+// reports whether such a session is live. Ending the guide's terminal is
+// recorded, so the guide's last activity in Chorus stops counting.
+func (s *Server) removeManagedRoleTerminals(
+	ctx context.Context, client TeamTerminals, role string,
+) (removed int, attached bool, err error) {
+	terminals, err := s.listRoleTerminals(ctx, client, role)
+	if err != nil {
+		return 0, false, err
+	}
+	for _, terminal := range terminals {
+		if terminal.Labels[labelManaged] != "true" {
+			attached = attached || terminal.State == hc.StateLive
+			continue
+		}
+		if err := s.removeTerminal(ctx, client, terminal); err != nil {
+			return removed, attached, err
+		}
+		removed++
+	}
+	if role == "guide" && removed > 0 {
+		s.team.observed.guideEnded(s.now())
+	}
+	return removed, attached, nil
+}
+
+// removeTerminal ends terminal's program when it still runs and removes the
+// terminal. One that is already gone is not an error.
+func (s *Server) removeTerminal(ctx context.Context, client TeamTerminals, terminal hc.Terminal) error {
+	if terminal.State == hc.StateLive {
+		if _, err := client.Kill(ctx, terminal.Address); err != nil && !errors.Is(err, hc.ErrNotFound) {
+			return err
+		}
+	}
+	if err := client.Remove(ctx, terminal.Address); err != nil && !errors.Is(err, hc.ErrNotFound) {
+		return err
+	}
+	return nil
+}
+
+// teamClosed reports whether the server closed its team.
+func (s *Server) teamClosed() bool {
+	s.team.Lock()
+	defer s.team.Unlock()
+	return s.team.closed
 }
 
 // prepareWorkerTrust checks explicit client restrictions and pre-populates
 // missing user-scoped folder trust for the project root and each role folder
 // about to launch. Any explicit policy restriction or unusable client
-// configuration returns a typed refusal before spaces, rosters or worker
-// processes are created.
+// configuration returns a typed refusal before any terminal is started.
 func (s *Server) prepareWorkerTrust(
 	ctx context.Context,
 	record Record,
-	roles []launcherRole,
+	roles []teamRole,
 	choices map[string]*genhighbay.RoleAgentChoice,
 	requireChorus bool,
 ) error {
@@ -607,9 +512,4 @@ func (s *Server) prepareWorkerTrust(
 		return &controlplane.TeamPolicyRefusal{Kind: controlplane.PolicyConfigUnusable}
 	}
 	return nil
-}
-
-// sameBuild compares the saved change and timestamp, regardless of time location.
-func sameBuild(a, b controlplane.BuildIdentity) bool {
-	return a.ChangeID == b.ChangeID && a.StartedAt.Equal(b.StartedAt)
 }

@@ -20,7 +20,7 @@ type (
 		// Full commit ID of the candidate being promoted (40 or 64 lowercase hex
 		// characters).
 		CandidateCommit *string `json:"candidate_commit"`
-		// SHA-256 digest of the CP4 verification report written by hbay verify (64
+		// SHA-256 digest of the CP4 verification report written by highbay verify (64
 		// lowercase hex characters).
 		ReportDigest *string `json:"report_digest"`
 	}
@@ -737,14 +737,14 @@ type (
 		// Opaque value for change detection. It changes whenever the listed cards, a
 		// card's get_build view (including the builder's branch head_commit and latest
 		// check), approval_available, initializing_phase, the owner's Story
-		// evaluation, get_team, or get_live_target changes; list_changes items carry
-		// no build or branch fields, so read get_build for those facts. Compare it
-		// only for equality.
+		// evaluation, get_team, get_team_conversation, or get_live_target changes;
+		// list_changes items carry no build or branch fields, so read get_build for
+		// those facts. Compare it only for equality.
 		Version *string `json:"version"`
 		// Whether approve_merge can record approvals on this server: true when the
-		// server runs Checkpoint 4 verification, as every server hbay starts does, and
-		// any stored promotion settings could be resolved; false when the server runs
-		// no verification or resolving the promotion target fails.
+		// server runs Checkpoint 4 verification, as every server highbay starts does,
+		// and any stored promotion settings could be resolved; false when the server
+		// runs no verification or resolving the promotion target fails.
 		ApprovalAvailable *bool `json:"approval_available"`
 		// What init_project is doing now, as a short sentence for the user, such as
 		// "Resolving the service's Go modules"; absent when no initialization is
@@ -836,6 +836,13 @@ type (
 		Opened *bool `json:"opened"`
 		// Safe handoff result without a URL or credential.
 		Message *string `json:"message"`
+		// Stable Chorus swarm name for this project.
+		Team *string `json:"team"`
+		// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+		Channel *string `json:"channel"`
+		// Registered Chorus handle for this project's guide (empty when no guide is
+		// registered yet).
+		Handle *string `json:"handle"`
 	}
 	// PreviewArchitecturePayloadTransport is the internal JSON transport type for PreviewArchitecturePayload.
 	// It lives in the toolset-local http package and is used only for JSON
@@ -1558,7 +1565,7 @@ type (
 	// the public tool type.
 	BuilderVerificationReportTransport struct {
 		// SHA-256 digest of the full report the evaluator saved; approve_merge and
-		// hbay approve take this digest.
+		// highbay approve take this digest.
 		ReportDigest *string `json:"report_digest"`
 		// Every declared scenario, counted by outcome.
 		Counts *VerificationCountsTransport `json:"counts"`

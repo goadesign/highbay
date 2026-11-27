@@ -311,7 +311,7 @@ type BuilderScenario struct {
 }
 
 // ForBuilders returns the builder view of the report: what get_verification,
-// list_verifications and `hbay verify` show by default. A holdout keeps only
+// list_verifications and `highbay verify` show by default. A holdout keeps only
 // its position and outcome. A repair scenario keeps its name, its checks and
 // the error the suite reported for it. An error Assemble wrote because the
 // scenario's record of the binaries it ran failed checkArtifacts is not the
@@ -384,7 +384,7 @@ func Approve(current Binding, report Report) error {
 	return nil
 }
 
-// DecodeReport reads one report written by Run (or `hbay verify`) from r. It
+// DecodeReport reads one report written by Run (or `highbay verify`) from r. It
 // rejects unknown fields and anything after the report, so a file that is not
 // exactly one report fails instead of being partly read. Decoding proves
 // nothing about the report's content; Approve checks that.

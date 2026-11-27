@@ -41,3 +41,18 @@ func BrowserLinkProjectPath() string {
 func ExchangeBrowserLinkProjectPath() string {
 	return "/project/browser-session"
 }
+
+// GetBrowserSessionProjectPath returns the URL path to the project service get_browser_session HTTP endpoint.
+func GetBrowserSessionProjectPath() string {
+	return "/project/browser-session"
+}
+
+// GetUpdateStatusProjectPath returns the URL path to the project service get_update_status HTTP endpoint.
+func GetUpdateStatusProjectPath() string {
+	return "/project/update"
+}
+
+// ApplyUpdateProjectPath returns the URL path to the project service apply_update HTTP endpoint.
+func ApplyUpdateProjectPath() string {
+	return "/project/update"
+}

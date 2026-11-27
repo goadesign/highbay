@@ -145,12 +145,15 @@ confirm.click();
 expect(page.sent("POST", "/changes/confirm").length === 0, "Confirm submitted an answer the draft does not implement");
 page.$("#highbay-review-revision-request").click();
 expect(page.doc.activeElement === page.$("#highbay-confirm-revision-needed"), "Next did not focus the revision request");
-let copied;
-Object.defineProperty(page.win.navigator, "clipboard", { value: { writeText: async (text) => { copied = text; } } });
-page.$("#highbay-confirm-revision-needed button").click();
-await until(() => page.text("#highbay-confirm-revision-needed").includes("Prompt copied."), "the request copy did not announce success");
-expect(copied.includes("chg-openui") && copied.includes("Does the $50 limit include tax?\ntotal_with_tax") &&
-       !copied.includes("\nsubtotal_only"), "the revision request omitted or changed the selected option");
+// The revision is asked of the guide directly, with the selected answers.
+await until(() => !page.$("#highbay-confirm-revision-needed-send").disabled, "the revision request never became available");
+page.$("#highbay-confirm-revision-needed-send").click();
+await until(() => page.sent("POST", "/team/messages").length === 1, "the revision request was not sent to the guide");
+const revision = page.sent("POST", "/team/messages")[0].body;
+expect(revision.to === "guide" && revision.text.includes("chg-openui") &&
+       revision.context.type === "revise_answers" && revision.context.value.change_id === "chg-openui" &&
+       revision.context.value.answers["chg-openui-ambiguity-01"] === "total_with_tax",
+       "the revision request omitted or changed the selected option: " + JSON.stringify(revision));
 draftMatch.click();
 expect(!confirm.disabled && !page.$("#highbay-confirm-revision-needed"), "the supported answer did not restore confirmation");
 const canonicalPill = editorRegion().querySelector('[data-ambiguity-id="chg-openui-ambiguity-01"][data-option="subtotal_only"]');

@@ -44,7 +44,7 @@ type (
 		// ReportDir receives each run's full report, named by its digest. It
 		// must lie outside the workspace.
 		ReportDir string
-		// Command is the argument list that runs this hbay executable;
+		// Command is the argument list that runs this highbay executable;
 		// runs start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 		Command []string
 		// Timeout is how long a run may take before it is stopped and
@@ -155,7 +155,7 @@ const (
 	// refusedMissingTests is an accepted tests' commit the repository no
 	// longer holds, such as after its branch was deleted or rewritten.
 	refusedMissingTests
-	// refusedNoLayout is a commit without the test layout `hbay init`
+	// refusedNoLayout is a commit without the test layout `highbay init`
 	// makes.
 	refusedNoLayout
 	// refusedTestModuleChanged is a candidate commit that changed
@@ -209,11 +209,11 @@ func (r *layoutRefusal) Error() string {
 			" restore these files to their versions or absence in commit %s, commit, and call verify_change or start_live_target again",
 			r.commit, r.testModule, r.baseCommit, list, r.testModule, renameNote, r.baseCommit)
 	}
-	step := "the builder commits the layout hbay init makes and verifies again"
+	step := "the builder commits the layout highbay init makes and verifies again"
 	if r.actor == testWriterActs {
 		step = "the test writer reports again, so Highbay checks and records its tests again"
 	}
-	return fmt.Sprintf("commit %s does not have the test layout hbay init makes (%s): %s", r.commit, r.missing, step)
+	return fmt.Sprintf("commit %s does not have the test layout highbay init makes (%s): %s", r.commit, r.missing, step)
 }
 
 // Error says only what is refused; each caller words the state and the step
@@ -549,7 +549,7 @@ func (c *ControlPlane) testsChoice(
 }
 
 // starterPlanAt reads, with git and never from the working tree, the test
-// layout `hbay init` makes at two commits of the repository holding the
+// layout `highbay init` makes at two commits of the repository holding the
 // bound workspace, and returns the plan that builds candidateCommit's
 // programs and runs testsCommit's generated entry point, written by agents
 // (verify.TestsWritten, the one place written tests are marked).
@@ -801,7 +801,7 @@ func refuseApprovalTestsNotAccepted(saved testWriterAssignment) error {
 }
 
 // refuseNoTestLayout is verify_change's no_test_layout refusal of a commit
-// without the test layout `hbay init` makes, of an accepted tests' commit
+// without the test layout `highbay init` makes, of an accepted tests' commit
 // the repository no longer holds, or of a project folder outside any git
 // repository: it names what is missing and ends with the step.
 func refuseNoTestLayout(refusal *layoutRefusal) error {

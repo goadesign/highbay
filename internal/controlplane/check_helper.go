@@ -1,10 +1,10 @@
 // This file runs each check_project and update_dependencies operation in a
 // check helper process, so the operation's containers are removed and its
-// record and output finished even when hbay serve dies.
+// record and output finished even when highbay serve dies.
 //
-// hbay serve binds the workspace, creates the operation directory and takes
+// highbay serve binds the workspace, creates the operation directory and takes
 // an exclusive flock on it, then starts the helper the composition root
-// bound (CheckHelper, `hbay check-run`) in its own session:
+// bound (CheckHelper, `highbay check-run`) in its own session:
 //
 //	stdin   one JSON checkHelperSpec; stdin then stays open, and its end
 //	        (serve canceled the operation or exited) cancels the operation
@@ -51,11 +51,11 @@ type (
 	// standard streams. The control plane sets the command's standard
 	// streams, extra descriptors and session before starting it, so the
 	// returned command must not set them; it inherits the server's
-	// environment unless it sets one. The composition root binds it: hbay
-	// serve binds `hbay check-run`. New requires one with a Checker.
+	// environment unless it sets one. The composition root binds it: highbay
+	// serve binds `highbay check-run`. New requires one with a Checker.
 	CheckHelper func() *exec.Cmd
 
-	// checkHelperSpec is what hbay serve sends a check helper on stdin: the
+	// checkHelperSpec is what highbay serve sends a check helper on stdin: the
 	// operation to run and the facts serve verified when it bound the
 	// workspace. The helper checks its inherited descriptors against it.
 	checkHelperSpec struct {
@@ -148,15 +148,15 @@ const (
 )
 
 // errServeReleased is the cancellation cause a check helper records when
-// its stdin ends: hbay serve canceled the operation or exited.
-var errServeReleased = errors.New("hbay serve canceled the operation or exited")
+// its stdin ends: highbay serve canceled the operation or exited.
+var errServeReleased = errors.New("highbay serve canceled the operation or exited")
 
 // errCheckTimeLimit is the cancellation cause of a check operation that
 // reached the server's configured check timeout, which tells that limit from
 // a deadline the caller set.
 var errCheckTimeLimit = errors.New("the check reached its configured time limit")
 
-// RunCheckHelper runs as `hbay check-run`, the check helper process of one
+// RunCheckHelper runs as `highbay check-run`, the check helper process of one
 // check_project or update_dependencies operation. runner resolves the
 // engine; tp receives the helper's spans. It reads the spec from stdin,
 // verifies the descriptors it inherited, and runs the operation; when stdin
@@ -231,7 +231,7 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 
 // lockNewOperationDir creates the operation directory dir and returns it
-// open with an exclusive flock held, which hbay serve hands to the check
+// open with an exclusive flock held, which highbay serve hands to the check
 // helper. A directory that cannot be locked is removed.
 func lockNewOperationDir(dir string) (*os.File, error) {
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -298,7 +298,7 @@ func openCheckHelperOperation(spec checkHelperSpec, runner *candidate.ContainerR
 	return op, os.NewFile(checkHelperDirFD, spec.Dir), nil
 }
 
-// watchServe reads the rest of the helper's stdin, which hbay serve never
+// watchServe reads the rest of the helper's stdin, which highbay serve never
 // writes to after the spec, and cancels the operation when it ends: serve
 // closed it to cancel the operation, or exited. A read error ends it the
 // same way.

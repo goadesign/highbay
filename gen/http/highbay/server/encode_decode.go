@@ -2946,22 +2946,66 @@ func EncodeGetTeamError(encoder func(context.Context, http.ResponseWriter) goaht
 	}
 }
 
-// EncodeShowTeamPaneResponse returns an encoder for responses returned by the
-// highbay show_team_pane endpoint.
-func EncodeShowTeamPaneResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeGetTeamConversationResponse returns an encoder for responses returned
+// by the highbay get_team_conversation endpoint.
+func EncodeGetTeamConversationResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		w.WriteHeader(http.StatusNoContent)
-		return nil
+		res, _ := v.(*highbay.TeamConversation)
+		enc := encoder(ctx, w)
+		body := NewGetTeamConversationResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
 	}
 }
 
-// DecodeShowTeamPaneRequest returns a decoder for requests sent to the highbay
-// show_team_pane endpoint.
-func DecodeShowTeamPaneRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.ShowTeamPanePayload, error) {
-	return func(r *http.Request) (*highbay.ShowTeamPanePayload, error) {
-		var payload *highbay.ShowTeamPanePayload
+// EncodeGetTeamConversationError returns an encoder for errors returned by the
+// get_team_conversation highbay endpoint.
+func EncodeGetTeamConversationError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetTeamConversationForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeSendTeamMessageResponse returns an encoder for responses returned by
+// the highbay send_team_message endpoint.
+func EncodeSendTeamMessageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*highbay.TeamMessage)
+		enc := encoder(ctx, w)
+		body := NewSendTeamMessageResponseBody(res)
+		w.WriteHeader(http.StatusCreated)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSendTeamMessageRequest returns a decoder for requests sent to the
+// highbay send_team_message endpoint.
+func DecodeSendTeamMessageRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.SendTeamMessagePayload, error) {
+	return func(r *http.Request) (*highbay.SendTeamMessagePayload, error) {
+		var payload *highbay.SendTeamMessagePayload
 		var (
-			body ShowTeamPaneRequestBody
+			body SendTeamMessageRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -2975,19 +3019,19 @@ func DecodeShowTeamPaneRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateShowTeamPaneRequestBody(&body)
+		err = ValidateSendTeamMessageRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewShowTeamPanePayload(&body)
+		payload = NewSendTeamMessagePayload(&body)
 
 		return payload, nil
 	}
 }
 
-// EncodeShowTeamPaneError returns an encoder for errors returned by the
-// show_team_pane highbay endpoint.
-func EncodeShowTeamPaneError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeSendTeamMessageError returns an encoder for errors returned by the
+// send_team_message highbay endpoint.
+func EncodeSendTeamMessageError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -2995,32 +3039,6 @@ func EncodeShowTeamPaneError(encoder func(context.Context, http.ResponseWriter) 
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "window_busy":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewShowTeamPaneWindowBusyResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "pane_unavailable":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewShowTeamPanePaneUnavailableResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "team_unavailable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3029,10 +3047,23 @@ func EncodeShowTeamPaneError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewShowTeamPaneTeamUnavailableResponseBody(res)
+				body = NewSendTeamMessageTeamUnavailableResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSendTeamMessageUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
 			return enc.Encode(body)
 		case "forbidden":
 			var res *goa.ServiceError
@@ -3042,7 +3073,7 @@ func EncodeShowTeamPaneError(encoder func(context.Context, http.ResponseWriter) 
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewShowTeamPaneForbiddenResponseBody(res)
+				body = NewSendTeamMessageForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3105,32 +3136,6 @@ func EncodeStartTeamAgentsError(encoder func(context.Context, http.ResponseWrite
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
-		case "ambiguous_space":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewStartTeamAgentsAmbiguousSpaceResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
-		case "window_busy":
-			var res *goa.ServiceError
-			errors.As(v, &res)
-			enc := encoder(ctx, w)
-			var body any
-			if formatter != nil {
-				body = formatter(ctx, res)
-			} else {
-				body = NewStartTeamAgentsWindowBusyResponseBody(res)
-			}
-			w.Header().Set("goa-error", res.GoaErrorName())
-			w.WriteHeader(http.StatusConflict)
-			return enc.Encode(body)
 		case "team_unavailable":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -3166,6 +3171,517 @@ func EncodeStartTeamAgentsError(encoder func(context.Context, http.ResponseWrite
 				body = formatter(ctx, res)
 			} else {
 				body = NewStartTeamAgentsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeInterruptTeamRoleResponse returns an encoder for responses returned by
+// the highbay interrupt_team_role endpoint.
+func EncodeInterruptTeamRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeInterruptTeamRoleRequest returns a decoder for requests sent to the
+// highbay interrupt_team_role endpoint.
+func DecodeInterruptTeamRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.InterruptTeamRolePayload, error) {
+	return func(r *http.Request) (*highbay.InterruptTeamRolePayload, error) {
+		var payload *highbay.InterruptTeamRolePayload
+		var (
+			role string
+			err  error
+
+			params = mux.Vars(r)
+		)
+		role = params["role"]
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewInterruptTeamRolePayload(role)
+
+		return payload, nil
+	}
+}
+
+// EncodeInterruptTeamRoleError returns an encoder for errors returned by the
+// interrupt_team_role highbay endpoint.
+func EncodeInterruptTeamRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "role_not_running":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInterruptTeamRoleRoleNotRunningResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "team_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInterruptTeamRoleTeamUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewInterruptTeamRoleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeStopTeamRoleResponse returns an encoder for responses returned by the
+// highbay stop_team_role endpoint.
+func EncodeStopTeamRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeStopTeamRoleRequest returns a decoder for requests sent to the highbay
+// stop_team_role endpoint.
+func DecodeStopTeamRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.StopTeamRolePayload, error) {
+	return func(r *http.Request) (*highbay.StopTeamRolePayload, error) {
+		var payload *highbay.StopTeamRolePayload
+		var (
+			role string
+			err  error
+
+			params = mux.Vars(r)
+		)
+		role = params["role"]
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewStopTeamRolePayload(role)
+
+		return payload, nil
+	}
+}
+
+// EncodeStopTeamRoleError returns an encoder for errors returned by the
+// stop_team_role highbay endpoint.
+func EncodeStopTeamRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "role_not_running":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStopTeamRoleRoleNotRunningResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "team_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStopTeamRoleTeamUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewStopTeamRoleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeRestartTeamRoleResponse returns an encoder for responses returned by
+// the highbay restart_team_role endpoint.
+func EncodeRestartTeamRoleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
+}
+
+// DecodeRestartTeamRoleRequest returns a decoder for requests sent to the
+// highbay restart_team_role endpoint.
+func DecodeRestartTeamRoleRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.RestartTeamRolePayload, error) {
+	return func(r *http.Request) (*highbay.RestartTeamRolePayload, error) {
+		var payload *highbay.RestartTeamRolePayload
+		var (
+			body RestartTeamRoleRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateRestartTeamRoleRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			role string
+
+			params = mux.Vars(r)
+		)
+		role = params["role"]
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRestartTeamRolePayload(&body, role)
+
+		return payload, nil
+	}
+}
+
+// EncodeRestartTeamRoleError returns an encoder for errors returned by the
+// restart_team_role highbay endpoint.
+func EncodeRestartTeamRoleError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "role_not_running":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRestartTeamRoleRoleNotRunningResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRestartTeamRoleUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "team_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRestartTeamRoleTeamUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewRestartTeamRoleForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeCreateTerminalTicketResponse returns an encoder for responses returned
+// by the highbay create_terminal_ticket endpoint.
+func EncodeCreateTerminalTicketResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*highbay.TerminalTicketResult)
+		enc := encoder(ctx, w)
+		body := NewCreateTerminalTicketResponseBody(res)
+		w.WriteHeader(http.StatusCreated)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeCreateTerminalTicketRequest returns a decoder for requests sent to the
+// highbay create_terminal_ticket endpoint.
+func DecodeCreateTerminalTicketRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.CreateTerminalTicketPayload, error) {
+	return func(r *http.Request) (*highbay.CreateTerminalTicketPayload, error) {
+		var payload *highbay.CreateTerminalTicketPayload
+		var (
+			role string
+			err  error
+
+			params = mux.Vars(r)
+		)
+		role = params["role"]
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewCreateTerminalTicketPayload(role)
+
+		return payload, nil
+	}
+}
+
+// EncodeCreateTerminalTicketError returns an encoder for errors returned by
+// the create_terminal_ticket highbay endpoint.
+func EncodeCreateTerminalTicketError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "terminal_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCreateTerminalTicketTerminalUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewCreateTerminalTicketForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// DecodeAttachRoleTerminalRequest returns a decoder for requests sent to the
+// highbay attach_role_terminal endpoint.
+func DecodeAttachRoleTerminalRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*highbay.AttachRoleTerminalPayload, error) {
+	return func(r *http.Request) (*highbay.AttachRoleTerminalPayload, error) {
+		var payload *highbay.AttachRoleTerminalPayload
+		var (
+			role    string
+			ticket  string
+			cols    int
+			rows    int
+			observe bool
+			err     error
+
+			params = mux.Vars(r)
+		)
+		role = params["role"]
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		qp := r.URL.Query()
+		ticket = qp.Get("ticket")
+		if ticket == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("ticket", "query string"))
+		}
+		if utf8.RuneCountInString(ticket) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("ticket", ticket, utf8.RuneCountInString(ticket), 16, true))
+		}
+		{
+			colsRaw := qp.Get("cols")
+			if colsRaw == "" {
+				cols = 100
+			} else {
+				v, err2 := strconv.ParseInt(colsRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("cols", colsRaw, "integer"))
+				}
+				cols = int(v)
+			}
+		}
+		if cols < 20 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("cols", cols, 20, true))
+		}
+		if cols > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("cols", cols, 500, false))
+		}
+		{
+			rowsRaw := qp.Get("rows")
+			if rowsRaw == "" {
+				rows = 30
+			} else {
+				v, err2 := strconv.ParseInt(rowsRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("rows", rowsRaw, "integer"))
+				}
+				rows = int(v)
+			}
+		}
+		if rows < 5 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("rows", rows, 5, true))
+		}
+		if rows > 250 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("rows", rows, 250, false))
+		}
+		{
+			observeRaw := qp.Get("observe")
+			if observeRaw != "" {
+				v, err2 := strconv.ParseBool(observeRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("observe", observeRaw, "boolean"))
+				}
+				observe = v
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewAttachRoleTerminalPayload(role, ticket, cols, rows, observe)
+
+		return payload, nil
+	}
+}
+
+// EncodeAttachRoleTerminalError returns an encoder for errors returned by the
+// attach_role_terminal highbay endpoint.
+func EncodeAttachRoleTerminalError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "terminal_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachRoleTerminalTerminalUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachRoleTerminalUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewAttachRoleTerminalForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -5842,12 +6358,15 @@ func marshalHighbayDraftCorrectionToDraftCorrectionResponseBody(v *highbay.Draft
 // type *TeamRoleStateResponseBody from a value of type *highbay.TeamRoleState.
 func marshalHighbayTeamRoleStateToTeamRoleStateResponseBody(v *highbay.TeamRoleState) *TeamRoleStateResponseBody {
 	res := &TeamRoleStateResponseBody{
-		Role:       v.Role,
-		Handle:     v.Handle,
-		State:      v.State,
-		Attention:  v.Attention,
-		Watcher:    v.Watcher,
-		Assignment: v.Assignment,
+		Role:        v.Role,
+		Handle:      v.Handle,
+		HasTerminal: v.HasTerminal,
+		State:       v.State,
+		Attention:   v.Attention,
+		Assignment:  v.Assignment,
+	}
+	if v.Choice != nil {
+		res.Choice = marshalHighbayRoleAgentChoiceToRoleAgentChoiceResponseBody(v.Choice)
 	}
 
 	return res
@@ -5868,6 +6387,24 @@ func marshalHighbayRoleAgentChoiceToRoleAgentChoiceResponseBody(v *highbay.RoleA
 	return res
 }
 
+// marshalHighbayTeamMessageToTeamMessageResponseBody builds a value of type
+// *TeamMessageResponseBody from a value of type *highbay.TeamMessage.
+func marshalHighbayTeamMessageToTeamMessageResponseBody(v *highbay.TeamMessage) *TeamMessageResponseBody {
+	res := &TeamMessageResponseBody{
+		ID:         v.ID,
+		Target:     v.Target,
+		Seq:        v.Seq,
+		Sender:     v.Sender,
+		SenderRole: v.SenderRole,
+		Model:      v.Model,
+		Text:       v.Text,
+		ReplyTo:    v.ReplyTo,
+		SentAtMs:   v.SentAtMs,
+	}
+
+	return res
+}
+
 // unmarshalRoleAgentChoiceRequestBodyToHighbayRoleAgentChoice builds a value
 // of type *highbay.RoleAgentChoice from a value of type
 // *RoleAgentChoiceRequestBody.
@@ -5883,14 +6420,140 @@ func unmarshalRoleAgentChoiceRequestBodyToHighbayRoleAgentChoice(v *RoleAgentCho
 	return res
 }
 
+// unmarshalReviseAnswersContextRequestBodyToHighbayReviseAnswersContext builds
+// a value of type *highbay.ReviseAnswersContext from a value of type
+// *ReviseAnswersContextRequestBody.
+func unmarshalReviseAnswersContextRequestBodyToHighbayReviseAnswersContext(v *ReviseAnswersContextRequestBody) *highbay.ReviseAnswersContext {
+	res := &highbay.ReviseAnswersContext{
+		ChangeID:        *v.ChangeID,
+		RequestRevision: *v.RequestRevision,
+	}
+	res.Answers = make(map[string]string, len(v.Answers))
+	for key, val := range v.Answers {
+		tk := key
+		tv := val
+		res.Answers[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalArchitectureElementContextRequestBodyToHighbayArchitectureElementContext
+// builds a value of type *highbay.ArchitectureElementContext from a value of
+// type *ArchitectureElementContextRequestBody.
+func unmarshalArchitectureElementContextRequestBodyToHighbayArchitectureElementContext(v *ArchitectureElementContextRequestBody) *highbay.ArchitectureElementContext {
+	res := &highbay.ArchitectureElementContext{
+		ChangeID:    v.ChangeID,
+		ElementID:   *v.ElementID,
+		ElementName: *v.ElementName,
+	}
+
+	return res
+}
+
+// unmarshalStoryFlowContextRequestBodyToHighbayStoryFlowContext builds a value
+// of type *highbay.StoryFlowContext from a value of type
+// *StoryFlowContextRequestBody.
+func unmarshalStoryFlowContextRequestBodyToHighbayStoryFlowContext(v *StoryFlowContextRequestBody) *highbay.StoryFlowContext {
+	res := &highbay.StoryFlowContext{
+		ChangeID: v.ChangeID,
+		Story:    *v.Story,
+		FlowKey:  v.FlowKey,
+	}
+
+	return res
+}
+
 // marshalHighbayProjectTeamRoleToProjectTeamRoleResponseBody builds a value of
 // type *ProjectTeamRoleResponseBody from a value of type
 // *highbay.ProjectTeamRole.
 func marshalHighbayProjectTeamRoleToProjectTeamRoleResponseBody(v *highbay.ProjectTeamRole) *ProjectTeamRoleResponseBody {
 	res := &ProjectTeamRoleResponseBody{
-		Role:    v.Role,
-		Handle:  v.Handle,
-		Running: v.Running,
+		Role:        v.Role,
+		Handle:      v.Handle,
+		HasTerminal: v.HasTerminal,
+		Running:     v.Running,
+	}
+
+	return res
+}
+
+// marshalHighbayTerminalOutputFrameToTerminalOutputFrameResponseBody builds a
+// value of type *TerminalOutputFrameResponseBody from a value of type
+// *highbay.TerminalOutputFrame.
+func marshalHighbayTerminalOutputFrameToTerminalOutputFrameResponseBody(v *highbay.TerminalOutputFrame) *TerminalOutputFrameResponseBody {
+	res := &TerminalOutputFrameResponseBody{
+		Data: v.Data,
+	}
+
+	return res
+}
+
+// marshalHighbayTerminalResizeToTerminalResizeResponseBody builds a value of
+// type *TerminalResizeResponseBody from a value of type
+// *highbay.TerminalResize.
+func marshalHighbayTerminalResizeToTerminalResizeResponseBody(v *highbay.TerminalResize) *TerminalResizeResponseBody {
+	res := &TerminalResizeResponseBody{
+		Cols: v.Cols,
+		Rows: v.Rows,
+	}
+
+	return res
+}
+
+// marshalHighbayTerminalClosedToTerminalClosedResponseBody builds a value of
+// type *TerminalClosedResponseBody from a value of type
+// *highbay.TerminalClosed.
+func marshalHighbayTerminalClosedToTerminalClosedResponseBody(v *highbay.TerminalClosed) *TerminalClosedResponseBody {
+	res := &TerminalClosedResponseBody{
+		Reason:   v.Reason,
+		ExitCode: v.ExitCode,
+		Signal:   v.Signal,
+	}
+
+	return res
+}
+
+// marshalTerminalInputFrameStreamingBodyToHighbayTerminalInputFrame builds a
+// value of type *highbay.TerminalInputFrame from a value of type
+// *TerminalInputFrameStreamingBody.
+func marshalTerminalInputFrameStreamingBodyToHighbayTerminalInputFrame(v *TerminalInputFrameStreamingBody) *highbay.TerminalInputFrame {
+	res := &highbay.TerminalInputFrame{
+		Data: v.Data,
+	}
+
+	return res
+}
+
+// marshalTerminalResizeStreamingBodyToHighbayTerminalResize builds a value of
+// type *highbay.TerminalResize from a value of type
+// *TerminalResizeStreamingBody.
+func marshalTerminalResizeStreamingBodyToHighbayTerminalResize(v *TerminalResizeStreamingBody) *highbay.TerminalResize {
+	res := &highbay.TerminalResize{
+		Cols: *v.Cols,
+		Rows: *v.Rows,
+	}
+
+	return res
+}
+
+// marshalTerminalFocusFrameStreamingBodyToHighbayTerminalFocusFrame builds a
+// value of type *highbay.TerminalFocusFrame from a value of type
+// *TerminalFocusFrameStreamingBody.
+func marshalTerminalFocusFrameStreamingBodyToHighbayTerminalFocusFrame(v *TerminalFocusFrameStreamingBody) *highbay.TerminalFocusFrame {
+	res := &highbay.TerminalFocusFrame{
+		Focused: *v.Focused,
+	}
+
+	return res
+}
+
+// marshalTerminalCreditFrameStreamingBodyToHighbayTerminalCreditFrame builds a
+// value of type *highbay.TerminalCreditFrame from a value of type
+// *TerminalCreditFrameStreamingBody.
+func marshalTerminalCreditFrameStreamingBodyToHighbayTerminalCreditFrame(v *TerminalCreditFrameStreamingBody) *highbay.TerminalCreditFrame {
+	res := &highbay.TerminalCreditFrame{
+		Bytes: *v.Bytes,
 	}
 
 	return res
@@ -5908,7 +6571,6 @@ func marshalHighbayInstalledAgentOptionToInstalledAgentOptionResponseBody(v *hig
 		ThinkingSupported: v.ThinkingSupported,
 		YoloSupported:     v.YoloSupported,
 		YoloEffect:        v.YoloEffect,
-		HeadlessSupported: v.HeadlessSupported,
 	}
 	if v.Models != nil {
 		res.Models = make([]string, len(v.Models))
@@ -6363,10 +7025,8 @@ func marshalHighbayBuildDroppedToBuildDroppedResponseBody(v *highbay.BuildDroppe
 // *ProjectTeamResponseBody from a value of type *highbay.ProjectTeam.
 func marshalHighbayProjectTeamToProjectTeamResponseBody(v *highbay.ProjectTeam) *ProjectTeamResponseBody {
 	res := &ProjectTeamResponseBody{
-		Team:      v.Team,
-		Space:     v.Space,
-		HerdrMode: v.HerdrMode,
-		Step:      v.Step,
+		Team: v.Team,
+		Step: v.Step,
 	}
 	if v.Roles != nil {
 		res.Roles = make([]*ProjectTeamRoleResponseBody, len(v.Roles))
@@ -6379,29 +7039,6 @@ func marshalHighbayProjectTeamToProjectTeamResponseBody(v *highbay.ProjectTeam) 
 		}
 	} else {
 		res.Roles = []*ProjectTeamRoleResponseBody{}
-	}
-
-	return res
-}
-
-// marshalHighbayBuildTeamWindowBusyToBuildTeamWindowBusyResponseBody builds a
-// value of type *BuildTeamWindowBusyResponseBody from a value of type
-// *highbay.BuildTeamWindowBusy.
-func marshalHighbayBuildTeamWindowBusyToBuildTeamWindowBusyResponseBody(v *highbay.BuildTeamWindowBusy) *BuildTeamWindowBusyResponseBody {
-	res := &BuildTeamWindowBusyResponseBody{
-		Step: string(v.Step),
-	}
-
-	return res
-}
-
-// marshalHighbayBuildTeamAmbiguousSpaceToBuildTeamAmbiguousSpaceResponseBody
-// builds a value of type *BuildTeamAmbiguousSpaceResponseBody from a value of
-// type *highbay.BuildTeamAmbiguousSpace.
-func marshalHighbayBuildTeamAmbiguousSpaceToBuildTeamAmbiguousSpaceResponseBody(v *highbay.BuildTeamAmbiguousSpace) *BuildTeamAmbiguousSpaceResponseBody {
-	res := &BuildTeamAmbiguousSpaceResponseBody{
-		Count: v.Count,
-		Step:  string(v.Step),
 	}
 
 	return res

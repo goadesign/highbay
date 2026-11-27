@@ -10,25 +10,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// pageTeamSnapshot supplies independent terminal, watcher and assignment facts.
+// pageTeamSnapshot supplies independent terminal and assignment facts.
 // Each replacement is immutable after publication to the fixture's readers.
 func pageTeamSnapshot(state string) genhighbay.TeamSnapshot {
-	return genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "page-team", Roles: []*genhighbay.TeamRoleState{
-		{Role: "guide", Handle: "page-guide", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unknown"},
-		{Role: "builder", Handle: "page-builder", State: state, Attention: "question", Watcher: "gone", Assignment: "unread"},
-		{Role: "test_writer", Handle: "page-writer", State: "unknown", Attention: "unknown", Watcher: "held", Assignment: "nothing_owed"},
-	}}
+	return genhighbay.TeamSnapshot{
+		Team: "page-team", Channel: "#page-team", ChorusStatus: "connected",
+		SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
+		Roles: []*genhighbay.TeamRoleState{
+			{Role: "guide", Handle: "page-guide", State: "not_started", Attention: "none", Assignment: "no_work"},
+			{Role: "builder", Handle: "page-builder", HasTerminal: true, State: state, Attention: "question", Assignment: "unread"},
+			{Role: "test_writer", Handle: "page-writer", State: "unknown", Attention: "unknown", Assignment: "nothing_owed"},
+		},
+	}
 }
 
 // TestViewsPageDescribeGuideStatusControlsNext follows the same Team reads
 // as Describe and checks that their guidance yields to an existing card.
 func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
-	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
-		Team: "page-team", Roles: []*genhighbay.TeamRoleState{},
+	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{
+		Team: "page-team", Channel: "#page-team", ChorusStatus: "connected",
+		SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
 	}}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)
-	for _, state := range []string{"unknown", "starting", "working", "ended", "not_started"} {
+	for _, state := range []string{"unknown", "starting", "working", "waiting", "ended", "not_started"} {
 		ps.act(state, func() {
 			f.mu.Lock()
 			defer f.mu.Unlock()
@@ -40,25 +45,6 @@ func TestViewsPageDescribeGuideStatusControlsNext(t *testing.T) {
 			f.snapshot = next
 		})
 	}
-	for _, mode := range []string{"available", "unavailable"} {
-		ps.act("external-"+mode, func() {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			next := pageTeamSnapshot("working")
-			next.HerdrMode = mode
-			next.Roles[0].State, next.Roles[0].Watcher = "unknown", "unknown"
-			next.Roles[2].State = "waiting"
-			f.snapshot = next
-		})
-	}
-	ps.act("worker-unknown", func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		next := pageTeamSnapshot("working")
-		next.HerdrMode = "available"
-		next.Roles[0].State = "unknown"
-		f.snapshot = next
-	})
 	initMsg := "Resolving the service's Go modules"
 	owner := pageOwner
 	ps.act("init-running", func() { cp.initPhase.Store(&initMsg) })
@@ -95,7 +81,13 @@ await control(origin, "hold", { key: "GET /team" });
 const page = await openPage(origin, { link: input.link });
 const next = () => page.text("#highbay-frame-next dd");
 const attention = () => page.text(".highbay-frame-attention dd");
-const connectGuide = "Connect your coding agent to this project’s Highbay MCP server.";
+// Without a guide, a message starts one. Describe says so in its welcome
+// panel, which replaces the status frame while nothing needs the user; Team
+// says so as the next step.
+const welcome = (text) => !page.$(".highbay-frame-slots") &&
+  page.text("#highbay-change-list-title") === "Describe what you want to build" &&
+  page.text("#highbay-change-list-empty").includes(text);
+const teamStartGuide = "Send a message in Team conversation to start Guide.";
 await until(() => page.$("#highbay-change-list-empty") && page.sent("GET", "/team").length === 1, "empty Describe did not begin reading Team");
 expect(next() === "Wait for Team status.", "pending Team read was treated as an absent guide");
 expect(attention() === "Waiting for Team status.", "unread Team status appeared settled on Describe");
@@ -103,9 +95,9 @@ page.$("#highbay-nav-team").click();
 expect(attention() === "Waiting for Team status.", "unread Team status appeared settled on Team");
 page.$("#highbay-nav-changes").click();
 await control(origin, "release", { key: "GET /team" });
-await until(() => next().includes(connectGuide), "Describe did not explain how to connect a guide");
+await until(() => welcome("launch Guide"), "Describe did not explain how to start a guide: " + page.text("#highbay-change-list-empty"));
 page.$("#highbay-nav-team").click();
-expect(next() === connectGuide && !page.$("#highbay-team-start"), "Team offered worker startup without a build assignment");
+expect(next() === teamStartGuide && !page.$("#highbay-team-start"), "Team offered worker startup without a build assignment: " + next());
 page.$("#highbay-nav-changes").click();
 
 await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "unavailable", message: "Team unavailable." } });
@@ -115,15 +107,14 @@ expect(attention() === "Team status could not be read.", "failed Team status app
 page.$("#highbay-nav-team").click();
 await until(() => page.$("#highbay-team-role-guide")?.dataset.state === "unknown", "Team did not retry its failed read");
 page.$("#highbay-nav-changes").click();
-expect(next().includes("refresh to check your coding agent’s status"), "unknown attached coding agent appeared ready or absent");
+// A guide outside a terminal whose state is unknown is still a guide to write to.
+await until(() => welcome("Send your request to Guide below"), "a guide of unknown state appeared absent: " + page.text("#highbay-change-list-empty"));
 await control(origin, "act", { key: "starting" });
-await until(() => next().includes("Wait for your coding agent to start"), "a starting coding agent did not tell the user to wait");
+await until(() => next().includes("Wait for Guide to start"), "a starting guide did not tell the user to wait: " + next());
 await control(origin, "act", { key: "working" });
-await until(() => !page.$(".highbay-frame-slots") && page.$("#highbay-empty-show-guide"), "a working attached coding agent did not lead to its existing pane");
-expect(page.text("#highbay-change-list-title") === "Working on your request" &&
-       !page.$(".highbay-welcome-steps") &&
-       !page.$("#highbay-empty-show-guide").classList.contains("shadcn-btn-primary"),
-       "a working coding agent showed the idle welcome prompt or primary CTA: " + page.text("#highbay-change-list-title"));
+await until(() => !page.$(".highbay-frame-slots") && page.text("#highbay-change-list-title") === "Working on your request",
+       "a working coding agent did not replace the connection steps: " + page.text("#highbay-change-list-title"));
+expect(!page.$(".highbay-welcome-steps"), "a working coding agent showed the idle welcome prompt");
 await control(origin, "act", { key: "init-running" });
 await until(() => page.text("#highbay-change-list-title") === "Preparing your project", "init_project did not show Preparing your project");
 expect(page.doc.title.startsWith("Preparing project:"), "init_project left the Describe title: " + page.doc.title);
@@ -136,36 +127,22 @@ await control(origin, "act", { key: "story-evaluating" });
 await until(() => page.text("#highbay-change-list-empty").includes("Checking the Story and Goa design"), "story evaluation progress was not shown");
 await control(origin, "act", { key: "story-ready" });
 await until(() => page.text("#highbay-change-list-empty").includes("Story and design checked"), "succeeded story evaluation was not shown");
-await control(origin, "act", { key: "external-available" });
-await until(() => !page.$("#highbay-empty-show-guide") && page.text("#highbay-change-list-title") === "Drafting your Change Card",
-       "external coding agent snapped back to Describe after init_project and refresh_story");
+// A coding agent that is working is expected to see the failed check itself;
+// the page asks for the user only once the agent has stopped.
+await control(origin, "act", { key: "waiting" });
 await control(origin, "act", { key: "story-failed" });
 await until(() => page.text("#highbay-change-list-title") === "Story check needs attention" &&
        attention() === "Story check needs attention.",
-       "failed story evaluation did not surface attention on external Describe");
+       "failed story evaluation did not surface attention once the coding agent waited: " +
+       page.text("#highbay-change-list-title") + " / " + attention());
 await control(origin, "act", { key: "draft-reset" });
-for (const mode of ["available", "unavailable"]) {
-  await control(origin, "act", { key: "external-" + mode });
-  await until(() => !page.$("#highbay-empty-show-guide") && !page.$(".highbay-frame-slots"), "external coding agent was treated as a Herdr pane");
-  expect(page.text("#highbay-change-list-title").includes("Describe what you want to build") &&
-         !page.$("#highbay-nav-changes") && !page.$(".highbay-frame-context"), "healthy empty state kept unnecessary frame chrome");
-  page.$("#highbay-nav-team").click();
-  const codingAgent = page.$("#highbay-team-role-guide");
-  expect(codingAgent.textContent.includes("Coding agent registered · No Herdr pane linked") &&
-         codingAgent.textContent.includes("open a project tab in Herdr and run /highbay") &&
-         !codingAgent.textContent.includes("Chorus watcher unknown") &&
-         !page.$("#highbay-team-show-guide"), "Team showed a false warning or pane action for external mode " + mode);
-  page.$("#highbay-nav-changes").click();
-}
-await control(origin, "act", { key: "worker-unknown" });
-await until(() => attention() === "Team status unknown." && next().includes("Open Team"), "a genuinely unobserved worker was hidden with the external guide's expected state");
 await control(origin, "act", { key: "ended" });
-await until(() => next().includes(connectGuide), "Describe did not explain how to reconnect an ended guide");
+await until(() => welcome("launch Guide"), "Describe did not explain how to start a guide again: " + page.text("#highbay-change-list-empty"));
 page.$("#highbay-nav-team").click();
 for (const state of ["ended", "not_started"]) {
   if (state === "not_started") await control(origin, "act", { key: state });
   await until(() => page.$("#highbay-team-role-guide")?.dataset.state === state && !page.$("#highbay-team-loading"), "Team did not read " + state);
-  expect(next() === connectGuide && !page.$("#highbay-team-start"), "Team offered worker startup for guide state " + state + " without a build assignment");
+  expect(next() === teamStartGuide && !page.$("#highbay-team-start"), "Team offered worker startup for guide state " + state + " without a build assignment: " + next());
 }
 page.$("#highbay-nav-changes").click();
 
@@ -175,14 +152,14 @@ await until(() => page.$("#highbay-change-open-error"), "the failed card read di
 expect(next().includes("Try opening the change again"), "card recovery did not take precedence over ordinary guidance");
 page.$("#highbay-open-change-chg-guide-next").click();
 await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-guide-next", "the existing card remained unavailable without a running guide");
-expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0, "guidance performed an agent action");
+expect(page.sent("POST", "/team/agents").length === 0, "guidance performed an agent action");
 page.close();
 `)
 }
 
 // TestViewsPageAttentionUsesOnlyTheCurrentLiveRegion follows permission,
 // question and recovery facts on empty Describe without overwriting unrelated
-// operation feedback. Herdr's done status is exposed by the owner as waiting.
+// operation feedback. A terminal that finished its turn is exposed by the owner as waiting.
 func TestViewsPageAttentionUsesOnlyTheCurrentLiveRegion(t *testing.T) {
 	f := &teamServiceFixture{snapshot: pageTeamSnapshot("working")}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
@@ -211,12 +188,12 @@ const live = page.$("#highbay-team-attention"), operation = page.status();
 expect(live.getAttribute("role") === "status" && live.getAttribute("aria-live") === "polite", "attention owner is not an announced live region");
 expect(live.textContent === "", "idle roles invented an attention state");
 await control(origin, "act", { key: "guide-permission" });
-await until(() => page.text("#highbay-team-attention-guide").includes("Coding agent needs you: permission"), "real permission attention was suppressed");
-expect(page.text(".highbay-frame-attention dd").includes("Coding agent needs you: permission") && page.text("#highbay-frame-next dd").includes("Show coding agent pane"), "Describe did not surface the coding agent’s reported blocker and pane");
+await until(() => page.text("#highbay-team-attention-guide").includes("Guide needs you: permission"), "real permission attention was suppressed");
+expect(page.text(".highbay-frame-attention dd").includes("Guide needs you: permission"), "Describe did not surface the coding agent’s reported blocker");
 expect(page.$("#highbay-team-attention") === live, "attention arrived in a newly mounted live region");
 expect(page.status() === operation, "team attention overwrote operation feedback");
 await control(origin, "act", { key: "two-roles" });
-await until(() => page.text("#highbay-team-attention-guide").includes("question") && page.text("#highbay-team-attention-builder").includes("sign-in required"), "changed and additional real blockers were not shown");
+await until(() => page.text("#highbay-team-attention-guide").includes("waiting on your answer") && page.text("#highbay-team-attention-builder").includes("sign-in required"), "changed and additional real blockers were not shown");
 expect(!live.textContent.includes("permission"), "replaced permission attention stayed stale");
 await control(origin, "act", { key: "guide-done" });
 await until(() => !page.$("#highbay-team-attention-guide"), "done guide retained an attention line");
@@ -226,15 +203,15 @@ await control(origin, "act", { key: "all-done" });
 await until(() => live.textContent === "", "recovered roles retained stale attention");
 expect(page.status() === operation && !page.status().includes("needs you"), "recovery left a duplicate stale status or replaced operation feedback");
 expect(page.$("#highbay-team-attention") === live && live.getAttribute("aria-live") === "polite", "recovery removed the next attention announcement owner");
-expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0, "reading attention performed a team action");
+expect(page.sent("POST", "/team/agents").length === 0, "reading attention performed a team action");
 page.close();
 `)
 }
 
-// TestViewsPageTeamFollowsAttentionAndShowsPane proves that global attention
-// follows the one version chain, pane actions accept real empty 204 answers,
-// and a removed focused attention control returns focus to the current view.
-func TestViewsPageTeamFollowsAttentionAndShowsPane(t *testing.T) {
+// TestViewsPageTeamFollowsAttention proves that global attention follows the
+// one version chain on every view and that Team shows each role's own state
+// and assignment facts.
+func TestViewsPageTeamFollowsAttention(t *testing.T) {
 	snapshot := pageTeamSnapshot("needs_you")
 	snapshot.Roles[2].Assignment = "no_work"
 	f := &teamServiceFixture{snapshot: snapshot}
@@ -250,84 +227,27 @@ func TestViewsPageTeamFollowsAttentionAndShowsPane(t *testing.T) {
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-team-attention-builder") && page.$("#highbay-build-section")?.dataset.state === "not_started" && !page.$("#highbay-build-loading"), "the eligible build or builder attention did not arrive");
-expect(page.text("#highbay-team-attention-builder").includes("Builder needs you: question"), "attention reason is missing");
+expect(page.text("#highbay-team-attention-builder").includes("Builder needs you: waiting on your answer"), "attention reason is missing");
 const attention = () => page.text(".highbay-frame-attention dd");
-expect(attention().includes("Builder needs you: question"), "unstarted Build hid the builder’s request");
+expect(attention().includes("Builder needs you: waiting on your answer"), "unstarted Build hid the builder’s request");
 for (const stage of ["changes", "cp1", "cp2", "story", "live"]) {
   page.$("#highbay-nav-" + stage).click();
-  expect(attention().includes("Builder needs you: question"), stage + " hid the builder’s request");
+  expect(attention().includes("Builder needs you: waiting on your answer"), stage + " hid the builder’s request");
 }
-page.$("#highbay-team-attention-show-pane-builder").click();
-await until(() => page.sent("POST", "/team/pane").some((r) => r.status === 204), "Show pane did not complete with 204");
-expect(page.sent("POST", "/team/pane").length === 1, "Show pane was repeated");
-expect(page.sent("POST", "/team/pane")[0].body.role === "builder", "Show pane selected a different role");
-await until(() => !page.$("#highbay-team-attention-show-pane-builder").disabled, "Show pane remained pending after empty success");
-expect(page.sent("POST", "/team/agents").length === 0, "a read or pane action started agents");
+expect(page.sent("POST", "/team/agents").length === 0, "reading attention started agents");
 page.$("#highbay-nav-team").click();
 await until(() => page.state() === "team" && page.$("#highbay-team-role-builder"), "Team did not open");
-expect(attention().includes("Builder needs you: question"), "Team hid the builder’s request");
-expect(page.text("#highbay-team-role-builder").includes("Chorus watcher absent") && page.text("#highbay-team-role-builder").includes("Assignment unread"), "independent facts were inferred from terminal state");
-expect(page.text("#highbay-team-role-test_writer").includes("Status unknown") && page.text("#highbay-team-role-test_writer").includes("Chorus watcher held"), "unknown terminal hid a known watcher");
+expect(attention().includes("Builder needs you: waiting on your answer"), "Team hid the builder’s request");
+expect(page.text("#highbay-team-role-builder").includes("Assignment unread"), "the builder's assignment fact was inferred from terminal state");
+expect(page.text("#highbay-team-role-test_writer").includes("Status unknown"), "the test writer's unknown terminal state is missing");
 expect(page.text("#highbay-team-role-test_writer").includes("No work now"), "the declared no_work assignment fact is missing");
 expect(page.doc.activeElement === page.$("#highbay-team-title"), "opening Team did not focus its title");
-page.$("#highbay-team-attention-show-pane-builder").focus();
 await control(origin, "act", { key: "builder-working" });
 await until(() => !page.$("#highbay-team-attention-builder"), "attention did not clear through updates");
 await until(() => page.$("#highbay-team-role-builder").dataset.state === "working", "Team did not follow the same update");
 expect(attention() === "Team status unknown.", "another role’s unknown status appeared settled");
-await until(() => page.doc.activeElement === page.$("#highbay-team-title"), "removed attention control lost focus");
 const teamReads = page.sent("GET", "/team").length;
 expect(teamReads <= page.sent("GET", "/changes").length + 2, "Team introduced an independent polling loop");
-page.close();
-`)
-}
-
-// TestViewsPageTeamNamesUnreadAssignmentStep shows, above every view, the
-// user's step for a role that needs them because it has waited with an unread
-// assignment, with that role's Show pane as the primary action.
-func TestViewsPageTeamNamesUnreadAssignmentStep(t *testing.T) {
-	snapshot := pageTeamSnapshot("needs_you")
-	snapshot.Roles[1].Attention = "assignment"
-	f := &teamServiceFixture{snapshot: snapshot}
-	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
-	ps := startPageServer(t, cp)
-	for _, transition := range []struct{ chorus, watcher string }{
-		{"unavailable", "unknown"}, {"connected", "held"},
-	} {
-		ps.act("chorus-"+transition.chorus, func() {
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			next := pageTeamSnapshot("needs_you")
-			next.ChorusStatus = &transition.chorus
-			next.Roles[1].Attention, next.Roles[1].Watcher = "assignment", transition.watcher
-			f.snapshot = next
-		})
-	}
-	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
-const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-team-attention-builder"), "builder attention is missing outside Team");
-expect(page.text("#highbay-team-attention-builder").includes("Builder needs you: idle with an unread assignment. Show its pane and tell it to read its assignments and to keep its Chorus watcher running."), "the user's step is missing: " + page.text("#highbay-team-attention-builder"));
-const show = page.$("#highbay-team-attention-show-pane-builder");
-expect(show !== null && show.textContent === "Show builder pane", "Show pane is missing");
-expect(show.classList.contains("highbay-btn-primary"), "Show pane is not the primary action");
-expect(page.$("#highbay-team-attention-test_writer") === null, "a role that does not need the user is listed");
-await control(origin, "act", { key: "chorus-unavailable" });
-await until(() => page.text("#highbay-team-chorus-status").includes("Running workers can wait for assignments through Highbay"), "the owner-reported Chorus outage did not reach the page");
-const builderAttention = () => page.$("#highbay-team-attention-builder");
-expect(builderAttention().textContent.includes("wait for assignments through Highbay") &&
-       !builderAttention().textContent.includes("Chorus watcher"), "outage recovery still claimed a watcher was needed or absent");
-const copyBuilderPrompt = () => Array.from(builderAttention().querySelectorAll("button")).find((b) => b.textContent === "Copy builder prompt");
-let copied;
-Object.defineProperty(page.win.navigator, "clipboard", { value: { writeText: async (text) => { copied = text; } } });
-checkControl(page, copyBuilderPrompt(), "Copy builder prompt");
-copyBuilderPrompt().click();
-await until(() => builderAttention().textContent.includes("Prompt copied."), "copying the nudge was not announced");
-expect(copied.includes("wait_for_builder_assignment") && copied.includes("since_version") && copied.includes("list_builder_assignments") &&
-       !copied.includes("Chorus watcher"), "the nudge did not give the assigned worker its Highbay waiting path");
-await control(origin, "act", { key: "chorus-connected" });
-await until(() => !page.$("#highbay-team-chorus-status") && !copyBuilderPrompt(), "recovered Chorus left an active outage warning or stale prompt");
-expect(page.sent("POST", "/team/agents").length === 0 && page.sent("POST", "/team/pane").length === 0,
-       "reading/copying Team suggestions started or focused a worker");
 page.close();
 `)
 }
@@ -340,7 +260,7 @@ func TestViewsPageTeamStartsExplicitlyAndRetainsFailedFacts(t *testing.T) {
 		f.mu.Lock()
 		f.snapshot = pageTeamSnapshot("working")
 		f.mu.Unlock()
-		return &genhighbay.ProjectTeam{Team: "page-team", Space: "page-space", HerdrMode: "attached", Step: "The project agents have started.", Roles: []*genhighbay.ProjectTeamRole{}}, nil
+		return &genhighbay.ProjectTeam{Team: "page-team", Step: "The project agents have started.", Roles: []*genhighbay.ProjectTeamRole{}}, nil
 	}
 	cp := pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}})
 	ps := startPageServer(t, cp)

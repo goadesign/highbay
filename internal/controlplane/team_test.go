@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,22 +26,44 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
-// teamServiceFixture models the narrow owner without any outside effect.
+// teamServiceFixture stands in for the project's team owner. It records each
+// call in order and reaches no terminal, Chorus server or other process.
 type teamServiceFixture struct {
-	mu        sync.Mutex
-	snapshot  genhighbay.TeamSnapshot
-	calls     []string
-	bound     AssignmentReader
-	supervise func(context.Context, AssignmentReader) error
-	// Action hooks return owner refusals without a window or external process.
-	show     func(context.Context, string) error
-	register func(context.Context, BuildFolders) error
-	start    func(context.Context) (*genhighbay.ProjectTeam, error)
-	options  func(context.Context) ([]*genhighbay.InstalledAgentOption, error)
-	dismiss  func(context.Context, string) error
+	mu       sync.Mutex
+	snapshot genhighbay.TeamSnapshot
+	// conversation is what ReadConversation returns; an empty team, channel or
+	// Chorus status is filled in like the snapshot's.
+	conversation genhighbay.TeamConversation
+	calls        []string
+	bound        AssignmentReader
+	supervise    func(context.Context, AssignmentReader) error
+	// Action hooks return owner refusals without a terminal or external process.
+	register  func(context.Context, BuildFolders) error
+	start     func(context.Context) (*genhighbay.ProjectTeam, error)
+	options   func(context.Context) ([]*genhighbay.InstalledAgentOption, error)
+	dismiss   func(context.Context, string) error
+	send      func(context.Context, *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error)
+	interrupt func(context.Context, string) error
 	// choices captures the last selection crossing the CP-to-team owner boundary.
 	choices map[string]*genhighbay.RoleAgentChoice
+	// sent is the last message SendMessage received.
+	sent *genhighbay.SendTeamMessagePayload
+	// attached is the last payload AttachTerminal received.
+	attached *genhighbay.AttachRoleTerminalPayload
+	// typed counts the input frames AttachTerminal received from viewers.
+	typed int
+	// restartErr is what RestartRole returns.
+	restartErr error
 }
+
+const (
+	// fixtureTeamChannel is the Chorus channel the fixture reports when a test
+	// names none.
+	fixtureTeamChannel = "#fixture-channel"
+	// fixtureTerminalTicket is the ticket CreateTerminalTicket returns; it is
+	// longer than the 16 characters the design requires of a ticket.
+	fixtureTerminalTicket = "fixture-ticket-0001"
+)
 
 // ReadTeam returns a copied snapshot and records a read, never an assignment mutation.
 func (f *teamServiceFixture) ReadTeam(context.Context) (*genhighbay.TeamSnapshot, error) {
@@ -48,11 +71,14 @@ func (f *teamServiceFixture) ReadTeam(context.Context) (*genhighbay.TeamSnapshot
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "read")
 	copy := f.snapshot
-	if copy.HerdrMode == "" {
-		copy.HerdrMode = "attached"
-	}
 	if copy.Team == "" {
 		copy.Team = "fixture-team"
+	}
+	if copy.Channel == "" {
+		copy.Channel = fixtureTeamChannel
+	}
+	if copy.ChorusStatus == "" {
+		copy.ChorusStatus = "connected"
 	}
 	if copy.Roles == nil {
 		copy.Roles = []*genhighbay.TeamRoleState{}
@@ -66,16 +92,48 @@ func (f *teamServiceFixture) ReadTeam(context.Context) (*genhighbay.TeamSnapshot
 	return &copy, nil
 }
 
-// ShowPane records the authorized requested role.
-func (f *teamServiceFixture) ShowPane(ctx context.Context, role string) error {
+// ReadConversation returns a copied conversation and records the read.
+func (f *teamServiceFixture) ReadConversation(context.Context) (*genhighbay.TeamConversation, error) {
 	f.mu.Lock()
-	f.calls = append(f.calls, "show:"+role)
-	show := f.show
-	f.mu.Unlock()
-	if show != nil {
-		return show(ctx, role)
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "conversation")
+	copy := f.conversation
+	if copy.Team == "" {
+		copy.Team = "fixture-team"
 	}
-	return nil
+	if copy.Channel == "" {
+		copy.Channel = fixtureTeamChannel
+	}
+	if copy.ChorusStatus == "" {
+		copy.ChorusStatus = "connected"
+	}
+	if copy.Messages == nil {
+		copy.Messages = []*genhighbay.TeamMessage{}
+	}
+	return &copy, nil
+}
+
+// SendMessage records the user's message and returns it as Chorus would save it.
+func (f *teamServiceFixture) SendMessage(
+	ctx context.Context, p *genhighbay.SendTeamMessagePayload,
+) (*genhighbay.TeamMessage, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, "send:"+p.To)
+	f.sent = p
+	send := f.send
+	f.mu.Unlock()
+	if send != nil {
+		return send(ctx, p)
+	}
+	return fixtureTeamMessage(p.Text), nil
+}
+
+// fixtureTeamMessage is the saved message SendMessage returns for text.
+func fixtureTeamMessage(text string) *genhighbay.TeamMessage {
+	return &genhighbay.TeamMessage{
+		ID: fixtureTeamChannel + ":1", Target: fixtureTeamChannel, Seq: 1,
+		Sender: "you", SenderRole: "you", Text: text, SentAtMs: 1,
+	}
 }
 
 // StartAgents records the authorized action without starting any process.
@@ -88,7 +146,80 @@ func (f *teamServiceFixture) StartAgents(ctx context.Context, choices map[string
 	if start != nil {
 		return start(ctx)
 	}
-	return &genhighbay.ProjectTeam{Team: "team", Space: "space", HerdrMode: "attached", Step: "The fixture agents have started.", Roles: []*genhighbay.ProjectTeamRole{}}, nil
+	return &genhighbay.ProjectTeam{Team: "team", Step: "The fixture agents have started.", Roles: []*genhighbay.ProjectTeamRole{}}, nil
+}
+
+// InterruptRole records which role's stop key the user pressed.
+func (f *teamServiceFixture) InterruptRole(ctx context.Context, role string) error {
+	f.mu.Lock()
+	f.calls = append(f.calls, "interrupt:"+role)
+	interrupt := f.interrupt
+	f.mu.Unlock()
+	if interrupt != nil {
+		return interrupt(ctx, role)
+	}
+	return nil
+}
+
+// StopRole records which role's terminal the user ended.
+func (f *teamServiceFixture) StopRole(_ context.Context, role string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "stop:"+role)
+	return nil
+}
+
+// RestartRole records which role the user restarted and with which coding
+// agent ("saved" when the request named none).
+func (f *teamServiceFixture) RestartRole(_ context.Context, role string, choice *genhighbay.RoleAgentChoice) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	client := "saved"
+	if choice != nil {
+		client = choice.Client
+	}
+	f.calls = append(f.calls, "restart:"+role+":"+client)
+	return f.restartErr
+}
+
+// CreateTerminalTicket records the role and returns the fixture's ticket.
+func (f *teamServiceFixture) CreateTerminalTicket(_ context.Context, role string) (*genhighbay.TerminalTicketResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "ticket:"+role)
+	return &genhighbay.TerminalTicketResult{Ticket: fixtureTerminalTicket, ExpiresAt: "2026-11-26T12:00:30Z"}, nil
+}
+
+// AttachTerminal records the viewer's request, then answers every input frame
+// with an output frame carrying the same bytes until the viewer closes the
+// stream, so a test sees frames cross in both directions.
+func (f *teamServiceFixture) AttachTerminal(
+	_ context.Context, p *genhighbay.AttachRoleTerminalPayload, stream genhighbay.AttachRoleTerminalServerStream,
+) error {
+	f.mu.Lock()
+	f.calls = append(f.calls, "attach:"+p.Role)
+	f.attached = p
+	f.mu.Unlock()
+	for {
+		frame, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return stream.Close()
+		}
+		if err != nil {
+			return err
+		}
+		input, ok := frame.ClientFrame.AsInput()
+		if !ok {
+			continue
+		}
+		f.mu.Lock()
+		f.typed++
+		f.mu.Unlock()
+		output := genhighbay.NewServerFrameOutput(&genhighbay.TerminalOutputFrame{Data: input.Data})
+		if err := stream.Send(&genhighbay.TerminalServerFrame{ServerFrame: output}); err != nil {
+			return err
+		}
+	}
 }
 
 // ListAgentOptions returns an installed-client fixture without executable discovery.
@@ -107,10 +238,10 @@ func fixtureAgentOptions() []*genhighbay.InstalledAgentOption {
 	return []*genhighbay.InstalledAgentOption{
 		{Client: "codex", Program: "/fixture/codex", Title: "Codex", Models: []string{"codex-default"},
 			Efforts: []string{"low", "high"}, ModelSupported: true, ThinkingSupported: true,
-			YoloSupported: true, HeadlessSupported: true},
+			YoloSupported: true},
 		{Client: "claude", Program: "/fixture/claude", Title: "Claude Code", Models: []string{"claude-default"},
 			Efforts: []string{"low", "high"}, ModelSupported: true, ThinkingSupported: true,
-			YoloSupported: true, HeadlessSupported: true},
+			YoloSupported: true},
 	}
 }
 
@@ -136,7 +267,7 @@ func (f *teamServiceFixture) StopWorkers(context.Context, BuildIdentity) error {
 // Close joins no processes in this fixture.
 func (f *teamServiceFixture) Close() error { return nil }
 
-// RegisterBuildRoles records registration without changing a window or starting any process.
+// RegisterBuildRoles records registration without starting any terminal or process.
 func (f *teamServiceFixture) RegisterBuildRoles(ctx context.Context, folders BuildFolders) error {
 	f.mu.Lock()
 	f.calls = append(f.calls, "register")
@@ -164,10 +295,17 @@ func (f *teamServiceFixture) Supervise(ctx context.Context, read AssignmentReade
 	return nil
 }
 
+// recorded returns the calls the fixture has seen so far, in order.
+func (f *teamServiceFixture) recorded() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.calls...)
+}
+
 // testTeamBinding supplies an independent team with no roles assigned yet.
 func testTeamBinding() *TeamBinding {
 	return &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{
-		snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "test-team", Roles: []*genhighbay.TeamRoleState{}},
+		snapshot: genhighbay.TeamSnapshot{Team: "test-team"},
 	}}
 }
 
@@ -201,28 +339,44 @@ func TestTeamAgentOptionsReturnsBuildRoles(t *testing.T) {
 
 // TestTeamUserTransport enforces user-only access before the owner sees a call,
 // including management, and validates the role with the generated decoder.
+// The terminal stream's route is a WebSocket upgrade; TestRoleTerminalStream
+// sends it.
 func TestTeamUserTransport(t *testing.T) {
+	routes := []struct{ method, path, body string }{
+		{"GET", "/team", ""},
+		{"GET", "/team/conversation", ""},
+		{"POST", "/team/messages", `{"to":"builder","text":"Please rerun the checks."}`},
+		{"POST", "/team/agents", `{}`},
+		{"POST", "/team/roles/builder/interrupt", ""},
+		{"POST", "/team/roles/builder/stop", ""},
+		{"POST", "/team/roles/builder/terminal-ticket", ""},
+		{"GET", "/team/agent-options", ""},
+		{"POST", "/team/notices/dismiss", `{"notice":"single_agent_family"}`},
+	}
 	for _, kind := range []CallerKind{CallerUser, CallerGuide, CallerBuilder, CallerTestWriter, CallerManagement} {
 		t.Run(string(kind), func(t *testing.T) {
-			f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*genhighbay.TeamRoleState{}}}
+			f := &teamServiceFixture{}
 			cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
 			handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) { return Principal{ID: "owner", Kind: kind}, nil })
-			for _, route := range []struct{ method, path, body string }{{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", `{}`}, {"GET", "/team/agent-options", ""}, {"POST", "/team/notices/dismiss", `{"notice":"outside_herdr"}`}} {
+			for _, route := range routes {
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, httptest.NewRequest(route.method, route.path, strings.NewReader(route.body)))
 				if kind == CallerUser {
-					assert.Less(t, response.Code, 300, response.Body.String())
+					assert.Less(t, response.Code, 300, "%s %s: %s", route.method, route.path, response.Body.String())
 				} else {
-					assert.Equal(t, 403, response.Code, response.Body.String())
+					assert.Equal(t, 403, response.Code, "%s %s: %s", route.method, route.path, response.Body.String())
 				}
 			}
 			if kind == CallerUser {
-				assert.Equal(t, []string{"read", "show:builder", "start"}, f.calls)
+				assert.Equal(t, []string{
+					"read", "conversation", "send:builder", "start",
+					"interrupt:builder", "stop:builder", "ticket:builder",
+				}, f.recorded())
 			} else {
-				assert.Empty(t, f.calls)
+				assert.Empty(t, f.recorded())
 			}
 			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest("POST", "/team/pane", strings.NewReader(`{"role":"other"}`)))
+			handler.ServeHTTP(response, httptest.NewRequest("POST", "/team/roles/other/interrupt", nil))
 			assert.Equal(t, 400, response.Code)
 		})
 	}
@@ -232,16 +386,16 @@ func TestTeamUserTransport(t *testing.T) {
 		owner                  *teamServiceFixture
 	}{
 		{
-			name: "window_busy", path: "/team/pane", body: `{"role":"builder"}`,
-			call: "show:builder", status: http.StatusConflict,
-			owner: &teamServiceFixture{show: func(context.Context, string) error {
-				return genhighbay.MakeWindowBusy(errors.New("close the open Herdr dialog before showing a pane"))
+			name: "role_not_running", path: "/team/roles/builder/interrupt",
+			call: "interrupt:builder", status: http.StatusConflict,
+			owner: &teamServiceFixture{interrupt: func(context.Context, string) error {
+				return genhighbay.MakeRoleNotRunning(errors.New("the builder has no running terminal to interrupt"))
 			}},
 		},
 		{
 			name: "team_unavailable", path: "/team/agents", body: `{}`, call: "start", status: http.StatusServiceUnavailable,
 			owner: &teamServiceFixture{start: func(context.Context) (*genhighbay.ProjectTeam, error) {
-				return nil, genhighbay.MakeTeamUnavailable(errors.New("open the Herdr app, then try again"))
+				return nil, genhighbay.MakeTeamUnavailable(errors.New("run chorus up, then try again"))
 			}},
 		},
 	} {
@@ -257,33 +411,9 @@ func TestTeamUserTransport(t *testing.T) {
 			var refusal struct{ Name string }
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &refusal))
 			assert.Equal(t, tc.name, refusal.Name)
-			assert.Equal(t, []string{tc.call}, tc.owner.calls)
+			assert.Equal(t, []string{tc.call}, tc.owner.recorded())
 		})
 	}
-}
-
-// TestTeamUserStartConflictTransport maps the owner's numeric conflict into the
-// ordinary user error with one actionable suffix, never peer-authored text.
-func TestTeamUserStartConflictTransport(t *testing.T) {
-	f := &teamServiceFixture{start: func(context.Context) (*genhighbay.ProjectTeam, error) {
-		return nil, fmt.Errorf("private peer output: %w", &TeamSpaceConflict{Count: 2})
-	}}
-	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "owner", Service: f}})
-	handler := NewHTTPHandler(cp, func(*http.Request) (Principal, error) {
-		return Principal{ID: "owner", Kind: CallerUser}, nil
-	})
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/team/agents", strings.NewReader(`{}`)))
-	assert.Equal(t, http.StatusConflict, response.Code, response.Body.String())
-	var body struct {
-		Name    string `json:"name"`
-		Message string `json:"message"`
-	}
-	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-	assert.Equal(t, "ambiguous_space", body.Name)
-	assert.Equal(t, "2 Herdr spaces match this project. Close the duplicate Herdr spaces, then start the agents.", body.Message)
-	assert.True(t, strings.HasSuffix(body.Message, duplicateTeamSpacesStep()))
-	assert.NotContains(t, response.Body.String(), "private peer output")
 }
 
 // TestTeamAgentChangeListDescription exposes only readable facts to an agent;
@@ -323,7 +453,7 @@ func TestTeamUserResourceOwner(t *testing.T) {
 		return Principal{ID: "bob", Kind: CallerUser}, nil
 	})
 	for _, request := range []struct{ method, path, body string }{
-		{"GET", "/team", ""}, {"POST", "/team/pane", `{"role":"builder"}`}, {"POST", "/team/agents", `{}`},
+		{"GET", "/team", ""}, {"POST", "/team/agents", `{}`},
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(request.method, request.path, strings.NewReader(request.body)))
@@ -337,7 +467,7 @@ func TestTeamUserResourceOwner(t *testing.T) {
 // TestTeamVersionBelongsToResourceOwner keeps other owners' change-list waits
 // independent of the bound team's activity and never reads that team for them.
 func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
-	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*genhighbay.TeamRoleState{}}}
+	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{Team: "team"}}
 	cp := newControlPlane(t, Options{Team: &TeamBinding{Owner: "alice", Service: f}})
 	cp.changesWait = time.Millisecond
 	alice, bob := asCaller("alice", CallerUser), asCaller("bob", CallerUser)
@@ -345,9 +475,9 @@ func TestTeamVersionBelongsToResourceOwner(t *testing.T) {
 	require.NoError(t, err)
 	b, err := cp.ListChanges(bob)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"read"}, f.calls)
+	assert.Equal(t, []string{"read", "conversation"}, f.calls, "only the owner's list reads the team and its conversation")
 	f.mu.Lock()
-	f.snapshot.Roles = []*genhighbay.TeamRoleState{{Role: "builder", Handle: "builder", State: "waiting", Attention: "none", Watcher: "gone", Assignment: "unread"}}
+	f.snapshot.Roles = []*genhighbay.TeamRoleState{{Role: "builder", Handle: "builder", State: "waiting", Attention: "none", Assignment: "unread"}}
 	f.calls = nil
 	f.mu.Unlock()
 	bobWait, err := cp.WaitForChanges(bob, &genhighbay.WaitForChangesPayload{Since: b.Version})
@@ -553,12 +683,15 @@ func TestTeamSupervisorNormalOwnerCompletion(t *testing.T) {
 }
 
 // TestTeamWaitingVersionAndHistory proves the existing wait covers every public
-// team fact and neither its request nor its inner span reaches bounded history.
+// team fact and the conversation, each changed alone, and neither its request
+// nor its inner span reaches bounded history.
 func TestTeamWaitingVersionAndHistory(t *testing.T) {
 	exporter := tracetest.NewInMemoryExporter()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	t.Cleanup(func() { assert.NoError(t, provider.Shutdown(context.Background())) })
-	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "team", Roles: []*genhighbay.TeamRoleState{{Role: "builder", Handle: "builder", State: "working", Attention: "none", Watcher: "held", Assignment: "nothing_owed"}}}}
+	f := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{Team: "team", Roles: []*genhighbay.TeamRoleState{
+		{Role: "builder", Handle: "builder", State: "working", Attention: "none", Assignment: "nothing_owed"},
+	}}}
 	cp := newControlPlane(t, Options{TracerProvider: provider, Team: &TeamBinding{Owner: "owner", Service: f}})
 	cp.changesWait = time.Millisecond
 	user := asCaller("owner", CallerUser)
@@ -566,25 +699,31 @@ func TestTeamWaitingVersionAndHistory(t *testing.T) {
 	require.NoError(t, err)
 	endpoints := genhighbay.NewEndpoints(cp)
 	applyOperationPolicy(endpoints, cp.tracer("test"))
-	for _, field := range []string{"state", "attention", "watcher", "assignment"} {
+	for _, tc := range []struct {
+		name string
+		// change replaces one fact of the fixture while its lock is held.
+		change func(*genhighbay.TeamRoleState)
+	}{
+		{"state", func(role *genhighbay.TeamRoleState) { role.State = "needs_you" }},
+		{"attention", func(role *genhighbay.TeamRoleState) { role.Attention = "permission" }},
+		{"terminal", func(role *genhighbay.TeamRoleState) { role.HasTerminal = true }},
+		{"assignment", func(role *genhighbay.TeamRoleState) { role.Assignment = "unread" }},
+		{"chorus status", func(*genhighbay.TeamRoleState) { f.snapshot.ChorusStatus = "unavailable" }},
+		{"conversation message", func(*genhighbay.TeamRoleState) {
+			f.conversation.Messages = []*genhighbay.TeamMessage{fixtureTeamMessage("The tests are accepted.")}
+		}},
+		{"conversation pin", func(*genhighbay.TeamRoleState) {
+			f.conversation.Pin = fixtureTeamMessage("Team manifest")
+		}},
+	} {
 		f.mu.Lock()
-		old := f.snapshot.Roles[0]
-		next := *old
-		switch field {
-		case "state":
-			next.State = "needs_you"
-		case "attention":
-			next.Attention = "permission"
-		case "watcher":
-			next.Watcher = "gone"
-		case "assignment":
-			next.Assignment = "unread"
-		}
+		next := *f.snapshot.Roles[0]
+		tc.change(&next)
 		f.snapshot.Roles = []*genhighbay.TeamRoleState{&next}
 		f.mu.Unlock()
 		result, err := endpoints.WaitForChanges(user, &genhighbay.WaitForChangesPayload{Since: list.Version})
 		require.NoError(t, err)
-		assert.NotEqual(t, list.Version, result.(*genhighbay.ChangeListVersion).Version)
+		assert.NotEqual(t, list.Version, result.(*genhighbay.ChangeListVersion).Version, tc.name)
 		list, err = cp.ListChanges(user)
 		require.NoError(t, err)
 	}

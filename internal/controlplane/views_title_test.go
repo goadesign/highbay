@@ -65,7 +65,7 @@ func TestViewsPageTitleRecoversTeamAndSession(t *testing.T) {
 	runPageScript(t, ps, nil, `
 const title = (page, step) => page.doc.title === step + ": Refunds café";
 const page = await openPage(origin, { link: input.link });
-await until(() => title(page, "Coding agent needs you: permission"), "role order or project name is wrong: " + page.doc.title);
+await until(() => title(page, "Guide needs you: permission prompt"), "role order or project name is wrong: " + page.doc.title);
 expect(!page.doc.title.includes("page-team"), "title used the sanitized team identity");
 page.$("#highbay-nav-team").click();
 await until(() => page.$("#highbay-team-refresh") && !page.$("#highbay-team-refresh").disabled, "Team did not open");
@@ -73,11 +73,11 @@ await control(origin, "reply", { key: "GET /team", status: 503, body: { name: "u
 page.$("#highbay-team-refresh").click();
 await until(() => title(page, "Refresh Team"), "failed read presented retained attention as current");
 page.$("#highbay-team-refresh").click();
-await until(() => title(page, "Coding agent needs you: permission"), "recovered read did not restore current attention");
+await until(() => title(page, "Guide needs you: permission prompt"), "recovered read did not restore current attention");
 await control(origin, "act", { key: "working" });
 await until(() => title(page, "Describe your change"), "working role kept stale needs-you attention");
 await control(origin, "act", { key: "needs-you" });
-await until(() => title(page, "Builder needs you: question"), "second attention did not arrive");
+await until(() => title(page, "Builder needs you: waiting on your answer"), "second attention did not arrive");
 await control(origin, "reply", { key: "GET /team", status: 401, body: { name: "unauthorized", message: "Session ended." } });
 page.$("#highbay-team-refresh").click();
 await until(() => title(page, "Reopen project"), "ended session did not override retained facts");
@@ -92,10 +92,10 @@ func TestViewsPageTitleRecoversWaiting(t *testing.T) {
 	ps := startPageServer(t, pageControlPlane(t, Options{Team: &TeamBinding{Owner: pageOwner, Service: f}}))
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.doc.title === "Builder needs you: question: Refunds café", "initial attention did not arrive");
+await until(() => page.doc.title === "Builder needs you: waiting on your answer: Refunds café", "initial attention did not arrive");
 await control(origin, "reply", { key: "GET /change-updates", status: 503, body: { name: "unavailable", message: "Wait unavailable." } });
 await until(() => page.doc.title === "Reconnecting: Refunds café", "wait trouble did not update the tab title");
-await until(() => page.doc.title === "Builder needs you: question: Refunds café", "wait recovery left stale recovery title", 10000);
+await until(() => page.doc.title === "Builder needs you: waiting on your answer: Refunds café", "wait recovery left stale recovery title", 10000);
 page.close();
 `)
 }

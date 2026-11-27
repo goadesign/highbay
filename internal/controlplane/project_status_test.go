@@ -2,7 +2,6 @@
 package controlplane
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,11 +24,14 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 	workspace := realTempDir(t)
 	const owner = "alice@example.com"
 	guide := &genhighbay.TeamRoleState{
-		Role: "guide", Handle: "guide-test", State: "needs_you", Attention: "question",
-		Watcher: "held", Assignment: "nothing_owed",
+		Role: "guide", Handle: "guide-test", HasTerminal: true, State: "needs_you", Attention: "question",
+		Assignment: "no_work",
+	}
+	builder := &genhighbay.TeamRoleState{
+		Role: "builder", Handle: "builder-test", State: "not_started", Attention: "none", Assignment: "no_work",
 	}
 	team := &teamServiceFixture{snapshot: genhighbay.TeamSnapshot{
-		Team: "test-project", HerdrMode: "attached", Roles: []*genhighbay.TeamRoleState{guide},
+		Team: "test-project", Roles: []*genhighbay.TeamRoleState{guide, builder},
 	}}
 	runsDir := realTempDir(t)
 	cp := &ControlPlane{
@@ -50,11 +52,18 @@ func TestProjectStatusFollowsSavedChange(t *testing.T) {
 		assert.Equal(t, filepath.Base(workspace), status.ProjectName)
 		assert.Equal(t, workspace, status.Directory)
 		assert.Equal(t, "test-project", status.Team)
-		assert.Equal(t, "attached", status.HerdrMode)
-		assert.Equal(t, []*genproject.TeamRoleState{{
-			Role: guide.Role, Handle: guide.Handle, State: guide.State,
-			Attention: guide.Attention, Watcher: guide.Watcher, Assignment: guide.Assignment,
-		}}, status.Roles)
+		// Each role keeps whether it has a terminal the page can open: the
+		// guide does, the builder that has not started does not.
+		assert.Equal(t, []*genproject.TeamRoleState{
+			{
+				Role: guide.Role, Handle: guide.Handle, HasTerminal: true, State: guide.State,
+				Attention: guide.Attention, Assignment: guide.Assignment,
+			},
+			{
+				Role: builder.Role, Handle: builder.Handle, HasTerminal: false, State: builder.State,
+				Attention: builder.Attention, Assignment: builder.Assignment,
+			},
+		}, status.Roles)
 		if card == nil {
 			assert.Empty(t, status.ChangeID)
 			assert.Empty(t, status.ChangeTitle)
@@ -123,34 +132,4 @@ func saveStatusProposal(t *testing.T, cp *ControlPlane, owner, id string) *genhi
 	require.NoError(t, err)
 	saveMetadataRecord(t, cp, storedChangeCard{card: card, owner: owner})
 	return card
-}
-
-func TestOpenViewsHandoffCopyReflectsOpenerCapabilities(t *testing.T) {
-	ctx := WithPrincipal(t.Context(), Principal{ID: "alice@example.com", Kind: CallerGuide})
-
-	unconfigured := newControlPlane(t, Options{})
-	res, err := unconfigured.OpenViews(ctx)
-	require.NoError(t, err)
-	assert.False(t, res.Opened)
-	assert.Contains(t, res.Message, "Open Highbay Window in the Herdr companion")
-	assert.NotContains(t, res.Message, "brought it to the front")
-
-	failing := newControlPlane(t, Options{
-		OpenViews: func(context.Context) error { return assert.AnError },
-	})
-	res, err = failing.OpenViews(ctx)
-	require.NoError(t, err)
-	assert.False(t, res.Opened)
-	assert.Contains(t, res.Message, "Open Highbay Window in the Herdr companion")
-	assert.NotContains(t, res.Message, "brought it to the front")
-
-	succeeding := newControlPlane(t, Options{
-		OpenViews: func(context.Context) error { return nil },
-	})
-	res, err = succeeding.OpenViews(ctx)
-	require.NoError(t, err)
-	assert.True(t, res.Opened)
-	assert.Contains(t, res.Message, "Opened Highbay views in the user's default browser.")
-	assert.Contains(t, res.Message, "Open Highbay Window in the Herdr companion")
-	assert.NotContains(t, res.Message, "brought it to the front")
 }

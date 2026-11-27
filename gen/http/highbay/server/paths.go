@@ -154,14 +154,44 @@ func GetTeamHighbayPath() string {
 	return "/team"
 }
 
-// ShowTeamPaneHighbayPath returns the URL path to the highbay service show_team_pane HTTP endpoint.
-func ShowTeamPaneHighbayPath() string {
-	return "/team/pane"
+// GetTeamConversationHighbayPath returns the URL path to the highbay service get_team_conversation HTTP endpoint.
+func GetTeamConversationHighbayPath() string {
+	return "/team/conversation"
+}
+
+// SendTeamMessageHighbayPath returns the URL path to the highbay service send_team_message HTTP endpoint.
+func SendTeamMessageHighbayPath() string {
+	return "/team/messages"
 }
 
 // StartTeamAgentsHighbayPath returns the URL path to the highbay service start_team_agents HTTP endpoint.
 func StartTeamAgentsHighbayPath() string {
 	return "/team/agents"
+}
+
+// InterruptTeamRoleHighbayPath returns the URL path to the highbay service interrupt_team_role HTTP endpoint.
+func InterruptTeamRoleHighbayPath(role string) string {
+	return fmt.Sprintf("/team/roles/%v/interrupt", role)
+}
+
+// StopTeamRoleHighbayPath returns the URL path to the highbay service stop_team_role HTTP endpoint.
+func StopTeamRoleHighbayPath(role string) string {
+	return fmt.Sprintf("/team/roles/%v/stop", role)
+}
+
+// RestartTeamRoleHighbayPath returns the URL path to the highbay service restart_team_role HTTP endpoint.
+func RestartTeamRoleHighbayPath(role string) string {
+	return fmt.Sprintf("/team/roles/%v/restart", role)
+}
+
+// CreateTerminalTicketHighbayPath returns the URL path to the highbay service create_terminal_ticket HTTP endpoint.
+func CreateTerminalTicketHighbayPath(role string) string {
+	return fmt.Sprintf("/team/roles/%v/terminal-ticket", role)
+}
+
+// AttachRoleTerminalHighbayPath returns the URL path to the highbay service attach_role_terminal HTTP endpoint.
+func AttachRoleTerminalHighbayPath(role string) string {
+	return fmt.Sprintf("/team/roles/%v/terminal", role)
 }
 
 // ListTeamAgentOptionsHighbayPath returns the URL path to the highbay service list_team_agent_options HTTP endpoint.

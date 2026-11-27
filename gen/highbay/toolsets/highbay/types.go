@@ -17,7 +17,7 @@ type (
 		// Full commit ID of the candidate being promoted (40 or 64 lowercase hex
 		// characters).
 		CandidateCommit string
-		// SHA-256 digest of the CP4 verification report written by hbay verify (64
+		// SHA-256 digest of the CP4 verification report written by highbay verify (64
 		// lowercase hex characters).
 		ReportDigest string
 	}
@@ -629,14 +629,14 @@ type (
 		// Opaque value for change detection. It changes whenever the listed cards, a
 		// card's get_build view (including the builder's branch head_commit and latest
 		// check), approval_available, initializing_phase, the owner's Story
-		// evaluation, get_team, or get_live_target changes; list_changes items carry
-		// no build or branch fields, so read get_build for those facts. Compare it
-		// only for equality.
+		// evaluation, get_team, get_team_conversation, or get_live_target changes;
+		// list_changes items carry no build or branch fields, so read get_build for
+		// those facts. Compare it only for equality.
 		Version string
 		// Whether approve_merge can record approvals on this server: true when the
-		// server runs Checkpoint 4 verification, as every server hbay starts does, and
-		// any stored promotion settings could be resolved; false when the server runs
-		// no verification or resolving the promotion target fails.
+		// server runs Checkpoint 4 verification, as every server highbay starts does,
+		// and any stored promotion settings could be resolved; false when the server
+		// runs no verification or resolving the promotion target fails.
 		ApprovalAvailable bool
 		// What init_project is doing now, as a short sentence for the user, such as
 		// "Resolving the service's Go modules"; absent when no initialization is
@@ -704,6 +704,13 @@ type (
 		Opened bool
 		// Safe handoff result without a URL or credential.
 		Message string
+		// Stable Chorus swarm name for this project.
+		Team string
+		// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+		Channel string
+		// Registered Chorus handle for this project's guide (empty when no guide is
+		// registered yet).
+		Handle string
 	}
 	// PreviewArchitecturePayload defines the JSON payload for the highbay.preview_architecture tool.
 	PreviewArchitecturePayload = struct {
@@ -1303,7 +1310,7 @@ type (
 	// BuilderVerificationReport is a nested type used by the generated JSON contract.
 	BuilderVerificationReport = struct {
 		// SHA-256 digest of the full report the evaluator saved; approve_merge and
-		// hbay approve take this digest.
+		// highbay approve take this digest.
 		ReportDigest string
 		// Every declared scenario, counted by outcome.
 		Counts *VerificationCounts

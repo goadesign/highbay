@@ -13,7 +13,7 @@ This page has two readers. A platform author follows [the seven rules](#the-7-go
 ## The 7 Golden Path Rules
 
 ### 1. Design Is the Single Source of Truth & Standardized Layout (`design/*.go` → `goa gen`)
-Projects initialized with Highbay use the same two-module Go layout (`design/`, `gen/`, `cmd/`, `internal/`, and `eval/`, while existing Goa repositories may also register an external suite module such as `examples/orders-eval`), and every service, method, payload, error contract, agent, toolset, MCP resource, and C4 container is declared in `design/*.go` first. Running `goa gen` deterministically generates transport codecs, OpenAPI 3 specs, gRPC protobufs (when compiled via standalone `goa gen` with `protoc`), workflow registrations, and `AGENTS_QUICKSTART.md` at **0 LLM tokens** (in the [`examples/orders`](../examples/orders/gen) reference platform and [`Highbay's own gen/`](../gen), generated Go accounts for over 70% of non-test `.go` code). Highbay's built-in `hbay gen` and candidate `generate_code` generate HTTP, JSON-RPC, and MCP transports and refuse designs declaring `GRPC` transports because `protoc` is not bundled; see [`hbay gen`](REFERENCE.md#hbay-gen). Files under `gen/` are never edited by hand.
+Projects initialized with Highbay use the same two-module Go layout (`design/`, `gen/`, `cmd/`, `internal/`, and `eval/`, while existing Goa repositories may also register an external suite module such as `examples/orders-eval`), and every service, method, payload, error contract, agent, toolset, MCP resource, and C4 container is declared in `design/*.go` first. Running `goa gen` deterministically generates transport codecs, OpenAPI 3 specs, gRPC protobufs (when compiled via standalone `goa gen` with `protoc`), workflow registrations, and `AGENTS_QUICKSTART.md` at **0 LLM tokens** (in the [`examples/orders`](../examples/orders/gen) reference platform and [`Highbay's own gen/`](../gen), generated Go accounts for over 70% of non-test `.go` code). Highbay's built-in `highbay gen` and candidate `generate_code` generate HTTP, JSON-RPC, and MCP transports and refuse designs declaring `GRPC` transports because `protoc` is not bundled; see [`highbay gen`](REFERENCE.md#highbay-gen). Files under `gen/` are never edited by hand.
 
 ### 2. Single HTTP/SSE/MCP Edge Gateway, Internal gRPC Services
 - **One Edge Service**: Expose a single stateless HTTP/SSE/MCP edge service that terminates TLS, validates authentication tokens (`JWTAuth`, `OAuth2`, `APIKeyAuth`), enforces CORS, and streams real-time updates to clients.
@@ -58,19 +58,21 @@ A Golden Path platform is built with these tools:
 
 The team of coding agents that builds it runs on two more:
 
-- **[Chorus](https://github.com/goadesign/chorus)** — Lets coding agents and people talk in real time through channels and direct messages, with `0`-token background waiting (`chorus watch`). It also launches the project's agent panes in Herdr.
-- **[Herdr](https://herdr.dev/)** — An optional terminal workspace for side-by-side agents. Highbay adopts the current guide's compatible space and pane and places workers beside it. Without Herdr, workers run in background processes.
+- **[Chorus](https://github.com/goadesign/chorus)** carries project messages
+  between the browser and agents. Agents wait for messages with `chorus watch`.
+- **[Herdr Core](https://herdr.dev/core/)** owns interactive terminals. The
+  server asks its `hc` API to start an agent, and the browser connects through
+  Highbay to see and interact with its terminal.
 
 ---
 
 ## Who owns what in Highbay
 
-One-time `hbay up` registers the `hbay stdio` MCP connection and `/highbay`
-(`$highbay`) skill with installed coding agents. The guide's first Highbay tool
-call in a project folder starts or attaches to that project's server (from
-here on, the server). Bare `hbay` remains a browser-opening operator
-entrypoint. The server serves the views page in the user's browser and one
-HTTP and MCP endpoint to the project's team of coding agents:
+`highbay up` checks dependencies and registers the `highbay stdio` MCP connection
+and `/highbay` (`$highbay`) skill with installed coding agents. Running
+`highbay` opens the browser workspace. The first message to the guide starts
+one when needed. The first Highbay call in an existing coding session can
+also start the server and register that session as the guide.
 
 - **The guide** is the agent the user talks to. Working in its `.highbay-draft` copy inside the project folder (never in the project folder itself), it writes the Story and the rest of the Go source in `design/` that describes the business's flows, evaluates that draft with `refresh_story`, and proposes changes. A flow is one path of who does what, from the event that starts it to its outcomes.
 - **The builder** writes the application code and asks Highbay to verify a commit.
@@ -80,14 +82,14 @@ Each change is saved as a Change Card: the record of the request, its open quest
 
 | Owner | Source | What it owns |
 | --- | --- | --- |
-| The `hbay` command | `cmd/hbay` | Global MCP/skill and companion setup, lazy stdio role binding, finding the project's private state folder, server startup and shutdown, authenticated CLI status, stored settings |
-| The server | `internal/project` | The project's identity and port, credentials and browser sessions, the team record, the Chorus roster, launch preferences, worker processes and observed role state |
+| The `highbay` command | `cmd/highbay` | Dependency checks, global MCP and skill registration, lazy stdio role binding, finding the project's private state folder, server startup and shutdown, authenticated CLI status, stored settings |
+| Release installation | `internal/selfupdate` | Stable release lookup, exact version verification, Homebrew dispatch, and the lock held through installation and restart |
+| The server | `internal/project` | The project's identity and port, credentials and browser sessions, the team record, Chorus integration, launch preferences, owned terminals and observed role state |
 | The control plane | `internal/controlplane` | Change Cards, builds and assignments, the report checker, the verification plan, the live target and operation diagnostics |
 | The build working copies | `internal/testwriter` | The `.highbay-build` and `.highbay-tests` folders, the numbered `highbay/build-<n>` and `highbay/tests-<n>` branches, the required tests, the check of a report and the commit of accepted tests |
 | Verification runs | `internal/verifyrun`, `internal/verify` | One folder per verification run (its run directory) and the processes that build, run and report it |
-| Herdr | outside Highbay | Terminals, panes and spaces |
-| Chorus | outside Highbay | Agent messaging and launch of role panes in Herdr |
-| The companion | `skills/herdr/highbay` | A floating Herdr window reading project status and focusing panes or opening the browser; no browser-session credential |
+| Herdr Core | outside Highbay | Terminal process lifetime, input, and output |
+| Chorus | outside Highbay | Project messages, agent presence, and guarded wakes for registered terminals |
 
 ### The server and its state
 
@@ -95,31 +97,39 @@ The executable binds the project's owner and team service and its physical
 workspace directory before constructing the control plane or opening the
 listener. Construction rejects either missing binding before opening the card
 store. Team operations and build operations therefore always have their
-project owner; the server can run build workers in the background when Herdr is unavailable. An empty project folder and a team with no registered or running
-agents are valid states.
+project owner. A project may start with an empty folder and no registered
+agents.
 
-A project is one physical folder. `hbay` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name and Herdr space, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, so its agents can reuse their connection settings. When `hbay` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
+A project is one physical folder. `highbay` looks for the nearest folder that has a project record and otherwise creates a new, empty project, so moving or renaming the folder starts a new project. Each project has one private state folder under the user's configuration folder, outside the project. It holds the project record (its ID, folder, owning operating-system account, port, team name, and each registered agent's role and working folder), one credential file per agent, the Change Card folder, verification runs and reports, one retained Go build cache, and the stored verification and promotion settings. A new project saves a free loopback port that no other project of the account saved, and keeps it, so its agents can reuse their connection settings. When `highbay` cannot use a project's record, it names the project folder, the record's path and the repair; when it cannot use a state folder, it names that folder and the repair.
 
-When a guide first calls through `hbay stdio`, or an operator runs `hbay`:
+When a guide first calls through `highbay stdio`, or an operator runs `highbay`:
 
 1. A start lock lets one caller start the server at a time. The folder lock, an operating-system file lock on the Change Card folder that a running server holds for its whole life, is the only proof that a server is running.
-2. The CLI passes the state folder explicitly to `hbay serve -state <dir>`. It starts a parentless Herdr terminal when `hc` is available or a detached process with a private startup log otherwise. Foreground `hbay serve` uses the same explicit state folder.
-3. After binding its port, the server publishes a fresh management credential in a private record. `hbay` reads that credential for each request, confirms that the answering server names the same project, folder and owner, and that the same build of `hbay` started it (the server reports the SHA-256 of its executable, read when it started), and only then continues. `hbay status` reads compatible servers and `hbay stop` accepts a server of any build. Before the listener closes, the server revokes the credential and withdraws the record, even when accepting connections failed.
-4. If the server exits before answering, `hbay` reads the last lines from the terminal or startup log and includes them in the error. It removes an exited server's startup terminal.
+2. The CLI passes the state folder explicitly to `highbay serve -state <dir>`. Foreground `highbay serve` uses the same explicit state folder.
+3. After binding its port, the server publishes a fresh management credential in a private record. `highbay` reads that credential for each request, confirms that the answering server names the same project, folder and owner, and that the same build of `highbay` started it (the server reports the SHA-256 of its executable, read when it started), and only then continues. `highbay status` reads compatible servers and `highbay stop` accepts a server of any build. Before the listener closes, the server revokes the credential and withdraws the record, even when accepting connections failed.
+4. If the server exits before answering, `highbay` reads the last lines from the startup log and includes them in the error.
 
 The management credential lets the CLI read project status, attach a guide,
 stop the server and ask for a browser link. User decisions require a separate
 browser session. The server issues a single-use link that expires after two
-minutes. The page exchanges it for a session held in memory in the server
-and the open page. Each agent authenticates with its role's credential file.
+minutes. The page exchanges it for a bearer credential and saves it in
+browser storage scoped to the project's origin, including its port.
+The project server keeps the session for its lifetime. Each agent
+authenticates with its role's credential file.
 
-Bare `hbay` opens a fresh link after handing over the shell's model settings.
-`hbay --print-link` prints the link and expiry instead. In `open_views`, the
+For an accepted in-place release update, the project server verifies the
+selected release through `internal/selfupdate`. It refreshes setup and
+passes the browser session and runtime settings to the replacement process
+through a private pipe. Herdr Core owns the continuing agent terminals. The
+browser waits for the selected server version before it offers a reload.
+
+Bare `highbay` opens a fresh link after handing over the shell's model settings.
+`highbay --print-link` prints the link and expiry instead. In `open_views`, the
 control plane checks the guide or user role, then the project server mints
 the link and passes it directly to the browser opener. The operation returns
-only an opening result and a message.
+the opening result and the Chorus team, channel, and guide handle.
 
-`hbay status` reads the existing card-store lock and verifies the answering
+`highbay status` reads the existing card-store lock and verifies the answering
 server's identity using the management credential. The project server
 delegates the status read to the control plane, which selects the change and
 derives the stage from the saved build and verification evidence. It may
@@ -131,17 +141,17 @@ staged entries. It moves entries without replacing existing names, publishing
 `.git` last. On restart the persisted publication record lets the control
 plane verify already moved entries and finish an interrupted initialization.
 
-`hbay verification set` and `hbay promotion set` validate a settings file and copy it into the state folder. The server reads both at start, so a change applies when Highbay is started again.
+`highbay verification set` and `highbay promotion set` validate a settings file and copy it into the state folder. The server reads both at start, so a change applies when Highbay is started again.
 
 ### The stdio connection and global setup
 
-`cmd/hbay/setup.go` owns registration of the installed `hbay stdio`
+`cmd/highbay/setup.go` owns registration of the installed `highbay stdio`
 executable and bundled skill in detected coding-agent configuration. It
-preserves unrelated settings and leaves identical content untouched. Setup
-also installs the floating Herdr companion after Herdr has created its app
-folder. On macOS it adds the free `cmd-alt-shift-h` shortcut in `keys.json`,
-without changing workspace layouts. `hbay up` runs setup and starts Chorus
-when installed; the project server itself does not restart Chorus.
+preserves unrelated settings and leaves identical content untouched.
+`highbay up` uses `internal/depinstall` to check Go, Git, Docker, Herdr Core,
+and Chorus before starting services.
+The dependency installer uses Homebrew for its formulae and verifies
+publisher checksums before installing standalone releases.
 
 The stdio server answers initialization, ping and catalogs from generated
 MCP definitions without creating state or starting a project server. The
@@ -160,52 +170,34 @@ test-writer-only, including nested modules and leftover worker folders. A
 missing worker registration or credential never grants guide access.
 Generated schemas and the control plane's operation policy still enforce each caller's tools.
 
-The Herdr companion reads `hbay status --json` for the shown local project
-and Herdr labels for pane focus. Its **Open Highbay Window** action runs the ordinary
-browser-opening entrypoint. It holds no user credential and changes no
-shipped workspace layout.
+### The team and terminal streams
 
-### The team: Herdr and Chorus
+The project server owns the role registry, launch choices, and terminal
+ownership. The control plane supplies the current build and its required
+roles and assignments. Team reads return observed state. Installed agent
+discovery runs when the browser asks for choices or a launch needs them.
 
-The project server owns the role registry, launch choices and notice
-preferences. The control plane owns which workers have work and reports the
-current build's identity, assignments and check results to the team
-supervisor. A team read returns cached observations and project preferences
-without starting discovery or terminal commands. Installed agent discovery
-runs on demand for the user and when resolving choices for a launch. The
-browser's inline Build and Team controls use those options and submit the
-needed roles' choices. The project saves choices and dismissed recommendations;
-those preferences do not change role permissions or required assignments.
+The first browser message to the guide starts the selected coding agent
+through Herdr Core when there is no active guide. The server then posts the
+message to the project's Chorus channel. A role recipient becomes a mention
+in that channel. The browser reads project messages and the channel pin
+from the project server. An external coding session registers through
+`attach_guide` in `highbay stdio`. When terminal identity matches the session,
+the server labels it for observation, browser attachment, and guarded
+Chorus wakes.
 
-`hbay stdio` registers the current coding session as guide through the local
-management `attach_guide` operation.
-The server checks the supplied terminal is a running model pane in a local
-tab with compatible project and team labels before adopting it. It keeps the
-live guide session in place and opens no launcher. A user can
-request an explicit guide launch in Herdr through `start_team_agents` if
-there is no running guide pane or watcher. Build starts request workers only.
+Highbay requests terminals for missing workers after an accepted build.
+The workers reuse saved choices or use installed defaults, authenticate
+through `highbay stdio`, and read their role's assignments. The server uses
+Chorus messages to notify agents about unread assignments. A message
+records communication. The control plane owns assignment and build state.
 
-To launch workers in Herdr, the server resolves the managed Chorus endpoint
-and identifies its owned live panes. It writes the roster and passes missing
-roles' choices to `chorus team launch`. The roster uses a running guide as the
-placement reference when there is one. Otherwise it starts with the workers.
-The first worker is placed to the right of a running guide and the test
-writer below the builder. A change to the managed Chorus endpoint replaces the
-observer and sender, clears stale watcher facts and carries forward the
-supervisor's assignment-attempt tracking.
-
-Without Herdr the supervisor starts finite worker invocations in dedicated
-process groups with the preserved launch environment. Workers use the globally
-registered `hbay stdio` connection and their role credentials. The browser
-requires a supported non-interactive client and explicit permission to run
-without interactive prompts. The supervisor
-advances workers when a new assignment or verification result calls for
-work and waits while Highbay checks a test report or runs
-verification. During a server lifetime, each build allows three invocations
-per role and each invocation has a 30-minute deadline. The project server
-drains those groups before the control plane releases the card-store lock.
-
-For a Herdr team, the server watches each registered role's terminal through Herdr and whether Chorus reports a watcher for each agent: the wait through which the agent receives its messages. It keeps the terminal's state and reported status, the foreground program's arguments and the watcher facts, never screen text, titles or messages. Herdr sends a heartbeat every 15 seconds; when three are missed, every role is unknown until fresh snapshots arrive. Chorus answers are read only up to their agent list, at most 256 KiB, before any conversation data. The control plane gives the server a read-only callback that reports which worker roles have work on the open build and which unread assignment generations they owe; calling it never marks work read. Highbay types nothing into a pane. It reminds a worker role that has work on the open build and owes an unread assignment with two tool calls posted to Chorus's `/mcp` endpoint, written as Chorus's dashboard writes them: `who` registers Highbay's own handle in the team, then `send` hands the role one fixed direct message. The sender has its own client, bounded at 5 seconds per post; it fails a response longer than 2 MiB and decodes only whether each call failed. The supervisor alone keeps, in memory, which generations of an unread assignment it has already tried. [Team supervision](REFERENCE.md#team-supervision) gives the user's view of this.
+To open a role's Terminal, the browser requests a role-bound one-use
+ticket, then upgrades to a WebSocket to the project server. Herdr Core
+owns the PTY. The project server forwards its output and the browser's
+keyboard input, focus, and resize events. The browser returns credit after
+rendering output to bound data in flight. Interrupt sends SIGINT to the
+running role. Stop removes a managed role's terminal at the user's request.
 
 ### Change Cards and builds
 
@@ -264,7 +256,7 @@ manual merge. This prevents content handling during a server merge from
 selecting those commands. Unused filter definitions, external configuration
 includes, trusted filesystem hooks and signing keep their existing behavior.
 
-The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a version of the change list that changes whenever a card, a change's latest verification run, a build as `get_build` shows it, the team, the Story evaluation or the live target changes, and the page then reads again. The page sends a build or a window action only when the user acts.
+The views page keeps one waiting read (`wait_for_changes`) open. Its answer is a version of the change list that changes whenever a card, a change's latest verification run, a build as `get_build` shows it, the team, its conversation, the Story evaluation or the live target changes, and the page then reads again. The page requests builds, messages, and terminal actions when the user acts.
 
 ### The test writer's working copy and the report checker
 
@@ -320,7 +312,7 @@ argument through the internal supervisor, executor and live roles. Saved
 requests, live records and verification plans contain no cache path.
 `verify.Prepare` passes it as `candidate.BuildSpec.BuildCacheDir` for candidate
 and test-program compilation; `WorkDir` keeps only operation-owned scratch and
-staging. The standalone `hbay verify` composition root instead supplies a cache
+staging. The standalone `highbay verify` composition root instead supplies a cache
 under its own work directory. The control-plane composition also supplies the
 project cache to its design evaluator, each fresh initialization generator and
 the test-report checker. Their scratch and outputs remain independently owned;
@@ -363,4 +355,4 @@ confine other same-user host processes.
 
 ### Operation diagnostics
 
-The control plane records each of its operations as an OpenTelemetry span and saves a bounded, safe view of each one in one history file, `traces.jsonl` in the Change Card folder. The history belongs to the project's owner: every caller (the user's page, the management credential and each agent) acts for that owner, and each record names its caller and the caller's kind, such as `user`, `management` or the agent's role. The server's composition root, `projectRuntime.serve` in [`project_server.go`](../cmd/hbay/project_server.go), owns the tracer provider, and exports full spans over OTLP when an OTLP endpoint is set in the server's environment. The exported spans carry no added identity. The user's page reads that succeed or are refused, and its waiting read, are not saved, so the page's repeated reads do not fill the history. Spans that end after the control plane closes are not saved. [Operation diagnostics](REFERENCE.md#operation-diagnostics) gives the caller's view.
+The control plane records each of its operations as an OpenTelemetry span and saves a bounded, safe view of each one in one history file, `traces.jsonl` in the Change Card folder. The history belongs to the project's owner: every caller (the user's page, the management credential and each agent) acts for that owner, and each record names its caller and the caller's kind, such as `user`, `management` or the agent's role. The server's composition root, `projectRuntime.serve` in [`project_server.go`](../cmd/highbay/project_server.go), owns the tracer provider, and exports full spans over OTLP when an OTLP endpoint is set in the server's environment. The exported spans carry no added identity. The user's page reads that succeed or are refused, and its waiting read, are not saved, so the page's repeated reads do not fill the history. Spans that end after the control plane closes are not saved. [Operation diagnostics](REFERENCE.md#operation-diagnostics) gives the caller's view.

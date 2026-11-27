@@ -165,7 +165,7 @@ func TestInitCreatesAProjectWhoseSuitePasses(t *testing.T) {
 			// The user makes the first commit, as the README says.
 			for _, args := range [][]string{
 				{"init", "--quiet"}, {"config", "user.name", "Test User"}, {"config", "user.email", "test@example.com"},
-				{"config", "commit.gpgsign", "false"}, {"add", "--all"}, {"commit", "--quiet", "-m", "Start from hbay init"},
+				{"config", "commit.gpgsign", "false"}, {"add", "--all"}, {"commit", "--quiet", "-m", "Start from highbay init"},
 			} {
 				out, err := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 				require.NoError(t, err, "git %v: %s", args, out)

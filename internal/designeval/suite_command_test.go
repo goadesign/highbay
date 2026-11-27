@@ -179,7 +179,7 @@ func TestGeneratedProgramRunsTheStarterSuite(t *testing.T) {
 	require.NoError(t, err)
 	program := string(gen.Files["gen/cmd/shop-evals/main.go"])
 	require.NotEmpty(t, program, "the program is generated at "+SuiteCommandPackage("shop"))
-	assert.Contains(t, program, "$ hbay gen")
+	assert.Contains(t, program, "$ highbay gen")
 	assert.Contains(t, program, `genevals "example.com/shop/eval/gen/evals/shop_acceptance"`)
 	assert.Contains(t, program, `const environment = "scripted-model"`)
 	guide := string(gen.Files[quickstartPath])
@@ -233,7 +233,7 @@ func (h *Hooks) RefundOverLimit(ctx context.Context) (eval.Result, error) {
 // module without its acceptance package: a module at <service module>/eval
 // whose design declares one suite, but not a Highbay test module. It gets no
 // program and no test-program section, and the module with what was
-// generated still builds. With the package, as hbay init generates it, the
+// generated still builds. With the package, as highbay init generates it, the
 // same module gets its program (TestGeneratedProgramRunsTheStarterSuite).
 func TestAModuleOnlyAtTheLayoutsPathGetsNoProgram(t *testing.T) {
 	if testing.Short() {

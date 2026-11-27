@@ -48,10 +48,6 @@ type echoStream struct {
 	response *model.Response
 }
 
-// starterWindowHost refuses the first external window operation. Other host
-// methods are unreachable because the team owner stops on that refusal.
-type starterWindowHost struct{ project.TeamHost }
-
 // published is the Highbay version the starter's go.mod pins; it exists on the
 // module proxy. It matches the internal tests' fixture of the same name.
 const published = testmodule.PublishedHighbayVersion
@@ -76,8 +72,8 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 	require.NoError(t, err)
 	commit := commitAll(t, seed)
 
-	hbayBin := filepath.Join(t.TempDir(), "hbay")
-	build := exec.CommandContext(t.Context(), "go", "build", "-o", hbayBin, "./cmd/hbay")
+	highbayBin := filepath.Join(t.TempDir(), "highbay")
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", highbayBin, "./cmd/highbay")
 	build.Dir = filepath.Join("..", "..")
 	out, err := build.CombinedOutput()
 	require.NoError(t, err, string(out))
@@ -110,11 +106,11 @@ func TestStarterLiveTargetAppliesADraftToTheNextModelRequest(t *testing.T) {
 						SuiteRepo: dir, SuiteCommit: commit, SuiteModule: "eval", SuiteCommand: "./gen/cmd/" + name + "-evals",
 						ReportDir: t.TempDir(),
 					},
-					Command: []string{hbayBin},
+					Command: []string{highbayBin},
 					Timeout: 15 * time.Minute,
 				},
 				Live: &controlplane.LiveConfig{
-					Command:      []string{hbayBin},
+					Command:      []string{highbayBin},
 					Env:          os.Environ(),
 					StartTimeout: 10 * time.Minute,
 				},
@@ -278,7 +274,7 @@ func starterCaller(t *testing.T, kind controlplane.CallerKind) context.Context {
 }
 
 // starterTeam binds the actual project-owned team and durable role registry.
-// Its unavailable window host prevents this test from launching agents.
+// It has no herdr-core and no Chorus, so this test starts no agent.
 func starterTeam(t *testing.T, dir string) *project.Server {
 	t.Helper()
 	state, err := project.Discover(t.TempDir(), dir)
@@ -288,12 +284,18 @@ func starterTeam(t *testing.T, dir string) *project.Server {
 	_, err = state.Initialize("alice@example.com")
 	require.NoError(t, errors.Join(err, lock.Close()))
 	server, err := project.NewServer(state, func() {}, project.TeamDependencies{
-		Lifetime: t.Context(), Host: starterWindowHost{}, RosterDirectory: t.TempDir(),
-		Connect: func(context.Context) (project.TeamConnection, error) {
-			return project.TeamConnection{}, nil
+		Lifetime: t.Context(),
+		DialTerminals: func(context.Context) (project.TeamTerminals, error) {
+			return nil, errors.New("the starter integration test has no herdr-core")
+		},
+		ConnectChorus: func(context.Context) (project.TeamChorus, error) {
+			return nil, errors.New("the starter integration test has no Chorus")
 		},
 		DiscoverAgents: func(context.Context) ([]*genhighbay.InstalledAgentOption, error) {
 			return []*genhighbay.InstalledAgentOption{}, nil
+		},
+		AgentCommand: func(*genhighbay.RoleAgentChoice, string) ([]string, error) {
+			return nil, errors.New("the starter integration test starts no agent")
 		},
 	})
 	require.NoError(t, err)
@@ -363,11 +365,6 @@ func assertVerified(t *testing.T, cp *controlplane.ControlPlane, ctx context.Con
 		case <-time.After(2 * time.Second):
 		}
 	}
-}
-
-// Overlays reports the test host's absent window service before any launcher work.
-func (starterWindowHost) Overlays(context.Context) ([]string, error) {
-	return nil, errors.New("the starter integration host has no agent windows")
 }
 
 // Complete is not used; the starter's planner streams.

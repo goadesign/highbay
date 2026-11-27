@@ -21,7 +21,11 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// Highbay MCP software factory control plane.
+// Owns Highbay's software factory lifecycle across Checkpoint 1 intent and
+// Story Change Cards, Checkpoint 2 C4 architecture and guardrail previews,
+// Checkpoint 3 live target prompt overrides, Checkpoint 4 verification runs,
+// Checkpoint 5 promotion approvals and merges, and the browser workspace's
+// team conversation and terminal controls.
 type Service interface {
 	// Serve the Highbay Golden Path architecture playbook for Goa-AI agentic
 	// platforms, followed by the decision component catalog for the optional
@@ -114,7 +118,7 @@ type Service interface {
 	// and an agent without positive TimeBudget and DefaultCaps(MaxToolCalls). The
 	// result reports what the design declares; it does not compare the design with
 	// the Change Card's requirements. The guide sees the architecture of an
-	// unsaved draft with hbay preview -dir <draft_folder>.
+	// unsaved draft with highbay preview -dir <draft_folder>.
 	PreviewArchitecture(context.Context, *PreviewArchitecturePayload) (res *ArchitecturePreviewResult, err error)
 	// Apply a Fast Draft Mode prompt override on the live target start_live_target
 	// runs, or reject a compiled-rule prompt hack. Highbay changes prompts only in
@@ -160,7 +164,7 @@ type Service interface {
 	// files, read by the design walk in gofmt form, are the build's design source
 	// version for version; and every design version at its merge base with the
 	// project's commit is one the revision was made from. With verification
-	// settings stored with hbay verification set, the run uses the operator's
+	// settings stored with highbay verification set, the run uses the operator's
 	// evaluator. Otherwise Highbay must have accepted the build's tests: the run
 	// builds the candidate's programs from the candidate commit and runs the
 	// generated entry point of the tests at the accepted commit. The server builds
@@ -191,7 +195,7 @@ type Service interface {
 	// the verification report by digest, re-derives the report from its evidence
 	// with verify.Approve, and records the approval on the card when the report
 	// passed for candidate_commit, request_revision, and that tests' commit. When
-	// promotion settings are configured with hbay promotion set (or a
+	// promotion settings are configured with highbay promotion set (or a
 	// PromotionTarget is bound), approve_merge also checks that the staged
 	// binaries in <release_dir>/<candidate_commit>/ match the report's binary
 	// digests and records those digests in artifacts; without promotion settings,
@@ -207,7 +211,7 @@ type Service interface {
 	Diff(context.Context, *DiffPayload) (res *DiffResult, err error)
 	// Choose, on a running control plane without restarting, the model that CP3
 	// live targets started afterwards receive: a direct provider and model name,
-	// whose request settings the hbay command handed to the project server with
+	// whose request settings the highbay command handed to the project server with
 	// hand_over_model_settings, or a running gRPC model gateway. With written
 	// tests, a direct provider is served by the executor's loopback model gateway
 	// and the accepted test program receives only that gateway, never provider
@@ -225,7 +229,7 @@ type Service interface {
 	// other setting value, and it changes nothing. Verification runs do not use
 	// this choice.
 	GetModelConnection(context.Context) (res *ModelConnection, err error)
-	// The hbay command, after it confirms the project server's identity, hands
+	// The highbay command, after it confirms the project server's identity, hands
 	// over the request settings of each model provider whose key is set in the
 	// shell it runs in: the key and the listed settings that route and
 	// authenticate the provider's requests. The project server holds them in
@@ -244,7 +248,7 @@ type Service interface {
 	// held. When no model is chosen and a provider is now held, live targets use
 	// that provider's default model, anthropic before openai; any other choice
 	// stays. The result names the held variables and the model choice, never a
-	// value. Only the hbay command's management credential may call this
+	// value. Only the highbay command's management credential may call this
 	// operation; it is never an MCP tool.
 	HandOverModelSettings(context.Context, *HandOverModelSettingsPayload) (res *ModelSettingsResult, err error)
 	// Initialize a new Highbay starter project directory inside the server's bound
@@ -375,21 +379,42 @@ type Service interface {
 	// update_draft, refresh_story and revise_change. Otherwise call refresh_story
 	// after this update. Takes no input.
 	UpdateDraft(context.Context) (res *DraftUpdateResult, err error)
-	// Read the project team's registered roles and current terminal, watcher and
-	// unread-assignment facts. Reading creates nothing and marks no assignment
-	// read. Only the user's browser session may call it. wait_for_changes covers
-	// this snapshot as well as the change list.
+	// Read the project team's registered roles and current herdr-core terminal,
+	// Chorus liveness, and unread-assignment facts. Reading creates nothing and
+	// marks no assignment read. Only the user's browser session may call it;
+	// wait_for_changes covers this snapshot.
 	GetTeam(context.Context) (res *TeamSnapshot, err error)
-	// Raise the Herdr window, show this project's space and tab, and focus the
-	// requested registered role's pane, only at the user's request. Any open Herdr
-	// dialog prevents all window changes. Fresh project, handle and space labels
-	// must still identify the pane.
-	ShowTeamPane(context.Context, *ShowTeamPanePayload) (err error)
-	// Start missing project agents using explicit choices, otherwise saved choices
-	// and installed cross-family defaults. Never replace a running guide. Only the
-	// user may call it. Workers run in Herdr when available, otherwise as finite
-	// server-owned headless processes. Opens no launcher.
+	// Read the project's Chorus conversation messages and active pin for the
+	// browser workspace's Conversation Rail. Only the user's browser session may
+	// call it; wait_for_changes advances whenever new Chorus messages arrive.
+	GetTeamConversation(context.Context) (res *TeamConversation, err error)
+	// Post a message from the user in the browser workspace to the project's
+	// Chorus channel (mentioning the target role when directed). If the message
+	// targets guide or team and no guide is currently active, Highbay starts a
+	// managed guide terminal in herdr-core first so the user never leaves the
+	// browser.
+	SendTeamMessage(context.Context, *SendTeamMessagePayload) (res *TeamMessage, err error)
+	// Start missing project agents in herdr-core using explicit choices, otherwise
+	// saved choices and installed cross-family defaults. Never replaces a running
+	// guide. Only the user's browser session may call it.
 	StartTeamAgents(context.Context, *StartTeamAgentsPayload) (res *ProjectTeam, err error)
+	// Send an interrupt signal (SIGINT / Ctrl-C) to a running role's herdr-core
+	// terminal at the user's request.
+	InterruptTeamRole(context.Context, *InterruptTeamRolePayload) (err error)
+	// Terminate and remove a role's managed herdr-core terminal at the user's
+	// request so it can be restarted cleanly.
+	StopTeamRole(context.Context, *StopTeamRolePayload) (err error)
+	// Atomically stop and remove a role's existing managed herdr-core terminal
+	// (when present) and launch a fresh managed herdr-core terminal for that role
+	// using the supplied choice, saved choice, or installed default. External
+	// non-managed sessions are never replaced.
+	RestartTeamRole(context.Context, *RestartTeamRolePayload) (err error)
+	// Mint a single-use 30-second WebSocket upgrade ticket for attaching the
+	// browser terminal drawer to a role's herdr-core terminal.
+	CreateTerminalTicket(context.Context, *CreateTerminalTicketPayload) (res *TerminalTicketResult, err error)
+	// Upgrade to a bidirectional WebSocket attached to a role's live herdr-core
+	// PTY with 256 KiB credit flow control.
+	AttachRoleTerminal(context.Context, *AttachRoleTerminalPayload, AttachRoleTerminalServerStream) (err error)
 	// Discover installed coding-agent executables and their supported options on
 	// demand. Only the user may call it; ordinary team reads never run discovery
 	// subprocesses.
@@ -397,9 +422,10 @@ type Service interface {
 	// Save the user's dismissal of one project notice without changing agent
 	// capability or startup behavior.
 	DismissTeamNotice(context.Context, *DismissTeamNoticePayload) (err error)
-	// Open a fresh project views session at the user's request. The project owner
-	// mints and opens the private link; no browser credential is returned to the
-	// caller.
+	// Open Highbay's browser workspace at the user's request and return the
+	// project's Chorus team, #channel, and guide handle. The project owner mints
+	// and opens the private browser link locally; no browser credential is
+	// returned to the caller.
 	OpenViews(context.Context) (res *OpenViewsResult, err error)
 	// Merge the user's current live-approved candidate and accepted tests into the
 	// clean checked-out local project branch. Rechecks approval, report and build
@@ -576,7 +602,39 @@ const ServiceName = "highbay"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [49]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "show_team_pane", "start_team_agents", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "wait_for_builder_assignment", "get_builder_assignment", "list_test_writer_assignments", "wait_for_test_writer_assignment", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
+var MethodNames = [55]string{"golden_path", "propose_change", "revise_change", "confirm_intent", "get_change", "decline_revision", "preview_architecture", "draft_override", "start_live_target", "stop_live_target", "get_live_target", "verify_change", "get_verification", "list_verifications", "approve_merge", "diff", "configure_model", "get_model_connection", "hand_over_model_settings", "init_project", "generate_code", "check_project", "update_dependencies", "read_check_output", "list_traces", "refresh_story", "get_story_refresh", "update_draft", "get_team", "get_team_conversation", "send_team_message", "start_team_agents", "interrupt_team_role", "stop_team_role", "restart_team_role", "create_terminal_ticket", "attach_role_terminal", "list_team_agent_options", "dismiss_team_notice", "open_views", "merge_change", "list_changes", "wait_for_changes", "start_build", "drop_build", "get_build", "get_test_findings", "list_builder_assignments", "wait_for_builder_assignment", "get_builder_assignment", "list_test_writer_assignments", "wait_for_test_writer_assignment", "get_test_writer_assignment", "report_tests_finished", "review_verification"}
+
+// AttachRoleTerminalServerStream allows streaming instances of
+// *TerminalServerFrame to the client.
+type AttachRoleTerminalServerStream interface {
+	// Send streams instances of "TerminalServerFrame".
+	Send(*TerminalServerFrame) error
+	// SendWithContext streams instances of "TerminalServerFrame" with context.
+	SendWithContext(context.Context, *TerminalServerFrame) error
+	// Recv reads instances of "TerminalClientFrame" from the stream.
+	Recv() (*TerminalClientFrame, error)
+	// RecvWithContext reads instances of "TerminalClientFrame" from the stream
+	// with context.
+	RecvWithContext(context.Context) (*TerminalClientFrame, error)
+	// Close closes the stream.
+	Close() error
+}
+
+// AttachRoleTerminalClientStream allows streaming instances of
+// *TerminalClientFrame to the client.
+type AttachRoleTerminalClientStream interface {
+	// Send streams instances of "TerminalClientFrame".
+	Send(*TerminalClientFrame) error
+	// SendWithContext streams instances of "TerminalClientFrame" with context.
+	SendWithContext(context.Context, *TerminalClientFrame) error
+	// Recv reads instances of "TerminalServerFrame" from the stream.
+	Recv() (*TerminalServerFrame, error)
+	// RecvWithContext reads instances of "TerminalServerFrame" from the stream
+	// with context.
+	RecvWithContext(context.Context) (*TerminalServerFrame, error)
+	// Close closes the stream.
+	Close() error
+}
 
 // Evaluated Goa-AI cost, safety, history, and cache policy for a single agent.
 type AgentPolicyItem struct {
@@ -678,9 +736,20 @@ type ApproveMergePayload struct {
 	// Full commit ID of the candidate being promoted (40 or 64 lowercase hex
 	// characters).
 	CandidateCommit string
-	// SHA-256 digest of the CP4 verification report written by hbay verify (64
+	// SHA-256 digest of the CP4 verification report written by highbay verify (64
 	// lowercase hex characters).
 	ReportDigest string
+}
+
+// Selected C4 architecture element referenced by the user's message to the
+// guide.
+type ArchitectureElementContext struct {
+	// Change Card identifier when viewing a specific card's architecture.
+	ChangeID *string
+	// Stable C4 model element identifier.
+	ElementID string
+	// Human-readable C4 element label.
+	ElementName string
 }
 
 // ArchitecturePreviewResult is the result type of the highbay service
@@ -705,6 +774,22 @@ type ArchitecturePreviewResult struct {
 	Tools []*ToolContractItem
 	// Plain-English summary of topology and guardrails.
 	Banner string
+}
+
+// AttachRoleTerminalPayload is the payload type of the highbay service
+// attach_role_terminal method.
+type AttachRoleTerminalPayload struct {
+	// Registered role whose herdr-core terminal is being attached.
+	Role string
+	// Single-use ticket returned by create_terminal_ticket.
+	Ticket string
+	// Initial terminal width in columns.
+	Cols int
+	// Initial terminal height in rows.
+	Rows int
+	// When true, attaches read-only without changing the terminal's grid size or
+	// sending input.
+	Observe bool
 }
 
 // No verification of this build has passed yet, so there is nothing to merge:
@@ -773,22 +858,14 @@ type BuildPassedTests struct {
 	Branch string
 }
 
+// Plain-English recovery step shown when starting a build's worker terminals
+// cannot finish immediately.
 type BuildStartStep string
 
-type BuildTeamAmbiguousSpace struct {
-	// Number of spaces matching this project.
-	Count int
-	// Close the duplicate Herdr spaces, then start the agents.
-	Step BuildStartStep
-}
-
+// Warning returned alongside a saved build when launching its worker terminals
+// could not complete immediately.
 type BuildTeamUnavailable struct {
 	// What the user does to make the team ready for the saved build.
-	Step BuildStartStep
-}
-
-type BuildTeamWindowBusy struct {
-	// Close the open dialog, then start the team agents.
 	Step BuildStartStep
 }
 
@@ -872,7 +949,7 @@ type BuilderProgress struct {
 // evaluator.
 type BuilderVerificationReport struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest string
 	// Every declared scenario, counted by outcome.
 	Counts *VerificationCounts
@@ -1143,14 +1220,14 @@ type ChangeList struct {
 	// Opaque value for change detection. It changes whenever the listed cards, a
 	// card's get_build view (including the builder's branch head_commit and latest
 	// check), approval_available, initializing_phase, the owner's Story
-	// evaluation, get_team, or get_live_target changes; list_changes items carry
-	// no build or branch fields, so read get_build for those facts. Compare it
-	// only for equality.
+	// evaluation, get_team, get_team_conversation, or get_live_target changes;
+	// list_changes items carry no build or branch fields, so read get_build for
+	// those facts. Compare it only for equality.
 	Version string
 	// Whether approve_merge can record approvals on this server: true when the
-	// server runs Checkpoint 4 verification, as every server hbay starts does, and
-	// any stored promotion settings could be resolved; false when the server runs
-	// no verification or resolving the promotion target fails.
+	// server runs Checkpoint 4 verification, as every server highbay starts does,
+	// and any stored promotion settings could be resolved; false when the server
+	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable bool
 	// What init_project is doing now, as a short sentence for the user, such as
 	// "Resolving the service's Go modules"; absent when no initialization is
@@ -1294,6 +1371,13 @@ type CopyOffBranch struct {
 	Uncommitted []string
 	// How many paths of the copy are uncommitted in all.
 	UncommittedCount int
+}
+
+// CreateTerminalTicketPayload is the payload type of the highbay service
+// create_terminal_ticket method.
+type CreateTerminalTicketPayload struct {
+	// Registered role whose terminal drawer is opening.
+	Role string
 }
 
 // DeclineRevisionPayload is the payload type of the highbay service
@@ -1553,6 +1637,8 @@ type InitProjectResult struct {
 	Commit string
 }
 
+// Discovered coding-agent CLI executable on PATH and the configuration
+// switches it supports.
 type InstalledAgentOption struct {
 	// Coding-agent client family.
 	Client string
@@ -1572,8 +1658,13 @@ type InstalledAgentOption struct {
 	YoloSupported bool
 	// What this client's unattended permission mode permits.
 	YoloEffect *string
-	// Whether Highbay supports this client's finite noninteractive mode.
-	HeadlessSupported bool
+}
+
+// InterruptTeamRolePayload is the payload type of the highbay service
+// interrupt_team_role method.
+type InterruptTeamRolePayload struct {
+	// Registered role to interrupt.
+	Role string
 }
 
 // The most recently accepted Checkpoint 4 verification run of a Change Card.
@@ -1789,10 +1880,17 @@ type OpenViewsResult struct {
 	Opened bool
 	// Safe handoff result without a URL or credential.
 	Message string
+	// Stable Chorus swarm name for this project.
+	Team string
+	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	Channel string
+	// Registered Chorus handle for this project's guide (empty when no guide is
+	// registered yet).
+	Handle string
 }
 
-// The run used the operator's evaluator: the one stored with hbay verification
-// set, or the one named on hbay verify's command line.
+// The run used the operator's evaluator: the one stored with highbay
+// verification set, or the one named on highbay verify's command line.
 type OperatorEvaluatorTests struct {
 }
 
@@ -1810,22 +1908,22 @@ type PreviewArchitecturePayload struct {
 type ProjectTeam struct {
 	// Stable Chorus team name.
 	Team string
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space string
+	// Observed state of each registered project role.
 	Roles []*ProjectTeamRole
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode string
 	// What the user does next for the prepared team.
 	Step string
 }
 
+// Observed identity and terminal liveness of one registered project role.
 type ProjectTeamRole struct {
 	// Trusted role.
 	Role string
 	// Stable Chorus handle and Highbay actor identity.
 	Handle string
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal bool
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running bool
 }
 
@@ -1964,6 +2062,27 @@ type RequiredTest struct {
 	Hook string
 }
 
+// RestartTeamRolePayload is the payload type of the highbay service
+// restart_team_role method.
+type RestartTeamRolePayload struct {
+	// Registered role whose managed herdr-core terminal is being restarted.
+	Role string
+	// Optional coding-agent CLI selection for the restarted terminal; when
+	// omitted, uses the role's saved choice or installed default.
+	Choice *RoleAgentChoice
+}
+
+// Selected Checkpoint 1 ambiguity answers that differ from the current
+// draft_option and require a revised Change Card.
+type ReviseAnswersContext struct {
+	// Change Card identifier being revised.
+	ChangeID string
+	// Current request_revision shown on the Agree view.
+	RequestRevision string
+	// Map of question ID to the user's chosen option.
+	Answers map[string]string
+}
+
 // ReviseChangePayload is the payload type of the highbay service revise_change
 // method.
 type ReviseChangePayload struct {
@@ -1993,6 +2112,8 @@ type ReviseChangePayload struct {
 	Analysis *CP1RevisionAnalysis
 }
 
+// Selected coding-agent CLI executable, optional model/reasoning settings, and
+// unattended permission switch for one project role.
 type RoleAgentChoice struct {
 	// Installed coding-agent client family.
 	Client string
@@ -2048,11 +2169,22 @@ type RunningLiveTarget struct {
 	Prompts []*LivePromptItem
 }
 
-// ShowTeamPanePayload is the payload type of the highbay service
-// show_team_pane method.
-type ShowTeamPanePayload struct {
-	// Registered role whose pane the user requests.
-	Role string
+// SendTeamMessagePayload is the payload type of the highbay service
+// send_team_message method.
+type SendTeamMessagePayload struct {
+	// Recipient target: team posts to the primary #channel; guide, builder, or
+	// test_writer mentions that role in the primary #channel.
+	To string
+	// Plain-English or Markdown message text.
+	Text string
+	// Optional sequence number in the primary #channel being replied to.
+	ReplyTo *int
+	// Optional coding-agent CLI selection used if Highbay starts a missing guide
+	// for this message.
+	GuideChoice *RoleAgentChoice
+	// Optional structured workspace context formatted into the Chorus message by
+	// the server.
+	Context Context
 }
 
 // StartBuildPayload is the payload type of the highbay service start_build
@@ -2152,6 +2284,13 @@ type StopLiveTargetResult struct {
 	Message string
 }
 
+// StopTeamRolePayload is the payload type of the highbay service
+// stop_team_role method.
+type StopTeamRolePayload struct {
+	// Registered role to stop.
+	Role string
+}
+
 // Domain role declared in a Story in declaration order.
 type StoryActorItem struct {
 	// Story-scoped actor key.
@@ -2160,6 +2299,16 @@ type StoryActorItem struct {
 	Title string
 	// Optional longer explanation of the actor role.
 	Description *string
+}
+
+// Selected Story and flow referenced by the user's message to the guide.
+type StoryFlowContext struct {
+	// Change Card identifier when viewing a saved card's Story.
+	ChangeID *string
+	// Story name.
+	Story string
+	// Optional flow key within the Story.
+	FlowKey *string
 }
 
 // Ordered timeline path through a domain Story in declaration order.
@@ -2251,51 +2400,154 @@ type StorySummaryItem struct {
 	Flows []*StoryFlowItem
 }
 
+// TeamConversation is the result type of the highbay service
+// get_team_conversation method.
+type TeamConversation struct {
+	// Stable Chorus swarm name.
+	Team string
+	// Primary Chorus #channel.
+	Channel string
+	// Whether Chorus responded to the latest conversation read.
+	ChorusStatus string
+	// Pinned collaboration manifest in the primary #channel when set.
+	Pin *TeamMessage
+	// Chronological messages across the project's #channel and @you direct
+	// messages.
+	Messages []*TeamMessage
+}
+
+// TeamMessage is the result type of the highbay service send_team_message
+// method.
+type TeamMessage struct {
+	// Unique message key combining target and sequence (for example
+	// #refunds-8f3a1c902b4e:12).
+	ID string
+	// Chorus target (#channel or @handle) carrying this message.
+	Target string
+	// Monotonic sequence number within target.
+	Seq int
+	// Chorus handle of the sender.
+	Sender string
+	// Project role of the sender for UI presentation.
+	SenderRole string
+	// Reported model or participant kind (for example human, service, or model
+	// name).
+	Model *string
+	// Markdown message text.
+	Text string
+	// Optional sequence number in target that this message replies to.
+	ReplyTo *int
+	// Unix timestamp in milliseconds when Chorus recorded the message.
+	SentAtMs int64
+}
+
+// Observed terminal, Chorus liveness, attention, and assignment state of one
+// registered project role.
 type TeamRoleState struct {
 	// Registered role.
 	Role string
 	// Registered Chorus handle.
 	Handle string
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal bool
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State string
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention string
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher string
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment string
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *RoleAgentChoice
 }
 
 // TeamSnapshot is the result type of the highbay service get_team method.
 type TeamSnapshot struct {
-	// Stable team name, also returned before a team is prepared.
+	// Stable Chorus swarm name for this project.
 	Team string
+	// Primary Chorus #channel for this project.
+	Channel string
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*TeamRoleState
-	// Current desktop attachment.
-	HerdrMode string
 	// Saved client choices by role.
 	SavedChoices map[string]*RoleAgentChoice
 	// Dismissed project notices.
 	DismissedNotices []string
-	// Whether Chorus serves this team: not_used when workers run outside Herdr and
-	// never use it; connected after Highbay's latest read of the team's Chorus
-	// view succeeded; unavailable after that read failed or when the team's space
-	// has no Chorus connection. While unavailable no Chorus reminder reaches a
-	// worker: workers wait on Highbay with wait_for_builder_assignment and
-	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
-	// prompt. Absent before a team space exists or before the first read settled
-	// it.
-	ChorusStatus *string
+	// Whether Highbay's local Chorus connection is healthy.
+	ChorusStatus string
+}
+
+// TerminalClientFrame is the streaming payload type of the highbay service
+// attach_role_terminal method.
+type TerminalClientFrame struct {
+	// Exactly one client terminal event.
+	ClientFrame ClientFrame
+}
+
+// Reason a herdr-core terminal attach stream ended, including process exit
+// code or signal when finished.
+type TerminalClosed struct {
+	// Stream end reason reported by herdr-core (for example detached, exited,
+	// killed, or lost).
+	Reason string
+	// Process exit status when the terminal process exited normally.
+	ExitCode *int
+	// Terminating signal number when the terminal process was ended by a signal.
+	Signal *int
+}
+
+// Byte count rendered by xterm.js, replenishing the herdr-core stream's 256
+// KiB flow-control window.
+type TerminalCreditFrame struct {
+	// Number of output bytes consumed by xterm.js.
+	Bytes int
+}
+
+// Browser terminal drawer focus change.
+type TerminalFocusFrame struct {
+	// Whether the terminal drawer currently holds focus.
+	Focused bool
+}
+
+// Raw UTF-8 or escape-sequence bytes typed by the user in xterm.js.
+type TerminalInputFrame struct {
+	// Raw terminal input bytes.
+	Data []byte
+}
+
+// Raw VT output bytes emitted by herdr-core for xterm.js.
+type TerminalOutputFrame struct {
+	// Raw terminal output bytes.
+	Data []byte
+}
+
+// Terminal viewport dimensions in character cells.
+type TerminalResize struct {
+	// Terminal width in columns.
+	Cols int
+	// Terminal height in rows.
+	Rows int
+}
+
+// TerminalServerFrame is the result type of the highbay service
+// attach_role_terminal method.
+type TerminalServerFrame struct {
+	// Exactly one server terminal event.
+	ServerFrame ServerFrame
+}
+
+// TerminalTicketResult is the result type of the highbay service
+// create_terminal_ticket method.
+type TerminalTicketResult struct {
+	// Opaque single-use ticket valid for at most 30 seconds.
+	Ticket string
+	// UTC expiration timestamp of the ticket.
+	ExpiresAt string
 }
 
 // No test-writer coverage snapshot was recorded. Never infer it from today's
@@ -2483,8 +2735,8 @@ type TestsNeedChanges struct {
 }
 
 // No test writer is used: the project verifies with the evaluator stored with
-// hbay verification set. Every read of a build in such a project shows this,
-// whatever the build recorded.
+// highbay verification set. Every read of a build in such a project shows
+// this, whatever the build recorded.
 type TestsNotUsed struct {
 }
 
@@ -2974,24 +3226,19 @@ func MakeUnavailable(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unavailable", false, false, false)
 }
 
-// MakeWindowBusy builds a goa.ServiceError from an error.
-func MakeWindowBusy(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "window_busy", false, false, false)
-}
-
-// MakePaneUnavailable builds a goa.ServiceError from an error.
-func MakePaneUnavailable(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "pane_unavailable", false, false, false)
-}
-
 // MakeTeamUnavailable builds a goa.ServiceError from an error.
 func MakeTeamUnavailable(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "team_unavailable", false, false, false)
 }
 
-// MakeAmbiguousSpace builds a goa.ServiceError from an error.
-func MakeAmbiguousSpace(err error) *goa.ServiceError {
-	return goa.NewServiceError(err, "ambiguous_space", false, false, false)
+// MakeRoleNotRunning builds a goa.ServiceError from an error.
+func MakeRoleNotRunning(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "role_not_running", false, false, false)
+}
+
+// MakeTerminalUnavailable builds a goa.ServiceError from an error.
+func MakeTerminalUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "terminal_unavailable", false, false, false)
 }
 
 // MakeNotApproved builds a goa.ServiceError from an error.
@@ -3080,26 +3327,6 @@ func (value *approvalItemIntTransport) UnmarshalJSON(data []byte) error {
 
 // ValidateapprovalItemIntTransport checks decoded JSON before it becomes a service value.
 func ValidateapprovalItemIntTransport(value approvalItemIntTransport) (err error) {
-
-	return err
-}
-
-// buildTeamAmbiguousSpaceIntTransport stores JSON fields until they have been validated.
-type buildTeamAmbiguousSpaceIntTransport int
-
-// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
-// declared range. Decimal and exponent spellings do not change its value.
-func (value *buildTeamAmbiguousSpaceIntTransport) UnmarshalJSON(data []byte) error {
-	number, err := rawjson.DecodeInteger[int](data)
-	if err != nil {
-		return fmt.Errorf("decode buildTeamAmbiguousSpaceIntTransport integer: %w", err)
-	}
-	*value = buildTeamAmbiguousSpaceIntTransport(number)
-	return nil
-}
-
-// ValidatebuildTeamAmbiguousSpaceIntTransport checks decoded JSON before it becomes a service value.
-func ValidatebuildTeamAmbiguousSpaceIntTransport(value buildTeamAmbiguousSpaceIntTransport) (err error) {
 
 	return err
 }
@@ -3380,7 +3607,7 @@ type jsonApproveMergePayloadTransport struct {
 	// Full commit ID of the candidate being promoted (40 or 64 lowercase hex
 	// characters).
 	CandidateCommit *string `json:"candidate_commit"`
-	// SHA-256 digest of the CP4 verification report written by hbay verify (64
+	// SHA-256 digest of the CP4 verification report written by highbay verify (64
 	// lowercase hex characters).
 	ReportDigest *string `json:"report_digest"`
 }
@@ -3407,6 +3634,40 @@ func validatejsonApproveMergePayloadTransport(value *jsonApproveMergePayloadTran
 	}
 	if value.ReportDigest != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.report_digest", *value.ReportDigest, "^[0-9a-f]{64}$"))
+	}
+	return err
+}
+
+// jsonArchitectureElementContextTransport stores JSON fields until they have been validated.
+type jsonArchitectureElementContextTransport struct {
+	// Change Card identifier when viewing a specific card's architecture.
+	ChangeID *string `json:"change_id,omitempty"`
+	// Stable C4 model element identifier.
+	ElementID *string `json:"element_id"`
+	// Human-readable C4 element label.
+	ElementName *string `json:"element_name"`
+}
+
+// validatejsonArchitectureElementContextTransport checks decoded JSON before it becomes a service value.
+func validatejsonArchitectureElementContextTransport(value *jsonArchitectureElementContextTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ElementID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("element_id", "body"))
+	}
+	if value.ElementName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("element_name", "body"))
+	}
+	if value.ElementID != nil {
+		if utf8.RuneCountInString(*value.ElementID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.element_id", *value.ElementID, utf8.RuneCountInString(*value.ElementID), 1, true))
+		}
+	}
+	if value.ElementName != nil {
+		if utf8.RuneCountInString(*value.ElementName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.element_name", *value.ElementName, utf8.RuneCountInString(*value.ElementName), 1, true))
+		}
 	}
 	return err
 }
@@ -3658,41 +3919,6 @@ func validatejsonBuildStartStepTransport(value jsonBuildStartStepTransport) (err
 	return err
 }
 
-// jsonBuildTeamAmbiguousSpaceTransport stores JSON fields until they have been validated.
-type jsonBuildTeamAmbiguousSpaceTransport struct {
-	// Number of spaces matching this project.
-	Count *buildTeamAmbiguousSpaceIntTransport `json:"count"`
-	// Close the duplicate Herdr spaces, then start the agents.
-	Step *jsonBuildStartStepTransport `json:"step"`
-}
-
-// validatejsonBuildTeamAmbiguousSpaceTransport checks decoded JSON before it becomes a service value.
-func validatejsonBuildTeamAmbiguousSpaceTransport(value *jsonBuildTeamAmbiguousSpaceTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.Count == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
-	}
-	if value.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
-	}
-	if value.Count != nil {
-		if int(*value.Count) < 2 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", int(*value.Count), 2, true))
-		}
-	}
-	if value.Step != nil {
-		if utf8.RuneCountInString(string(*value.Step)) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", string(*value.Step), utf8.RuneCountInString(string(*value.Step)), 1, true))
-		}
-		if utf8.RuneCountInString(string(*value.Step)) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", string(*value.Step), utf8.RuneCountInString(string(*value.Step)), 512, false))
-		}
-	}
-	return err
-}
-
 // jsonBuildTeamUnavailableTransport stores JSON fields until they have been validated.
 type jsonBuildTeamUnavailableTransport struct {
 	// What the user does to make the team ready for the saved build.
@@ -3701,31 +3927,6 @@ type jsonBuildTeamUnavailableTransport struct {
 
 // validatejsonBuildTeamUnavailableTransport checks decoded JSON before it becomes a service value.
 func validatejsonBuildTeamUnavailableTransport(value *jsonBuildTeamUnavailableTransport) (err error) {
-	if value == nil {
-		return goa.MissingFieldError("body", "JSON value")
-	}
-	if value.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
-	}
-	if value.Step != nil {
-		if utf8.RuneCountInString(string(*value.Step)) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", string(*value.Step), utf8.RuneCountInString(string(*value.Step)), 1, true))
-		}
-		if utf8.RuneCountInString(string(*value.Step)) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", string(*value.Step), utf8.RuneCountInString(string(*value.Step)), 512, false))
-		}
-	}
-	return err
-}
-
-// jsonBuildTeamWindowBusyTransport stores JSON fields until they have been validated.
-type jsonBuildTeamWindowBusyTransport struct {
-	// Close the open dialog, then start the team agents.
-	Step *jsonBuildStartStepTransport `json:"step"`
-}
-
-// validatejsonBuildTeamWindowBusyTransport checks decoded JSON before it becomes a service value.
-func validatejsonBuildTeamWindowBusyTransport(value *jsonBuildTeamWindowBusyTransport) (err error) {
 	if value == nil {
 		return goa.MissingFieldError("body", "JSON value")
 	}
@@ -3916,7 +4117,7 @@ func validatejsonBuilderProgressTransport(value *jsonBuilderProgressTransport) (
 // jsonBuilderVerificationReportTransport stores JSON fields until they have been validated.
 type jsonBuilderVerificationReportTransport struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest *string `json:"report_digest"`
 	// Every declared scenario, counted by outcome.
 	Counts *jsonVerificationCountsTransport `json:"counts"`
@@ -4623,14 +4824,14 @@ type jsonChangeListTransport struct {
 	// Opaque value for change detection. It changes whenever the listed cards, a
 	// card's get_build view (including the builder's branch head_commit and latest
 	// check), approval_available, initializing_phase, the owner's Story
-	// evaluation, get_team, or get_live_target changes; list_changes items carry
-	// no build or branch fields, so read get_build for those facts. Compare it
-	// only for equality.
+	// evaluation, get_team, get_team_conversation, or get_live_target changes;
+	// list_changes items carry no build or branch fields, so read get_build for
+	// those facts. Compare it only for equality.
 	Version *string `json:"version"`
 	// Whether approve_merge can record approvals on this server: true when the
-	// server runs Checkpoint 4 verification, as every server hbay starts does, and
-	// any stored promotion settings could be resolved; false when the server runs
-	// no verification or resolving the promotion target fails.
+	// server runs Checkpoint 4 verification, as every server highbay starts does,
+	// and any stored promotion settings could be resolved; false when the server
+	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable *bool `json:"approval_available"`
 	// What init_project is doing now, as a short sentence for the user, such as
 	// "Resolving the service's Go modules"; absent when no initialization is
@@ -5455,8 +5656,6 @@ type jsonInstalledAgentOptionTransport struct {
 	YoloSupported *bool `json:"yolo_supported"`
 	// What this client's unattended permission mode permits.
 	YoloEffect *string `json:"yolo_effect,omitempty"`
-	// Whether Highbay supports this client's finite noninteractive mode.
-	HeadlessSupported *bool `json:"headless_supported"`
 }
 
 // validatejsonInstalledAgentOptionTransport checks decoded JSON before it becomes a service value.
@@ -5487,9 +5686,6 @@ func validatejsonInstalledAgentOptionTransport(value *jsonInstalledAgentOptionTr
 	}
 	if value.YoloSupported == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("yolo_supported", "body"))
-	}
-	if value.HeadlessSupported == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headless_supported", "body"))
 	}
 	if value.Client != nil {
 		if !(*value.Client == "claude" || *value.Client == "codex" || *value.Client == "antigravity" || *value.Client == "cursor" || *value.Client == "gemini" || *value.Client == "opencode") {
@@ -6042,6 +6238,44 @@ func validatejsonOpenBuildRefusalTransport(value *jsonOpenBuildRefusalTransport)
 	return err
 }
 
+// jsonOpenViewsResultTransport stores JSON fields until they have been validated.
+type jsonOpenViewsResultTransport struct {
+	// Whether the browser opener completed successfully.
+	Opened *bool `json:"opened"`
+	// Safe handoff result without a URL or credential.
+	Message *string `json:"message"`
+	// Stable Chorus swarm name for this project.
+	Team *string `json:"team"`
+	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	Channel *string `json:"channel"`
+	// Registered Chorus handle for this project's guide (empty when no guide is
+	// registered yet).
+	Handle *string `json:"handle"`
+}
+
+// validatejsonOpenViewsResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonOpenViewsResultTransport(value *jsonOpenViewsResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Opened == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("opened", "body"))
+	}
+	if value.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if value.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if value.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if value.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	return err
+}
+
 // jsonOperatorEvaluatorTestsTransport stores JSON fields until they have been validated.
 type jsonOperatorEvaluatorTestsTransport struct {
 }
@@ -6083,8 +6317,10 @@ type jsonProjectTeamRoleTransport struct {
 	Role *string `json:"role"`
 	// Stable Chorus handle and Highbay actor identity.
 	Handle *string `json:"handle"`
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal *bool `json:"has_terminal"`
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running *bool `json:"running"`
 }
 
@@ -6098,6 +6334,9 @@ func validatejsonProjectTeamRoleTransport(value *jsonProjectTeamRoleTransport) (
 	}
 	if value.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if value.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
 	}
 	if value.Running == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("running", "body"))
@@ -6114,11 +6353,8 @@ func validatejsonProjectTeamRoleTransport(value *jsonProjectTeamRoleTransport) (
 type jsonProjectTeamTransport struct {
 	// Stable Chorus team name.
 	Team *string `json:"team"`
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space *string                         `json:"space"`
+	// Observed state of each registered project role.
 	Roles []*jsonProjectTeamRoleTransport `json:"roles"`
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode *string `json:"herdr_mode"`
 	// What the user does next for the prepared team.
 	Step *string `json:"step"`
 }
@@ -6131,14 +6367,8 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if value.Space == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("space", "body"))
-	}
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if value.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if value.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -6146,22 +6376,11 @@ func validatejsonProjectTeamTransport(value *jsonProjectTeamTransport) (err erro
 	if value.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
-	if value.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-		if utf8.RuneCountInString(*value.Space) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *value.Space, utf8.RuneCountInString(*value.Space), 64, false))
-		}
-	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validatejsonProjectTeamRoleTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if value.HerdrMode != nil {
-		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if value.Step != nil {
@@ -6535,6 +6754,43 @@ func validatejsonRequiredTestTransport(value *jsonRequiredTestTransport) (err er
 	return err
 }
 
+// jsonReviseAnswersContextTransport stores JSON fields until they have been validated.
+type jsonReviseAnswersContextTransport struct {
+	// Change Card identifier being revised.
+	ChangeID *string `json:"change_id"`
+	// Current request_revision shown on the Agree view.
+	RequestRevision *string `json:"request_revision"`
+	// Map of question ID to the user's chosen option.
+	Answers map[string]string `json:"answers"`
+}
+
+// validatejsonReviseAnswersContextTransport checks decoded JSON before it becomes a service value.
+func validatejsonReviseAnswersContextTransport(value *jsonReviseAnswersContextTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ChangeID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("change_id", "body"))
+	}
+	if value.RequestRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_revision", "body"))
+	}
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if value.ChangeID != nil {
+		if utf8.RuneCountInString(*value.ChangeID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", *value.ChangeID, utf8.RuneCountInString(*value.ChangeID), 1, true))
+		}
+	}
+	if value.RequestRevision != nil {
+		if utf8.RuneCountInString(*value.RequestRevision) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", *value.RequestRevision, utf8.RuneCountInString(*value.RequestRevision), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonReviseChangePayloadTransport stores JSON fields until they have been validated.
 type jsonReviseChangePayloadTransport struct {
 	// Change identifier.
@@ -6760,6 +7016,91 @@ func validatejsonRunningLiveTargetTransport(value *jsonRunningLiveTargetTranspor
 	return err
 }
 
+// jsonSendTeamMessagePayloadTransport stores JSON fields until they have been validated.
+type jsonSendTeamMessagePayloadTransport struct {
+	// Recipient target: team posts to the primary #channel; guide, builder, or
+	// test_writer mentions that role in the primary #channel.
+	To *string `json:"to"`
+	// Plain-English or Markdown message text.
+	Text *string `json:"text"`
+	// Optional sequence number in the primary #channel being replied to.
+	ReplyTo *sendTeamMessagePayloadIntTransport `json:"reply_to,omitempty"`
+	// Optional coding-agent CLI selection used if Highbay starts a missing guide
+	// for this message.
+	GuideChoice *jsonRoleAgentChoiceTransport `json:"guide_choice,omitempty"`
+	// Optional structured workspace context formatted into the Chorus message by
+	// the server.
+	Context *jsonContextTransport `json:"context,omitempty"`
+}
+
+// validatejsonSendTeamMessagePayloadTransport checks decoded JSON before it becomes a service value.
+func validatejsonSendTeamMessagePayloadTransport(value *jsonSendTeamMessagePayloadTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.To == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("to", "body"))
+	}
+	if value.Text == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("text", "body"))
+	}
+	if value.To != nil {
+		if !(*value.To == "team" || *value.To == "guide" || *value.To == "builder" || *value.To == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.to", *value.To, []any{"team", "guide", "builder", "test_writer"}))
+		}
+	}
+	if value.Text != nil {
+		if utf8.RuneCountInString(*value.Text) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", *value.Text, utf8.RuneCountInString(*value.Text), 1, true))
+		}
+		if utf8.RuneCountInString(*value.Text) > 3500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", *value.Text, utf8.RuneCountInString(*value.Text), 3500, false))
+		}
+	}
+	if value.ReplyTo != nil {
+		if int(*value.ReplyTo) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.reply_to", int(*value.ReplyTo), 1, true))
+		}
+	}
+	if value.GuideChoice != nil {
+		if err2 := validatejsonRoleAgentChoiceTransport(value.GuideChoice); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if value.Context != nil {
+
+		if err2 := value.Context.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Context.Kind()) {
+			case "revise_answers":
+				actual, _ := value.Context.AsReviseAnswers()
+				if actual != nil {
+					if err2 := validatejsonReviseAnswersContextTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "architecture_element":
+				actual, _ := value.Context.AsArchitectureElement()
+				if actual != nil {
+					if err2 := validatejsonArchitectureElementContextTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "story_flow":
+				actual, _ := value.Context.AsStoryFlow()
+				if actual != nil {
+					if err2 := validatejsonStoryFlowContextTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
 // jsonStartBuildResultTransport stores JSON fields until they have been validated.
 type jsonStartBuildResultTransport struct {
 	// The build saved before Highbay made any missing working copy and admitted
@@ -6795,20 +7136,6 @@ func validatejsonStartBuildResultTransport(value *jsonStartBuildResultTransport)
 				actual, _ := value.Team.AsReady()
 				if actual != nil {
 					if err2 := validatejsonProjectTeamTransport(actual); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "window_busy":
-				actual, _ := value.Team.AsWindowBusy()
-				if actual != nil {
-					if err2 := validatejsonBuildTeamWindowBusyTransport(actual); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "ambiguous_space":
-				actual, _ := value.Team.AsAmbiguousSpace()
-				if actual != nil {
-					if err2 := validatejsonBuildTeamAmbiguousSpaceTransport(actual); err2 != nil {
 						err = goa.MergeErrors(err, err2)
 					}
 				}
@@ -7063,6 +7390,32 @@ func validatejsonStoryActorItemTransport(value *jsonStoryActorItemTransport) (er
 	return err
 }
 
+// jsonStoryFlowContextTransport stores JSON fields until they have been validated.
+type jsonStoryFlowContextTransport struct {
+	// Change Card identifier when viewing a saved card's Story.
+	ChangeID *string `json:"change_id,omitempty"`
+	// Story name.
+	Story *string `json:"story"`
+	// Optional flow key within the Story.
+	FlowKey *string `json:"flow_key,omitempty"`
+}
+
+// validatejsonStoryFlowContextTransport checks decoded JSON before it becomes a service value.
+func validatejsonStoryFlowContextTransport(value *jsonStoryFlowContextTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Story == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("story", "body"))
+	}
+	if value.Story != nil {
+		if utf8.RuneCountInString(*value.Story) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.story", *value.Story, utf8.RuneCountInString(*value.Story), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonStoryFlowItemTransport stores JSON fields until they have been validated.
 type jsonStoryFlowItemTransport struct {
 	// Story-scoped flow key.
@@ -7301,28 +7654,147 @@ func validatejsonStorySummaryItemTransport(value *jsonStorySummaryItemTransport)
 	return err
 }
 
+// jsonTeamConversationTransport stores JSON fields until they have been validated.
+type jsonTeamConversationTransport struct {
+	// Stable Chorus swarm name.
+	Team *string `json:"team"`
+	// Primary Chorus #channel.
+	Channel *string `json:"channel"`
+	// Whether Chorus responded to the latest conversation read.
+	ChorusStatus *string `json:"chorus_status"`
+	// Pinned collaboration manifest in the primary #channel when set.
+	Pin *jsonTeamMessageTransport `json:"pin,omitempty"`
+	// Chronological messages across the project's #channel and @you direct
+	// messages.
+	Messages []*jsonTeamMessageTransport `json:"messages"`
+}
+
+// validatejsonTeamConversationTransport checks decoded JSON before it becomes a service value.
+func validatejsonTeamConversationTransport(value *jsonTeamConversationTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if value.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if value.ChorusStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chorus_status", "body"))
+	}
+	if value.Messages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+	}
+	if value.ChorusStatus != nil {
+		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable"}))
+		}
+	}
+	if value.Pin != nil {
+		if err2 := validatejsonTeamMessageTransport(value.Pin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range value.Messages {
+		if e != nil {
+			if err2 := validatejsonTeamMessageTransport(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// jsonTeamMessageTransport stores JSON fields until they have been validated.
+type jsonTeamMessageTransport struct {
+	// Unique message key combining target and sequence (for example
+	// #refunds-8f3a1c902b4e:12).
+	ID *string `json:"id"`
+	// Chorus target (#channel or @handle) carrying this message.
+	Target *string `json:"target"`
+	// Monotonic sequence number within target.
+	Seq *teamConversationIntTransport `json:"seq"`
+	// Chorus handle of the sender.
+	Sender *string `json:"sender"`
+	// Project role of the sender for UI presentation.
+	SenderRole *string `json:"sender_role"`
+	// Reported model or participant kind (for example human, service, or model
+	// name).
+	Model *string `json:"model,omitempty"`
+	// Markdown message text.
+	Text *string `json:"text"`
+	// Optional sequence number in target that this message replies to.
+	ReplyTo *teamConversationIntTransport `json:"reply_to,omitempty"`
+	// Unix timestamp in milliseconds when Chorus recorded the message.
+	SentAtMs *teamConversationInt64Transport `json:"sent_at_ms"`
+}
+
+// validatejsonTeamMessageTransport checks decoded JSON before it becomes a service value.
+func validatejsonTeamMessageTransport(value *jsonTeamMessageTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if value.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	if value.Seq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seq", "body"))
+	}
+	if value.Sender == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender", "body"))
+	}
+	if value.SenderRole == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender_role", "body"))
+	}
+	if value.Text == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("text", "body"))
+	}
+	if value.SentAtMs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sent_at_ms", "body"))
+	}
+	if value.Seq != nil {
+		if int(*value.Seq) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.seq", int(*value.Seq), 1, true))
+		}
+	}
+	if value.SenderRole != nil {
+		if !(*value.SenderRole == "you" || *value.SenderRole == "guide" || *value.SenderRole == "builder" || *value.SenderRole == "test_writer" || *value.SenderRole == "service" || *value.SenderRole == "peer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sender_role", *value.SenderRole, []any{"you", "guide", "builder", "test_writer", "service", "peer"}))
+		}
+	}
+	if value.ReplyTo != nil {
+		if int(*value.ReplyTo) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.reply_to", int(*value.ReplyTo), 1, true))
+		}
+	}
+	return err
+}
+
 // jsonTeamRoleStateTransport stores JSON fields until they have been validated.
 type jsonTeamRoleStateTransport struct {
 	// Registered role.
 	Role *string `json:"role"`
 	// Registered Chorus handle.
 	Handle *string `json:"handle"`
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal *bool `json:"has_terminal"`
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `json:"state"`
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention *string `json:"attention"`
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher *string `json:"watcher"`
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment *string `json:"assignment"`
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *jsonRoleAgentChoiceTransport `json:"choice,omitempty"`
 }
 
 // validatejsonTeamRoleStateTransport checks decoded JSON before it becomes a service value.
@@ -7336,14 +7808,14 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 	if value.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
+	if value.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
+	}
 	if value.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
 	if value.Attention == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
-	}
-	if value.Watcher == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", "body"))
 	}
 	if value.Assignment == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", "body"))
@@ -7359,13 +7831,8 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 		}
 	}
 	if value.Attention != nil {
-		if !(*value.Attention == "none" || *value.Attention == "permission" || *value.Attention == "question" || *value.Attention == "auth" || *value.Attention == "silent" || *value.Attention == "assignment" || *value.Attention == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *value.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-		}
-	}
-	if value.Watcher != nil {
-		if !(*value.Watcher == "held" || *value.Watcher == "gone" || *value.Watcher == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.watcher", *value.Watcher, []any{"held", "gone", "unknown"}))
+		if !(*value.Attention == "none" || *value.Attention == "permission" || *value.Attention == "question" || *value.Attention == "auth" || *value.Attention == "silent" || *value.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *value.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 		}
 	}
 	if value.Assignment != nil {
@@ -7373,31 +7840,29 @@ func validatejsonTeamRoleStateTransport(value *jsonTeamRoleStateTransport) (err 
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
 		}
 	}
+	if value.Choice != nil {
+		if err2 := validatejsonRoleAgentChoiceTransport(value.Choice); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return err
 }
 
 // jsonTeamSnapshotTransport stores JSON fields until they have been validated.
 type jsonTeamSnapshotTransport struct {
-	// Stable team name, also returned before a team is prepared.
+	// Stable Chorus swarm name for this project.
 	Team *string `json:"team"`
+	// Primary Chorus #channel for this project.
+	Channel *string `json:"channel"`
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*jsonTeamRoleStateTransport `json:"roles"`
-	// Current desktop attachment.
-	HerdrMode *string `json:"herdr_mode"`
 	// Saved client choices by role.
 	SavedChoices map[string]*jsonRoleAgentChoiceTransport `json:"saved_choices"`
 	// Dismissed project notices.
 	DismissedNotices []string `json:"dismissed_notices"`
-	// Whether Chorus serves this team: not_used when workers run outside Herdr and
-	// never use it; connected after Highbay's latest read of the team's Chorus
-	// view succeeded; unavailable after that read failed or when the team's space
-	// has no Chorus connection. While unavailable no Chorus reminder reaches a
-	// worker: workers wait on Highbay with wait_for_builder_assignment and
-	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
-	// prompt. Absent before a team space exists or before the first read settled
-	// it.
-	ChorusStatus *string `json:"chorus_status,omitempty"`
+	// Whether Highbay's local Chorus connection is healthy.
+	ChorusStatus *string `json:"chorus_status"`
 }
 
 // validatejsonTeamSnapshotTransport checks decoded JSON before it becomes a service value.
@@ -7408,11 +7873,11 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 	if value.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
+	if value.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
 	if value.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if value.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if value.SavedChoices == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("saved_choices", "body"))
@@ -7420,16 +7885,14 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 	if value.DismissedNotices == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("dismissed_notices", "body"))
 	}
+	if value.ChorusStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chorus_status", "body"))
+	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validatejsonTeamRoleStateTransport(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if value.HerdrMode != nil {
-		if !(*value.HerdrMode == "attached" || *value.HerdrMode == "available" || *value.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *value.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	for k, v := range value.SavedChoices {
@@ -7443,14 +7906,299 @@ func validatejsonTeamSnapshotTransport(value *jsonTeamSnapshotTransport) (err er
 		}
 	}
 	for _, e := range value.DismissedNotices {
-		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		if !(e == "single_agent_family") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family"}))
 		}
 	}
 	if value.ChorusStatus != nil {
-		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable" || *value.ChorusStatus == "not_used") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
+		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable"}))
 		}
+	}
+	return err
+}
+
+// jsonTerminalClientFrameTransport stores JSON fields until they have been validated.
+type jsonTerminalClientFrameTransport struct {
+	// Exactly one client terminal event.
+	ClientFrame *jsonClientFrameTransport `json:"client_frame"`
+}
+
+// validatejsonTerminalClientFrameTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalClientFrameTransport(value *jsonTerminalClientFrameTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ClientFrame == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_frame", "body"))
+	}
+	if value.ClientFrame != nil {
+
+		if err2 := value.ClientFrame.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.ClientFrame.Kind()) {
+			case "input":
+				actual, _ := value.ClientFrame.AsInput()
+				if actual != nil {
+					if err2 := validatejsonTerminalInputFrameTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "resize":
+				actual, _ := value.ClientFrame.AsResize()
+				if actual != nil {
+					if err2 := validatejsonTerminalResizeTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "focus":
+				actual, _ := value.ClientFrame.AsFocus()
+				if actual != nil {
+					if err2 := validatejsonTerminalFocusFrameTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "credit":
+				actual, _ := value.ClientFrame.AsCredit()
+				if actual != nil {
+					if err2 := validatejsonTerminalCreditFrameTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// jsonTerminalClosedTransport stores JSON fields until they have been validated.
+type jsonTerminalClosedTransport struct {
+	// Stream end reason reported by herdr-core (for example detached, exited,
+	// killed, or lost).
+	Reason *string `json:"reason"`
+	// Process exit status when the terminal process exited normally.
+	ExitCode *terminalClosedIntTransport `json:"exit_code,omitempty"`
+	// Terminating signal number when the terminal process was ended by a signal.
+	Signal *terminalClosedIntTransport `json:"signal,omitempty"`
+}
+
+// validatejsonTerminalClosedTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalClosedTransport(value *jsonTerminalClosedTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if value.ExitCode != nil {
+		if int(*value.ExitCode) < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.exit_code", int(*value.ExitCode), 0, true))
+		}
+		if int(*value.ExitCode) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.exit_code", int(*value.ExitCode), 255, false))
+		}
+	}
+	if value.Signal != nil {
+		if int(*value.Signal) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.signal", int(*value.Signal), 1, true))
+		}
+		if int(*value.Signal) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.signal", int(*value.Signal), 255, false))
+		}
+	}
+	return err
+}
+
+// jsonTerminalCreditFrameTransport stores JSON fields until they have been validated.
+type jsonTerminalCreditFrameTransport struct {
+	// Number of output bytes consumed by xterm.js.
+	Bytes *terminalClientFrameIntTransport `json:"bytes"`
+}
+
+// validatejsonTerminalCreditFrameTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalCreditFrameTransport(value *jsonTerminalCreditFrameTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Bytes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("bytes", "body"))
+	}
+	if value.Bytes != nil {
+		if int(*value.Bytes) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.bytes", int(*value.Bytes), 1, true))
+		}
+		if int(*value.Bytes) > 1.6777216e+07 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.bytes", int(*value.Bytes), 1.6777216e+07, false))
+		}
+	}
+	return err
+}
+
+// jsonTerminalFocusFrameTransport stores JSON fields until they have been validated.
+type jsonTerminalFocusFrameTransport struct {
+	// Whether the terminal drawer currently holds focus.
+	Focused *bool `json:"focused"`
+}
+
+// validatejsonTerminalFocusFrameTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalFocusFrameTransport(value *jsonTerminalFocusFrameTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Focused == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("focused", "body"))
+	}
+	return err
+}
+
+// jsonTerminalInputFrameTransport stores JSON fields until they have been validated.
+type jsonTerminalInputFrameTransport struct {
+	// Raw terminal input bytes.
+	Data []byte `json:"data"`
+}
+
+// validatejsonTerminalInputFrameTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalInputFrameTransport(value *jsonTerminalInputFrameTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", "body"))
+	}
+	return err
+}
+
+// jsonTerminalOutputFrameTransport stores JSON fields until they have been validated.
+type jsonTerminalOutputFrameTransport struct {
+	// Raw terminal output bytes.
+	Data []byte `json:"data"`
+}
+
+// validatejsonTerminalOutputFrameTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalOutputFrameTransport(value *jsonTerminalOutputFrameTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", "body"))
+	}
+	return err
+}
+
+// jsonTerminalResizeTransport stores JSON fields until they have been validated.
+type jsonTerminalResizeTransport struct {
+	// Terminal width in columns.
+	Cols *terminalClientFrameIntTransport `json:"cols"`
+	// Terminal height in rows.
+	Rows *terminalClientFrameIntTransport `json:"rows"`
+}
+
+// validatejsonTerminalResizeTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalResizeTransport(value *jsonTerminalResizeTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Cols == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cols", "body"))
+	}
+	if value.Rows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rows", "body"))
+	}
+	if value.Cols != nil {
+		if int(*value.Cols) < 20 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.cols", int(*value.Cols), 20, true))
+		}
+		if int(*value.Cols) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.cols", int(*value.Cols), 500, false))
+		}
+	}
+	if value.Rows != nil {
+		if int(*value.Rows) < 5 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.rows", int(*value.Rows), 5, true))
+		}
+		if int(*value.Rows) > 250 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.rows", int(*value.Rows), 250, false))
+		}
+	}
+	return err
+}
+
+// jsonTerminalServerFrameTransport stores JSON fields until they have been validated.
+type jsonTerminalServerFrameTransport struct {
+	// Exactly one server terminal event.
+	ServerFrame *jsonServerFrameTransport `json:"server_frame"`
+}
+
+// validatejsonTerminalServerFrameTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalServerFrameTransport(value *jsonTerminalServerFrameTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.ServerFrame == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_frame", "body"))
+	}
+	if value.ServerFrame != nil {
+
+		if err2 := value.ServerFrame.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.ServerFrame.Kind()) {
+			case "output":
+				actual, _ := value.ServerFrame.AsOutput()
+				if actual != nil {
+					if err2 := validatejsonTerminalOutputFrameTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "resize":
+				actual, _ := value.ServerFrame.AsResize()
+				if actual != nil {
+					if err2 := validatejsonTerminalResizeTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "closed":
+				actual, _ := value.ServerFrame.AsClosed()
+				if actual != nil {
+					if err2 := validatejsonTerminalClosedTransport(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
+	}
+	return err
+}
+
+// jsonTerminalTicketResultTransport stores JSON fields until they have been validated.
+type jsonTerminalTicketResultTransport struct {
+	// Opaque single-use ticket valid for at most 30 seconds.
+	Ticket *string `json:"ticket"`
+	// UTC expiration timestamp of the ticket.
+	ExpiresAt *string `json:"expires_at"`
+}
+
+// validatejsonTerminalTicketResultTransport checks decoded JSON before it becomes a service value.
+func validatejsonTerminalTicketResultTransport(value *jsonTerminalTicketResultTransport) (err error) {
+	if value == nil {
+		return goa.MissingFieldError("body", "JSON value")
+	}
+	if value.Ticket == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ticket", "body"))
+	}
+	if value.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if value.Ticket != nil {
+		if utf8.RuneCountInString(*value.Ticket) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ticket", *value.Ticket, utf8.RuneCountInString(*value.Ticket), 16, true))
+		}
+	}
+	if value.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *value.ExpiresAt, goa.FormatDateTime))
 	}
 	return err
 }
@@ -8989,6 +9737,106 @@ func ValidaterecordedRunStoryIntTransport(value recordedRunStoryIntTransport) (e
 	return err
 }
 
+// sendTeamMessagePayloadIntTransport stores JSON fields until they have been validated.
+type sendTeamMessagePayloadIntTransport int
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *sendTeamMessagePayloadIntTransport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int](data)
+	if err != nil {
+		return fmt.Errorf("decode sendTeamMessagePayloadIntTransport integer: %w", err)
+	}
+	*value = sendTeamMessagePayloadIntTransport(number)
+	return nil
+}
+
+// ValidatesendTeamMessagePayloadIntTransport checks decoded JSON before it becomes a service value.
+func ValidatesendTeamMessagePayloadIntTransport(value sendTeamMessagePayloadIntTransport) (err error) {
+
+	return err
+}
+
+// teamConversationInt64Transport stores JSON fields until they have been validated.
+type teamConversationInt64Transport int64
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *teamConversationInt64Transport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int64](data)
+	if err != nil {
+		return fmt.Errorf("decode teamConversationInt64Transport integer: %w", err)
+	}
+	*value = teamConversationInt64Transport(number)
+	return nil
+}
+
+// ValidateteamConversationInt64Transport checks decoded JSON before it becomes a service value.
+func ValidateteamConversationInt64Transport(value teamConversationInt64Transport) (err error) {
+
+	return err
+}
+
+// teamConversationIntTransport stores JSON fields until they have been validated.
+type teamConversationIntTransport int
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *teamConversationIntTransport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int](data)
+	if err != nil {
+		return fmt.Errorf("decode teamConversationIntTransport integer: %w", err)
+	}
+	*value = teamConversationIntTransport(number)
+	return nil
+}
+
+// ValidateteamConversationIntTransport checks decoded JSON before it becomes a service value.
+func ValidateteamConversationIntTransport(value teamConversationIntTransport) (err error) {
+
+	return err
+}
+
+// terminalClientFrameIntTransport stores JSON fields until they have been validated.
+type terminalClientFrameIntTransport int
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *terminalClientFrameIntTransport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int](data)
+	if err != nil {
+		return fmt.Errorf("decode terminalClientFrameIntTransport integer: %w", err)
+	}
+	*value = terminalClientFrameIntTransport(number)
+	return nil
+}
+
+// ValidateterminalClientFrameIntTransport checks decoded JSON before it becomes a service value.
+func ValidateterminalClientFrameIntTransport(value terminalClientFrameIntTransport) (err error) {
+
+	return err
+}
+
+// terminalClosedIntTransport stores JSON fields until they have been validated.
+type terminalClosedIntTransport int
+
+// UnmarshalJSON reads an exact whole JSON number and stores it within this type's
+// declared range. Decimal and exponent spellings do not change its value.
+func (value *terminalClosedIntTransport) UnmarshalJSON(data []byte) error {
+	number, err := rawjson.DecodeInteger[int](data)
+	if err != nil {
+		return fmt.Errorf("decode terminalClosedIntTransport integer: %w", err)
+	}
+	*value = terminalClosedIntTransport(number)
+	return nil
+}
+
+// ValidateterminalClosedIntTransport checks decoded JSON before it becomes a service value.
+func ValidateterminalClosedIntTransport(value terminalClosedIntTransport) (err error) {
+
+	return err
+}
+
 // testFindingsIntTransport stores JSON fields until they have been validated.
 type testFindingsIntTransport int
 
@@ -9057,6 +9905,17 @@ func validateApprovalItemOriginal(value *ApprovalItem) (err error) {
 func validateApproveMergePayloadOriginal(value *ApproveMergePayload) (err error) {
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.candidate_commit", value.CandidateCommit, "^([0-9a-f]{40}|[0-9a-f]{64})$"))
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.report_digest", value.ReportDigest, "^[0-9a-f]{64}$"))
+	return err
+}
+
+// validateArchitectureElementContextOriginal checks the original typed value before JSON conversion.
+func validateArchitectureElementContextOriginal(value *ArchitectureElementContext) (err error) {
+	if utf8.RuneCountInString(value.ElementID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.element_id", value.ElementID, utf8.RuneCountInString(value.ElementID), 1, true))
+	}
+	if utf8.RuneCountInString(value.ElementName) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.element_name", value.ElementName, utf8.RuneCountInString(value.ElementName), 1, true))
+	}
 	return err
 }
 
@@ -9169,33 +10028,8 @@ func validateBuildStartStepOriginal(value BuildStartStep) (err error) {
 	return err
 }
 
-// validateBuildTeamAmbiguousSpaceOriginal checks the original typed value before JSON conversion.
-func validateBuildTeamAmbiguousSpaceOriginal(value *BuildTeamAmbiguousSpace) (err error) {
-	if value.Count < 2 {
-		err = goa.MergeErrors(err, goa.InvalidRangeError("value.count", value.Count, 2, true))
-	}
-	if utf8.RuneCountInString(string(value.Step)) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 1, true))
-	}
-	if utf8.RuneCountInString(string(value.Step)) > 512 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 512, false))
-	}
-	return err
-}
-
 // validateBuildTeamUnavailableOriginal checks the original typed value before JSON conversion.
 func validateBuildTeamUnavailableOriginal(value *BuildTeamUnavailable) (err error) {
-	if utf8.RuneCountInString(string(value.Step)) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 1, true))
-	}
-	if utf8.RuneCountInString(string(value.Step)) > 512 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 512, false))
-	}
-	return err
-}
-
-// validateBuildTeamWindowBusyOriginal checks the original typed value before JSON conversion.
-func validateBuildTeamWindowBusyOriginal(value *BuildTeamWindowBusy) (err error) {
 	if utf8.RuneCountInString(string(value.Step)) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", string(value.Step), utf8.RuneCountInString(string(value.Step)), 1, true))
 	}
@@ -10309,19 +11143,12 @@ func validateProjectTeamOriginal(value *ProjectTeam) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "value"))
 	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("value.team", value.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
-	err = goa.MergeErrors(err, goa.ValidatePattern("value.space", value.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-	if utf8.RuneCountInString(value.Space) > 64 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("value.space", value.Space, utf8.RuneCountInString(value.Space), 64, false))
-	}
 	for _, e := range value.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleOriginal(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
-	}
-	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
 	}
 	if utf8.RuneCountInString(value.Step) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("value.step", value.Step, utf8.RuneCountInString(value.Step), 1, true))
@@ -10466,6 +11293,20 @@ func validateReplacedBuildOriginal(value *ReplacedBuild) (err error) {
 	return err
 }
 
+// validateReviseAnswersContextOriginal checks the original typed value before JSON conversion.
+func validateReviseAnswersContextOriginal(value *ReviseAnswersContext) (err error) {
+	if value.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "value"))
+	}
+	if utf8.RuneCountInString(value.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.change_id", value.ChangeID, utf8.RuneCountInString(value.ChangeID), 1, true))
+	}
+	if utf8.RuneCountInString(value.RequestRevision) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.request_revision", value.RequestRevision, utf8.RuneCountInString(value.RequestRevision), 1, true))
+	}
+	return err
+}
+
 // validateReviseChangePayloadOriginal checks the original typed value before JSON conversion.
 func validateReviseChangePayloadOriginal(value *ReviseChangePayload) (err error) {
 	if value.Analysis == nil {
@@ -10498,6 +11339,69 @@ func validateRunApprovalBlockedOriginal(value *RunApprovalBlocked) (err error) {
 	return err
 }
 
+// validateSendTeamMessagePayloadOriginal checks the original typed value before JSON conversion.
+func validateSendTeamMessagePayloadOriginal(value *SendTeamMessagePayload) (err error) {
+	if !(value.To == "team" || value.To == "guide" || value.To == "builder" || value.To == "test_writer") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.to", value.To, []any{"team", "guide", "builder", "test_writer"}))
+	}
+	if utf8.RuneCountInString(value.Text) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.text", value.Text, utf8.RuneCountInString(value.Text), 1, true))
+	}
+	if utf8.RuneCountInString(value.Text) > 3500 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.text", value.Text, utf8.RuneCountInString(value.Text), 3500, false))
+	}
+	if value.ReplyTo != nil {
+		if *value.ReplyTo < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("value.reply_to", *value.ReplyTo, 1, true))
+		}
+	}
+	if value.GuideChoice != nil {
+		if err2 := validateRoleAgentChoiceOriginal(value.GuideChoice); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+
+	if value.Context.Kind() != "" {
+		if err2 := value.Context.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(value.Context.Kind()) {
+			case "revise_answers":
+				actual, _ := value.Context.AsReviseAnswers()
+				if actual != nil {
+					if err2 := validateReviseAnswersContextOriginal(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "architecture_element":
+				actual, _ := value.Context.AsArchitectureElement()
+				if actual != nil {
+					if err2 := validateArchitectureElementContextOriginal(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "story_flow":
+				actual, _ := value.Context.AsStoryFlow()
+				if actual != nil {
+					if err2 := validateStoryFlowContextOriginal(actual); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+// validateStoryFlowContextOriginal checks the original typed value before JSON conversion.
+func validateStoryFlowContextOriginal(value *StoryFlowContext) (err error) {
+	if utf8.RuneCountInString(value.Story) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.story", value.Story, utf8.RuneCountInString(value.Story), 1, true))
+	}
+	return err
+}
+
 // validateStartBuildResultOriginal checks the original typed value before JSON conversion.
 func validateStartBuildResultOriginal(value *StartBuildResult) (err error) {
 	if value.Build == nil {
@@ -10520,20 +11424,6 @@ func validateStartBuildResultOriginal(value *StartBuildResult) (err error) {
 			actual, _ := value.Team.AsReady()
 			if actual != nil {
 				if err2 := validateProjectTeamOriginal(actual); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		case "window_busy":
-			actual, _ := value.Team.AsWindowBusy()
-			if actual != nil {
-				if err2 := validateBuildTeamWindowBusyOriginal(actual); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		case "ambiguous_space":
-			actual, _ := value.Team.AsAmbiguousSpace()
-			if actual != nil {
-				if err2 := validateBuildTeamAmbiguousSpaceOriginal(actual); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -10577,6 +11467,45 @@ func validateStoryRefreshResultOriginal(value *StoryRefreshResult) (err error) {
 	return err
 }
 
+// validateTeamConversationOriginal checks the original typed value before JSON conversion.
+func validateTeamConversationOriginal(value *TeamConversation) (err error) {
+	if value.Messages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "value"))
+	}
+	if !(value.ChorusStatus == "connected" || value.ChorusStatus == "unavailable") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.chorus_status", value.ChorusStatus, []any{"connected", "unavailable"}))
+	}
+	if value.Pin != nil {
+		if err2 := validateTeamMessageOriginal(value.Pin); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range value.Messages {
+		if e != nil {
+			if err2 := validateTeamMessageOriginal(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return err
+}
+
+// validateTeamMessageOriginal checks the original typed value before JSON conversion.
+func validateTeamMessageOriginal(value *TeamMessage) (err error) {
+	if value.Seq < 1 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.seq", value.Seq, 1, true))
+	}
+	if !(value.SenderRole == "you" || value.SenderRole == "guide" || value.SenderRole == "builder" || value.SenderRole == "test_writer" || value.SenderRole == "service" || value.SenderRole == "peer") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.sender_role", value.SenderRole, []any{"you", "guide", "builder", "test_writer", "service", "peer"}))
+	}
+	if value.ReplyTo != nil {
+		if *value.ReplyTo < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("value.reply_to", *value.ReplyTo, 1, true))
+		}
+	}
+	return err
+}
+
 // validateTeamRoleStateOriginal checks the original typed value before JSON conversion.
 func validateTeamRoleStateOriginal(value *TeamRoleState) (err error) {
 	if !(value.Role == "guide" || value.Role == "builder" || value.Role == "test_writer") {
@@ -10585,14 +11514,16 @@ func validateTeamRoleStateOriginal(value *TeamRoleState) (err error) {
 	if !(value.State == "not_started" || value.State == "ended" || value.State == "starting" || value.State == "needs_you" || value.State == "working" || value.State == "waiting" || value.State == "error" || value.State == "unknown") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.state", value.State, []any{"not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown"}))
 	}
-	if !(value.Attention == "none" || value.Attention == "permission" || value.Attention == "question" || value.Attention == "auth" || value.Attention == "silent" || value.Attention == "assignment" || value.Attention == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.attention", value.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-	}
-	if !(value.Watcher == "held" || value.Watcher == "gone" || value.Watcher == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.watcher", value.Watcher, []any{"held", "gone", "unknown"}))
+	if !(value.Attention == "none" || value.Attention == "permission" || value.Attention == "question" || value.Attention == "auth" || value.Attention == "silent" || value.Attention == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.attention", value.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 	}
 	if !(value.Assignment == "unread" || value.Assignment == "nothing_owed" || value.Assignment == "no_work" || value.Assignment == "unknown") {
 		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.assignment", value.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+	}
+	if value.Choice != nil {
+		if err2 := validateRoleAgentChoiceOriginal(value.Choice); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return err
 }
@@ -10615,9 +11546,6 @@ func validateTeamSnapshotOriginal(value *TeamSnapshot) (err error) {
 			}
 		}
 	}
-	if !(value.HerdrMode == "attached" || value.HerdrMode == "available" || value.HerdrMode == "unavailable") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.herdr_mode", value.HerdrMode, []any{"attached", "available", "unavailable"}))
-	}
 	for k, v := range value.SavedChoices {
 		if !(k == "guide" || k == "builder" || k == "test_writer") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.saved_choices.key", k, []any{"guide", "builder", "test_writer"}))
@@ -10629,15 +11557,161 @@ func validateTeamSnapshotOriginal(value *TeamSnapshot) (err error) {
 		}
 	}
 	for _, e := range value.DismissedNotices {
-		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		if !(e == "single_agent_family") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.dismissed_notices[*]", e, []any{"single_agent_family"}))
 		}
 	}
-	if value.ChorusStatus != nil {
-		if !(*value.ChorusStatus == "connected" || *value.ChorusStatus == "unavailable" || *value.ChorusStatus == "not_used") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.chorus_status", *value.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
+	if !(value.ChorusStatus == "connected" || value.ChorusStatus == "unavailable") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("value.chorus_status", value.ChorusStatus, []any{"connected", "unavailable"}))
+	}
+	return err
+}
+
+// validateTerminalClientFrameOriginal checks the original typed value before JSON conversion.
+func validateTerminalClientFrameOriginal(value *TerminalClientFrame) (err error) {
+	if value.ClientFrame.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_frame", "value"))
+	}
+
+	if err2 := value.ClientFrame.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := value.ClientFrame.AsInput()
+			if actual != nil {
+				if err2 := validateTerminalInputFrameOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "resize":
+			actual, _ := value.ClientFrame.AsResize()
+			if actual != nil {
+				if err2 := validateTerminalResizeOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "credit":
+			actual, _ := value.ClientFrame.AsCredit()
+			if actual != nil {
+				if err2 := validateTerminalCreditFrameOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
 		}
 	}
+
+	return err
+}
+
+// validateTerminalInputFrameOriginal checks the original typed value before JSON conversion.
+func validateTerminalInputFrameOriginal(value *TerminalInputFrame) (err error) {
+	if value.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", "value"))
+	}
+	return err
+}
+
+// validateTerminalResizeOriginal checks the original typed value before JSON conversion.
+func validateTerminalResizeOriginal(value *TerminalResize) (err error) {
+	if value.Cols < 20 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.cols", value.Cols, 20, true))
+	}
+	if value.Cols > 500 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.cols", value.Cols, 500, false))
+	}
+	if value.Rows < 5 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.rows", value.Rows, 5, true))
+	}
+	if value.Rows > 250 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.rows", value.Rows, 250, false))
+	}
+	return err
+}
+
+// validateTerminalCreditFrameOriginal checks the original typed value before JSON conversion.
+func validateTerminalCreditFrameOriginal(value *TerminalCreditFrame) (err error) {
+	if value.Bytes < 1 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.bytes", value.Bytes, 1, true))
+	}
+	if value.Bytes > 1.6777216e+07 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("value.bytes", value.Bytes, 1.6777216e+07, false))
+	}
+	return err
+}
+
+// validateTerminalClosedOriginal checks the original typed value before JSON conversion.
+func validateTerminalClosedOriginal(value *TerminalClosed) (err error) {
+	if value.ExitCode != nil {
+		if *value.ExitCode < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("value.exit_code", *value.ExitCode, 0, true))
+		}
+		if *value.ExitCode > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("value.exit_code", *value.ExitCode, 255, false))
+		}
+	}
+	if value.Signal != nil {
+		if *value.Signal < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("value.signal", *value.Signal, 1, true))
+		}
+		if *value.Signal > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("value.signal", *value.Signal, 255, false))
+		}
+	}
+	return err
+}
+
+// validateTerminalOutputFrameOriginal checks the original typed value before JSON conversion.
+func validateTerminalOutputFrameOriginal(value *TerminalOutputFrame) (err error) {
+	if value.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", "value"))
+	}
+	return err
+}
+
+// validateTerminalServerFrameOriginal checks the original typed value before JSON conversion.
+func validateTerminalServerFrameOriginal(value *TerminalServerFrame) (err error) {
+	if value.ServerFrame.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_frame", "value"))
+	}
+
+	if err2 := value.ServerFrame.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(value.ServerFrame.Kind()) {
+		case "output":
+			actual, _ := value.ServerFrame.AsOutput()
+			if actual != nil {
+				if err2 := validateTerminalOutputFrameOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "resize":
+			actual, _ := value.ServerFrame.AsResize()
+			if actual != nil {
+				if err2 := validateTerminalResizeOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "closed":
+			actual, _ := value.ServerFrame.AsClosed()
+			if actual != nil {
+				if err2 := validateTerminalClosedOriginal(actual); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return err
+}
+
+// validateTerminalTicketResultOriginal checks the original typed value before JSON conversion.
+func validateTerminalTicketResultOriginal(value *TerminalTicketResult) (err error) {
+	if utf8.RuneCountInString(value.Ticket) < 16 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("value.ticket", value.Ticket, utf8.RuneCountInString(value.Ticket), 16, true))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("value.expires_at", value.ExpiresAt, goa.FormatDateTime))
 	return err
 }
 
@@ -11988,6 +13062,245 @@ func (u *jsonBuildTransport) UnmarshalJSON(data []byte) error {
 	return u.Validate()
 }
 
+// jsonClientFrameTransport stores exactly one selected Goa OneOf branch.
+type jsonClientFrameTransport struct {
+	kind   jsonClientFrameTransportKind
+	Input  *jsonTerminalInputFrameTransport
+	Resize *jsonTerminalResizeTransport
+	Focus  *jsonTerminalFocusFrameTransport
+	Credit *jsonTerminalCreditFrameTransport
+}
+
+// jsonClientFrameTransportKind identifies the selected branch of jsonClientFrameTransport.
+type jsonClientFrameTransportKind string
+
+const (
+	jsonClientFrameTransportKindInput  jsonClientFrameTransportKind = "input"
+	jsonClientFrameTransportKindResize jsonClientFrameTransportKind = "resize"
+	jsonClientFrameTransportKindFocus  jsonClientFrameTransportKind = "focus"
+	jsonClientFrameTransportKindCredit jsonClientFrameTransportKind = "credit"
+)
+
+// Kind returns the selected branch.
+func (u jsonClientFrameTransport) Kind() jsonClientFrameTransportKind {
+	return u.kind
+}
+
+// newjsonClientFrameTransportInput creates jsonClientFrameTransport with its input branch selected.
+func newjsonClientFrameTransportInput(value *jsonTerminalInputFrameTransport) jsonClientFrameTransport {
+	return jsonClientFrameTransport{kind: jsonClientFrameTransportKindInput, Input: value}
+}
+
+// AsInput returns the input branch when it is selected.
+func (u jsonClientFrameTransport) AsInput() (_ *jsonTerminalInputFrameTransport, ok bool) {
+	if u.kind != jsonClientFrameTransportKindInput {
+		return
+	}
+	return u.Input, true
+}
+
+// SetInput selects the input branch.
+func (u *jsonClientFrameTransport) SetInput(value *jsonTerminalInputFrameTransport) {
+	u.kind = jsonClientFrameTransportKindInput
+	u.Input = value
+}
+
+// newjsonClientFrameTransportResize creates jsonClientFrameTransport with its resize branch selected.
+func newjsonClientFrameTransportResize(value *jsonTerminalResizeTransport) jsonClientFrameTransport {
+	return jsonClientFrameTransport{kind: jsonClientFrameTransportKindResize, Resize: value}
+}
+
+// AsResize returns the resize branch when it is selected.
+func (u jsonClientFrameTransport) AsResize() (_ *jsonTerminalResizeTransport, ok bool) {
+	if u.kind != jsonClientFrameTransportKindResize {
+		return
+	}
+	return u.Resize, true
+}
+
+// SetResize selects the resize branch.
+func (u *jsonClientFrameTransport) SetResize(value *jsonTerminalResizeTransport) {
+	u.kind = jsonClientFrameTransportKindResize
+	u.Resize = value
+}
+
+// newjsonClientFrameTransportFocus creates jsonClientFrameTransport with its focus branch selected.
+func newjsonClientFrameTransportFocus(value *jsonTerminalFocusFrameTransport) jsonClientFrameTransport {
+	return jsonClientFrameTransport{kind: jsonClientFrameTransportKindFocus, Focus: value}
+}
+
+// AsFocus returns the focus branch when it is selected.
+func (u jsonClientFrameTransport) AsFocus() (_ *jsonTerminalFocusFrameTransport, ok bool) {
+	if u.kind != jsonClientFrameTransportKindFocus {
+		return
+	}
+	return u.Focus, true
+}
+
+// SetFocus selects the focus branch.
+func (u *jsonClientFrameTransport) SetFocus(value *jsonTerminalFocusFrameTransport) {
+	u.kind = jsonClientFrameTransportKindFocus
+	u.Focus = value
+}
+
+// newjsonClientFrameTransportCredit creates jsonClientFrameTransport with its credit branch selected.
+func newjsonClientFrameTransportCredit(value *jsonTerminalCreditFrameTransport) jsonClientFrameTransport {
+	return jsonClientFrameTransport{kind: jsonClientFrameTransportKindCredit, Credit: value}
+}
+
+// AsCredit returns the credit branch when it is selected.
+func (u jsonClientFrameTransport) AsCredit() (_ *jsonTerminalCreditFrameTransport, ok bool) {
+	if u.kind != jsonClientFrameTransportKindCredit {
+		return
+	}
+	return u.Credit, true
+}
+
+// SetCredit selects the credit branch.
+func (u *jsonClientFrameTransport) SetCredit(value *jsonTerminalCreditFrameTransport) {
+	u.kind = jsonClientFrameTransportKindCredit
+	u.Credit = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonClientFrameTransport) Validate() error {
+	switch u.kind {
+	case jsonClientFrameTransportKindInput:
+		if u.Input == nil {
+			return goa.MissingFieldError("value", "jsonClientFrameTransport")
+		}
+		return nil
+	case jsonClientFrameTransportKindResize:
+		if u.Resize == nil {
+			return goa.MissingFieldError("value", "jsonClientFrameTransport")
+		}
+		return nil
+	case jsonClientFrameTransportKindFocus:
+		if u.Focus == nil {
+			return goa.MissingFieldError("value", "jsonClientFrameTransport")
+		}
+		return nil
+	case jsonClientFrameTransportKindCredit:
+		if u.Credit == nil {
+			return goa.MissingFieldError("value", "jsonClientFrameTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("kind", "jsonClientFrameTransport")
+	default:
+		return goa.InvalidEnumValueError("kind", u.kind, []any{string(jsonClientFrameTransportKindInput), string(jsonClientFrameTransportKindResize), string(jsonClientFrameTransportKindFocus), string(jsonClientFrameTransportKindCredit)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonClientFrameTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonClientFrameTransportKindInput:
+		value = u.Input
+	case jsonClientFrameTransportKindResize:
+		value = u.Resize
+	case jsonClientFrameTransportKindFocus:
+		value = u.Focus
+	case jsonClientFrameTransportKindCredit:
+		value = u.Credit
+	default:
+		return nil, fmt.Errorf("unexpected jsonClientFrameTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("kind", nil, "non-null JSON object")
+	}
+	if _, exists := fields["kind"]; exists {
+		return nil, fmt.Errorf("jsonClientFrameTransport branch already contains discriminator %q", "kind")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["kind"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonClientFrameTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["kind"]
+	if !exists {
+		return goa.MissingFieldError("kind", "jsonClientFrameTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("kind", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "kind")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonClientFrameTransportKindInput):
+		var value *jsonTerminalInputFrameTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonClientFrameTransportKindInput
+		u.Input = value
+	case string(jsonClientFrameTransportKindResize):
+		var value *jsonTerminalResizeTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonClientFrameTransportKindResize
+		u.Resize = value
+	case string(jsonClientFrameTransportKindFocus):
+		var value *jsonTerminalFocusFrameTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonClientFrameTransportKindFocus
+		u.Focus = value
+	case string(jsonClientFrameTransportKindCredit):
+		var value *jsonTerminalCreditFrameTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonClientFrameTransportKindCredit
+		u.Credit = value
+	default:
+		return goa.InvalidEnumValueError("kind", raw.Type, []any{string(jsonClientFrameTransportKindInput), string(jsonClientFrameTransportKindResize), string(jsonClientFrameTransportKindFocus), string(jsonClientFrameTransportKindCredit)})
+	}
+	return u.Validate()
+}
+
 // jsonConnectionTransport stores exactly one selected Goa OneOf branch.
 type jsonConnectionTransport struct {
 	kind    jsonConnectionTransportKind
@@ -12186,6 +13499,192 @@ func (u *jsonConnectionTransport) UnmarshalJSON(data []byte) error {
 		u.Gateway = value
 	default:
 		return goa.InvalidEnumValueError("kind", raw.Type, []any{string(jsonConnectionTransportKindNone), string(jsonConnectionTransportKindDirect), string(jsonConnectionTransportKindGateway)})
+	}
+	return u.Validate()
+}
+
+// jsonContextTransport stores exactly one selected Goa OneOf branch.
+type jsonContextTransport struct {
+	kind                jsonContextTransportKind
+	ReviseAnswers       *jsonReviseAnswersContextTransport
+	ArchitectureElement *jsonArchitectureElementContextTransport
+	StoryFlow           *jsonStoryFlowContextTransport
+}
+
+// jsonContextTransportKind identifies the selected branch of jsonContextTransport.
+type jsonContextTransportKind string
+
+const (
+	jsonContextTransportKindReviseAnswers       jsonContextTransportKind = "revise_answers"
+	jsonContextTransportKindArchitectureElement jsonContextTransportKind = "architecture_element"
+	jsonContextTransportKindStoryFlow           jsonContextTransportKind = "story_flow"
+)
+
+// Kind returns the selected branch.
+func (u jsonContextTransport) Kind() jsonContextTransportKind {
+	return u.kind
+}
+
+// newjsonContextTransportReviseAnswers creates jsonContextTransport with its revise_answers branch selected.
+func newjsonContextTransportReviseAnswers(value *jsonReviseAnswersContextTransport) jsonContextTransport {
+	return jsonContextTransport{kind: jsonContextTransportKindReviseAnswers, ReviseAnswers: value}
+}
+
+// AsReviseAnswers returns the revise_answers branch when it is selected.
+func (u jsonContextTransport) AsReviseAnswers() (_ *jsonReviseAnswersContextTransport, ok bool) {
+	if u.kind != jsonContextTransportKindReviseAnswers {
+		return
+	}
+	return u.ReviseAnswers, true
+}
+
+// SetReviseAnswers selects the revise_answers branch.
+func (u *jsonContextTransport) SetReviseAnswers(value *jsonReviseAnswersContextTransport) {
+	u.kind = jsonContextTransportKindReviseAnswers
+	u.ReviseAnswers = value
+}
+
+// newjsonContextTransportArchitectureElement creates jsonContextTransport with its architecture_element branch selected.
+func newjsonContextTransportArchitectureElement(value *jsonArchitectureElementContextTransport) jsonContextTransport {
+	return jsonContextTransport{kind: jsonContextTransportKindArchitectureElement, ArchitectureElement: value}
+}
+
+// AsArchitectureElement returns the architecture_element branch when it is selected.
+func (u jsonContextTransport) AsArchitectureElement() (_ *jsonArchitectureElementContextTransport, ok bool) {
+	if u.kind != jsonContextTransportKindArchitectureElement {
+		return
+	}
+	return u.ArchitectureElement, true
+}
+
+// SetArchitectureElement selects the architecture_element branch.
+func (u *jsonContextTransport) SetArchitectureElement(value *jsonArchitectureElementContextTransport) {
+	u.kind = jsonContextTransportKindArchitectureElement
+	u.ArchitectureElement = value
+}
+
+// newjsonContextTransportStoryFlow creates jsonContextTransport with its story_flow branch selected.
+func newjsonContextTransportStoryFlow(value *jsonStoryFlowContextTransport) jsonContextTransport {
+	return jsonContextTransport{kind: jsonContextTransportKindStoryFlow, StoryFlow: value}
+}
+
+// AsStoryFlow returns the story_flow branch when it is selected.
+func (u jsonContextTransport) AsStoryFlow() (_ *jsonStoryFlowContextTransport, ok bool) {
+	if u.kind != jsonContextTransportKindStoryFlow {
+		return
+	}
+	return u.StoryFlow, true
+}
+
+// SetStoryFlow selects the story_flow branch.
+func (u *jsonContextTransport) SetStoryFlow(value *jsonStoryFlowContextTransport) {
+	u.kind = jsonContextTransportKindStoryFlow
+	u.StoryFlow = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonContextTransport) Validate() error {
+	switch u.kind {
+	case jsonContextTransportKindReviseAnswers:
+		if u.ReviseAnswers == nil {
+			return goa.MissingFieldError("value", "jsonContextTransport")
+		}
+		return nil
+	case jsonContextTransportKindArchitectureElement:
+		if u.ArchitectureElement == nil {
+			return goa.MissingFieldError("value", "jsonContextTransport")
+		}
+		return nil
+	case jsonContextTransportKindStoryFlow:
+		if u.StoryFlow == nil {
+			return goa.MissingFieldError("value", "jsonContextTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("type", "jsonContextTransport")
+	default:
+		return goa.InvalidEnumValueError("type", u.kind, []any{string(jsonContextTransportKindReviseAnswers), string(jsonContextTransportKindArchitectureElement), string(jsonContextTransportKindStoryFlow)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonContextTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonContextTransportKindReviseAnswers:
+		value = u.ReviseAnswers
+	case jsonContextTransportKindArchitectureElement:
+		value = u.ArchitectureElement
+	case jsonContextTransportKindStoryFlow:
+		value = u.StoryFlow
+	default:
+		return nil, fmt.Errorf("unexpected jsonContextTransport branch %q", u.kind)
+	}
+	return json.Marshal(struct {
+		Type  string `json:"type"`
+		Value any    `json:"value"`
+	}{Type: string(u.kind), Value: value})
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonContextTransport) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string          `json:"type"`
+		Value json.RawMessage `json:"value"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&raw); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("decode jsonContextTransport JSON: multiple JSON values")
+		}
+		return err
+	}
+	if raw.Type == "" {
+		return goa.MissingFieldError("type", "jsonContextTransport")
+	}
+	if len(raw.Value) == 0 {
+		return goa.MissingFieldError("value", "jsonContextTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(raw.Value), []byte("null")) {
+		return goa.InvalidFieldTypeError("value", nil, "non-null JSON value")
+	}
+	switch raw.Type {
+	case string(jsonContextTransportKindReviseAnswers):
+		var value *jsonReviseAnswersContextTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonContextTransportKindReviseAnswers
+		u.ReviseAnswers = value
+	case string(jsonContextTransportKindArchitectureElement):
+		var value *jsonArchitectureElementContextTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonContextTransportKindArchitectureElement
+		u.ArchitectureElement = value
+	case string(jsonContextTransportKindStoryFlow):
+		var value *jsonStoryFlowContextTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonContextTransportKindStoryFlow
+		u.StoryFlow = value
+	default:
+		return goa.InvalidEnumValueError("type", raw.Type, []any{string(jsonContextTransportKindReviseAnswers), string(jsonContextTransportKindArchitectureElement), string(jsonContextTransportKindStoryFlow)})
 	}
 	return u.Validate()
 }
@@ -12631,6 +14130,208 @@ func (u *jsonMappingTransport) UnmarshalJSON(data []byte) error {
 	return u.Validate()
 }
 
+// jsonServerFrameTransport stores exactly one selected Goa OneOf branch.
+type jsonServerFrameTransport struct {
+	kind   jsonServerFrameTransportKind
+	Output *jsonTerminalOutputFrameTransport
+	Resize *jsonTerminalResizeTransport
+	Closed *jsonTerminalClosedTransport
+}
+
+// jsonServerFrameTransportKind identifies the selected branch of jsonServerFrameTransport.
+type jsonServerFrameTransportKind string
+
+const (
+	jsonServerFrameTransportKindOutput jsonServerFrameTransportKind = "output"
+	jsonServerFrameTransportKindResize jsonServerFrameTransportKind = "resize"
+	jsonServerFrameTransportKindClosed jsonServerFrameTransportKind = "closed"
+)
+
+// Kind returns the selected branch.
+func (u jsonServerFrameTransport) Kind() jsonServerFrameTransportKind {
+	return u.kind
+}
+
+// newjsonServerFrameTransportOutput creates jsonServerFrameTransport with its output branch selected.
+func newjsonServerFrameTransportOutput(value *jsonTerminalOutputFrameTransport) jsonServerFrameTransport {
+	return jsonServerFrameTransport{kind: jsonServerFrameTransportKindOutput, Output: value}
+}
+
+// AsOutput returns the output branch when it is selected.
+func (u jsonServerFrameTransport) AsOutput() (_ *jsonTerminalOutputFrameTransport, ok bool) {
+	if u.kind != jsonServerFrameTransportKindOutput {
+		return
+	}
+	return u.Output, true
+}
+
+// SetOutput selects the output branch.
+func (u *jsonServerFrameTransport) SetOutput(value *jsonTerminalOutputFrameTransport) {
+	u.kind = jsonServerFrameTransportKindOutput
+	u.Output = value
+}
+
+// newjsonServerFrameTransportResize creates jsonServerFrameTransport with its resize branch selected.
+func newjsonServerFrameTransportResize(value *jsonTerminalResizeTransport) jsonServerFrameTransport {
+	return jsonServerFrameTransport{kind: jsonServerFrameTransportKindResize, Resize: value}
+}
+
+// AsResize returns the resize branch when it is selected.
+func (u jsonServerFrameTransport) AsResize() (_ *jsonTerminalResizeTransport, ok bool) {
+	if u.kind != jsonServerFrameTransportKindResize {
+		return
+	}
+	return u.Resize, true
+}
+
+// SetResize selects the resize branch.
+func (u *jsonServerFrameTransport) SetResize(value *jsonTerminalResizeTransport) {
+	u.kind = jsonServerFrameTransportKindResize
+	u.Resize = value
+}
+
+// newjsonServerFrameTransportClosed creates jsonServerFrameTransport with its closed branch selected.
+func newjsonServerFrameTransportClosed(value *jsonTerminalClosedTransport) jsonServerFrameTransport {
+	return jsonServerFrameTransport{kind: jsonServerFrameTransportKindClosed, Closed: value}
+}
+
+// AsClosed returns the closed branch when it is selected.
+func (u jsonServerFrameTransport) AsClosed() (_ *jsonTerminalClosedTransport, ok bool) {
+	if u.kind != jsonServerFrameTransportKindClosed {
+		return
+	}
+	return u.Closed, true
+}
+
+// SetClosed selects the closed branch.
+func (u *jsonServerFrameTransport) SetClosed(value *jsonTerminalClosedTransport) {
+	u.kind = jsonServerFrameTransportKindClosed
+	u.Closed = value
+}
+
+// Validate checks that one complete branch is selected.
+func (u jsonServerFrameTransport) Validate() error {
+	switch u.kind {
+	case jsonServerFrameTransportKindOutput:
+		if u.Output == nil {
+			return goa.MissingFieldError("value", "jsonServerFrameTransport")
+		}
+		return nil
+	case jsonServerFrameTransportKindResize:
+		if u.Resize == nil {
+			return goa.MissingFieldError("value", "jsonServerFrameTransport")
+		}
+		return nil
+	case jsonServerFrameTransportKindClosed:
+		if u.Closed == nil {
+			return goa.MissingFieldError("value", "jsonServerFrameTransport")
+		}
+		return nil
+	case "":
+		return goa.MissingFieldError("kind", "jsonServerFrameTransport")
+	default:
+		return goa.InvalidEnumValueError("kind", u.kind, []any{string(jsonServerFrameTransportKindOutput), string(jsonServerFrameTransportKindResize), string(jsonServerFrameTransportKindClosed)})
+	}
+}
+
+// MarshalJSON writes the selected branch name and value.
+func (u jsonServerFrameTransport) MarshalJSON() ([]byte, error) {
+	if err := u.Validate(); err != nil {
+		return nil, err
+	}
+	var value any
+	switch u.kind {
+	case jsonServerFrameTransportKindOutput:
+		value = u.Output
+	case jsonServerFrameTransportKindResize:
+		value = u.Resize
+	case jsonServerFrameTransportKindClosed:
+		value = u.Closed
+	default:
+		return nil, fmt.Errorf("unexpected jsonServerFrameTransport branch %q", u.kind)
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("kind", nil, "non-null JSON object")
+	}
+	if _, exists := fields["kind"]; exists {
+		return nil, fmt.Errorf("jsonServerFrameTransport branch already contains discriminator %q", "kind")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["kind"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads one complete branch name and value.
+func (u *jsonServerFrameTransport) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["kind"]
+	if !exists {
+		return goa.MissingFieldError("kind", "jsonServerFrameTransport")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("kind", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "kind")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(jsonServerFrameTransportKindOutput):
+		var value *jsonTerminalOutputFrameTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonServerFrameTransportKindOutput
+		u.Output = value
+	case string(jsonServerFrameTransportKindResize):
+		var value *jsonTerminalResizeTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonServerFrameTransportKindResize
+		u.Resize = value
+	case string(jsonServerFrameTransportKindClosed):
+		var value *jsonTerminalClosedTransport
+		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		u.kind = jsonServerFrameTransportKindClosed
+		u.Closed = value
+	default:
+		return goa.InvalidEnumValueError("kind", raw.Type, []any{string(jsonServerFrameTransportKindOutput), string(jsonServerFrameTransportKindResize), string(jsonServerFrameTransportKindClosed)})
+	}
+	return u.Validate()
+}
+
 // jsonStateTransport stores exactly one selected Goa OneOf branch.
 type jsonStateTransport struct {
 	kind         jsonStateTransportKind
@@ -12984,21 +14685,17 @@ func (u *jsonStoryContextTransport) UnmarshalJSON(data []byte) error {
 
 // jsonTeamTransport stores exactly one selected Goa OneOf branch.
 type jsonTeamTransport struct {
-	kind           jsonTeamTransportKind
-	Ready          *jsonProjectTeamTransport
-	WindowBusy     *jsonBuildTeamWindowBusyTransport
-	AmbiguousSpace *jsonBuildTeamAmbiguousSpaceTransport
-	Unavailable    *jsonBuildTeamUnavailableTransport
+	kind        jsonTeamTransportKind
+	Ready       *jsonProjectTeamTransport
+	Unavailable *jsonBuildTeamUnavailableTransport
 }
 
 // jsonTeamTransportKind identifies the selected branch of jsonTeamTransport.
 type jsonTeamTransportKind string
 
 const (
-	jsonTeamTransportKindReady          jsonTeamTransportKind = "ready"
-	jsonTeamTransportKindWindowBusy     jsonTeamTransportKind = "window_busy"
-	jsonTeamTransportKindAmbiguousSpace jsonTeamTransportKind = "ambiguous_space"
-	jsonTeamTransportKindUnavailable    jsonTeamTransportKind = "unavailable"
+	jsonTeamTransportKindReady       jsonTeamTransportKind = "ready"
+	jsonTeamTransportKindUnavailable jsonTeamTransportKind = "unavailable"
 )
 
 // Kind returns the selected branch.
@@ -13023,44 +14720,6 @@ func (u jsonTeamTransport) AsReady() (_ *jsonProjectTeamTransport, ok bool) {
 func (u *jsonTeamTransport) SetReady(value *jsonProjectTeamTransport) {
 	u.kind = jsonTeamTransportKindReady
 	u.Ready = value
-}
-
-// newjsonTeamTransportWindowBusy creates jsonTeamTransport with its window_busy branch selected.
-func newjsonTeamTransportWindowBusy(value *jsonBuildTeamWindowBusyTransport) jsonTeamTransport {
-	return jsonTeamTransport{kind: jsonTeamTransportKindWindowBusy, WindowBusy: value}
-}
-
-// AsWindowBusy returns the window_busy branch when it is selected.
-func (u jsonTeamTransport) AsWindowBusy() (_ *jsonBuildTeamWindowBusyTransport, ok bool) {
-	if u.kind != jsonTeamTransportKindWindowBusy {
-		return
-	}
-	return u.WindowBusy, true
-}
-
-// SetWindowBusy selects the window_busy branch.
-func (u *jsonTeamTransport) SetWindowBusy(value *jsonBuildTeamWindowBusyTransport) {
-	u.kind = jsonTeamTransportKindWindowBusy
-	u.WindowBusy = value
-}
-
-// newjsonTeamTransportAmbiguousSpace creates jsonTeamTransport with its ambiguous_space branch selected.
-func newjsonTeamTransportAmbiguousSpace(value *jsonBuildTeamAmbiguousSpaceTransport) jsonTeamTransport {
-	return jsonTeamTransport{kind: jsonTeamTransportKindAmbiguousSpace, AmbiguousSpace: value}
-}
-
-// AsAmbiguousSpace returns the ambiguous_space branch when it is selected.
-func (u jsonTeamTransport) AsAmbiguousSpace() (_ *jsonBuildTeamAmbiguousSpaceTransport, ok bool) {
-	if u.kind != jsonTeamTransportKindAmbiguousSpace {
-		return
-	}
-	return u.AmbiguousSpace, true
-}
-
-// SetAmbiguousSpace selects the ambiguous_space branch.
-func (u *jsonTeamTransport) SetAmbiguousSpace(value *jsonBuildTeamAmbiguousSpaceTransport) {
-	u.kind = jsonTeamTransportKindAmbiguousSpace
-	u.AmbiguousSpace = value
 }
 
 // newjsonTeamTransportUnavailable creates jsonTeamTransport with its unavailable branch selected.
@@ -13090,16 +14749,6 @@ func (u jsonTeamTransport) Validate() error {
 			return goa.MissingFieldError("value", "jsonTeamTransport")
 		}
 		return nil
-	case jsonTeamTransportKindWindowBusy:
-		if u.WindowBusy == nil {
-			return goa.MissingFieldError("value", "jsonTeamTransport")
-		}
-		return nil
-	case jsonTeamTransportKindAmbiguousSpace:
-		if u.AmbiguousSpace == nil {
-			return goa.MissingFieldError("value", "jsonTeamTransport")
-		}
-		return nil
 	case jsonTeamTransportKindUnavailable:
 		if u.Unavailable == nil {
 			return goa.MissingFieldError("value", "jsonTeamTransport")
@@ -13108,7 +14757,7 @@ func (u jsonTeamTransport) Validate() error {
 	case "":
 		return goa.MissingFieldError("state", "jsonTeamTransport")
 	default:
-		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonTeamTransportKindReady), string(jsonTeamTransportKindWindowBusy), string(jsonTeamTransportKindAmbiguousSpace), string(jsonTeamTransportKindUnavailable)})
+		return goa.InvalidEnumValueError("state", u.kind, []any{string(jsonTeamTransportKindReady), string(jsonTeamTransportKindUnavailable)})
 	}
 }
 
@@ -13121,10 +14770,6 @@ func (u jsonTeamTransport) MarshalJSON() ([]byte, error) {
 	switch u.kind {
 	case jsonTeamTransportKindReady:
 		value = u.Ready
-	case jsonTeamTransportKindWindowBusy:
-		value = u.WindowBusy
-	case jsonTeamTransportKindAmbiguousSpace:
-		value = u.AmbiguousSpace
 	case jsonTeamTransportKindUnavailable:
 		value = u.Unavailable
 	default:
@@ -13188,24 +14833,6 @@ func (u *jsonTeamTransport) UnmarshalJSON(data []byte) error {
 		}
 		u.kind = jsonTeamTransportKindReady
 		u.Ready = value
-	case string(jsonTeamTransportKindWindowBusy):
-		var value *jsonBuildTeamWindowBusyTransport
-		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&value); err != nil {
-			return err
-		}
-		u.kind = jsonTeamTransportKindWindowBusy
-		u.WindowBusy = value
-	case string(jsonTeamTransportKindAmbiguousSpace):
-		var value *jsonBuildTeamAmbiguousSpaceTransport
-		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&value); err != nil {
-			return err
-		}
-		u.kind = jsonTeamTransportKindAmbiguousSpace
-		u.AmbiguousSpace = value
 	case string(jsonTeamTransportKindUnavailable):
 		var value *jsonBuildTeamUnavailableTransport
 		decoder := json.NewDecoder(bytes.NewReader(raw.Value))
@@ -13216,7 +14843,7 @@ func (u *jsonTeamTransport) UnmarshalJSON(data []byte) error {
 		u.kind = jsonTeamTransportKindUnavailable
 		u.Unavailable = value
 	default:
-		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonTeamTransportKindReady), string(jsonTeamTransportKindWindowBusy), string(jsonTeamTransportKindAmbiguousSpace), string(jsonTeamTransportKindUnavailable)})
+		return goa.InvalidEnumValueError("state", raw.Type, []any{string(jsonTeamTransportKindReady), string(jsonTeamTransportKindUnavailable)})
 	}
 	return u.Validate()
 }
@@ -14632,6 +16259,95 @@ func DecodeApproveMergePayload(data []byte) (out *ApproveMergePayload, err error
 	return out, nil
 }
 
+// EncodeArchitectureElementContext turns a service value into JSON using the field names in the Goa design.
+func EncodeArchitectureElementContext(in *ArchitectureElementContext) ([]byte, error) {
+	if err := checkArchitectureElementContextValue(in); err != nil {
+		return nil, fmt.Errorf("encode ArchitectureElementContext JSON: %w", err)
+	}
+	if err := validateArchitectureElementContextOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate ArchitectureElementContext value: %w", err)
+	}
+	var body *jsonArchitectureElementContextTransport
+	{
+		body = &jsonArchitectureElementContextTransport{
+			ChangeID:    in.ChangeID,
+			ElementID:   &in.ElementID,
+			ElementName: &in.ElementName,
+		}
+	}
+	if err := validatejsonArchitectureElementContextTransport(body); err != nil {
+		return nil, fmt.Errorf("validate ArchitectureElementContext JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode ArchitectureElementContext JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateArchitectureElementContextValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateArchitectureElementContextValue(in *ArchitectureElementContext) error {
+	if err := checkArchitectureElementContextValue(in); err != nil {
+		return fmt.Errorf("validate ArchitectureElementContext value: %w", err)
+	}
+	if err := validateArchitectureElementContextOriginal(in); err != nil {
+		return fmt.Errorf("validate ArchitectureElementContext value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "ArchitectureElementContext")
+	}
+
+	var body *jsonArchitectureElementContextTransport
+	{
+		body = &jsonArchitectureElementContextTransport{
+			ChangeID:    in.ChangeID,
+			ElementID:   &in.ElementID,
+			ElementName: &in.ElementName,
+		}
+	}
+	if err := validatejsonArchitectureElementContextTransport(body); err != nil {
+		return fmt.Errorf("validate ArchitectureElementContext value: %w", err)
+	}
+	return nil
+}
+
+// DecodeArchitectureElementContext checks JSON field names from the Goa design and returns a service value.
+func DecodeArchitectureElementContext(data []byte) (out *ArchitectureElementContext, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode ArchitectureElementContext JSON: %w", err)
+	}
+	if err := validateArchitectureElementContextJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode ArchitectureElementContext JSON: %w", err)
+	}
+	var body *jsonArchitectureElementContextTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode ArchitectureElementContext JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode ArchitectureElementContext JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode ArchitectureElementContext JSON after first value: %w", err)
+	}
+	if err := validatejsonArchitectureElementContextTransport(body); err != nil {
+		return out, fmt.Errorf("validate ArchitectureElementContext JSON: %w", err)
+	}
+	{
+		out = &ArchitectureElementContext{
+			ChangeID:    body.ChangeID,
+			ElementID:   *body.ElementID,
+			ElementName: *body.ElementName,
+		}
+	}
+	return out, nil
+}
+
 // EncodeArchitecturePreviewResult turns a service value into JSON using the field names in the Goa design.
 func EncodeArchitecturePreviewResult(in *ArchitecturePreviewResult) ([]byte, error) {
 	if err := checkArchitecturePreviewResultValue(in); err != nil {
@@ -15440,94 +17156,6 @@ func DecodeBuildStartStep(data []byte) (out BuildStartStep, err error) {
 	return out, nil
 }
 
-// EncodeBuildTeamAmbiguousSpace turns a service value into JSON using the field names in the Goa design.
-func EncodeBuildTeamAmbiguousSpace(in *BuildTeamAmbiguousSpace) ([]byte, error) {
-	if err := checkBuildTeamAmbiguousSpaceValue(in); err != nil {
-		return nil, fmt.Errorf("encode BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	if err := validateBuildTeamAmbiguousSpaceOriginal(in); err != nil {
-		return nil, fmt.Errorf("validate BuildTeamAmbiguousSpace value: %w", err)
-	}
-	var body *jsonBuildTeamAmbiguousSpaceTransport
-	{
-		body = &jsonBuildTeamAmbiguousSpaceTransport{}
-		count := buildTeamAmbiguousSpaceIntTransport(in.Count)
-		body.Count = &count
-		step := jsonBuildStartStepTransport(in.Step)
-		body.Step = &step
-	}
-	if err := validatejsonBuildTeamAmbiguousSpaceTransport(body); err != nil {
-		return nil, fmt.Errorf("validate BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateBuildTeamAmbiguousSpaceValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateBuildTeamAmbiguousSpaceValue(in *BuildTeamAmbiguousSpace) error {
-	if err := checkBuildTeamAmbiguousSpaceValue(in); err != nil {
-		return fmt.Errorf("validate BuildTeamAmbiguousSpace value: %w", err)
-	}
-	if err := validateBuildTeamAmbiguousSpaceOriginal(in); err != nil {
-		return fmt.Errorf("validate BuildTeamAmbiguousSpace value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "BuildTeamAmbiguousSpace")
-	}
-
-	var body *jsonBuildTeamAmbiguousSpaceTransport
-	{
-		body = &jsonBuildTeamAmbiguousSpaceTransport{}
-		count := buildTeamAmbiguousSpaceIntTransport(in.Count)
-		body.Count = &count
-		step := jsonBuildStartStepTransport(in.Step)
-		body.Step = &step
-	}
-	if err := validatejsonBuildTeamAmbiguousSpaceTransport(body); err != nil {
-		return fmt.Errorf("validate BuildTeamAmbiguousSpace value: %w", err)
-	}
-	return nil
-}
-
-// DecodeBuildTeamAmbiguousSpace checks JSON field names from the Goa design and returns a service value.
-func DecodeBuildTeamAmbiguousSpace(data []byte) (out *BuildTeamAmbiguousSpace, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	if err := validateBuildTeamAmbiguousSpaceJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	var body *jsonBuildTeamAmbiguousSpaceTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode BuildTeamAmbiguousSpace JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode BuildTeamAmbiguousSpace JSON after first value: %w", err)
-	}
-	if err := validatejsonBuildTeamAmbiguousSpaceTransport(body); err != nil {
-		return out, fmt.Errorf("validate BuildTeamAmbiguousSpace JSON: %w", err)
-	}
-	{
-		out = &BuildTeamAmbiguousSpace{
-			Count: int(*body.Count),
-			Step:  BuildStartStep(*body.Step),
-		}
-	}
-	return out, nil
-}
-
 // EncodeBuildTeamUnavailable turns a service value into JSON using the field names in the Goa design.
 func EncodeBuildTeamUnavailable(in *BuildTeamUnavailable) ([]byte, error) {
 	if err := checkBuildTeamUnavailableValue(in); err != nil {
@@ -15605,89 +17233,6 @@ func DecodeBuildTeamUnavailable(data []byte) (out *BuildTeamUnavailable, err err
 	}
 	{
 		out = &BuildTeamUnavailable{
-			Step: BuildStartStep(*body.Step),
-		}
-	}
-	return out, nil
-}
-
-// EncodeBuildTeamWindowBusy turns a service value into JSON using the field names in the Goa design.
-func EncodeBuildTeamWindowBusy(in *BuildTeamWindowBusy) ([]byte, error) {
-	if err := checkBuildTeamWindowBusyValue(in); err != nil {
-		return nil, fmt.Errorf("encode BuildTeamWindowBusy JSON: %w", err)
-	}
-	if err := validateBuildTeamWindowBusyOriginal(in); err != nil {
-		return nil, fmt.Errorf("validate BuildTeamWindowBusy value: %w", err)
-	}
-	var body *jsonBuildTeamWindowBusyTransport
-	{
-		body = &jsonBuildTeamWindowBusyTransport{}
-		step := jsonBuildStartStepTransport(in.Step)
-		body.Step = &step
-	}
-	if err := validatejsonBuildTeamWindowBusyTransport(body); err != nil {
-		return nil, fmt.Errorf("validate BuildTeamWindowBusy JSON: %w", err)
-	}
-	data, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("encode BuildTeamWindowBusy JSON: %w", err)
-	}
-	return data, nil
-}
-
-// ValidateBuildTeamWindowBusyValue checks the original Go fields against their declared constraints.
-// It returns validation errors without encoding the value as JSON.
-
-func ValidateBuildTeamWindowBusyValue(in *BuildTeamWindowBusy) error {
-	if err := checkBuildTeamWindowBusyValue(in); err != nil {
-		return fmt.Errorf("validate BuildTeamWindowBusy value: %w", err)
-	}
-	if err := validateBuildTeamWindowBusyOriginal(in); err != nil {
-		return fmt.Errorf("validate BuildTeamWindowBusy value: %w", err)
-	}
-
-	if in == nil {
-		return goa.MissingFieldError("result", "BuildTeamWindowBusy")
-	}
-
-	var body *jsonBuildTeamWindowBusyTransport
-	{
-		body = &jsonBuildTeamWindowBusyTransport{}
-		step := jsonBuildStartStepTransport(in.Step)
-		body.Step = &step
-	}
-	if err := validatejsonBuildTeamWindowBusyTransport(body); err != nil {
-		return fmt.Errorf("validate BuildTeamWindowBusy value: %w", err)
-	}
-	return nil
-}
-
-// DecodeBuildTeamWindowBusy checks JSON field names from the Goa design and returns a service value.
-func DecodeBuildTeamWindowBusy(data []byte) (out *BuildTeamWindowBusy, err error) {
-	root, err := readStrictJSON(data)
-	if err != nil {
-		return out, fmt.Errorf("decode BuildTeamWindowBusy JSON: %w", err)
-	}
-	if err := validateBuildTeamWindowBusyJSONValue("", root, ""); err != nil {
-		return out, fmt.Errorf("decode BuildTeamWindowBusy JSON: %w", err)
-	}
-	var body *jsonBuildTeamWindowBusyTransport
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil {
-		return out, fmt.Errorf("decode BuildTeamWindowBusy JSON: %w", err)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		if err == nil {
-			return out, fmt.Errorf("decode BuildTeamWindowBusy JSON: multiple JSON values")
-		}
-		return out, fmt.Errorf("decode BuildTeamWindowBusy JSON after first value: %w", err)
-	}
-	if err := validatejsonBuildTeamWindowBusyTransport(body); err != nil {
-		return out, fmt.Errorf("validate BuildTeamWindowBusy JSON: %w", err)
-	}
-	{
-		out = &BuildTeamWindowBusy{
 			Step: BuildStartStep(*body.Step),
 		}
 	}
@@ -19935,7 +21480,6 @@ func EncodeInstalledAgentOption(in *InstalledAgentOption) ([]byte, error) {
 			ThinkingSupported: &in.ThinkingSupported,
 			YoloSupported:     &in.YoloSupported,
 			YoloEffect:        in.YoloEffect,
-			HeadlessSupported: &in.HeadlessSupported,
 		}
 		body.Models = make([]string, len(in.Models))
 		for i, val := range in.Models {
@@ -19981,7 +21525,6 @@ func ValidateInstalledAgentOptionValue(in *InstalledAgentOption) error {
 			ThinkingSupported: &in.ThinkingSupported,
 			YoloSupported:     &in.YoloSupported,
 			YoloEffect:        in.YoloEffect,
-			HeadlessSupported: &in.HeadlessSupported,
 		}
 		body.Models = make([]string, len(in.Models))
 		for i, val := range in.Models {
@@ -20031,7 +21574,6 @@ func DecodeInstalledAgentOption(data []byte) (out *InstalledAgentOption, err err
 			ThinkingSupported: *body.ThinkingSupported,
 			YoloSupported:     *body.YoloSupported,
 			YoloEffect:        body.YoloEffect,
-			HeadlessSupported: *body.HeadlessSupported,
 		}
 		out.Models = make([]string, len(body.Models))
 		for i, val := range body.Models {
@@ -21837,6 +23379,95 @@ func DecodeOpenBuildRefusal(data []byte) (out *OpenBuildRefusal, err error) {
 	return out, nil
 }
 
+// EncodeOpenViewsResult turns a service value into JSON using the field names in the Goa design.
+func EncodeOpenViewsResult(in *OpenViewsResult) ([]byte, error) {
+	if err := checkOpenViewsResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode OpenViewsResult JSON: %w", err)
+	}
+	var body *jsonOpenViewsResultTransport
+	{
+		body = &jsonOpenViewsResultTransport{
+			Opened:  &in.Opened,
+			Message: &in.Message,
+			Team:    &in.Team,
+			Channel: &in.Channel,
+			Handle:  &in.Handle,
+		}
+	}
+	if err := validatejsonOpenViewsResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate OpenViewsResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode OpenViewsResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateOpenViewsResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateOpenViewsResultValue(in *OpenViewsResult) error {
+	if err := checkOpenViewsResultValue(in); err != nil {
+		return fmt.Errorf("validate OpenViewsResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "OpenViewsResult")
+	}
+
+	var body *jsonOpenViewsResultTransport
+	{
+		body = &jsonOpenViewsResultTransport{
+			Opened:  &in.Opened,
+			Message: &in.Message,
+			Team:    &in.Team,
+			Channel: &in.Channel,
+			Handle:  &in.Handle,
+		}
+	}
+	if err := validatejsonOpenViewsResultTransport(body); err != nil {
+		return fmt.Errorf("validate OpenViewsResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeOpenViewsResult checks JSON field names from the Goa design and returns a service value.
+func DecodeOpenViewsResult(data []byte) (out *OpenViewsResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode OpenViewsResult JSON: %w", err)
+	}
+	if err := validateOpenViewsResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode OpenViewsResult JSON: %w", err)
+	}
+	var body *jsonOpenViewsResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode OpenViewsResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode OpenViewsResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode OpenViewsResult JSON after first value: %w", err)
+	}
+	if err := validatejsonOpenViewsResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate OpenViewsResult JSON: %w", err)
+	}
+	{
+		out = &OpenViewsResult{
+			Opened:  *body.Opened,
+			Message: *body.Message,
+			Team:    *body.Team,
+			Channel: *body.Channel,
+			Handle:  *body.Handle,
+		}
+	}
+	return out, nil
+}
+
 // EncodeOperatorEvaluatorTests turns a service value into JSON using the field names in the Goa design.
 func EncodeOperatorEvaluatorTests(in *OperatorEvaluatorTests) ([]byte, error) {
 	if err := checkOperatorEvaluatorTestsValue(in); err != nil {
@@ -21999,10 +23630,8 @@ func EncodeProjectTeam(in *ProjectTeam) ([]byte, error) {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:      &in.Team,
-			Space:     &in.Space,
-			HerdrMode: &in.HerdrMode,
-			Step:      &in.Step,
+			Team: &in.Team,
+			Step: &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -22041,10 +23670,8 @@ func ValidateProjectTeamValue(in *ProjectTeam) error {
 	var body *jsonProjectTeamTransport
 	{
 		body = &jsonProjectTeamTransport{
-			Team:      &in.Team,
-			Space:     &in.Space,
-			HerdrMode: &in.HerdrMode,
-			Step:      &in.Step,
+			Team: &in.Team,
+			Step: &in.Step,
 		}
 		body.Roles = make([]*jsonProjectTeamRoleTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -22087,10 +23714,8 @@ func DecodeProjectTeam(data []byte) (out *ProjectTeam, err error) {
 	}
 	{
 		out = &ProjectTeam{
-			Team:      *body.Team,
-			Space:     *body.Space,
-			HerdrMode: *body.HerdrMode,
-			Step:      *body.Step,
+			Team: *body.Team,
+			Step: *body.Step,
 		}
 		out.Roles = make([]*ProjectTeamRole, len(body.Roles))
 		for i, val := range body.Roles {
@@ -22115,9 +23740,10 @@ func EncodeProjectTeamRole(in *ProjectTeamRole) ([]byte, error) {
 	var body *jsonProjectTeamRoleTransport
 	{
 		body = &jsonProjectTeamRoleTransport{
-			Role:    &in.Role,
-			Handle:  &in.Handle,
-			Running: &in.Running,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			Running:     &in.Running,
 		}
 	}
 	if err := validatejsonProjectTeamRoleTransport(body); err != nil {
@@ -22148,9 +23774,10 @@ func ValidateProjectTeamRoleValue(in *ProjectTeamRole) error {
 	var body *jsonProjectTeamRoleTransport
 	{
 		body = &jsonProjectTeamRoleTransport{
-			Role:    &in.Role,
-			Handle:  &in.Handle,
-			Running: &in.Running,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			Running:     &in.Running,
 		}
 	}
 	if err := validatejsonProjectTeamRoleTransport(body); err != nil {
@@ -22185,9 +23812,10 @@ func DecodeProjectTeamRole(data []byte) (out *ProjectTeamRole, err error) {
 	}
 	{
 		out = &ProjectTeamRole{
-			Role:    *body.Role,
-			Handle:  *body.Handle,
-			Running: *body.Running,
+			Role:        *body.Role,
+			Handle:      *body.Handle,
+			HasTerminal: *body.HasTerminal,
+			Running:     *body.Running,
 		}
 	}
 	return out, nil
@@ -23141,6 +24769,110 @@ func DecodeRequiredTest(data []byte) (out *RequiredTest, err error) {
 	return out, nil
 }
 
+// EncodeReviseAnswersContext turns a service value into JSON using the field names in the Goa design.
+func EncodeReviseAnswersContext(in *ReviseAnswersContext) ([]byte, error) {
+	if err := checkReviseAnswersContextValue(in); err != nil {
+		return nil, fmt.Errorf("encode ReviseAnswersContext JSON: %w", err)
+	}
+	if err := validateReviseAnswersContextOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate ReviseAnswersContext value: %w", err)
+	}
+	var body *jsonReviseAnswersContextTransport
+	{
+		body = &jsonReviseAnswersContextTransport{
+			ChangeID:        &in.ChangeID,
+			RequestRevision: &in.RequestRevision,
+		}
+		body.Answers = make(map[string]string, len(in.Answers))
+		for key, val := range in.Answers {
+			tk := key
+			tv := val
+			body.Answers[tk] = tv
+		}
+	}
+	if err := validatejsonReviseAnswersContextTransport(body); err != nil {
+		return nil, fmt.Errorf("validate ReviseAnswersContext JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode ReviseAnswersContext JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateReviseAnswersContextValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateReviseAnswersContextValue(in *ReviseAnswersContext) error {
+	if err := checkReviseAnswersContextValue(in); err != nil {
+		return fmt.Errorf("validate ReviseAnswersContext value: %w", err)
+	}
+	if err := validateReviseAnswersContextOriginal(in); err != nil {
+		return fmt.Errorf("validate ReviseAnswersContext value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "ReviseAnswersContext")
+	}
+
+	var body *jsonReviseAnswersContextTransport
+	{
+		body = &jsonReviseAnswersContextTransport{
+			ChangeID:        &in.ChangeID,
+			RequestRevision: &in.RequestRevision,
+		}
+		body.Answers = make(map[string]string, len(in.Answers))
+		for key, val := range in.Answers {
+			tk := key
+			tv := val
+			body.Answers[tk] = tv
+		}
+	}
+	if err := validatejsonReviseAnswersContextTransport(body); err != nil {
+		return fmt.Errorf("validate ReviseAnswersContext value: %w", err)
+	}
+	return nil
+}
+
+// DecodeReviseAnswersContext checks JSON field names from the Goa design and returns a service value.
+func DecodeReviseAnswersContext(data []byte) (out *ReviseAnswersContext, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode ReviseAnswersContext JSON: %w", err)
+	}
+	if err := validateReviseAnswersContextJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode ReviseAnswersContext JSON: %w", err)
+	}
+	var body *jsonReviseAnswersContextTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode ReviseAnswersContext JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode ReviseAnswersContext JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode ReviseAnswersContext JSON after first value: %w", err)
+	}
+	if err := validatejsonReviseAnswersContextTransport(body); err != nil {
+		return out, fmt.Errorf("validate ReviseAnswersContext JSON: %w", err)
+	}
+	{
+		out = &ReviseAnswersContext{
+			ChangeID:        *body.ChangeID,
+			RequestRevision: *body.RequestRevision,
+		}
+		out.Answers = make(map[string]string, len(body.Answers))
+		for key, val := range body.Answers {
+			tk := key
+			tv := val
+			out.Answers[tk] = tv
+		}
+	}
+	return out, nil
+}
+
 // EncodeReviseChangePayload turns a service value into JSON using the field names in the Goa design.
 func EncodeReviseChangePayload(in *ReviseChangePayload) ([]byte, error) {
 	if err := checkReviseChangePayloadValue(in); err != nil {
@@ -23844,6 +25576,210 @@ func DecodeRunningLiveTarget(data []byte) (out *RunningLiveTarget, err error) {
 	return out, nil
 }
 
+// EncodeSendTeamMessagePayload turns a service value into JSON using the field names in the Goa design.
+func EncodeSendTeamMessagePayload(in *SendTeamMessagePayload) ([]byte, error) {
+	if err := checkSendTeamMessagePayloadValue(in); err != nil {
+		return nil, fmt.Errorf("encode SendTeamMessagePayload JSON: %w", err)
+	}
+	if err := validateSendTeamMessagePayloadOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate SendTeamMessagePayload value: %w", err)
+	}
+	var body *jsonSendTeamMessagePayloadTransport
+	{
+		body = &jsonSendTeamMessagePayloadTransport{
+			To:   &in.To,
+			Text: &in.Text,
+		}
+		if in.ReplyTo != nil {
+			replyTo := sendTeamMessagePayloadIntTransport(*in.ReplyTo)
+			body.ReplyTo = &replyTo
+		}
+		if in.GuideChoice != nil {
+			body.GuideChoice = encodeRoleAgentChoiceToRoleAgentChoiceTransport(in.GuideChoice)
+		}
+		if in.Context.Kind() != "" {
+			var contextValue jsonContextTransport
+			switch string(in.Context.Kind()) {
+			case "revise_answers":
+				actual, _ := in.Context.AsReviseAnswers()
+				var obj *jsonReviseAnswersContextTransport
+				if actual != nil {
+					obj = encodeReviseAnswersContextToReviseAnswersContextTransport(actual)
+				}
+				u := contextValue
+				u.SetReviseAnswers((*jsonReviseAnswersContextTransport)(obj))
+				contextValue = u
+			case "architecture_element":
+				actual, _ := in.Context.AsArchitectureElement()
+				var obj *jsonArchitectureElementContextTransport
+				if actual != nil {
+					obj = encodeArchitectureElementContextToArchitectureElementContextTransport(actual)
+				}
+				u := contextValue
+				u.SetArchitectureElement((*jsonArchitectureElementContextTransport)(obj))
+				contextValue = u
+			case "story_flow":
+				actual, _ := in.Context.AsStoryFlow()
+				var obj *jsonStoryFlowContextTransport
+				if actual != nil {
+					obj = encodeStoryFlowContextToStoryFlowContextTransport(actual)
+				}
+				u := contextValue
+				u.SetStoryFlow((*jsonStoryFlowContextTransport)(obj))
+				contextValue = u
+			}
+			body.Context = &contextValue
+		}
+	}
+	if err := validatejsonSendTeamMessagePayloadTransport(body); err != nil {
+		return nil, fmt.Errorf("validate SendTeamMessagePayload JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode SendTeamMessagePayload JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateSendTeamMessagePayloadValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateSendTeamMessagePayloadValue(in *SendTeamMessagePayload) error {
+	if err := checkSendTeamMessagePayloadValue(in); err != nil {
+		return fmt.Errorf("validate SendTeamMessagePayload value: %w", err)
+	}
+	if err := validateSendTeamMessagePayloadOriginal(in); err != nil {
+		return fmt.Errorf("validate SendTeamMessagePayload value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "SendTeamMessagePayload")
+	}
+
+	var body *jsonSendTeamMessagePayloadTransport
+	{
+		body = &jsonSendTeamMessagePayloadTransport{
+			To:   &in.To,
+			Text: &in.Text,
+		}
+		if in.ReplyTo != nil {
+			replyTo := sendTeamMessagePayloadIntTransport(*in.ReplyTo)
+			body.ReplyTo = &replyTo
+		}
+		if in.GuideChoice != nil {
+			body.GuideChoice = encodeRoleAgentChoiceToRoleAgentChoiceTransport(in.GuideChoice)
+		}
+		if in.Context.Kind() != "" {
+			var contextValue jsonContextTransport
+			switch string(in.Context.Kind()) {
+			case "revise_answers":
+				actual, _ := in.Context.AsReviseAnswers()
+				var obj *jsonReviseAnswersContextTransport
+				if actual != nil {
+					obj = encodeReviseAnswersContextToReviseAnswersContextTransport(actual)
+				}
+				u := contextValue
+				u.SetReviseAnswers((*jsonReviseAnswersContextTransport)(obj))
+				contextValue = u
+			case "architecture_element":
+				actual, _ := in.Context.AsArchitectureElement()
+				var obj *jsonArchitectureElementContextTransport
+				if actual != nil {
+					obj = encodeArchitectureElementContextToArchitectureElementContextTransport(actual)
+				}
+				u := contextValue
+				u.SetArchitectureElement((*jsonArchitectureElementContextTransport)(obj))
+				contextValue = u
+			case "story_flow":
+				actual, _ := in.Context.AsStoryFlow()
+				var obj *jsonStoryFlowContextTransport
+				if actual != nil {
+					obj = encodeStoryFlowContextToStoryFlowContextTransport(actual)
+				}
+				u := contextValue
+				u.SetStoryFlow((*jsonStoryFlowContextTransport)(obj))
+				contextValue = u
+			}
+			body.Context = &contextValue
+		}
+	}
+	if err := validatejsonSendTeamMessagePayloadTransport(body); err != nil {
+		return fmt.Errorf("validate SendTeamMessagePayload value: %w", err)
+	}
+	return nil
+}
+
+// DecodeSendTeamMessagePayload checks JSON field names from the Goa design and returns a service value.
+func DecodeSendTeamMessagePayload(data []byte) (out *SendTeamMessagePayload, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode SendTeamMessagePayload JSON: %w", err)
+	}
+	if err := validateSendTeamMessagePayloadJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode SendTeamMessagePayload JSON: %w", err)
+	}
+	var body *jsonSendTeamMessagePayloadTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode SendTeamMessagePayload JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode SendTeamMessagePayload JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode SendTeamMessagePayload JSON after first value: %w", err)
+	}
+	if err := validatejsonSendTeamMessagePayloadTransport(body); err != nil {
+		return out, fmt.Errorf("validate SendTeamMessagePayload JSON: %w", err)
+	}
+	{
+		out = &SendTeamMessagePayload{
+			To:   *body.To,
+			Text: *body.Text,
+		}
+		if body.ReplyTo != nil {
+			replyTo := int(*body.ReplyTo)
+			out.ReplyTo = &replyTo
+		}
+		if body.GuideChoice != nil {
+			out.GuideChoice = decodeRoleAgentChoiceTransportToRoleAgentChoice(body.GuideChoice)
+		}
+		if body.Context != nil {
+			switch string(body.Context.Kind()) {
+			case "revise_answers":
+				actual, _ := body.Context.AsReviseAnswers()
+				var obj *ReviseAnswersContext
+				if actual != nil {
+					obj = decodeReviseAnswersContextTransportToReviseAnswersContext(actual)
+				}
+				u := out.Context
+				u.SetReviseAnswers((*ReviseAnswersContext)(obj))
+				out.Context = u
+			case "architecture_element":
+				actual, _ := body.Context.AsArchitectureElement()
+				var obj *ArchitectureElementContext
+				if actual != nil {
+					obj = decodeArchitectureElementContextTransportToArchitectureElementContext(actual)
+				}
+				u := out.Context
+				u.SetArchitectureElement((*ArchitectureElementContext)(obj))
+				out.Context = u
+			case "story_flow":
+				actual, _ := body.Context.AsStoryFlow()
+				var obj *StoryFlowContext
+				if actual != nil {
+					obj = decodeStoryFlowContextTransportToStoryFlowContext(actual)
+				}
+				u := out.Context
+				u.SetStoryFlow((*StoryFlowContext)(obj))
+				out.Context = u
+			}
+		}
+	}
+	return out, nil
+}
+
 // EncodeStartBuildResult turns a service value into JSON using the field names in the Goa design.
 func EncodeStartBuildResult(in *StartBuildResult) ([]byte, error) {
 	if err := checkStartBuildResultValue(in); err != nil {
@@ -23866,24 +25802,6 @@ func EncodeStartBuildResult(in *StartBuildResult) ([]byte, error) {
 			}
 			u := teamValue
 			u.SetReady((*jsonProjectTeamTransport)(obj))
-			teamValue = u
-		case "window_busy":
-			actual, _ := in.Team.AsWindowBusy()
-			var obj *jsonBuildTeamWindowBusyTransport
-			if actual != nil {
-				obj = encodeBuildTeamWindowBusyToBuildTeamWindowBusyTransport(actual)
-			}
-			u := teamValue
-			u.SetWindowBusy((*jsonBuildTeamWindowBusyTransport)(obj))
-			teamValue = u
-		case "ambiguous_space":
-			actual, _ := in.Team.AsAmbiguousSpace()
-			var obj *jsonBuildTeamAmbiguousSpaceTransport
-			if actual != nil {
-				obj = encodeBuildTeamAmbiguousSpaceToBuildTeamAmbiguousSpaceTransport(actual)
-			}
-			u := teamValue
-			u.SetAmbiguousSpace((*jsonBuildTeamAmbiguousSpaceTransport)(obj))
 			teamValue = u
 		case "unavailable":
 			actual, _ := in.Team.AsUnavailable()
@@ -23936,24 +25854,6 @@ func ValidateStartBuildResultValue(in *StartBuildResult) error {
 			}
 			u := teamValue
 			u.SetReady((*jsonProjectTeamTransport)(obj))
-			teamValue = u
-		case "window_busy":
-			actual, _ := in.Team.AsWindowBusy()
-			var obj *jsonBuildTeamWindowBusyTransport
-			if actual != nil {
-				obj = encodeBuildTeamWindowBusyToBuildTeamWindowBusyTransport(actual)
-			}
-			u := teamValue
-			u.SetWindowBusy((*jsonBuildTeamWindowBusyTransport)(obj))
-			teamValue = u
-		case "ambiguous_space":
-			actual, _ := in.Team.AsAmbiguousSpace()
-			var obj *jsonBuildTeamAmbiguousSpaceTransport
-			if actual != nil {
-				obj = encodeBuildTeamAmbiguousSpaceToBuildTeamAmbiguousSpaceTransport(actual)
-			}
-			u := teamValue
-			u.SetAmbiguousSpace((*jsonBuildTeamAmbiguousSpaceTransport)(obj))
 			teamValue = u
 		case "unavailable":
 			actual, _ := in.Team.AsUnavailable()
@@ -24009,24 +25909,6 @@ func DecodeStartBuildResult(data []byte) (out *StartBuildResult, err error) {
 			}
 			u := out.Team
 			u.SetReady((*ProjectTeam)(obj))
-			out.Team = u
-		case "window_busy":
-			actual, _ := body.Team.AsWindowBusy()
-			var obj *BuildTeamWindowBusy
-			if actual != nil {
-				obj = decodeBuildTeamWindowBusyTransportToBuildTeamWindowBusy(actual)
-			}
-			u := out.Team
-			u.SetWindowBusy((*BuildTeamWindowBusy)(obj))
-			out.Team = u
-		case "ambiguous_space":
-			actual, _ := body.Team.AsAmbiguousSpace()
-			var obj *BuildTeamAmbiguousSpace
-			if actual != nil {
-				obj = decodeBuildTeamAmbiguousSpaceTransportToBuildTeamAmbiguousSpace(actual)
-			}
-			u := out.Team
-			u.SetAmbiguousSpace((*BuildTeamAmbiguousSpace)(obj))
 			out.Team = u
 		case "unavailable":
 			actual, _ := body.Team.AsUnavailable()
@@ -24600,6 +26482,95 @@ func DecodeStoryActorItem(data []byte) (out *StoryActorItem, err error) {
 			Key:         *body.Key,
 			Title:       *body.Title,
 			Description: body.Description,
+		}
+	}
+	return out, nil
+}
+
+// EncodeStoryFlowContext turns a service value into JSON using the field names in the Goa design.
+func EncodeStoryFlowContext(in *StoryFlowContext) ([]byte, error) {
+	if err := checkStoryFlowContextValue(in); err != nil {
+		return nil, fmt.Errorf("encode StoryFlowContext JSON: %w", err)
+	}
+	if err := validateStoryFlowContextOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate StoryFlowContext value: %w", err)
+	}
+	var body *jsonStoryFlowContextTransport
+	{
+		body = &jsonStoryFlowContextTransport{
+			ChangeID: in.ChangeID,
+			Story:    &in.Story,
+			FlowKey:  in.FlowKey,
+		}
+	}
+	if err := validatejsonStoryFlowContextTransport(body); err != nil {
+		return nil, fmt.Errorf("validate StoryFlowContext JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode StoryFlowContext JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateStoryFlowContextValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateStoryFlowContextValue(in *StoryFlowContext) error {
+	if err := checkStoryFlowContextValue(in); err != nil {
+		return fmt.Errorf("validate StoryFlowContext value: %w", err)
+	}
+	if err := validateStoryFlowContextOriginal(in); err != nil {
+		return fmt.Errorf("validate StoryFlowContext value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "StoryFlowContext")
+	}
+
+	var body *jsonStoryFlowContextTransport
+	{
+		body = &jsonStoryFlowContextTransport{
+			ChangeID: in.ChangeID,
+			Story:    &in.Story,
+			FlowKey:  in.FlowKey,
+		}
+	}
+	if err := validatejsonStoryFlowContextTransport(body); err != nil {
+		return fmt.Errorf("validate StoryFlowContext value: %w", err)
+	}
+	return nil
+}
+
+// DecodeStoryFlowContext checks JSON field names from the Goa design and returns a service value.
+func DecodeStoryFlowContext(data []byte) (out *StoryFlowContext, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode StoryFlowContext JSON: %w", err)
+	}
+	if err := validateSendTeamMessagePayloadJSONValue3("", root, ""); err != nil {
+		return out, fmt.Errorf("decode StoryFlowContext JSON: %w", err)
+	}
+	var body *jsonStoryFlowContextTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode StoryFlowContext JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode StoryFlowContext JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode StoryFlowContext JSON after first value: %w", err)
+	}
+	if err := validatejsonStoryFlowContextTransport(body); err != nil {
+		return out, fmt.Errorf("validate StoryFlowContext JSON: %w", err)
+	}
+	{
+		out = &StoryFlowContext{
+			ChangeID: body.ChangeID,
+			Story:    *body.Story,
+			FlowKey:  body.FlowKey,
 		}
 	}
 	return out, nil
@@ -25221,6 +27192,248 @@ func DecodeStorySummaryItem(data []byte) (out *StorySummaryItem, err error) {
 	return out, nil
 }
 
+// EncodeTeamConversation turns a service value into JSON using the field names in the Goa design.
+func EncodeTeamConversation(in *TeamConversation) ([]byte, error) {
+	if err := checkTeamConversationValue(in); err != nil {
+		return nil, fmt.Errorf("encode TeamConversation JSON: %w", err)
+	}
+	if err := validateTeamConversationOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TeamConversation value: %w", err)
+	}
+	var body *jsonTeamConversationTransport
+	{
+		body = &jsonTeamConversationTransport{
+			Team:         &in.Team,
+			Channel:      &in.Channel,
+			ChorusStatus: &in.ChorusStatus,
+		}
+		if in.Pin != nil {
+			body.Pin = encodeTeamMessageToTeamMessageTransport2(in.Pin)
+		}
+		body.Messages = make([]*jsonTeamMessageTransport, len(in.Messages))
+		for i, val := range in.Messages {
+			if val == nil {
+				body.Messages[i] = nil
+				continue
+			}
+			body.Messages[i] = encodeTeamMessageToTeamMessageTransport(val)
+		}
+	}
+	if err := validatejsonTeamConversationTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TeamConversation JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TeamConversation JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTeamConversationValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTeamConversationValue(in *TeamConversation) error {
+	if err := checkTeamConversationValue(in); err != nil {
+		return fmt.Errorf("validate TeamConversation value: %w", err)
+	}
+	if err := validateTeamConversationOriginal(in); err != nil {
+		return fmt.Errorf("validate TeamConversation value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TeamConversation")
+	}
+
+	var body *jsonTeamConversationTransport
+	{
+		body = &jsonTeamConversationTransport{
+			Team:         &in.Team,
+			Channel:      &in.Channel,
+			ChorusStatus: &in.ChorusStatus,
+		}
+		if in.Pin != nil {
+			body.Pin = encodeTeamMessageToTeamMessageTransport2(in.Pin)
+		}
+		body.Messages = make([]*jsonTeamMessageTransport, len(in.Messages))
+		for i, val := range in.Messages {
+			if val == nil {
+				body.Messages[i] = nil
+				continue
+			}
+			body.Messages[i] = encodeTeamMessageToTeamMessageTransport(val)
+		}
+	}
+	if err := validatejsonTeamConversationTransport(body); err != nil {
+		return fmt.Errorf("validate TeamConversation value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTeamConversation checks JSON field names from the Goa design and returns a service value.
+func DecodeTeamConversation(data []byte) (out *TeamConversation, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TeamConversation JSON: %w", err)
+	}
+	if err := validateTeamConversationJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TeamConversation JSON: %w", err)
+	}
+	var body *jsonTeamConversationTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TeamConversation JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TeamConversation JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TeamConversation JSON after first value: %w", err)
+	}
+	if err := validatejsonTeamConversationTransport(body); err != nil {
+		return out, fmt.Errorf("validate TeamConversation JSON: %w", err)
+	}
+	{
+		out = &TeamConversation{
+			Team:         *body.Team,
+			Channel:      *body.Channel,
+			ChorusStatus: *body.ChorusStatus,
+		}
+		if body.Pin != nil {
+			out.Pin = decodeTeamMessageTransportToTeamMessage(body.Pin)
+		}
+		out.Messages = make([]*TeamMessage, len(body.Messages))
+		for i, val := range body.Messages {
+			if val == nil {
+				out.Messages[i] = nil
+				continue
+			}
+			out.Messages[i] = decodeTeamMessageTransportToTeamMessage(val)
+		}
+	}
+	return out, nil
+}
+
+// EncodeTeamMessage turns a service value into JSON using the field names in the Goa design.
+func EncodeTeamMessage(in *TeamMessage) ([]byte, error) {
+	if err := checkTeamMessageValue(in); err != nil {
+		return nil, fmt.Errorf("encode TeamMessage JSON: %w", err)
+	}
+	if err := validateTeamMessageOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TeamMessage value: %w", err)
+	}
+	var body *jsonTeamMessageTransport
+	{
+		body = &jsonTeamMessageTransport{
+			ID:         &in.ID,
+			Target:     &in.Target,
+			Sender:     &in.Sender,
+			SenderRole: &in.SenderRole,
+			Model:      in.Model,
+			Text:       &in.Text,
+		}
+		seq := teamConversationIntTransport(in.Seq)
+		body.Seq = &seq
+		if in.ReplyTo != nil {
+			replyTo := teamConversationIntTransport(*in.ReplyTo)
+			body.ReplyTo = &replyTo
+		}
+		sentAtMs := teamConversationInt64Transport(in.SentAtMs)
+		body.SentAtMs = &sentAtMs
+	}
+	if err := validatejsonTeamMessageTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TeamMessage JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TeamMessage JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTeamMessageValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTeamMessageValue(in *TeamMessage) error {
+	if err := checkTeamMessageValue(in); err != nil {
+		return fmt.Errorf("validate TeamMessage value: %w", err)
+	}
+	if err := validateTeamMessageOriginal(in); err != nil {
+		return fmt.Errorf("validate TeamMessage value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TeamMessage")
+	}
+
+	var body *jsonTeamMessageTransport
+	{
+		body = &jsonTeamMessageTransport{
+			ID:         &in.ID,
+			Target:     &in.Target,
+			Sender:     &in.Sender,
+			SenderRole: &in.SenderRole,
+			Model:      in.Model,
+			Text:       &in.Text,
+		}
+		seq := teamConversationIntTransport(in.Seq)
+		body.Seq = &seq
+		if in.ReplyTo != nil {
+			replyTo := teamConversationIntTransport(*in.ReplyTo)
+			body.ReplyTo = &replyTo
+		}
+		sentAtMs := teamConversationInt64Transport(in.SentAtMs)
+		body.SentAtMs = &sentAtMs
+	}
+	if err := validatejsonTeamMessageTransport(body); err != nil {
+		return fmt.Errorf("validate TeamMessage value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTeamMessage checks JSON field names from the Goa design and returns a service value.
+func DecodeTeamMessage(data []byte) (out *TeamMessage, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TeamMessage JSON: %w", err)
+	}
+	if err := validateTeamConversationJSONValue3("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TeamMessage JSON: %w", err)
+	}
+	var body *jsonTeamMessageTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TeamMessage JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TeamMessage JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TeamMessage JSON after first value: %w", err)
+	}
+	if err := validatejsonTeamMessageTransport(body); err != nil {
+		return out, fmt.Errorf("validate TeamMessage JSON: %w", err)
+	}
+	{
+		out = &TeamMessage{
+			ID:         *body.ID,
+			Target:     *body.Target,
+			Seq:        int(*body.Seq),
+			Sender:     *body.Sender,
+			SenderRole: *body.SenderRole,
+			Model:      body.Model,
+			Text:       *body.Text,
+			SentAtMs:   int64(*body.SentAtMs),
+		}
+		if body.ReplyTo != nil {
+			replyTo := int(*body.ReplyTo)
+			out.ReplyTo = &replyTo
+		}
+	}
+	return out, nil
+}
+
 // EncodeTeamRoleState turns a service value into JSON using the field names in the Goa design.
 func EncodeTeamRoleState(in *TeamRoleState) ([]byte, error) {
 	if err := checkTeamRoleStateValue(in); err != nil {
@@ -25232,12 +27445,15 @@ func EncodeTeamRoleState(in *TeamRoleState) ([]byte, error) {
 	var body *jsonTeamRoleStateTransport
 	{
 		body = &jsonTeamRoleStateTransport{
-			Role:       &in.Role,
-			Handle:     &in.Handle,
-			State:      &in.State,
-			Attention:  &in.Attention,
-			Watcher:    &in.Watcher,
-			Assignment: &in.Assignment,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			State:       &in.State,
+			Attention:   &in.Attention,
+			Assignment:  &in.Assignment,
+		}
+		if in.Choice != nil {
+			body.Choice = encodeRoleAgentChoiceToRoleAgentChoiceTransport2(in.Choice)
 		}
 	}
 	if err := validatejsonTeamRoleStateTransport(body); err != nil {
@@ -25268,12 +27484,15 @@ func ValidateTeamRoleStateValue(in *TeamRoleState) error {
 	var body *jsonTeamRoleStateTransport
 	{
 		body = &jsonTeamRoleStateTransport{
-			Role:       &in.Role,
-			Handle:     &in.Handle,
-			State:      &in.State,
-			Attention:  &in.Attention,
-			Watcher:    &in.Watcher,
-			Assignment: &in.Assignment,
+			Role:        &in.Role,
+			Handle:      &in.Handle,
+			HasTerminal: &in.HasTerminal,
+			State:       &in.State,
+			Attention:   &in.Attention,
+			Assignment:  &in.Assignment,
+		}
+		if in.Choice != nil {
+			body.Choice = encodeRoleAgentChoiceToRoleAgentChoiceTransport2(in.Choice)
 		}
 	}
 	if err := validatejsonTeamRoleStateTransport(body); err != nil {
@@ -25308,12 +27527,15 @@ func DecodeTeamRoleState(data []byte) (out *TeamRoleState, err error) {
 	}
 	{
 		out = &TeamRoleState{
-			Role:       *body.Role,
-			Handle:     *body.Handle,
-			State:      *body.State,
-			Attention:  *body.Attention,
-			Watcher:    *body.Watcher,
-			Assignment: *body.Assignment,
+			Role:        *body.Role,
+			Handle:      *body.Handle,
+			HasTerminal: *body.HasTerminal,
+			State:       *body.State,
+			Attention:   *body.Attention,
+			Assignment:  *body.Assignment,
+		}
+		if body.Choice != nil {
+			out.Choice = decodeRoleAgentChoiceTransportToRoleAgentChoice(body.Choice)
 		}
 	}
 	return out, nil
@@ -25331,8 +27553,8 @@ func EncodeTeamSnapshot(in *TeamSnapshot) ([]byte, error) {
 	{
 		body = &jsonTeamSnapshotTransport{
 			Team:         &in.Team,
-			HerdrMode:    &in.HerdrMode,
-			ChorusStatus: in.ChorusStatus,
+			Channel:      &in.Channel,
+			ChorusStatus: &in.ChorusStatus,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -25349,7 +27571,7 @@ func EncodeTeamSnapshot(in *TeamSnapshot) ([]byte, error) {
 				body.SavedChoices[tk] = nil
 				continue
 			}
-			body.SavedChoices[tk] = encodeRoleAgentChoiceToRoleAgentChoiceTransport(val)
+			body.SavedChoices[tk] = encodeRoleAgentChoiceToRoleAgentChoiceTransport3(val)
 		}
 		body.DismissedNotices = make([]string, len(in.DismissedNotices))
 		for i, val := range in.DismissedNotices {
@@ -25385,8 +27607,8 @@ func ValidateTeamSnapshotValue(in *TeamSnapshot) error {
 	{
 		body = &jsonTeamSnapshotTransport{
 			Team:         &in.Team,
-			HerdrMode:    &in.HerdrMode,
-			ChorusStatus: in.ChorusStatus,
+			Channel:      &in.Channel,
+			ChorusStatus: &in.ChorusStatus,
 		}
 		body.Roles = make([]*jsonTeamRoleStateTransport, len(in.Roles))
 		for i, val := range in.Roles {
@@ -25403,7 +27625,7 @@ func ValidateTeamSnapshotValue(in *TeamSnapshot) error {
 				body.SavedChoices[tk] = nil
 				continue
 			}
-			body.SavedChoices[tk] = encodeRoleAgentChoiceToRoleAgentChoiceTransport(val)
+			body.SavedChoices[tk] = encodeRoleAgentChoiceToRoleAgentChoiceTransport3(val)
 		}
 		body.DismissedNotices = make([]string, len(in.DismissedNotices))
 		for i, val := range in.DismissedNotices {
@@ -25443,8 +27665,8 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 	{
 		out = &TeamSnapshot{
 			Team:         *body.Team,
-			HerdrMode:    *body.HerdrMode,
-			ChorusStatus: body.ChorusStatus,
+			Channel:      *body.Channel,
+			ChorusStatus: *body.ChorusStatus,
 		}
 		out.Roles = make([]*TeamRoleState, len(body.Roles))
 		for i, val := range body.Roles {
@@ -25466,6 +27688,976 @@ func DecodeTeamSnapshot(data []byte) (out *TeamSnapshot, err error) {
 		out.DismissedNotices = make([]string, len(body.DismissedNotices))
 		for i, val := range body.DismissedNotices {
 			out.DismissedNotices[i] = val
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalClientFrame turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalClientFrame(in *TerminalClientFrame) ([]byte, error) {
+	if err := checkTerminalClientFrameValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalClientFrame JSON: %w", err)
+	}
+	if err := validateTerminalClientFrameOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalClientFrame value: %w", err)
+	}
+	var body *jsonTerminalClientFrameTransport
+	{
+		body = &jsonTerminalClientFrameTransport{}
+		var clientFrameValue jsonClientFrameTransport
+		switch string(in.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := in.ClientFrame.AsInput()
+			var obj *jsonTerminalInputFrameTransport
+			if actual != nil {
+				obj = encodeTerminalInputFrameToTerminalInputFrameTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetInput((*jsonTerminalInputFrameTransport)(obj))
+			clientFrameValue = u
+		case "resize":
+			actual, _ := in.ClientFrame.AsResize()
+			var obj *jsonTerminalResizeTransport
+			if actual != nil {
+				obj = encodeTerminalResizeToTerminalResizeTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetResize((*jsonTerminalResizeTransport)(obj))
+			clientFrameValue = u
+		case "focus":
+			actual, _ := in.ClientFrame.AsFocus()
+			var obj *jsonTerminalFocusFrameTransport
+			if actual != nil {
+				obj = encodeTerminalFocusFrameToTerminalFocusFrameTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetFocus((*jsonTerminalFocusFrameTransport)(obj))
+			clientFrameValue = u
+		case "credit":
+			actual, _ := in.ClientFrame.AsCredit()
+			var obj *jsonTerminalCreditFrameTransport
+			if actual != nil {
+				obj = encodeTerminalCreditFrameToTerminalCreditFrameTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetCredit((*jsonTerminalCreditFrameTransport)(obj))
+			clientFrameValue = u
+		}
+		body.ClientFrame = &clientFrameValue
+	}
+	if err := validatejsonTerminalClientFrameTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalClientFrame JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalClientFrame JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalClientFrameValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalClientFrameValue(in *TerminalClientFrame) error {
+	if err := checkTerminalClientFrameValue(in); err != nil {
+		return fmt.Errorf("validate TerminalClientFrame value: %w", err)
+	}
+	if err := validateTerminalClientFrameOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalClientFrame value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalClientFrame")
+	}
+
+	var body *jsonTerminalClientFrameTransport
+	{
+		body = &jsonTerminalClientFrameTransport{}
+		var clientFrameValue jsonClientFrameTransport
+		switch string(in.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := in.ClientFrame.AsInput()
+			var obj *jsonTerminalInputFrameTransport
+			if actual != nil {
+				obj = encodeTerminalInputFrameToTerminalInputFrameTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetInput((*jsonTerminalInputFrameTransport)(obj))
+			clientFrameValue = u
+		case "resize":
+			actual, _ := in.ClientFrame.AsResize()
+			var obj *jsonTerminalResizeTransport
+			if actual != nil {
+				obj = encodeTerminalResizeToTerminalResizeTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetResize((*jsonTerminalResizeTransport)(obj))
+			clientFrameValue = u
+		case "focus":
+			actual, _ := in.ClientFrame.AsFocus()
+			var obj *jsonTerminalFocusFrameTransport
+			if actual != nil {
+				obj = encodeTerminalFocusFrameToTerminalFocusFrameTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetFocus((*jsonTerminalFocusFrameTransport)(obj))
+			clientFrameValue = u
+		case "credit":
+			actual, _ := in.ClientFrame.AsCredit()
+			var obj *jsonTerminalCreditFrameTransport
+			if actual != nil {
+				obj = encodeTerminalCreditFrameToTerminalCreditFrameTransport(actual)
+			}
+			u := clientFrameValue
+			u.SetCredit((*jsonTerminalCreditFrameTransport)(obj))
+			clientFrameValue = u
+		}
+		body.ClientFrame = &clientFrameValue
+	}
+	if err := validatejsonTerminalClientFrameTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalClientFrame value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalClientFrame checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalClientFrame(data []byte) (out *TerminalClientFrame, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalClientFrame JSON: %w", err)
+	}
+	if err := validateTerminalClientFrameJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalClientFrame JSON: %w", err)
+	}
+	var body *jsonTerminalClientFrameTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalClientFrame JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalClientFrame JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalClientFrame JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalClientFrameTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalClientFrame JSON: %w", err)
+	}
+	{
+		out = &TerminalClientFrame{}
+		switch string(body.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := body.ClientFrame.AsInput()
+			var obj *TerminalInputFrame
+			if actual != nil {
+				obj = decodeTerminalInputFrameTransportToTerminalInputFrame(actual)
+			}
+			u := out.ClientFrame
+			u.SetInput((*TerminalInputFrame)(obj))
+			out.ClientFrame = u
+		case "resize":
+			actual, _ := body.ClientFrame.AsResize()
+			var obj *TerminalResize
+			if actual != nil {
+				obj = decodeTerminalResizeTransportToTerminalResize(actual)
+			}
+			u := out.ClientFrame
+			u.SetResize((*TerminalResize)(obj))
+			out.ClientFrame = u
+		case "focus":
+			actual, _ := body.ClientFrame.AsFocus()
+			var obj *TerminalFocusFrame
+			if actual != nil {
+				obj = decodeTerminalFocusFrameTransportToTerminalFocusFrame(actual)
+			}
+			u := out.ClientFrame
+			u.SetFocus((*TerminalFocusFrame)(obj))
+			out.ClientFrame = u
+		case "credit":
+			actual, _ := body.ClientFrame.AsCredit()
+			var obj *TerminalCreditFrame
+			if actual != nil {
+				obj = decodeTerminalCreditFrameTransportToTerminalCreditFrame(actual)
+			}
+			u := out.ClientFrame
+			u.SetCredit((*TerminalCreditFrame)(obj))
+			out.ClientFrame = u
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalClosed turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalClosed(in *TerminalClosed) ([]byte, error) {
+	if err := checkTerminalClosedValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalClosed JSON: %w", err)
+	}
+	if err := validateTerminalClosedOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalClosed value: %w", err)
+	}
+	var body *jsonTerminalClosedTransport
+	{
+		body = &jsonTerminalClosedTransport{
+			Reason: &in.Reason,
+		}
+		if in.ExitCode != nil {
+			exitCode := terminalClosedIntTransport(*in.ExitCode)
+			body.ExitCode = &exitCode
+		}
+		if in.Signal != nil {
+			signal := terminalClosedIntTransport(*in.Signal)
+			body.Signal = &signal
+		}
+	}
+	if err := validatejsonTerminalClosedTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalClosed JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalClosed JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalClosedValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalClosedValue(in *TerminalClosed) error {
+	if err := checkTerminalClosedValue(in); err != nil {
+		return fmt.Errorf("validate TerminalClosed value: %w", err)
+	}
+	if err := validateTerminalClosedOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalClosed value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalClosed")
+	}
+
+	var body *jsonTerminalClosedTransport
+	{
+		body = &jsonTerminalClosedTransport{
+			Reason: &in.Reason,
+		}
+		if in.ExitCode != nil {
+			exitCode := terminalClosedIntTransport(*in.ExitCode)
+			body.ExitCode = &exitCode
+		}
+		if in.Signal != nil {
+			signal := terminalClosedIntTransport(*in.Signal)
+			body.Signal = &signal
+		}
+	}
+	if err := validatejsonTerminalClosedTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalClosed value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalClosed checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalClosed(data []byte) (out *TerminalClosed, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalClosed JSON: %w", err)
+	}
+	if err := validateTerminalClosedJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalClosed JSON: %w", err)
+	}
+	var body *jsonTerminalClosedTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalClosed JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalClosed JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalClosed JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalClosedTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalClosed JSON: %w", err)
+	}
+	{
+		out = &TerminalClosed{
+			Reason: *body.Reason,
+		}
+		if body.ExitCode != nil {
+			exitCode := int(*body.ExitCode)
+			out.ExitCode = &exitCode
+		}
+		if body.Signal != nil {
+			signal := int(*body.Signal)
+			out.Signal = &signal
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalCreditFrame turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalCreditFrame(in *TerminalCreditFrame) ([]byte, error) {
+	if err := checkTerminalCreditFrameValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalCreditFrame JSON: %w", err)
+	}
+	if err := validateTerminalCreditFrameOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalCreditFrame value: %w", err)
+	}
+	var body *jsonTerminalCreditFrameTransport
+	{
+		body = &jsonTerminalCreditFrameTransport{}
+		bytes := terminalClientFrameIntTransport(in.Bytes)
+		body.Bytes = &bytes
+	}
+	if err := validatejsonTerminalCreditFrameTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalCreditFrame JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalCreditFrame JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalCreditFrameValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalCreditFrameValue(in *TerminalCreditFrame) error {
+	if err := checkTerminalCreditFrameValue(in); err != nil {
+		return fmt.Errorf("validate TerminalCreditFrame value: %w", err)
+	}
+	if err := validateTerminalCreditFrameOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalCreditFrame value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalCreditFrame")
+	}
+
+	var body *jsonTerminalCreditFrameTransport
+	{
+		body = &jsonTerminalCreditFrameTransport{}
+		bytes := terminalClientFrameIntTransport(in.Bytes)
+		body.Bytes = &bytes
+	}
+	if err := validatejsonTerminalCreditFrameTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalCreditFrame value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalCreditFrame checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalCreditFrame(data []byte) (out *TerminalCreditFrame, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalCreditFrame JSON: %w", err)
+	}
+	if err := validateTerminalClientFrameJSONValue7("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalCreditFrame JSON: %w", err)
+	}
+	var body *jsonTerminalCreditFrameTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalCreditFrame JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalCreditFrame JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalCreditFrame JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalCreditFrameTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalCreditFrame JSON: %w", err)
+	}
+	{
+		out = &TerminalCreditFrame{
+			Bytes: int(*body.Bytes),
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalFocusFrame turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalFocusFrame(in *TerminalFocusFrame) ([]byte, error) {
+	if err := checkTerminalFocusFrameValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalFocusFrame JSON: %w", err)
+	}
+	var body *jsonTerminalFocusFrameTransport
+	{
+		body = &jsonTerminalFocusFrameTransport{
+			Focused: &in.Focused,
+		}
+	}
+	if err := validatejsonTerminalFocusFrameTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalFocusFrame JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalFocusFrame JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalFocusFrameValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalFocusFrameValue(in *TerminalFocusFrame) error {
+	if err := checkTerminalFocusFrameValue(in); err != nil {
+		return fmt.Errorf("validate TerminalFocusFrame value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalFocusFrame")
+	}
+
+	var body *jsonTerminalFocusFrameTransport
+	{
+		body = &jsonTerminalFocusFrameTransport{
+			Focused: &in.Focused,
+		}
+	}
+	if err := validatejsonTerminalFocusFrameTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalFocusFrame value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalFocusFrame checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalFocusFrame(data []byte) (out *TerminalFocusFrame, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalFocusFrame JSON: %w", err)
+	}
+	if err := validateTerminalClientFrameJSONValue6("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalFocusFrame JSON: %w", err)
+	}
+	var body *jsonTerminalFocusFrameTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalFocusFrame JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalFocusFrame JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalFocusFrame JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalFocusFrameTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalFocusFrame JSON: %w", err)
+	}
+	{
+		out = &TerminalFocusFrame{
+			Focused: *body.Focused,
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalInputFrame turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalInputFrame(in *TerminalInputFrame) ([]byte, error) {
+	if err := checkTerminalInputFrameValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalInputFrame JSON: %w", err)
+	}
+	if err := validateTerminalInputFrameOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalInputFrame value: %w", err)
+	}
+	var body *jsonTerminalInputFrameTransport
+	{
+		body = &jsonTerminalInputFrameTransport{
+			Data: in.Data,
+		}
+	}
+	if err := validatejsonTerminalInputFrameTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalInputFrame JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalInputFrame JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalInputFrameValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalInputFrameValue(in *TerminalInputFrame) error {
+	if err := checkTerminalInputFrameValue(in); err != nil {
+		return fmt.Errorf("validate TerminalInputFrame value: %w", err)
+	}
+	if err := validateTerminalInputFrameOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalInputFrame value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalInputFrame")
+	}
+
+	var body *jsonTerminalInputFrameTransport
+	{
+		body = &jsonTerminalInputFrameTransport{
+			Data: in.Data,
+		}
+	}
+	if err := validatejsonTerminalInputFrameTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalInputFrame value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalInputFrame checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalInputFrame(data []byte) (out *TerminalInputFrame, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalInputFrame JSON: %w", err)
+	}
+	if err := validateTerminalClientFrameJSONValue3("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalInputFrame JSON: %w", err)
+	}
+	var body *jsonTerminalInputFrameTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalInputFrame JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalInputFrame JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalInputFrame JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalInputFrameTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalInputFrame JSON: %w", err)
+	}
+	{
+		out = &TerminalInputFrame{
+			Data: body.Data,
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalOutputFrame turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalOutputFrame(in *TerminalOutputFrame) ([]byte, error) {
+	if err := checkTerminalOutputFrameValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalOutputFrame JSON: %w", err)
+	}
+	if err := validateTerminalOutputFrameOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalOutputFrame value: %w", err)
+	}
+	var body *jsonTerminalOutputFrameTransport
+	{
+		body = &jsonTerminalOutputFrameTransport{
+			Data: in.Data,
+		}
+	}
+	if err := validatejsonTerminalOutputFrameTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalOutputFrame JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalOutputFrame JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalOutputFrameValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalOutputFrameValue(in *TerminalOutputFrame) error {
+	if err := checkTerminalOutputFrameValue(in); err != nil {
+		return fmt.Errorf("validate TerminalOutputFrame value: %w", err)
+	}
+	if err := validateTerminalOutputFrameOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalOutputFrame value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalOutputFrame")
+	}
+
+	var body *jsonTerminalOutputFrameTransport
+	{
+		body = &jsonTerminalOutputFrameTransport{
+			Data: in.Data,
+		}
+	}
+	if err := validatejsonTerminalOutputFrameTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalOutputFrame value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalOutputFrame checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalOutputFrame(data []byte) (out *TerminalOutputFrame, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalOutputFrame JSON: %w", err)
+	}
+	if err := validateTerminalOutputFrameJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalOutputFrame JSON: %w", err)
+	}
+	var body *jsonTerminalOutputFrameTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalOutputFrame JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalOutputFrame JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalOutputFrame JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalOutputFrameTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalOutputFrame JSON: %w", err)
+	}
+	{
+		out = &TerminalOutputFrame{
+			Data: body.Data,
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalResize turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalResize(in *TerminalResize) ([]byte, error) {
+	if err := checkTerminalResizeValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalResize JSON: %w", err)
+	}
+	if err := validateTerminalResizeOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalResize value: %w", err)
+	}
+	var body *jsonTerminalResizeTransport
+	{
+		body = &jsonTerminalResizeTransport{}
+		cols := terminalClientFrameIntTransport(in.Cols)
+		body.Cols = &cols
+		rows := terminalClientFrameIntTransport(in.Rows)
+		body.Rows = &rows
+	}
+	if err := validatejsonTerminalResizeTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalResize JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalResize JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalResizeValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalResizeValue(in *TerminalResize) error {
+	if err := checkTerminalResizeValue(in); err != nil {
+		return fmt.Errorf("validate TerminalResize value: %w", err)
+	}
+	if err := validateTerminalResizeOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalResize value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalResize")
+	}
+
+	var body *jsonTerminalResizeTransport
+	{
+		body = &jsonTerminalResizeTransport{}
+		cols := terminalClientFrameIntTransport(in.Cols)
+		body.Cols = &cols
+		rows := terminalClientFrameIntTransport(in.Rows)
+		body.Rows = &rows
+	}
+	if err := validatejsonTerminalResizeTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalResize value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalResize checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalResize(data []byte) (out *TerminalResize, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalResize JSON: %w", err)
+	}
+	if err := validateTerminalClientFrameJSONValue5("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalResize JSON: %w", err)
+	}
+	var body *jsonTerminalResizeTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalResize JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalResize JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalResize JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalResizeTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalResize JSON: %w", err)
+	}
+	{
+		out = &TerminalResize{
+			Cols: int(*body.Cols),
+			Rows: int(*body.Rows),
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalServerFrame turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalServerFrame(in *TerminalServerFrame) ([]byte, error) {
+	if err := checkTerminalServerFrameValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalServerFrame JSON: %w", err)
+	}
+	if err := validateTerminalServerFrameOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalServerFrame value: %w", err)
+	}
+	var body *jsonTerminalServerFrameTransport
+	{
+		body = &jsonTerminalServerFrameTransport{}
+		var serverFrameValue jsonServerFrameTransport
+		switch string(in.ServerFrame.Kind()) {
+		case "output":
+			actual, _ := in.ServerFrame.AsOutput()
+			var obj *jsonTerminalOutputFrameTransport
+			if actual != nil {
+				obj = encodeTerminalOutputFrameToTerminalOutputFrameTransport(actual)
+			}
+			u := serverFrameValue
+			u.SetOutput((*jsonTerminalOutputFrameTransport)(obj))
+			serverFrameValue = u
+		case "resize":
+			actual, _ := in.ServerFrame.AsResize()
+			var obj *jsonTerminalResizeTransport
+			if actual != nil {
+				obj = encodeTerminalResizeToTerminalResizeTransport(actual)
+			}
+			u := serverFrameValue
+			u.SetResize((*jsonTerminalResizeTransport)(obj))
+			serverFrameValue = u
+		case "closed":
+			actual, _ := in.ServerFrame.AsClosed()
+			var obj *jsonTerminalClosedTransport
+			if actual != nil {
+				obj = encodeTerminalClosedToTerminalClosedTransport(actual)
+			}
+			u := serverFrameValue
+			u.SetClosed((*jsonTerminalClosedTransport)(obj))
+			serverFrameValue = u
+		}
+		body.ServerFrame = &serverFrameValue
+	}
+	if err := validatejsonTerminalServerFrameTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalServerFrame JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalServerFrame JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalServerFrameValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalServerFrameValue(in *TerminalServerFrame) error {
+	if err := checkTerminalServerFrameValue(in); err != nil {
+		return fmt.Errorf("validate TerminalServerFrame value: %w", err)
+	}
+	if err := validateTerminalServerFrameOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalServerFrame value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalServerFrame")
+	}
+
+	var body *jsonTerminalServerFrameTransport
+	{
+		body = &jsonTerminalServerFrameTransport{}
+		var serverFrameValue jsonServerFrameTransport
+		switch string(in.ServerFrame.Kind()) {
+		case "output":
+			actual, _ := in.ServerFrame.AsOutput()
+			var obj *jsonTerminalOutputFrameTransport
+			if actual != nil {
+				obj = encodeTerminalOutputFrameToTerminalOutputFrameTransport(actual)
+			}
+			u := serverFrameValue
+			u.SetOutput((*jsonTerminalOutputFrameTransport)(obj))
+			serverFrameValue = u
+		case "resize":
+			actual, _ := in.ServerFrame.AsResize()
+			var obj *jsonTerminalResizeTransport
+			if actual != nil {
+				obj = encodeTerminalResizeToTerminalResizeTransport(actual)
+			}
+			u := serverFrameValue
+			u.SetResize((*jsonTerminalResizeTransport)(obj))
+			serverFrameValue = u
+		case "closed":
+			actual, _ := in.ServerFrame.AsClosed()
+			var obj *jsonTerminalClosedTransport
+			if actual != nil {
+				obj = encodeTerminalClosedToTerminalClosedTransport(actual)
+			}
+			u := serverFrameValue
+			u.SetClosed((*jsonTerminalClosedTransport)(obj))
+			serverFrameValue = u
+		}
+		body.ServerFrame = &serverFrameValue
+	}
+	if err := validatejsonTerminalServerFrameTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalServerFrame value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalServerFrame checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalServerFrame(data []byte) (out *TerminalServerFrame, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalServerFrame JSON: %w", err)
+	}
+	if err := validateTerminalServerFrameJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalServerFrame JSON: %w", err)
+	}
+	var body *jsonTerminalServerFrameTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalServerFrame JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalServerFrame JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalServerFrame JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalServerFrameTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalServerFrame JSON: %w", err)
+	}
+	{
+		out = &TerminalServerFrame{}
+		switch string(body.ServerFrame.Kind()) {
+		case "output":
+			actual, _ := body.ServerFrame.AsOutput()
+			var obj *TerminalOutputFrame
+			if actual != nil {
+				obj = decodeTerminalOutputFrameTransportToTerminalOutputFrame(actual)
+			}
+			u := out.ServerFrame
+			u.SetOutput((*TerminalOutputFrame)(obj))
+			out.ServerFrame = u
+		case "resize":
+			actual, _ := body.ServerFrame.AsResize()
+			var obj *TerminalResize
+			if actual != nil {
+				obj = decodeTerminalResizeTransportToTerminalResize(actual)
+			}
+			u := out.ServerFrame
+			u.SetResize((*TerminalResize)(obj))
+			out.ServerFrame = u
+		case "closed":
+			actual, _ := body.ServerFrame.AsClosed()
+			var obj *TerminalClosed
+			if actual != nil {
+				obj = decodeTerminalClosedTransportToTerminalClosed(actual)
+			}
+			u := out.ServerFrame
+			u.SetClosed((*TerminalClosed)(obj))
+			out.ServerFrame = u
+		}
+	}
+	return out, nil
+}
+
+// EncodeTerminalTicketResult turns a service value into JSON using the field names in the Goa design.
+func EncodeTerminalTicketResult(in *TerminalTicketResult) ([]byte, error) {
+	if err := checkTerminalTicketResultValue(in); err != nil {
+		return nil, fmt.Errorf("encode TerminalTicketResult JSON: %w", err)
+	}
+	if err := validateTerminalTicketResultOriginal(in); err != nil {
+		return nil, fmt.Errorf("validate TerminalTicketResult value: %w", err)
+	}
+	var body *jsonTerminalTicketResultTransport
+	{
+		body = &jsonTerminalTicketResultTransport{
+			Ticket:    &in.Ticket,
+			ExpiresAt: &in.ExpiresAt,
+		}
+	}
+	if err := validatejsonTerminalTicketResultTransport(body); err != nil {
+		return nil, fmt.Errorf("validate TerminalTicketResult JSON: %w", err)
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode TerminalTicketResult JSON: %w", err)
+	}
+	return data, nil
+}
+
+// ValidateTerminalTicketResultValue checks the original Go fields against their declared constraints.
+// It returns validation errors without encoding the value as JSON.
+
+func ValidateTerminalTicketResultValue(in *TerminalTicketResult) error {
+	if err := checkTerminalTicketResultValue(in); err != nil {
+		return fmt.Errorf("validate TerminalTicketResult value: %w", err)
+	}
+	if err := validateTerminalTicketResultOriginal(in); err != nil {
+		return fmt.Errorf("validate TerminalTicketResult value: %w", err)
+	}
+
+	if in == nil {
+		return goa.MissingFieldError("result", "TerminalTicketResult")
+	}
+
+	var body *jsonTerminalTicketResultTransport
+	{
+		body = &jsonTerminalTicketResultTransport{
+			Ticket:    &in.Ticket,
+			ExpiresAt: &in.ExpiresAt,
+		}
+	}
+	if err := validatejsonTerminalTicketResultTransport(body); err != nil {
+		return fmt.Errorf("validate TerminalTicketResult value: %w", err)
+	}
+	return nil
+}
+
+// DecodeTerminalTicketResult checks JSON field names from the Goa design and returns a service value.
+func DecodeTerminalTicketResult(data []byte) (out *TerminalTicketResult, err error) {
+	root, err := readStrictJSON(data)
+	if err != nil {
+		return out, fmt.Errorf("decode TerminalTicketResult JSON: %w", err)
+	}
+	if err := validateTerminalTicketResultJSONValue("", root, ""); err != nil {
+		return out, fmt.Errorf("decode TerminalTicketResult JSON: %w", err)
+	}
+	var body *jsonTerminalTicketResultTransport
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		return out, fmt.Errorf("decode TerminalTicketResult JSON: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return out, fmt.Errorf("decode TerminalTicketResult JSON: multiple JSON values")
+		}
+		return out, fmt.Errorf("decode TerminalTicketResult JSON after first value: %w", err)
+	}
+	if err := validatejsonTerminalTicketResultTransport(body); err != nil {
+		return out, fmt.Errorf("validate TerminalTicketResult JSON: %w", err)
+	}
+	{
+		out = &TerminalTicketResult{
+			Ticket:    *body.Ticket,
+			ExpiresAt: *body.ExpiresAt,
 		}
 	}
 	return out, nil
@@ -29549,6 +32741,16 @@ func decodeApprovalItemTransportToApprovalItem(v *jsonApprovalItemTransport) *Ap
 	return res
 }
 
+func decodeArchitectureElementContextTransportToArchitectureElementContext(v *jsonArchitectureElementContextTransport) *ArchitectureElementContext {
+	res := &ArchitectureElementContext{
+		ChangeID:    v.ChangeID,
+		ElementID:   *v.ElementID,
+		ElementName: *v.ElementName,
+	}
+
+	return res
+}
+
 func decodeBuildBuildingTransportToBuildBuilding(v *jsonBuildBuildingTransport) *BuildBuilding {
 	res := &BuildBuilding{}
 
@@ -29617,25 +32819,8 @@ func decodeBuildPassedTransportToBuildPassed(v *jsonBuildPassedTransport) *Build
 	return res
 }
 
-func decodeBuildTeamAmbiguousSpaceTransportToBuildTeamAmbiguousSpace(v *jsonBuildTeamAmbiguousSpaceTransport) *BuildTeamAmbiguousSpace {
-	res := &BuildTeamAmbiguousSpace{
-		Count: int(*v.Count),
-		Step:  BuildStartStep(*v.Step),
-	}
-
-	return res
-}
-
 func decodeBuildTeamUnavailableTransportToBuildTeamUnavailable(v *jsonBuildTeamUnavailableTransport) *BuildTeamUnavailable {
 	res := &BuildTeamUnavailable{
-		Step: BuildStartStep(*v.Step),
-	}
-
-	return res
-}
-
-func decodeBuildTeamWindowBusyTransportToBuildTeamWindowBusy(v *jsonBuildTeamWindowBusyTransport) *BuildTeamWindowBusy {
-	res := &BuildTeamWindowBusy{
 		Step: BuildStartStep(*v.Step),
 	}
 
@@ -29980,9 +33165,10 @@ func decodeOperatorEvaluatorTestsTransportToOperatorEvaluatorTests(v *jsonOperat
 
 func decodeProjectTeamRoleTransportToProjectTeamRole(v *jsonProjectTeamRoleTransport) *ProjectTeamRole {
 	res := &ProjectTeamRole{
-		Role:    *v.Role,
-		Handle:  *v.Handle,
-		Running: *v.Running,
+		Role:        *v.Role,
+		Handle:      *v.Handle,
+		HasTerminal: *v.HasTerminal,
+		Running:     *v.Running,
 	}
 
 	return res
@@ -29990,10 +33176,8 @@ func decodeProjectTeamRoleTransportToProjectTeamRole(v *jsonProjectTeamRoleTrans
 
 func decodeProjectTeamTransportToProjectTeam(v *jsonProjectTeamTransport) *ProjectTeam {
 	res := &ProjectTeam{
-		Team:      *v.Team,
-		Space:     *v.Space,
-		HerdrMode: *v.HerdrMode,
-		Step:      *v.Step,
+		Team: *v.Team,
+		Step: *v.Step,
 	}
 	res.Roles = make([]*ProjectTeamRole, len(v.Roles))
 	for i, val := range v.Roles {
@@ -30152,6 +33336,21 @@ func decodeRequiredTestTransportToRequiredTest(v *jsonRequiredTestTransport) *Re
 		FlowKey:  *v.FlowKey,
 		Scenario: *v.Scenario,
 		Hook:     *v.Hook,
+	}
+
+	return res
+}
+
+func decodeReviseAnswersContextTransportToReviseAnswersContext(v *jsonReviseAnswersContextTransport) *ReviseAnswersContext {
+	res := &ReviseAnswersContext{
+		ChangeID:        *v.ChangeID,
+		RequestRevision: *v.RequestRevision,
+	}
+	res.Answers = make(map[string]string, len(v.Answers))
+	for key, val := range v.Answers {
+		tk := key
+		tv := val
+		res.Answers[tk] = tv
 	}
 
 	return res
@@ -30320,6 +33519,16 @@ func decodeStoryActorItemTransportToStoryActorItem(v *jsonStoryActorItemTranspor
 	return res
 }
 
+func decodeStoryFlowContextTransportToStoryFlowContext(v *jsonStoryFlowContextTransport) *StoryFlowContext {
+	res := &StoryFlowContext{
+		ChangeID: v.ChangeID,
+		Story:    *v.Story,
+		FlowKey:  v.FlowKey,
+	}
+
+	return res
+}
+
 func decodeStoryFlowItemTransportToStoryFlowItem(v *jsonStoryFlowItemTransport) *StoryFlowItem {
 	res := &StoryFlowItem{
 		Key:         *v.Key,
@@ -30406,14 +33615,93 @@ func decodeStorySummaryItemTransportToStorySummaryItem(v *jsonStorySummaryItemTr
 	return res
 }
 
+func decodeTeamMessageTransportToTeamMessage(v *jsonTeamMessageTransport) *TeamMessage {
+	res := &TeamMessage{
+		ID:         *v.ID,
+		Target:     *v.Target,
+		Seq:        int(*v.Seq),
+		Sender:     *v.Sender,
+		SenderRole: *v.SenderRole,
+		Model:      v.Model,
+		Text:       *v.Text,
+		SentAtMs:   int64(*v.SentAtMs),
+	}
+	if v.ReplyTo != nil {
+		replyTo := int(*v.ReplyTo)
+		res.ReplyTo = &replyTo
+	}
+
+	return res
+}
+
 func decodeTeamRoleStateTransportToTeamRoleState(v *jsonTeamRoleStateTransport) *TeamRoleState {
 	res := &TeamRoleState{
-		Role:       *v.Role,
-		Handle:     *v.Handle,
-		State:      *v.State,
-		Attention:  *v.Attention,
-		Watcher:    *v.Watcher,
-		Assignment: *v.Assignment,
+		Role:        *v.Role,
+		Handle:      *v.Handle,
+		HasTerminal: *v.HasTerminal,
+		State:       *v.State,
+		Attention:   *v.Attention,
+		Assignment:  *v.Assignment,
+	}
+	if v.Choice != nil {
+		res.Choice = decodeRoleAgentChoiceTransportToRoleAgentChoice(v.Choice)
+	}
+
+	return res
+}
+
+func decodeTerminalClosedTransportToTerminalClosed(v *jsonTerminalClosedTransport) *TerminalClosed {
+	res := &TerminalClosed{
+		Reason: *v.Reason,
+	}
+	if v.ExitCode != nil {
+		exitCode := int(*v.ExitCode)
+		res.ExitCode = &exitCode
+	}
+	if v.Signal != nil {
+		signal := int(*v.Signal)
+		res.Signal = &signal
+	}
+
+	return res
+}
+
+func decodeTerminalCreditFrameTransportToTerminalCreditFrame(v *jsonTerminalCreditFrameTransport) *TerminalCreditFrame {
+	res := &TerminalCreditFrame{
+		Bytes: int(*v.Bytes),
+	}
+
+	return res
+}
+
+func decodeTerminalFocusFrameTransportToTerminalFocusFrame(v *jsonTerminalFocusFrameTransport) *TerminalFocusFrame {
+	res := &TerminalFocusFrame{
+		Focused: *v.Focused,
+	}
+
+	return res
+}
+
+func decodeTerminalInputFrameTransportToTerminalInputFrame(v *jsonTerminalInputFrameTransport) *TerminalInputFrame {
+	res := &TerminalInputFrame{
+		Data: v.Data,
+	}
+
+	return res
+}
+
+func decodeTerminalOutputFrameTransportToTerminalOutputFrame(v *jsonTerminalOutputFrameTransport) *TerminalOutputFrame {
+	res := &TerminalOutputFrame{
+		Data: v.Data,
+	}
+
+	return res
+}
+
+func decodeTerminalResizeTransportToTerminalResize(v *jsonTerminalResizeTransport) *TerminalResize {
+	res := &TerminalResize{
+		Cols: int(*v.Cols),
+		Rows: int(*v.Rows),
 	}
 
 	return res
@@ -31021,6 +34309,16 @@ func encodeApprovalItemToApprovalItemTransport3(v *ApprovalItem) *jsonApprovalIt
 	return res
 }
 
+func encodeArchitectureElementContextToArchitectureElementContextTransport(v *ArchitectureElementContext) *jsonArchitectureElementContextTransport {
+	res := &jsonArchitectureElementContextTransport{
+		ChangeID:    v.ChangeID,
+		ElementID:   &v.ElementID,
+		ElementName: &v.ElementName,
+	}
+
+	return res
+}
+
 func encodeBuildBuildingToBuildBuildingTransport(v *BuildBuilding) *jsonBuildBuildingTransport {
 	res := &jsonBuildBuildingTransport{}
 
@@ -31091,26 +34389,8 @@ func encodeBuildPassedToBuildPassedTransport(v *BuildPassed) *jsonBuildPassedTra
 	return res
 }
 
-func encodeBuildTeamAmbiguousSpaceToBuildTeamAmbiguousSpaceTransport(v *BuildTeamAmbiguousSpace) *jsonBuildTeamAmbiguousSpaceTransport {
-	res := &jsonBuildTeamAmbiguousSpaceTransport{}
-	count := buildTeamAmbiguousSpaceIntTransport(v.Count)
-	res.Count = &count
-	step := jsonBuildStartStepTransport(v.Step)
-	res.Step = &step
-
-	return res
-}
-
 func encodeBuildTeamUnavailableToBuildTeamUnavailableTransport(v *BuildTeamUnavailable) *jsonBuildTeamUnavailableTransport {
 	res := &jsonBuildTeamUnavailableTransport{}
-	step := jsonBuildStartStepTransport(v.Step)
-	res.Step = &step
-
-	return res
-}
-
-func encodeBuildTeamWindowBusyToBuildTeamWindowBusyTransport(v *BuildTeamWindowBusy) *jsonBuildTeamWindowBusyTransport {
-	res := &jsonBuildTeamWindowBusyTransport{}
 	step := jsonBuildStartStepTransport(v.Step)
 	res.Step = &step
 
@@ -31477,9 +34757,10 @@ func encodeOperatorEvaluatorTestsToOperatorEvaluatorTestsTransport(v *OperatorEv
 
 func encodeProjectTeamRoleToProjectTeamRoleTransport(v *ProjectTeamRole) *jsonProjectTeamRoleTransport {
 	res := &jsonProjectTeamRoleTransport{
-		Role:    &v.Role,
-		Handle:  &v.Handle,
-		Running: &v.Running,
+		Role:        &v.Role,
+		Handle:      &v.Handle,
+		HasTerminal: &v.HasTerminal,
+		Running:     &v.Running,
 	}
 
 	return res
@@ -31487,10 +34768,8 @@ func encodeProjectTeamRoleToProjectTeamRoleTransport(v *ProjectTeamRole) *jsonPr
 
 func encodeProjectTeamToProjectTeamTransport(v *ProjectTeam) *jsonProjectTeamTransport {
 	res := &jsonProjectTeamTransport{
-		Team:      &v.Team,
-		Space:     &v.Space,
-		HerdrMode: &v.HerdrMode,
-		Step:      &v.Step,
+		Team: &v.Team,
+		Step: &v.Step,
 	}
 	res.Roles = make([]*jsonProjectTeamRoleTransport, len(v.Roles))
 	for i, val := range v.Roles {
@@ -31659,7 +34938,46 @@ func encodeRequiredTestToRequiredTestTransport(v *RequiredTest) *jsonRequiredTes
 	return res
 }
 
+func encodeReviseAnswersContextToReviseAnswersContextTransport(v *ReviseAnswersContext) *jsonReviseAnswersContextTransport {
+	res := &jsonReviseAnswersContextTransport{
+		ChangeID:        &v.ChangeID,
+		RequestRevision: &v.RequestRevision,
+	}
+	res.Answers = make(map[string]string, len(v.Answers))
+	for key, val := range v.Answers {
+		tk := key
+		tv := val
+		res.Answers[tk] = tv
+	}
+
+	return res
+}
+
 func encodeRoleAgentChoiceToRoleAgentChoiceTransport(v *RoleAgentChoice) *jsonRoleAgentChoiceTransport {
+	res := &jsonRoleAgentChoiceTransport{
+		Client:   &v.Client,
+		Program:  &v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     &v.Yolo,
+	}
+
+	return res
+}
+
+func encodeRoleAgentChoiceToRoleAgentChoiceTransport2(v *RoleAgentChoice) *jsonRoleAgentChoiceTransport {
+	res := &jsonRoleAgentChoiceTransport{
+		Client:   &v.Client,
+		Program:  &v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     &v.Yolo,
+	}
+
+	return res
+}
+
+func encodeRoleAgentChoiceToRoleAgentChoiceTransport3(v *RoleAgentChoice) *jsonRoleAgentChoiceTransport {
 	res := &jsonRoleAgentChoiceTransport{
 		Client:   &v.Client,
 		Program:  &v.Program,
@@ -31997,6 +35315,16 @@ func encodeStoryActorItemToStoryActorItemTransport(v *StoryActorItem) *jsonStory
 	return res
 }
 
+func encodeStoryFlowContextToStoryFlowContextTransport(v *StoryFlowContext) *jsonStoryFlowContextTransport {
+	res := &jsonStoryFlowContextTransport{
+		ChangeID: v.ChangeID,
+		Story:    &v.Story,
+		FlowKey:  v.FlowKey,
+	}
+
+	return res
+}
+
 func encodeStoryFlowItemToStoryFlowItemTransport(v *StoryFlowItem) *jsonStoryFlowItemTransport {
 	res := &jsonStoryFlowItemTransport{
 		Key:         &v.Key,
@@ -32083,15 +35411,118 @@ func encodeStorySummaryItemToStorySummaryItemTransport(v *StorySummaryItem) *jso
 	return res
 }
 
+func encodeTeamMessageToTeamMessageTransport(v *TeamMessage) *jsonTeamMessageTransport {
+	res := &jsonTeamMessageTransport{
+		ID:         &v.ID,
+		Target:     &v.Target,
+		Sender:     &v.Sender,
+		SenderRole: &v.SenderRole,
+		Model:      v.Model,
+		Text:       &v.Text,
+	}
+	seq := teamConversationIntTransport(v.Seq)
+	res.Seq = &seq
+	if v.ReplyTo != nil {
+		replyTo := teamConversationIntTransport(*v.ReplyTo)
+		res.ReplyTo = &replyTo
+	}
+	sentAtMs := teamConversationInt64Transport(v.SentAtMs)
+	res.SentAtMs = &sentAtMs
+
+	return res
+}
+
+func encodeTeamMessageToTeamMessageTransport2(v *TeamMessage) *jsonTeamMessageTransport {
+	res := &jsonTeamMessageTransport{
+		ID:         &v.ID,
+		Target:     &v.Target,
+		Sender:     &v.Sender,
+		SenderRole: &v.SenderRole,
+		Model:      v.Model,
+		Text:       &v.Text,
+	}
+	seq := teamConversationIntTransport(v.Seq)
+	res.Seq = &seq
+	if v.ReplyTo != nil {
+		replyTo := teamConversationIntTransport(*v.ReplyTo)
+		res.ReplyTo = &replyTo
+	}
+	sentAtMs := teamConversationInt64Transport(v.SentAtMs)
+	res.SentAtMs = &sentAtMs
+
+	return res
+}
+
 func encodeTeamRoleStateToTeamRoleStateTransport(v *TeamRoleState) *jsonTeamRoleStateTransport {
 	res := &jsonTeamRoleStateTransport{
-		Role:       &v.Role,
-		Handle:     &v.Handle,
-		State:      &v.State,
-		Attention:  &v.Attention,
-		Watcher:    &v.Watcher,
-		Assignment: &v.Assignment,
+		Role:        &v.Role,
+		Handle:      &v.Handle,
+		HasTerminal: &v.HasTerminal,
+		State:       &v.State,
+		Attention:   &v.Attention,
+		Assignment:  &v.Assignment,
 	}
+	if v.Choice != nil {
+		res.Choice = encodeRoleAgentChoiceToRoleAgentChoiceTransport2(v.Choice)
+	}
+
+	return res
+}
+
+func encodeTerminalClosedToTerminalClosedTransport(v *TerminalClosed) *jsonTerminalClosedTransport {
+	res := &jsonTerminalClosedTransport{
+		Reason: &v.Reason,
+	}
+	if v.ExitCode != nil {
+		exitCode := terminalClosedIntTransport(*v.ExitCode)
+		res.ExitCode = &exitCode
+	}
+	if v.Signal != nil {
+		signal := terminalClosedIntTransport(*v.Signal)
+		res.Signal = &signal
+	}
+
+	return res
+}
+
+func encodeTerminalCreditFrameToTerminalCreditFrameTransport(v *TerminalCreditFrame) *jsonTerminalCreditFrameTransport {
+	res := &jsonTerminalCreditFrameTransport{}
+	bytes := terminalClientFrameIntTransport(v.Bytes)
+	res.Bytes = &bytes
+
+	return res
+}
+
+func encodeTerminalFocusFrameToTerminalFocusFrameTransport(v *TerminalFocusFrame) *jsonTerminalFocusFrameTransport {
+	res := &jsonTerminalFocusFrameTransport{
+		Focused: &v.Focused,
+	}
+
+	return res
+}
+
+func encodeTerminalInputFrameToTerminalInputFrameTransport(v *TerminalInputFrame) *jsonTerminalInputFrameTransport {
+	res := &jsonTerminalInputFrameTransport{
+		Data: v.Data,
+	}
+
+	return res
+}
+
+func encodeTerminalOutputFrameToTerminalOutputFrameTransport(v *TerminalOutputFrame) *jsonTerminalOutputFrameTransport {
+	res := &jsonTerminalOutputFrameTransport{
+		Data: v.Data,
+	}
+
+	return res
+}
+
+func encodeTerminalResizeToTerminalResizeTransport(v *TerminalResize) *jsonTerminalResizeTransport {
+	res := &jsonTerminalResizeTransport{}
+	cols := terminalClientFrameIntTransport(v.Cols)
+	res.Cols = &cols
+	rows := terminalClientFrameIntTransport(v.Rows)
+	res.Rows = &rows
 
 	return res
 }
@@ -33128,7 +36559,7 @@ func validateApproveMergePayloadJSONValue(path string, value any, description st
 		case "report_digest":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the CP4 verification report written by hbay verify (64 lowercase hex characters).",
+				typed[key], "SHA-256 digest of the CP4 verification report written by highbay verify (64 lowercase hex characters).",
 			); err != nil {
 				return err
 			}
@@ -33145,6 +36576,58 @@ func validateApproveMergePayloadJSONValue(path string, value any, description st
 				"change_id",
 				"report_digest",
 				"request_revision",
+			})
+		}
+	}
+	return nil
+}
+
+// validateArchitectureElementContextJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateArchitectureElementContextJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier when viewing a specific card's architecture.",
+			); err != nil {
+				return err
+			}
+		case "element_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stable C4 model element identifier.",
+			); err != nil {
+				return err
+			}
+		case "element_name":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Human-readable C4 element label.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"element_id",
+				"element_name",
 			})
 		}
 	}
@@ -33997,50 +37480,6 @@ func validateBuildPassedJSONValue3(path string, value any, description string) e
 	return nil
 }
 
-// validateBuildTeamAmbiguousSpaceJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateBuildTeamAmbiguousSpaceJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "count":
-			if err := validateAgentPolicyItemJSONValue4(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Number of spaces matching this project.",
-			); err != nil {
-				return err
-			}
-		case "step":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Close the duplicate Herdr spaces, then start the agents.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"count",
-				"step",
-			})
-		}
-	}
-	return nil
-}
-
 // validateBuildTeamUnavailableJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateBuildTeamUnavailableJSONValue(path string, value any, description string) error {
 	field := path
@@ -34065,42 +37504,6 @@ func validateBuildTeamUnavailableJSONValue(path string, value any, description s
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "What the user does to make the team ready for the saved build.",
-			); err != nil {
-				return err
-			}
-		default:
-			return unknownJSONFieldError(path, key, []string{
-				"step",
-			})
-		}
-	}
-	return nil
-}
-
-// validateBuildTeamWindowBusyJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
-func validateBuildTeamWindowBusyJSONValue(path string, value any, description string) error {
-	field := path
-	if field == "" {
-		field = "$payload"
-	}
-	if value == nil {
-		return invalidGeneratedFieldTypeError(field, "object", "null", description)
-	}
-	typed, ok := value.(map[string]any)
-	if !ok {
-		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
-	}
-	keys := make([]string, 0, len(typed))
-	for key := range typed {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		switch key {
-		case "step":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Close the open dialog, then start the team agents.",
 			); err != nil {
 				return err
 			}
@@ -34577,7 +37980,7 @@ func validateBuilderVerificationReportJSONValue(path string, value any, descript
 		case "report_digest":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "SHA-256 digest of the full report the evaluator saved; approve_merge and hbay approve take this digest.",
+				typed[key], "SHA-256 digest of the full report the evaluator saved; approve_merge and highbay approve take this digest.",
 			); err != nil {
 				return err
 			}
@@ -37347,7 +40750,7 @@ func validateChangeListJSONValue(path string, value any, description string) err
 		case "approval_available":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server hbay starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
+				typed[key], "Whether approve_merge can record approvals on this server: true when the server runs Checkpoint 4 verification, as every server highbay starts does, and any stored promotion settings could be resolved; false when the server runs no verification or resolving the promotion target fails.",
 			); err != nil {
 				return err
 			}
@@ -37375,7 +40778,7 @@ func validateChangeListJSONValue(path string, value any, description string) err
 		case "version":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
+				typed[key], "Opaque value for change detection. It changes whenever the listed cards, a card's get_build view (including the builder's branch head_commit and latest check), approval_available, initializing_phase, the owner's Story evaluation, get_team, get_team_conversation, or get_live_target changes; list_changes items carry no build or branch fields, so read get_build for those facts. Compare it only for equality.",
 			); err != nil {
 				return err
 			}
@@ -39075,13 +42478,6 @@ func validateInstalledAgentOptionJSONValue(path string, value any, description s
 			); err != nil {
 				return err
 			}
-		case "headless_supported":
-			if err := validateAgentPolicyItemJSONValue3(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether Highbay supports this client's finite noninteractive mode.",
-			); err != nil {
-				return err
-			}
 		case "model_supported":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
@@ -39135,7 +42531,6 @@ func validateInstalledAgentOptionJSONValue(path string, value any, description s
 			return unknownJSONFieldError(path, key, []string{
 				"client",
 				"efforts",
-				"headless_supported",
 				"model_supported",
 				"models",
 				"program",
@@ -40116,6 +43511,74 @@ func validateOpenBuildRefusalJSONValue(path string, value any, description strin
 	return nil
 }
 
+// validateOpenViewsResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateOpenViewsResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "channel":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).",
+			); err != nil {
+				return err
+			}
+		case "handle":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Registered Chorus handle for this project's guide (empty when no guide is registered yet).",
+			); err != nil {
+				return err
+			}
+		case "message":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Safe handoff result without a URL or credential.",
+			); err != nil {
+				return err
+			}
+		case "opened":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the browser opener completed successfully.",
+			); err != nil {
+				return err
+			}
+		case "team":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stable Chorus swarm name for this project.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"channel",
+				"handle",
+				"message",
+				"opened",
+				"team",
+			})
+		}
+	}
+	return nil
+}
+
 // validatePreviewArchitecturePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validatePreviewArchitecturePayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -40180,24 +43643,10 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "herdr_mode":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether Herdr hosts this project, is available, or is unavailable.",
-			); err != nil {
-				return err
-			}
 		case "roles":
 			if err := validateProjectTeamJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "",
-			); err != nil {
-				return err
-			}
-		case "space":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Local Herdr space identifier, empty when Herdr is unavailable.",
+				typed[key], "Observed state of each registered project role.",
 			); err != nil {
 				return err
 			}
@@ -40217,9 +43666,7 @@ func validateProjectTeamJSONValue(path string, value any, description string) er
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
-				"herdr_mode",
 				"roles",
-				"space",
 				"step",
 				"team",
 			})
@@ -40282,6 +43729,13 @@ func validateProjectTeamJSONValue3(path string, value any, description string) e
 			); err != nil {
 				return err
 			}
+		case "has_terminal":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when this role is backed by a live or owned herdr-core (hc) terminal.",
+			); err != nil {
+				return err
+			}
 		case "role":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
@@ -40292,13 +43746,14 @@ func validateProjectTeamJSONValue3(path string, value any, description string) e
 		case "running":
 			if err := validateAgentPolicyItemJSONValue3(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "The matching live terminal is not reported as an idle shell; missing foreground information counts as running.",
+				typed[key], "True when the role has a live hc agent terminal or active external Chorus presence.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
 				"handle",
+				"has_terminal",
 				"role",
 				"running",
 			})
@@ -40865,6 +44320,87 @@ func validateReplacedBuildJSONValue(path string, value any, description string) 
 	return nil
 }
 
+// validateReviseAnswersContextJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviseAnswersContextJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "answers":
+			if err := validateReviseAnswersContextJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Map of question ID to the user's chosen option.",
+			); err != nil {
+				return err
+			}
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier being revised.",
+			); err != nil {
+				return err
+			}
+		case "request_revision":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Current request_revision shown on the Agree view.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"answers",
+				"change_id",
+				"request_revision",
+			})
+		}
+	}
+	return nil
+}
+
+// validateReviseAnswersContextJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateReviseAnswersContextJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if err := validateAgentPolicyItemJSONValue2(
+			generatedJSONChildPath(path, key, true),
+			typed[key], description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateReviseChangePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateReviseChangePayloadJSONValue(path string, value any, description string) error {
 	field := path
@@ -41099,6 +44635,164 @@ func validateRunStoryNotRecordedJSONValue(path string, value any, description st
 	return nil
 }
 
+// validateSendTeamMessagePayloadJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateSendTeamMessagePayloadJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "context":
+			if err := validateSendTeamMessagePayloadJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional structured workspace context formatted into the Chorus message by the server.",
+			); err != nil {
+				return err
+			}
+		case "guide_choice":
+			if err := validateRoleAgentChoiceJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional coding-agent CLI selection used if Highbay starts a missing guide for this message.",
+			); err != nil {
+				return err
+			}
+		case "reply_to":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional sequence number in the primary #channel being replied to.",
+			); err != nil {
+				return err
+			}
+		case "text":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Plain-English or Markdown message text.",
+			); err != nil {
+				return err
+			}
+		case "to":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Recipient target: team posts to the primary #channel; guide, builder, or test_writer mentions that role in the primary #channel.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"context",
+				"guide_choice",
+				"reply_to",
+				"text",
+				"to",
+			})
+		}
+	}
+	return nil
+}
+
+// validateSendTeamMessagePayloadJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateSendTeamMessagePayloadJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	for key := range typed {
+		if key != "type" && key != "value" {
+			return unknownJSONFieldError(path, key, []string{"type", "value"})
+		}
+	}
+	discriminator, ok := typed["type"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch, exists := typed["value"]
+	if !exists {
+		return fmt.Errorf("%s: missing union value", field)
+	}
+	switch discriminator {
+	case "revise_answers":
+		return validateReviseAnswersContextJSONValue(generatedJSONChildPath(path, "value", false), branch, "")
+	case "architecture_element":
+		return validateArchitectureElementContextJSONValue(generatedJSONChildPath(path, "value", false), branch, "")
+	case "story_flow":
+		return validateSendTeamMessagePayloadJSONValue3(generatedJSONChildPath(path, "value", false), branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateSendTeamMessagePayloadJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateSendTeamMessagePayloadJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "change_id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Change Card identifier when viewing a saved card's Story.",
+			); err != nil {
+				return err
+			}
+		case "flow_key":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional flow key within the Story.",
+			); err != nil {
+				return err
+			}
+		case "story":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Story name.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"change_id",
+				"flow_key",
+				"story",
+			})
+		}
+	}
+	return nil
+}
+
 // validateStartBuildResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateStartBuildResultJSONValue(path string, value any, description string) error {
 	field := path
@@ -41169,10 +44863,6 @@ func validateStartBuildResultJSONValue2(path string, value any, description stri
 	switch discriminator {
 	case "ready":
 		return validateProjectTeamJSONValue(path, branch, "")
-	case "window_busy":
-		return validateBuildTeamWindowBusyJSONValue(path, branch, "")
-	case "ambiguous_space":
-		return validateBuildTeamAmbiguousSpaceJSONValue(path, branch, "")
 	case "unavailable":
 		return validateBuildTeamUnavailableJSONValue(path, branch, "")
 	default:
@@ -41379,6 +45069,201 @@ func validateStoryRefreshResultJSONValue2(path string, value any, description st
 	return nil
 }
 
+// validateTeamConversationJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTeamConversationJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "channel":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Primary Chorus #channel.",
+			); err != nil {
+				return err
+			}
+		case "chorus_status":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether Chorus responded to the latest conversation read.",
+			); err != nil {
+				return err
+			}
+		case "messages":
+			if err := validateTeamConversationJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Chronological messages across the project's #channel and @you direct messages.",
+			); err != nil {
+				return err
+			}
+		case "pin":
+			if err := validateTeamConversationJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Pinned collaboration manifest in the primary #channel when set.",
+			); err != nil {
+				return err
+			}
+		case "team":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stable Chorus swarm name.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"channel",
+				"chorus_status",
+				"messages",
+				"pin",
+				"team",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTeamConversationJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTeamConversationJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "array", "null", description)
+	}
+	typed, ok := value.([]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "array", decodedJSONType(value), description)
+	}
+	for index, item := range typed {
+		if item == nil {
+			continue
+		}
+		if err := validateTeamConversationJSONValue3(
+			generatedJSONChildPath(path, strconv.Itoa(index), true),
+			item, description,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateTeamConversationJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTeamConversationJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "id":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Unique message key combining target and sequence (for example #refunds-8f3a1c902b4e:12).",
+			); err != nil {
+				return err
+			}
+		case "model":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Reported model or participant kind (for example human, service, or model name).",
+			); err != nil {
+				return err
+			}
+		case "reply_to":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Optional sequence number in target that this message replies to.",
+			); err != nil {
+				return err
+			}
+		case "sender":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Chorus handle of the sender.",
+			); err != nil {
+				return err
+			}
+		case "sender_role":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Project role of the sender for UI presentation.",
+			); err != nil {
+				return err
+			}
+		case "sent_at_ms":
+			if err := validateCheckOutputPageJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Unix timestamp in milliseconds when Chorus recorded the message.",
+			); err != nil {
+				return err
+			}
+		case "seq":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Monotonic sequence number within target.",
+			); err != nil {
+				return err
+			}
+		case "target":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Chorus target (#channel or @handle) carrying this message.",
+			); err != nil {
+				return err
+			}
+		case "text":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Markdown message text.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"id",
+				"model",
+				"reply_to",
+				"sender",
+				"sender_role",
+				"sent_at_ms",
+				"seq",
+				"target",
+				"text",
+			})
+		}
+	}
+	return nil
+}
+
 // validateTeamRoleStateJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
 func validateTeamRoleStateJSONValue(path string, value any, description string) error {
 	field := path
@@ -41402,14 +45287,21 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 		case "assignment":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "unread when this role owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it (no build is open, the build was dropped, the test writer's tests are accepted, or a verification of the builder's build passed); unknown when the owner could not read assignments. The guide has no assignments.",
+				typed[key], "unread when this worker owes an assignment read; nothing_owed when it has work and owes no read; no_work when the open build needs nothing from it; unknown when assignments could not be read. The guide has no assignments (no_work).",
 			); err != nil {
 				return err
 			}
 		case "attention":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Reported block kind, or why a running agent needs the user: silent when it reports nothing for 60 seconds, assignment when it has waited with an unread assignment for 90 seconds, or for 15 seconds while Chorus is not known to be reachable and so no reminder can arrive.",
+				typed[key], "Reported block kind when the role needs the user (for example permission, question, auth, or silent after 60 seconds without progress).",
+			); err != nil {
+				return err
+			}
+		case "choice":
+			if err := validateRoleAgentChoiceJSONValue(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Configured coding-agent CLI selection for this role when saved.",
 			); err != nil {
 				return err
 			}
@@ -41417,6 +45309,13 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Registered Chorus handle.",
+			); err != nil {
+				return err
+			}
+		case "has_terminal":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "True when this role has a managed or attached herdr-core terminal that can be opened in the browser terminal drawer.",
 			); err != nil {
 				return err
 			}
@@ -41430,14 +45329,7 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 		case "state":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Current terminal state; unknown means Herdr cannot establish it.",
-			); err != nil {
-				return err
-			}
-		case "watcher":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "held when Chorus reports a watcher, gone after its absence grace, unknown otherwise.",
+				typed[key], "Current role state; unknown means herdr-core and Chorus cannot establish it.",
 			); err != nil {
 				return err
 			}
@@ -41445,10 +45337,11 @@ func validateTeamRoleStateJSONValue(path string, value any, description string) 
 			return unknownJSONFieldError(path, key, []string{
 				"assignment",
 				"attention",
+				"choice",
 				"handle",
+				"has_terminal",
 				"role",
 				"state",
-				"watcher",
 			})
 		}
 	}
@@ -41475,10 +45368,17 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
+		case "channel":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Primary Chorus #channel for this project.",
+			); err != nil {
+				return err
+			}
 		case "chorus_status":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Whether Chorus serves this team: not_used when workers run outside Herdr and never use it; connected after Highbay's latest read of the team's Chorus view succeeded; unavailable after that read failed or when the team's space has no Chorus connection. While unavailable no Chorus reminder reaches a worker: workers wait on Highbay with wait_for_builder_assignment and wait_for_test_writer_assignment, and a worker that stopped needs the user's prompt. Absent before a team space exists or before the first read settled it.",
+				typed[key], "Whether Highbay's local Chorus connection is healthy.",
 			); err != nil {
 				return err
 			}
@@ -41486,13 +45386,6 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 			if err := validateTeamSnapshotJSONValue2(
 				generatedJSONChildPath(path, key, false),
 				typed[key], "Dismissed project notices.",
-			); err != nil {
-				return err
-			}
-		case "herdr_mode":
-			if err := validateAgentPolicyItemJSONValue2(
-				generatedJSONChildPath(path, key, false),
-				typed[key], "Current desktop attachment.",
 			); err != nil {
 				return err
 			}
@@ -41513,15 +45406,15 @@ func validateTeamSnapshotJSONValue(path string, value any, description string) e
 		case "team":
 			if err := validateAgentPolicyItemJSONValue2(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "Stable team name, also returned before a team is prepared.",
+				typed[key], "Stable Chorus swarm name for this project.",
 			); err != nil {
 				return err
 			}
 		default:
 			return unknownJSONFieldError(path, key, []string{
+				"channel",
 				"chorus_status",
 				"dismissed_notices",
-				"herdr_mode",
 				"roles",
 				"saved_choices",
 				"team",
@@ -41609,6 +45502,450 @@ func validateTeamSnapshotJSONValue4(path string, value any, description string) 
 			typed[key], description,
 		); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// validateTerminalClientFrameJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "client_frame":
+			if err := validateTerminalClientFrameJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exactly one client terminal event.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"client_frame",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalClientFrameJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["kind"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "kind" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "input":
+		return validateTerminalClientFrameJSONValue3(path, branch, "")
+	case "resize":
+		return validateTerminalClientFrameJSONValue5(path, branch, "")
+	case "focus":
+		return validateTerminalClientFrameJSONValue6(path, branch, "")
+	case "credit":
+		return validateTerminalClientFrameJSONValue7(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateTerminalClientFrameJSONValue3 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue3(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "data":
+			if err := validateTerminalClientFrameJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Raw terminal input bytes.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"data",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalClientFrameJSONValue4 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue4(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "string", "null", description)
+	}
+	_, ok := value.(string)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "string", decodedJSONType(value), description)
+	}
+	return nil
+}
+
+// validateTerminalClientFrameJSONValue5 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue5(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "cols":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Terminal width in columns.",
+			); err != nil {
+				return err
+			}
+		case "rows":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Terminal height in rows.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"cols",
+				"rows",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalClientFrameJSONValue6 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue6(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "focused":
+			if err := validateAgentPolicyItemJSONValue3(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Whether the terminal drawer currently holds focus.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"focused",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalClientFrameJSONValue7 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClientFrameJSONValue7(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "bytes":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Number of output bytes consumed by xterm.js.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"bytes",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalClosedJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalClosedJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "exit_code":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Process exit status when the terminal process exited normally.",
+			); err != nil {
+				return err
+			}
+		case "reason":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Stream end reason reported by herdr-core (for example detached, exited, killed, or lost).",
+			); err != nil {
+				return err
+			}
+		case "signal":
+			if err := validateAgentPolicyItemJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Terminating signal number when the terminal process was ended by a signal.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"exit_code",
+				"reason",
+				"signal",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalOutputFrameJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalOutputFrameJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "data":
+			if err := validateTerminalClientFrameJSONValue4(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Raw terminal output bytes.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"data",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalServerFrameJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalServerFrameJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "server_frame":
+			if err := validateTerminalServerFrameJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Exactly one server terminal event.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"server_frame",
+			})
+		}
+	}
+	return nil
+}
+
+// validateTerminalServerFrameJSONValue2 checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalServerFrameJSONValue2(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	discriminator, ok := typed["kind"].(string)
+	if !ok {
+		return fmt.Errorf("%s: missing or invalid union discriminator", field)
+	}
+	branch := make(map[string]any, len(typed)-1)
+	for key, item := range typed {
+		if key != "kind" {
+			branch[key] = item
+		}
+	}
+	switch discriminator {
+	case "output":
+		return validateTerminalOutputFrameJSONValue(path, branch, "")
+	case "resize":
+		return validateTerminalClientFrameJSONValue5(path, branch, "")
+	case "closed":
+		return validateTerminalClosedJSONValue(path, branch, "")
+	default:
+		return fmt.Errorf("%s: unknown union discriminator %q", field, discriminator)
+	}
+}
+
+// validateTerminalTicketResultJSONValue checks one value whose JSON shape is fixed by the generated Goa type.
+func validateTerminalTicketResultJSONValue(path string, value any, description string) error {
+	field := path
+	if field == "" {
+		field = "$payload"
+	}
+	if value == nil {
+		return invalidGeneratedFieldTypeError(field, "object", "null", description)
+	}
+	typed, ok := value.(map[string]any)
+	if !ok {
+		return invalidGeneratedFieldTypeError(field, "object", decodedJSONType(value), description)
+	}
+	keys := make([]string, 0, len(typed))
+	for key := range typed {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		switch key {
+		case "expires_at":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "UTC expiration timestamp of the ticket.",
+			); err != nil {
+				return err
+			}
+		case "ticket":
+			if err := validateAgentPolicyItemJSONValue2(
+				generatedJSONChildPath(path, key, false),
+				typed[key], "Opaque single-use ticket valid for at most 30 seconds.",
+			); err != nil {
+				return err
+			}
+		default:
+			return unknownJSONFieldError(path, key, []string{
+				"expires_at",
+				"ticket",
+			})
 		}
 	}
 	return nil
@@ -43581,6 +47918,44 @@ func checkApproveMergePayloadApproveMergePayloadValue(in *ApproveMergePayload, f
 	return nil
 }
 
+// checkArchitectureElementContextValue checks text and cycles before conversion.
+func checkArchitectureElementContextValue(in *ArchitectureElementContext) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkArchitectureElementContextArchitectureElementContextValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkArchitectureElementContextArchitectureElementContextValue checks one generated value on the active path.
+func checkArchitectureElementContextArchitectureElementContextValue(in *ArchitectureElementContext, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if in.ChangeID != nil {
+			if !utf8.ValidString(string(*in.ChangeID)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+			}
+		}
+		if !utf8.ValidString(string(in.ElementID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "element_id", false))
+		}
+		if !utf8.ValidString(string(in.ElementName)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "element_name", false))
+		}
+	}
+	return nil
+}
+
 // checkArchitecturePreviewResultValue checks text and cycles before conversion.
 func checkArchitecturePreviewResultValue(in *ArchitecturePreviewResult) error {
 	if in == nil {
@@ -44007,36 +48382,6 @@ func checkBuildStartStepBuildStartStepValue(in BuildStartStep, field string, act
 	return nil
 }
 
-// checkBuildTeamAmbiguousSpaceValue checks text and cycles before conversion.
-func checkBuildTeamAmbiguousSpaceValue(in *BuildTeamAmbiguousSpace) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkBuildTeamAmbiguousSpaceBuildTeamAmbiguousSpaceValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkBuildTeamAmbiguousSpaceBuildTeamAmbiguousSpaceValue checks one generated value on the active path.
-func checkBuildTeamAmbiguousSpaceBuildTeamAmbiguousSpaceValue(in *BuildTeamAmbiguousSpace, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if err := checkBuildStartStepBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // checkBuildTeamUnavailableValue checks text and cycles before conversion.
 func checkBuildTeamUnavailableValue(in *BuildTeamUnavailable) error {
 	if in == nil {
@@ -44051,36 +48396,6 @@ func checkBuildTeamUnavailableValue(in *BuildTeamUnavailable) error {
 
 // checkBuildTeamUnavailableBuildTeamUnavailableValue checks one generated value on the active path.
 func checkBuildTeamUnavailableBuildTeamUnavailableValue(in *BuildTeamUnavailable, field string, active map[any]bool) error {
-	if in == nil {
-		return nil
-	}
-	if active[in] {
-		return fmt.Errorf("%s: cyclic Go value", field)
-	}
-	active[in] = true
-	defer delete(active, in)
-	if in != nil {
-		if err := checkBuildStartStepBuildStartStepValue(in.Step, generatedJSONChildPath(field, "step", false), active); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkBuildTeamWindowBusyValue checks text and cycles before conversion.
-func checkBuildTeamWindowBusyValue(in *BuildTeamWindowBusy) error {
-	if in == nil {
-		return fmt.Errorf("missing root value")
-	}
-	active := make(map[any]bool)
-	if err := checkBuildTeamWindowBusyBuildTeamWindowBusyValue(in, "$", active); err != nil {
-		return err
-	}
-	return nil
-}
-
-// checkBuildTeamWindowBusyBuildTeamWindowBusyValue checks one generated value on the active path.
-func checkBuildTeamWindowBusyBuildTeamWindowBusyValue(in *BuildTeamWindowBusy, field string, active map[any]bool) error {
 	if in == nil {
 		return nil
 	}
@@ -47161,6 +51476,45 @@ func checkOpenBuildRefusalOpenBuildRefusalValue(in *OpenBuildRefusal, field stri
 	return nil
 }
 
+// checkOpenViewsResultValue checks text and cycles before conversion.
+func checkOpenViewsResultValue(in *OpenViewsResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkOpenViewsResultOpenViewsResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkOpenViewsResultOpenViewsResultValue checks one generated value on the active path.
+func checkOpenViewsResultOpenViewsResultValue(in *OpenViewsResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Message)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "message", false))
+		}
+		if !utf8.ValidString(string(in.Team)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
+		}
+		if !utf8.ValidString(string(in.Channel)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "channel", false))
+		}
+		if !utf8.ValidString(string(in.Handle)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "handle", false))
+		}
+	}
+	return nil
+}
+
 // checkOperatorEvaluatorTestsValue checks text and cycles before conversion.
 func checkOperatorEvaluatorTestsValue(in *OperatorEvaluatorTests) error {
 	if in == nil {
@@ -47232,18 +51586,12 @@ func checkProjectTeamProjectTeamValue(in *ProjectTeam, field string, active map[
 		if !utf8.ValidString(string(in.Team)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
 		}
-		if !utf8.ValidString(string(in.Space)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "space", false))
-		}
 		for index1, item1 := range in.Roles {
 			_ = index1
 			_ = item1
 			if err := checkProjectTeamProjectTeamRoleValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "roles", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
-		}
-		if !utf8.ValidString(string(in.HerdrMode)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
 		}
 		if !utf8.ValidString(string(in.Step)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "step", false))
@@ -47587,6 +51935,48 @@ func checkRequiredTestValue(in *RequiredTest) error {
 	return nil
 }
 
+// checkReviseAnswersContextValue checks text and cycles before conversion.
+func checkReviseAnswersContextValue(in *ReviseAnswersContext) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkReviseAnswersContextReviseAnswersContextValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkReviseAnswersContextReviseAnswersContextValue checks one generated value on the active path.
+func checkReviseAnswersContextReviseAnswersContextValue(in *ReviseAnswersContext, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ChangeID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+		}
+		if !utf8.ValidString(string(in.RequestRevision)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "request_revision", false))
+		}
+		for key1, item1 := range in.Answers {
+			_ = item1
+			if !utf8.ValidString(string(key1)) {
+				return fmt.Errorf("%s: invalid UTF-8 map key", generatedJSONChildPath(field, "answers", false))
+			}
+			if !utf8.ValidString(string(item1)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "answers", false), string(key1), true))
+			}
+		}
+	}
+	return nil
+}
+
 // checkReviseChangePayloadValue checks text and cycles before conversion.
 func checkReviseChangePayloadValue(in *ReviseChangePayload) error {
 	if in == nil {
@@ -47797,6 +52187,88 @@ func checkRunningLiveTargetValue(in *RunningLiveTarget) error {
 	return nil
 }
 
+// checkSendTeamMessagePayloadValue checks text and cycles before conversion.
+func checkSendTeamMessagePayloadValue(in *SendTeamMessagePayload) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkSendTeamMessagePayloadSendTeamMessagePayloadValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkSendTeamMessagePayloadSendTeamMessagePayloadValue checks one generated value on the active path.
+func checkSendTeamMessagePayloadSendTeamMessagePayloadValue(in *SendTeamMessagePayload, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.To)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "to", false))
+		}
+		if !utf8.ValidString(string(in.Text)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "text", false))
+		}
+		if err := checkRoleAgentChoiceRoleAgentChoiceValue(in.GuideChoice, generatedJSONChildPath(field, "guide_choice", false), active); err != nil {
+			return err
+		}
+		if branch1, ok := in.Context.AsReviseAnswers(); ok {
+			_ = branch1
+			if err := checkReviseAnswersContextReviseAnswersContextValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "context", false), "value", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Context.AsArchitectureElement(); ok {
+			_ = branch1
+			if err := checkArchitectureElementContextArchitectureElementContextValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "context", false), "value", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.Context.AsStoryFlow(); ok {
+			_ = branch1
+			if err := checkSendTeamMessagePayloadStoryFlowContextValue(branch1, generatedJSONChildPath(generatedJSONChildPath(field, "context", false), "value", false), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkSendTeamMessagePayloadStoryFlowContextValue checks one generated value on the active path.
+func checkSendTeamMessagePayloadStoryFlowContextValue(in *StoryFlowContext, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if in.ChangeID != nil {
+			if !utf8.ValidString(string(*in.ChangeID)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "change_id", false))
+			}
+		}
+		if !utf8.ValidString(string(in.Story)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "story", false))
+		}
+		if in.FlowKey != nil {
+			if !utf8.ValidString(string(*in.FlowKey)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "flow_key", false))
+			}
+		}
+	}
+	return nil
+}
+
 // checkStartBuildResultValue checks text and cycles before conversion.
 func checkStartBuildResultValue(in *StartBuildResult) error {
 	if in == nil {
@@ -47828,22 +52300,6 @@ func checkStartBuildResultStartBuildResultValue(in *StartBuildResult, field stri
 			if branch1 != nil {
 			}
 			if err := checkProjectTeamProjectTeamValue(branch1, generatedJSONChildPath(field, "team", false), active); err != nil {
-				return err
-			}
-		}
-		if branch1, ok := in.Team.AsWindowBusy(); ok {
-			_ = branch1
-			if branch1 != nil {
-			}
-			if err := checkBuildTeamWindowBusyBuildTeamWindowBusyValue(branch1, generatedJSONChildPath(field, "team", false), active); err != nil {
-				return err
-			}
-		}
-		if branch1, ok := in.Team.AsAmbiguousSpace(); ok {
-			_ = branch1
-			if branch1 != nil {
-			}
-			if err := checkBuildTeamAmbiguousSpaceBuildTeamAmbiguousSpaceValue(branch1, generatedJSONChildPath(field, "team", false), active); err != nil {
 				return err
 			}
 		}
@@ -47941,6 +52397,18 @@ func checkStoryActorItemValue(in *StoryActorItem) error {
 	}
 	active := make(map[any]bool)
 	if err := checkChangeCardResultStoryActorItemValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkStoryFlowContextValue checks text and cycles before conversion.
+func checkStoryFlowContextValue(in *StoryFlowContext) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkSendTeamMessagePayloadStoryFlowContextValue(in, "$", active); err != nil {
 		return err
 	}
 	return nil
@@ -48052,6 +52520,99 @@ func checkStorySummaryItemValue(in *StorySummaryItem) error {
 	return nil
 }
 
+// checkTeamConversationValue checks text and cycles before conversion.
+func checkTeamConversationValue(in *TeamConversation) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTeamConversationTeamConversationValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTeamConversationTeamConversationValue checks one generated value on the active path.
+func checkTeamConversationTeamConversationValue(in *TeamConversation, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Team)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
+		}
+		if !utf8.ValidString(string(in.Channel)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "channel", false))
+		}
+		if !utf8.ValidString(string(in.ChorusStatus)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "chorus_status", false))
+		}
+		if err := checkTeamConversationTeamMessageValue(in.Pin, generatedJSONChildPath(field, "pin", false), active); err != nil {
+			return err
+		}
+		for index1, item1 := range in.Messages {
+			_ = index1
+			_ = item1
+			if err := checkTeamConversationTeamMessageValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "messages", false), strconv.Itoa(index1), true), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkTeamConversationTeamMessageValue checks one generated value on the active path.
+func checkTeamConversationTeamMessageValue(in *TeamMessage, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.ID)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "id", false))
+		}
+		if !utf8.ValidString(string(in.Target)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "target", false))
+		}
+		if !utf8.ValidString(string(in.Sender)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "sender", false))
+		}
+		if !utf8.ValidString(string(in.SenderRole)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "sender_role", false))
+		}
+		if in.Model != nil {
+			if !utf8.ValidString(string(*in.Model)) {
+				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "model", false))
+			}
+		}
+		if !utf8.ValidString(string(in.Text)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "text", false))
+		}
+	}
+	return nil
+}
+
+// checkTeamMessageValue checks text and cycles before conversion.
+func checkTeamMessageValue(in *TeamMessage) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTeamConversationTeamMessageValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
 // checkTeamRoleStateValue checks text and cycles before conversion.
 func checkTeamRoleStateValue(in *TeamRoleState) error {
 	if in == nil {
@@ -48087,11 +52648,11 @@ func checkTeamRoleStateTeamRoleStateValue(in *TeamRoleState, field string, activ
 		if !utf8.ValidString(string(in.Attention)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "attention", false))
 		}
-		if !utf8.ValidString(string(in.Watcher)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "watcher", false))
-		}
 		if !utf8.ValidString(string(in.Assignment)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "assignment", false))
+		}
+		if err := checkRoleAgentChoiceRoleAgentChoiceValue(in.Choice, generatedJSONChildPath(field, "choice", false), active); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -48123,15 +52684,15 @@ func checkTeamSnapshotTeamSnapshotValue(in *TeamSnapshot, field string, active m
 		if !utf8.ValidString(string(in.Team)) {
 			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "team", false))
 		}
+		if !utf8.ValidString(string(in.Channel)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "channel", false))
+		}
 		for index1, item1 := range in.Roles {
 			_ = index1
 			_ = item1
 			if err := checkTeamRoleStateTeamRoleStateValue(item1, generatedJSONChildPath(generatedJSONChildPath(field, "roles", false), strconv.Itoa(index1), true), active); err != nil {
 				return err
 			}
-		}
-		if !utf8.ValidString(string(in.HerdrMode)) {
-			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "herdr_mode", false))
 		}
 		for key1, item1 := range in.SavedChoices {
 			_ = item1
@@ -48149,10 +52710,316 @@ func checkTeamSnapshotTeamSnapshotValue(in *TeamSnapshot, field string, active m
 				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(generatedJSONChildPath(field, "dismissed_notices", false), strconv.Itoa(index1), true))
 			}
 		}
-		if in.ChorusStatus != nil {
-			if !utf8.ValidString(string(*in.ChorusStatus)) {
-				return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "chorus_status", false))
+		if !utf8.ValidString(string(in.ChorusStatus)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "chorus_status", false))
+		}
+	}
+	return nil
+}
+
+// checkTerminalClientFrameValue checks text and cycles before conversion.
+func checkTerminalClientFrameValue(in *TerminalClientFrame) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalClientFrameTerminalClientFrameValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalClientFrameTerminalClientFrameValue checks one generated value on the active path.
+func checkTerminalClientFrameTerminalClientFrameValue(in *TerminalClientFrame, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if branch1, ok := in.ClientFrame.AsInput(); ok {
+			_ = branch1
+			if branch1 != nil {
 			}
+			if err := checkTerminalClientFrameTerminalInputFrameValue(branch1, generatedJSONChildPath(field, "client_frame", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.ClientFrame.AsResize(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkTerminalClientFrameTerminalResizeValue(branch1, generatedJSONChildPath(field, "client_frame", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.ClientFrame.AsFocus(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkTerminalClientFrameTerminalFocusFrameValue(branch1, generatedJSONChildPath(field, "client_frame", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.ClientFrame.AsCredit(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkTerminalClientFrameTerminalCreditFrameValue(branch1, generatedJSONChildPath(field, "client_frame", false), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkTerminalClientFrameTerminalInputFrameValue checks one generated value on the active path.
+func checkTerminalClientFrameTerminalInputFrameValue(in *TerminalInputFrame, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkTerminalClientFrameTerminalResizeValue checks one generated value on the active path.
+func checkTerminalClientFrameTerminalResizeValue(in *TerminalResize, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkTerminalClientFrameTerminalFocusFrameValue checks one generated value on the active path.
+func checkTerminalClientFrameTerminalFocusFrameValue(in *TerminalFocusFrame, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkTerminalClientFrameTerminalCreditFrameValue checks one generated value on the active path.
+func checkTerminalClientFrameTerminalCreditFrameValue(in *TerminalCreditFrame, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkTerminalClosedValue checks text and cycles before conversion.
+func checkTerminalClosedValue(in *TerminalClosed) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalClosedTerminalClosedValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalClosedTerminalClosedValue checks one generated value on the active path.
+func checkTerminalClosedTerminalClosedValue(in *TerminalClosed, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Reason)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "reason", false))
+		}
+	}
+	return nil
+}
+
+// checkTerminalCreditFrameValue checks text and cycles before conversion.
+func checkTerminalCreditFrameValue(in *TerminalCreditFrame) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalClientFrameTerminalCreditFrameValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalFocusFrameValue checks text and cycles before conversion.
+func checkTerminalFocusFrameValue(in *TerminalFocusFrame) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalClientFrameTerminalFocusFrameValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalInputFrameValue checks text and cycles before conversion.
+func checkTerminalInputFrameValue(in *TerminalInputFrame) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalClientFrameTerminalInputFrameValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalOutputFrameValue checks text and cycles before conversion.
+func checkTerminalOutputFrameValue(in *TerminalOutputFrame) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalOutputFrameTerminalOutputFrameValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalOutputFrameTerminalOutputFrameValue checks one generated value on the active path.
+func checkTerminalOutputFrameTerminalOutputFrameValue(in *TerminalOutputFrame, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+	}
+	return nil
+}
+
+// checkTerminalResizeValue checks text and cycles before conversion.
+func checkTerminalResizeValue(in *TerminalResize) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalClientFrameTerminalResizeValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalServerFrameValue checks text and cycles before conversion.
+func checkTerminalServerFrameValue(in *TerminalServerFrame) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalServerFrameTerminalServerFrameValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalServerFrameTerminalServerFrameValue checks one generated value on the active path.
+func checkTerminalServerFrameTerminalServerFrameValue(in *TerminalServerFrame, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if branch1, ok := in.ServerFrame.AsOutput(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkTerminalOutputFrameTerminalOutputFrameValue(branch1, generatedJSONChildPath(field, "server_frame", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.ServerFrame.AsResize(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkTerminalClientFrameTerminalResizeValue(branch1, generatedJSONChildPath(field, "server_frame", false), active); err != nil {
+				return err
+			}
+		}
+		if branch1, ok := in.ServerFrame.AsClosed(); ok {
+			_ = branch1
+			if branch1 != nil {
+			}
+			if err := checkTerminalClosedTerminalClosedValue(branch1, generatedJSONChildPath(field, "server_frame", false), active); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// checkTerminalTicketResultValue checks text and cycles before conversion.
+func checkTerminalTicketResultValue(in *TerminalTicketResult) error {
+	if in == nil {
+		return fmt.Errorf("missing root value")
+	}
+	active := make(map[any]bool)
+	if err := checkTerminalTicketResultTerminalTicketResultValue(in, "$", active); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkTerminalTicketResultTerminalTicketResultValue checks one generated value on the active path.
+func checkTerminalTicketResultTerminalTicketResultValue(in *TerminalTicketResult, field string, active map[any]bool) error {
+	if in == nil {
+		return nil
+	}
+	if active[in] {
+		return fmt.Errorf("%s: cyclic Go value", field)
+	}
+	active[in] = true
+	defer delete(active, in)
+	if in != nil {
+		if !utf8.ValidString(string(in.Ticket)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "ticket", false))
+		}
+		if !utf8.ValidString(string(in.ExpiresAt)) {
+			return fmt.Errorf("%s: invalid UTF-8", generatedJSONChildPath(field, "expires_at", false))
 		}
 	}
 	return nil

@@ -139,7 +139,7 @@ type ApproveMergeRequestBody struct {
 	// Full commit ID of the candidate being promoted (40 or 64 lowercase hex
 	// characters).
 	CandidateCommit string `form:"candidate_commit" json:"candidate_commit" xml:"candidate_commit"`
-	// SHA-256 digest of the CP4 verification report written by hbay verify (64
+	// SHA-256 digest of the CP4 verification report written by highbay verify (64
 	// lowercase hex characters).
 	ReportDigest string `form:"report_digest" json:"report_digest" xml:"report_digest"`
 }
@@ -218,11 +218,22 @@ type ReadCheckOutputRequestBody struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty" xml:"cursor,omitempty"`
 }
 
-// ShowTeamPaneRequestBody is the type of the "highbay" service
-// "show_team_pane" endpoint HTTP request body.
-type ShowTeamPaneRequestBody struct {
-	// Registered role whose pane the user requests.
-	Role string `form:"role" json:"role" xml:"role"`
+// SendTeamMessageRequestBody is the type of the "highbay" service
+// "send_team_message" endpoint HTTP request body.
+type SendTeamMessageRequestBody struct {
+	// Recipient target: team posts to the primary #channel; guide, builder, or
+	// test_writer mentions that role in the primary #channel.
+	To string `form:"to" json:"to" xml:"to"`
+	// Plain-English or Markdown message text.
+	Text string `form:"text" json:"text" xml:"text"`
+	// Optional sequence number in the primary #channel being replied to.
+	ReplyTo *int `form:"reply_to,omitempty" json:"reply_to,omitempty" xml:"reply_to,omitempty"`
+	// Optional coding-agent CLI selection used if Highbay starts a missing guide
+	// for this message.
+	GuideChoice *RoleAgentChoiceRequestBody `form:"guide_choice,omitempty" json:"guide_choice,omitempty" xml:"guide_choice,omitempty"`
+	// Optional structured workspace context formatted into the Chorus message by
+	// the server.
+	Context *ContextRequestBody `form:"context,omitempty" json:"context,omitempty" xml:"context,omitempty"`
 }
 
 // StartTeamAgentsRequestBody is the type of the "highbay" service
@@ -232,6 +243,18 @@ type StartTeamAgentsRequestBody struct {
 	// and empty choices both use saved choices and installed defaults.
 	Choices map[string]*RoleAgentChoiceRequestBody `form:"choices,omitempty" json:"choices,omitempty" xml:"choices,omitempty"`
 }
+
+// RestartTeamRoleRequestBody is the type of the "highbay" service
+// "restart_team_role" endpoint HTTP request body.
+type RestartTeamRoleRequestBody struct {
+	// Optional coding-agent CLI selection for the restarted terminal; when
+	// omitted, uses the role's saved choice or installed default.
+	Choice *RoleAgentChoiceRequestBody `form:"choice,omitempty" json:"choice,omitempty" xml:"choice,omitempty"`
+}
+
+// AttachRoleTerminalStreamingBody is the type of the "highbay" service
+// "attach_role_terminal" endpoint HTTP request body.
+type AttachRoleTerminalStreamingBody TerminalClientFrameStreamingBody
 
 // DismissTeamNoticeRequestBody is the type of the "highbay" service
 // "dismiss_team_notice" endpoint HTTP request body.
@@ -1009,26 +1032,60 @@ type UpdateDraftResponseBody struct {
 // GetTeamResponseBody is the type of the "highbay" service "get_team" endpoint
 // HTTP response body.
 type GetTeamResponseBody struct {
-	// Stable team name, also returned before a team is prepared.
+	// Stable Chorus swarm name for this project.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
+	// Primary Chorus #channel for this project.
+	Channel *string `form:"channel,omitempty" json:"channel,omitempty" xml:"channel,omitempty"`
 	// Registered roles in guide, builder, test_writer order; empty before
 	// registration.
 	Roles []*TeamRoleStateResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Current desktop attachment.
-	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// Saved client choices by role.
 	SavedChoices map[string]*RoleAgentChoiceResponseBody `form:"saved_choices,omitempty" json:"saved_choices,omitempty" xml:"saved_choices,omitempty"`
 	// Dismissed project notices.
 	DismissedNotices []string `form:"dismissed_notices,omitempty" json:"dismissed_notices,omitempty" xml:"dismissed_notices,omitempty"`
-	// Whether Chorus serves this team: not_used when workers run outside Herdr and
-	// never use it; connected after Highbay's latest read of the team's Chorus
-	// view succeeded; unavailable after that read failed or when the team's space
-	// has no Chorus connection. While unavailable no Chorus reminder reaches a
-	// worker: workers wait on Highbay with wait_for_builder_assignment and
-	// wait_for_test_writer_assignment, and a worker that stopped needs the user's
-	// prompt. Absent before a team space exists or before the first read settled
-	// it.
+	// Whether Highbay's local Chorus connection is healthy.
 	ChorusStatus *string `form:"chorus_status,omitempty" json:"chorus_status,omitempty" xml:"chorus_status,omitempty"`
+}
+
+// GetTeamConversationResponseBody is the type of the "highbay" service
+// "get_team_conversation" endpoint HTTP response body.
+type GetTeamConversationResponseBody struct {
+	// Stable Chorus swarm name.
+	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
+	// Primary Chorus #channel.
+	Channel *string `form:"channel,omitempty" json:"channel,omitempty" xml:"channel,omitempty"`
+	// Whether Chorus responded to the latest conversation read.
+	ChorusStatus *string `form:"chorus_status,omitempty" json:"chorus_status,omitempty" xml:"chorus_status,omitempty"`
+	// Pinned collaboration manifest in the primary #channel when set.
+	Pin *TeamMessageResponseBody `form:"pin,omitempty" json:"pin,omitempty" xml:"pin,omitempty"`
+	// Chronological messages across the project's #channel and @you direct
+	// messages.
+	Messages []*TeamMessageResponseBody `form:"messages,omitempty" json:"messages,omitempty" xml:"messages,omitempty"`
+}
+
+// SendTeamMessageResponseBody is the type of the "highbay" service
+// "send_team_message" endpoint HTTP response body.
+type SendTeamMessageResponseBody struct {
+	// Unique message key combining target and sequence (for example
+	// #refunds-8f3a1c902b4e:12).
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Chorus target (#channel or @handle) carrying this message.
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
+	// Monotonic sequence number within target.
+	Seq *int `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
+	// Chorus handle of the sender.
+	Sender *string `form:"sender,omitempty" json:"sender,omitempty" xml:"sender,omitempty"`
+	// Project role of the sender for UI presentation.
+	SenderRole *string `form:"sender_role,omitempty" json:"sender_role,omitempty" xml:"sender_role,omitempty"`
+	// Reported model or participant kind (for example human, service, or model
+	// name).
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Markdown message text.
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+	// Optional sequence number in target that this message replies to.
+	ReplyTo *int `form:"reply_to,omitempty" json:"reply_to,omitempty" xml:"reply_to,omitempty"`
+	// Unix timestamp in milliseconds when Chorus recorded the message.
+	SentAtMs *int64 `form:"sent_at_ms,omitempty" json:"sent_at_ms,omitempty" xml:"sent_at_ms,omitempty"`
 }
 
 // StartTeamAgentsResponseBody is the type of the "highbay" service
@@ -1036,13 +1093,26 @@ type GetTeamResponseBody struct {
 type StartTeamAgentsResponseBody struct {
 	// Stable Chorus team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space *string                        `form:"space,omitempty" json:"space,omitempty" xml:"space,omitempty"`
+	// Observed state of each registered project role.
 	Roles []*ProjectTeamRoleResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// What the user does next for the prepared team.
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
+}
+
+// CreateTerminalTicketResponseBody is the type of the "highbay" service
+// "create_terminal_ticket" endpoint HTTP response body.
+type CreateTerminalTicketResponseBody struct {
+	// Opaque single-use ticket valid for at most 30 seconds.
+	Ticket *string `form:"ticket,omitempty" json:"ticket,omitempty" xml:"ticket,omitempty"`
+	// UTC expiration timestamp of the ticket.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// AttachRoleTerminalResponseBody is the type of the "highbay" service
+// "attach_role_terminal" endpoint HTTP response body.
+type AttachRoleTerminalResponseBody struct {
+	// Exactly one server terminal event.
+	ServerFrame *ServerFrameResponseBody `form:"server_frame,omitempty" json:"server_frame,omitempty" xml:"server_frame,omitempty"`
 }
 
 // ListTeamAgentOptionsResponseBody is the type of the "highbay" service
@@ -1062,6 +1132,13 @@ type OpenViewsResponseBody struct {
 	Opened *bool `form:"opened,omitempty" json:"opened,omitempty" xml:"opened,omitempty"`
 	// Safe handoff result without a URL or credential.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Stable Chorus swarm name for this project.
+	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
+	// Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).
+	Channel *string `form:"channel,omitempty" json:"channel,omitempty" xml:"channel,omitempty"`
+	// Registered Chorus handle for this project's guide (empty when no guide is
+	// registered yet).
+	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
 }
 
 // MergeChangeResponseBody is the type of the "highbay" service "merge_change"
@@ -1081,14 +1158,14 @@ type ListChangesResponseBody struct {
 	// Opaque value for change detection. It changes whenever the listed cards, a
 	// card's get_build view (including the builder's branch head_commit and latest
 	// check), approval_available, initializing_phase, the owner's Story
-	// evaluation, get_team, or get_live_target changes; list_changes items carry
-	// no build or branch fields, so read get_build for those facts. Compare it
-	// only for equality.
+	// evaluation, get_team, get_team_conversation, or get_live_target changes;
+	// list_changes items carry no build or branch fields, so read get_build for
+	// those facts. Compare it only for equality.
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Whether approve_merge can record approvals on this server: true when the
-	// server runs Checkpoint 4 verification, as every server hbay starts does, and
-	// any stored promotion settings could be resolved; false when the server runs
-	// no verification or resolving the promotion target fails.
+	// server runs Checkpoint 4 verification, as every server highbay starts does,
+	// and any stored promotion settings could be resolved; false when the server
+	// runs no verification or resolving the promotion target fails.
 	ApprovalAvailable *bool `form:"approval_available,omitempty" json:"approval_available,omitempty" xml:"approval_available,omitempty"`
 	// What init_project is doing now, as a short sentence for the user, such as
 	// "Resolving the service's Go modules"; absent when no initialization is
@@ -3566,9 +3643,10 @@ type GetTeamForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ShowTeamPaneWindowBusyResponseBody is the type of the "highbay" service
-// "show_team_pane" endpoint HTTP response body for the "window_busy" error.
-type ShowTeamPaneWindowBusyResponseBody struct {
+// GetTeamConversationForbiddenResponseBody is the type of the "highbay"
+// service "get_team_conversation" endpoint HTTP response body for the
+// "forbidden" error.
+type GetTeamConversationForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3584,10 +3662,10 @@ type ShowTeamPaneWindowBusyResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ShowTeamPanePaneUnavailableResponseBody is the type of the "highbay" service
-// "show_team_pane" endpoint HTTP response body for the "pane_unavailable"
-// error.
-type ShowTeamPanePaneUnavailableResponseBody struct {
+// SendTeamMessageTeamUnavailableResponseBody is the type of the "highbay"
+// service "send_team_message" endpoint HTTP response body for the
+// "team_unavailable" error.
+type SendTeamMessageTeamUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3603,10 +3681,10 @@ type ShowTeamPanePaneUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ShowTeamPaneTeamUnavailableResponseBody is the type of the "highbay" service
-// "show_team_pane" endpoint HTTP response body for the "team_unavailable"
-// error.
-type ShowTeamPaneTeamUnavailableResponseBody struct {
+// SendTeamMessageUnprocessableResponseBody is the type of the "highbay"
+// service "send_team_message" endpoint HTTP response body for the
+// "unprocessable" error.
+type SendTeamMessageUnprocessableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3622,46 +3700,9 @@ type ShowTeamPaneTeamUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ShowTeamPaneForbiddenResponseBody is the type of the "highbay" service
-// "show_team_pane" endpoint HTTP response body for the "forbidden" error.
-type ShowTeamPaneForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// StartTeamAgentsAmbiguousSpaceResponseBody is the type of the "highbay"
-// service "start_team_agents" endpoint HTTP response body for the
-// "ambiguous_space" error.
-type StartTeamAgentsAmbiguousSpaceResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// StartTeamAgentsWindowBusyResponseBody is the type of the "highbay" service
-// "start_team_agents" endpoint HTTP response body for the "window_busy" error.
-type StartTeamAgentsWindowBusyResponseBody struct {
+// SendTeamMessageForbiddenResponseBody is the type of the "highbay" service
+// "send_team_message" endpoint HTTP response body for the "forbidden" error.
+type SendTeamMessageForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3718,6 +3759,287 @@ type StartTeamAgentsUnprocessableResponseBody struct {
 // StartTeamAgentsForbiddenResponseBody is the type of the "highbay" service
 // "start_team_agents" endpoint HTTP response body for the "forbidden" error.
 type StartTeamAgentsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTeamRoleRoleNotRunningResponseBody is the type of the "highbay"
+// service "interrupt_team_role" endpoint HTTP response body for the
+// "role_not_running" error.
+type InterruptTeamRoleRoleNotRunningResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTeamRoleTeamUnavailableResponseBody is the type of the "highbay"
+// service "interrupt_team_role" endpoint HTTP response body for the
+// "team_unavailable" error.
+type InterruptTeamRoleTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// InterruptTeamRoleForbiddenResponseBody is the type of the "highbay" service
+// "interrupt_team_role" endpoint HTTP response body for the "forbidden" error.
+type InterruptTeamRoleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StopTeamRoleRoleNotRunningResponseBody is the type of the "highbay" service
+// "stop_team_role" endpoint HTTP response body for the "role_not_running"
+// error.
+type StopTeamRoleRoleNotRunningResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StopTeamRoleTeamUnavailableResponseBody is the type of the "highbay" service
+// "stop_team_role" endpoint HTTP response body for the "team_unavailable"
+// error.
+type StopTeamRoleTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StopTeamRoleForbiddenResponseBody is the type of the "highbay" service
+// "stop_team_role" endpoint HTTP response body for the "forbidden" error.
+type StopTeamRoleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RestartTeamRoleRoleNotRunningResponseBody is the type of the "highbay"
+// service "restart_team_role" endpoint HTTP response body for the
+// "role_not_running" error.
+type RestartTeamRoleRoleNotRunningResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RestartTeamRoleUnprocessableResponseBody is the type of the "highbay"
+// service "restart_team_role" endpoint HTTP response body for the
+// "unprocessable" error.
+type RestartTeamRoleUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RestartTeamRoleTeamUnavailableResponseBody is the type of the "highbay"
+// service "restart_team_role" endpoint HTTP response body for the
+// "team_unavailable" error.
+type RestartTeamRoleTeamUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RestartTeamRoleForbiddenResponseBody is the type of the "highbay" service
+// "restart_team_role" endpoint HTTP response body for the "forbidden" error.
+type RestartTeamRoleForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTerminalTicketTerminalUnavailableResponseBody is the type of the
+// "highbay" service "create_terminal_ticket" endpoint HTTP response body for
+// the "terminal_unavailable" error.
+type CreateTerminalTicketTerminalUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CreateTerminalTicketForbiddenResponseBody is the type of the "highbay"
+// service "create_terminal_ticket" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateTerminalTicketForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachRoleTerminalTerminalUnavailableResponseBody is the type of the
+// "highbay" service "attach_role_terminal" endpoint HTTP response body for the
+// "terminal_unavailable" error.
+type AttachRoleTerminalTerminalUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachRoleTerminalUnprocessableResponseBody is the type of the "highbay"
+// service "attach_role_terminal" endpoint HTTP response body for the
+// "unprocessable" error.
+type AttachRoleTerminalUnprocessableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AttachRoleTerminalForbiddenResponseBody is the type of the "highbay" service
+// "attach_role_terminal" endpoint HTTP response body for the "forbidden" error.
+type AttachRoleTerminalForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5334,7 +5656,7 @@ type VerificationCompletedResponseBody struct {
 // body types.
 type BuilderVerificationReportResponseBody struct {
 	// SHA-256 digest of the full report the evaluator saved; approve_merge and
-	// hbay approve take this digest.
+	// highbay approve take this digest.
 	ReportDigest *string `form:"report_digest,omitempty" json:"report_digest,omitempty" xml:"report_digest,omitempty"`
 	// Every declared scenario, counted by outcome.
 	Counts *VerificationCountsResponseBody `form:"counts,omitempty" json:"counts,omitempty" xml:"counts,omitempty"`
@@ -5505,22 +5827,21 @@ type TeamRoleStateResponseBody struct {
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// Registered Chorus handle.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
-	// Current terminal state; unknown means Herdr cannot establish it.
+	// True when this role has a managed or attached herdr-core terminal that can
+	// be opened in the browser terminal drawer.
+	HasTerminal *bool `form:"has_terminal,omitempty" json:"has_terminal,omitempty" xml:"has_terminal,omitempty"`
+	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
-	// Reported block kind, or why a running agent needs the user: silent when it
-	// reports nothing for 60 seconds, assignment when it has waited with an unread
-	// assignment for 90 seconds, or for 15 seconds while Chorus is not known to be
-	// reachable and so no reminder can arrive.
+	// Reported block kind when the role needs the user (for example permission,
+	// question, auth, or silent after 60 seconds without progress).
 	Attention *string `form:"attention,omitempty" json:"attention,omitempty" xml:"attention,omitempty"`
-	// held when Chorus reports a watcher, gone after its absence grace, unknown
-	// otherwise.
-	Watcher *string `form:"watcher,omitempty" json:"watcher,omitempty" xml:"watcher,omitempty"`
-	// unread when this role owes an assignment read; nothing_owed when it has work
-	// and owes no read; no_work when the open build needs nothing from it (no
-	// build is open, the build was dropped, the test writer's tests are accepted,
-	// or a verification of the builder's build passed); unknown when the owner
-	// could not read assignments. The guide has no assignments.
+	// unread when this worker owes an assignment read; nothing_owed when it has
+	// work and owes no read; no_work when the open build needs nothing from it;
+	// unknown when assignments could not be read. The guide has no assignments
+	// (no_work).
 	Assignment *string `form:"assignment,omitempty" json:"assignment,omitempty" xml:"assignment,omitempty"`
+	// Configured coding-agent CLI selection for this role when saved.
+	Choice *RoleAgentChoiceResponseBody `form:"choice,omitempty" json:"choice,omitempty" xml:"choice,omitempty"`
 }
 
 // RoleAgentChoiceResponseBody is used to define fields on response body types.
@@ -5537,15 +5858,67 @@ type RoleAgentChoiceResponseBody struct {
 	Yolo *bool `form:"yolo,omitempty" json:"yolo,omitempty" xml:"yolo,omitempty"`
 }
 
+// TeamMessageResponseBody is used to define fields on response body types.
+type TeamMessageResponseBody struct {
+	// Unique message key combining target and sequence (for example
+	// #refunds-8f3a1c902b4e:12).
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Chorus target (#channel or @handle) carrying this message.
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
+	// Monotonic sequence number within target.
+	Seq *int `form:"seq,omitempty" json:"seq,omitempty" xml:"seq,omitempty"`
+	// Chorus handle of the sender.
+	Sender *string `form:"sender,omitempty" json:"sender,omitempty" xml:"sender,omitempty"`
+	// Project role of the sender for UI presentation.
+	SenderRole *string `form:"sender_role,omitempty" json:"sender_role,omitempty" xml:"sender_role,omitempty"`
+	// Reported model or participant kind (for example human, service, or model
+	// name).
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Markdown message text.
+	Text *string `form:"text,omitempty" json:"text,omitempty" xml:"text,omitempty"`
+	// Optional sequence number in target that this message replies to.
+	ReplyTo *int `form:"reply_to,omitempty" json:"reply_to,omitempty" xml:"reply_to,omitempty"`
+	// Unix timestamp in milliseconds when Chorus recorded the message.
+	SentAtMs *int64 `form:"sent_at_ms,omitempty" json:"sent_at_ms,omitempty" xml:"sent_at_ms,omitempty"`
+}
+
 // ProjectTeamRoleResponseBody is used to define fields on response body types.
 type ProjectTeamRoleResponseBody struct {
 	// Trusted role.
 	Role *string `form:"role,omitempty" json:"role,omitempty" xml:"role,omitempty"`
 	// Stable Chorus handle and Highbay actor identity.
 	Handle *string `form:"handle,omitempty" json:"handle,omitempty" xml:"handle,omitempty"`
-	// The matching live terminal is not reported as an idle shell; missing
-	// foreground information counts as running.
+	// True when this role is backed by a live or owned herdr-core (hc) terminal.
+	HasTerminal *bool `form:"has_terminal,omitempty" json:"has_terminal,omitempty" xml:"has_terminal,omitempty"`
+	// True when the role has a live hc agent terminal or active external Chorus
+	// presence.
 	Running *bool `form:"running,omitempty" json:"running,omitempty" xml:"running,omitempty"`
+}
+
+// TerminalOutputFrameResponseBody is used to define fields on response body
+// types.
+type TerminalOutputFrameResponseBody struct {
+	// Raw terminal output bytes.
+	Data []byte `form:"data,omitempty" json:"data,omitempty" xml:"data,omitempty"`
+}
+
+// TerminalResizeResponseBody is used to define fields on response body types.
+type TerminalResizeResponseBody struct {
+	// Terminal width in columns.
+	Cols *int `form:"cols,omitempty" json:"cols,omitempty" xml:"cols,omitempty"`
+	// Terminal height in rows.
+	Rows *int `form:"rows,omitempty" json:"rows,omitempty" xml:"rows,omitempty"`
+}
+
+// TerminalClosedResponseBody is used to define fields on response body types.
+type TerminalClosedResponseBody struct {
+	// Stream end reason reported by herdr-core (for example detached, exited,
+	// killed, or lost).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Process exit status when the terminal process exited normally.
+	ExitCode *int `form:"exit_code,omitempty" json:"exit_code,omitempty" xml:"exit_code,omitempty"`
+	// Terminating signal number when the terminal process was ended by a signal.
+	Signal *int `form:"signal,omitempty" json:"signal,omitempty" xml:"signal,omitempty"`
 }
 
 // InstalledAgentOptionResponseBody is used to define fields on response body
@@ -5569,8 +5942,6 @@ type InstalledAgentOptionResponseBody struct {
 	YoloSupported *bool `form:"yolo_supported,omitempty" json:"yolo_supported,omitempty" xml:"yolo_supported,omitempty"`
 	// What this client's unattended permission mode permits.
 	YoloEffect *string `form:"yolo_effect,omitempty" json:"yolo_effect,omitempty" xml:"yolo_effect,omitempty"`
-	// Whether Highbay supports this client's finite noninteractive mode.
-	HeadlessSupported *bool `form:"headless_supported,omitempty" json:"headless_supported,omitempty" xml:"headless_supported,omitempty"`
 }
 
 // ChangeListItemResponseBody is used to define fields on response body types.
@@ -5816,28 +6187,9 @@ type BuildDroppedResponseBody struct {
 type ProjectTeamResponseBody struct {
 	// Stable Chorus team name.
 	Team *string `form:"team,omitempty" json:"team,omitempty" xml:"team,omitempty"`
-	// Local Herdr space identifier, empty when Herdr is unavailable.
-	Space *string                        `form:"space,omitempty" json:"space,omitempty" xml:"space,omitempty"`
+	// Observed state of each registered project role.
 	Roles []*ProjectTeamRoleResponseBody `form:"roles,omitempty" json:"roles,omitempty" xml:"roles,omitempty"`
-	// Whether Herdr hosts this project, is available, or is unavailable.
-	HerdrMode *string `form:"herdr_mode,omitempty" json:"herdr_mode,omitempty" xml:"herdr_mode,omitempty"`
 	// What the user does next for the prepared team.
-	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
-}
-
-// BuildTeamWindowBusyResponseBody is used to define fields on response body
-// types.
-type BuildTeamWindowBusyResponseBody struct {
-	// Close the open dialog, then start the team agents.
-	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
-}
-
-// BuildTeamAmbiguousSpaceResponseBody is used to define fields on response
-// body types.
-type BuildTeamAmbiguousSpaceResponseBody struct {
-	// Number of spaces matching this project.
-	Count *int `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
-	// Close the duplicate Herdr spaces, then start the agents.
 	Step *string `form:"step,omitempty" json:"step,omitempty" xml:"step,omitempty"`
 }
 
@@ -6133,6 +6485,74 @@ type RoleAgentChoiceRequestBody struct {
 	Thinking *string `form:"thinking,omitempty" json:"thinking,omitempty" xml:"thinking,omitempty"`
 	// Whether to enable this client's advertised unattended permission mode.
 	Yolo bool `form:"yolo" json:"yolo" xml:"yolo"`
+}
+
+// ReviseAnswersContextRequestBody is used to define fields on request body
+// types.
+type ReviseAnswersContextRequestBody struct {
+	// Change Card identifier being revised.
+	ChangeID string `form:"change_id" json:"change_id" xml:"change_id"`
+	// Current request_revision shown on the Agree view.
+	RequestRevision string `form:"request_revision" json:"request_revision" xml:"request_revision"`
+	// Map of question ID to the user's chosen option.
+	Answers map[string]string `form:"answers" json:"answers" xml:"answers"`
+}
+
+// ArchitectureElementContextRequestBody is used to define fields on request
+// body types.
+type ArchitectureElementContextRequestBody struct {
+	// Change Card identifier when viewing a specific card's architecture.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// Stable C4 model element identifier.
+	ElementID string `form:"element_id" json:"element_id" xml:"element_id"`
+	// Human-readable C4 element label.
+	ElementName string `form:"element_name" json:"element_name" xml:"element_name"`
+}
+
+// StoryFlowContextRequestBody is used to define fields on request body types.
+type StoryFlowContextRequestBody struct {
+	// Change Card identifier when viewing a saved card's Story.
+	ChangeID *string `form:"change_id,omitempty" json:"change_id,omitempty" xml:"change_id,omitempty"`
+	// Story name.
+	Story string `form:"story" json:"story" xml:"story"`
+	// Optional flow key within the Story.
+	FlowKey *string `form:"flow_key,omitempty" json:"flow_key,omitempty" xml:"flow_key,omitempty"`
+}
+
+// TerminalClientFrameStreamingBody is used to define fields on request body
+// types.
+type TerminalClientFrameStreamingBody struct {
+	// Exactly one client terminal event.
+	ClientFrame ClientFrameStreamingBody `form:"client_frame" json:"client_frame" xml:"client_frame"`
+}
+
+// TerminalInputFrameStreamingBody is used to define fields on request body
+// types.
+type TerminalInputFrameStreamingBody struct {
+	// Raw terminal input bytes.
+	Data []byte `form:"data" json:"data" xml:"data"`
+}
+
+// TerminalResizeStreamingBody is used to define fields on request body types.
+type TerminalResizeStreamingBody struct {
+	// Terminal width in columns.
+	Cols int `form:"cols" json:"cols" xml:"cols"`
+	// Terminal height in rows.
+	Rows int `form:"rows" json:"rows" xml:"rows"`
+}
+
+// TerminalFocusFrameStreamingBody is used to define fields on request body
+// types.
+type TerminalFocusFrameStreamingBody struct {
+	// Whether the terminal drawer currently holds focus.
+	Focused bool `form:"focused" json:"focused" xml:"focused"`
+}
+
+// TerminalCreditFrameStreamingBody is used to define fields on request body
+// types.
+type TerminalCreditFrameStreamingBody struct {
+	// Number of output bytes consumed by xterm.js.
+	Bytes int `form:"bytes" json:"bytes" xml:"bytes"`
 }
 
 // ReplacedBuildRequestBody is used to define fields on request body types.
@@ -7233,6 +7653,270 @@ func (u *BuildTakingResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ClientFrameStreamingBody holds exactly one of its branch values.
+type ClientFrameStreamingBody struct {
+	kind   ClientFrameStreamingBodyKind
+	input  *TerminalInputFrameStreamingBody
+	resize *TerminalResizeStreamingBody
+	focus  *TerminalFocusFrameStreamingBody
+	credit *TerminalCreditFrameStreamingBody
+}
+
+// ClientFrameStreamingBodyKind records which ClientFrameStreamingBody branch is selected.
+type ClientFrameStreamingBodyKind string
+
+const (
+	// ClientFrameStreamingBodyKindInput identifies the input branch.
+	ClientFrameStreamingBodyKindInput ClientFrameStreamingBodyKind = "input"
+	// ClientFrameStreamingBodyKindResize identifies the resize branch.
+	ClientFrameStreamingBodyKindResize ClientFrameStreamingBodyKind = "resize"
+	// ClientFrameStreamingBodyKindFocus identifies the focus branch.
+	ClientFrameStreamingBodyKindFocus ClientFrameStreamingBodyKind = "focus"
+	// ClientFrameStreamingBodyKindCredit identifies the credit branch.
+	ClientFrameStreamingBodyKindCredit ClientFrameStreamingBodyKind = "credit"
+)
+
+// Kind returns the selected branch.
+func (u ClientFrameStreamingBody) Kind() ClientFrameStreamingBodyKind {
+	return u.kind
+}
+
+// NewClientFrameStreamingBodyInput constructs ClientFrameStreamingBody with the input branch set.
+func NewClientFrameStreamingBodyInput(v *TerminalInputFrameStreamingBody) ClientFrameStreamingBody {
+	return ClientFrameStreamingBody{
+		kind:  ClientFrameStreamingBodyKindInput,
+		input: v,
+	}
+}
+
+// AsInput returns the value when the input branch is selected.
+func (u ClientFrameStreamingBody) AsInput() (_ *TerminalInputFrameStreamingBody, ok bool) {
+	if u.kind != ClientFrameStreamingBodyKindInput {
+		return
+	}
+	return u.input, true
+}
+
+// SetInput selects the input branch and stores v.
+func (u *ClientFrameStreamingBody) SetInput(v *TerminalInputFrameStreamingBody) {
+	*u = ClientFrameStreamingBody{
+		kind:  ClientFrameStreamingBodyKindInput,
+		input: v,
+	}
+}
+
+// NewClientFrameStreamingBodyResize constructs ClientFrameStreamingBody with the resize branch set.
+func NewClientFrameStreamingBodyResize(v *TerminalResizeStreamingBody) ClientFrameStreamingBody {
+	return ClientFrameStreamingBody{
+		kind:   ClientFrameStreamingBodyKindResize,
+		resize: v,
+	}
+}
+
+// AsResize returns the value when the resize branch is selected.
+func (u ClientFrameStreamingBody) AsResize() (_ *TerminalResizeStreamingBody, ok bool) {
+	if u.kind != ClientFrameStreamingBodyKindResize {
+		return
+	}
+	return u.resize, true
+}
+
+// SetResize selects the resize branch and stores v.
+func (u *ClientFrameStreamingBody) SetResize(v *TerminalResizeStreamingBody) {
+	*u = ClientFrameStreamingBody{
+		kind:   ClientFrameStreamingBodyKindResize,
+		resize: v,
+	}
+}
+
+// NewClientFrameStreamingBodyFocus constructs ClientFrameStreamingBody with the focus branch set.
+func NewClientFrameStreamingBodyFocus(v *TerminalFocusFrameStreamingBody) ClientFrameStreamingBody {
+	return ClientFrameStreamingBody{
+		kind:  ClientFrameStreamingBodyKindFocus,
+		focus: v,
+	}
+}
+
+// AsFocus returns the value when the focus branch is selected.
+func (u ClientFrameStreamingBody) AsFocus() (_ *TerminalFocusFrameStreamingBody, ok bool) {
+	if u.kind != ClientFrameStreamingBodyKindFocus {
+		return
+	}
+	return u.focus, true
+}
+
+// SetFocus selects the focus branch and stores v.
+func (u *ClientFrameStreamingBody) SetFocus(v *TerminalFocusFrameStreamingBody) {
+	*u = ClientFrameStreamingBody{
+		kind:  ClientFrameStreamingBodyKindFocus,
+		focus: v,
+	}
+}
+
+// NewClientFrameStreamingBodyCredit constructs ClientFrameStreamingBody with the credit branch set.
+func NewClientFrameStreamingBodyCredit(v *TerminalCreditFrameStreamingBody) ClientFrameStreamingBody {
+	return ClientFrameStreamingBody{
+		kind:   ClientFrameStreamingBodyKindCredit,
+		credit: v,
+	}
+}
+
+// AsCredit returns the value when the credit branch is selected.
+func (u ClientFrameStreamingBody) AsCredit() (_ *TerminalCreditFrameStreamingBody, ok bool) {
+	if u.kind != ClientFrameStreamingBodyKindCredit {
+		return
+	}
+	return u.credit, true
+}
+
+// SetCredit selects the credit branch and stores v.
+func (u *ClientFrameStreamingBody) SetCredit(v *TerminalCreditFrameStreamingBody) {
+	*u = ClientFrameStreamingBody{
+		kind:   ClientFrameStreamingBodyKindCredit,
+		credit: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u ClientFrameStreamingBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u ClientFrameStreamingBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("kind", "", []any{
+			string(ClientFrameStreamingBodyKindInput),
+			string(ClientFrameStreamingBodyKindResize),
+			string(ClientFrameStreamingBodyKindFocus),
+			string(ClientFrameStreamingBodyKindCredit),
+		})
+	case ClientFrameStreamingBodyKindInput:
+		if u.input == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrameStreamingBody")
+		}
+		return u.input, nil
+	case ClientFrameStreamingBodyKindResize:
+		if u.resize == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrameStreamingBody")
+		}
+		return u.resize, nil
+	case ClientFrameStreamingBodyKindFocus:
+		if u.focus == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrameStreamingBody")
+		}
+		return u.focus, nil
+	case ClientFrameStreamingBodyKindCredit:
+		if u.credit == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrameStreamingBody")
+		}
+		return u.credit, nil
+	default:
+		return nil, goa.InvalidEnumValueError("kind", u.kind, []any{
+			string(ClientFrameStreamingBodyKindInput),
+			string(ClientFrameStreamingBodyKindResize),
+			string(ClientFrameStreamingBodyKindFocus),
+			string(ClientFrameStreamingBodyKindCredit),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u ClientFrameStreamingBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("kind", nil, "non-null JSON object")
+	}
+	if _, exists := fields["kind"]; exists {
+		return nil, fmt.Errorf("ClientFrameStreamingBody branch already contains discriminator %q", "kind")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["kind"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *ClientFrameStreamingBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["kind"]
+	if !exists {
+		return goa.MissingFieldError("kind", "ClientFrameStreamingBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("kind", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "kind")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(ClientFrameStreamingBodyKindInput):
+		var v *TerminalInputFrameStreamingBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetInput(v)
+	case string(ClientFrameStreamingBodyKindResize):
+		var v *TerminalResizeStreamingBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetResize(v)
+	case string(ClientFrameStreamingBodyKindFocus):
+		var v *TerminalFocusFrameStreamingBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetFocus(v)
+	case string(ClientFrameStreamingBodyKindCredit):
+		var v *TerminalCreditFrameStreamingBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetCredit(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("kind", "ClientFrameStreamingBody")
+		}
+		return goa.InvalidEnumValueError("kind", raw.Type, []any{
+			string(ClientFrameStreamingBodyKindInput),
+			string(ClientFrameStreamingBodyKindResize),
+			string(ClientFrameStreamingBodyKindFocus),
+			string(ClientFrameStreamingBodyKindCredit),
+		})
+	}
+	return nil
+}
+
 // ConnectionResponseBody holds exactly one of its branch values.
 type ConnectionResponseBody struct {
 	kind    ConnectionResponseBodyKind
@@ -7451,6 +8135,205 @@ func (u *ConnectionResponseBody) UnmarshalJSON(data []byte) error {
 			string(ConnectionResponseBodyKindNone),
 			string(ConnectionResponseBodyKindDirect),
 			string(ConnectionResponseBodyKindGateway),
+		})
+	}
+	return nil
+}
+
+// ContextRequestBody holds exactly one of its branch values.
+type ContextRequestBody struct {
+	kind                ContextRequestBodyKind
+	reviseAnswers       *ReviseAnswersContextRequestBody
+	architectureElement *ArchitectureElementContextRequestBody
+	storyFlow           *StoryFlowContextRequestBody
+}
+
+// ContextRequestBodyKind records which ContextRequestBody branch is selected.
+type ContextRequestBodyKind string
+
+const (
+	// ContextRequestBodyKindReviseAnswers identifies the revise_answers branch.
+	ContextRequestBodyKindReviseAnswers ContextRequestBodyKind = "revise_answers"
+	// ContextRequestBodyKindArchitectureElement identifies the architecture_element branch.
+	ContextRequestBodyKindArchitectureElement ContextRequestBodyKind = "architecture_element"
+	// ContextRequestBodyKindStoryFlow identifies the story_flow branch.
+	ContextRequestBodyKindStoryFlow ContextRequestBodyKind = "story_flow"
+)
+
+// Kind returns the selected branch.
+func (u ContextRequestBody) Kind() ContextRequestBodyKind {
+	return u.kind
+}
+
+// NewContextRequestBodyReviseAnswers constructs ContextRequestBody with the revise_answers branch set.
+func NewContextRequestBodyReviseAnswers(v *ReviseAnswersContextRequestBody) ContextRequestBody {
+	return ContextRequestBody{
+		kind:          ContextRequestBodyKindReviseAnswers,
+		reviseAnswers: v,
+	}
+}
+
+// AsReviseAnswers returns the value when the revise_answers branch is selected.
+func (u ContextRequestBody) AsReviseAnswers() (_ *ReviseAnswersContextRequestBody, ok bool) {
+	if u.kind != ContextRequestBodyKindReviseAnswers {
+		return
+	}
+	return u.reviseAnswers, true
+}
+
+// SetReviseAnswers selects the revise_answers branch and stores v.
+func (u *ContextRequestBody) SetReviseAnswers(v *ReviseAnswersContextRequestBody) {
+	*u = ContextRequestBody{
+		kind:          ContextRequestBodyKindReviseAnswers,
+		reviseAnswers: v,
+	}
+}
+
+// NewContextRequestBodyArchitectureElement constructs ContextRequestBody with the architecture_element branch set.
+func NewContextRequestBodyArchitectureElement(v *ArchitectureElementContextRequestBody) ContextRequestBody {
+	return ContextRequestBody{
+		kind:                ContextRequestBodyKindArchitectureElement,
+		architectureElement: v,
+	}
+}
+
+// AsArchitectureElement returns the value when the architecture_element branch is selected.
+func (u ContextRequestBody) AsArchitectureElement() (_ *ArchitectureElementContextRequestBody, ok bool) {
+	if u.kind != ContextRequestBodyKindArchitectureElement {
+		return
+	}
+	return u.architectureElement, true
+}
+
+// SetArchitectureElement selects the architecture_element branch and stores v.
+func (u *ContextRequestBody) SetArchitectureElement(v *ArchitectureElementContextRequestBody) {
+	*u = ContextRequestBody{
+		kind:                ContextRequestBodyKindArchitectureElement,
+		architectureElement: v,
+	}
+}
+
+// NewContextRequestBodyStoryFlow constructs ContextRequestBody with the story_flow branch set.
+func NewContextRequestBodyStoryFlow(v *StoryFlowContextRequestBody) ContextRequestBody {
+	return ContextRequestBody{
+		kind:      ContextRequestBodyKindStoryFlow,
+		storyFlow: v,
+	}
+}
+
+// AsStoryFlow returns the value when the story_flow branch is selected.
+func (u ContextRequestBody) AsStoryFlow() (_ *StoryFlowContextRequestBody, ok bool) {
+	if u.kind != ContextRequestBodyKindStoryFlow {
+		return
+	}
+	return u.storyFlow, true
+}
+
+// SetStoryFlow selects the story_flow branch and stores v.
+func (u *ContextRequestBody) SetStoryFlow(v *StoryFlowContextRequestBody) {
+	*u = ContextRequestBody{
+		kind:      ContextRequestBodyKindStoryFlow,
+		storyFlow: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u ContextRequestBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u ContextRequestBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("type", "", []any{
+			string(ContextRequestBodyKindReviseAnswers),
+			string(ContextRequestBodyKindArchitectureElement),
+			string(ContextRequestBodyKindStoryFlow),
+		})
+	case ContextRequestBodyKindReviseAnswers:
+		if u.reviseAnswers == nil {
+			return nil, goa.MissingFieldError("value", "ContextRequestBody")
+		}
+		return u.reviseAnswers, nil
+	case ContextRequestBodyKindArchitectureElement:
+		if u.architectureElement == nil {
+			return nil, goa.MissingFieldError("value", "ContextRequestBody")
+		}
+		return u.architectureElement, nil
+	case ContextRequestBodyKindStoryFlow:
+		if u.storyFlow == nil {
+			return nil, goa.MissingFieldError("value", "ContextRequestBody")
+		}
+		return u.storyFlow, nil
+	default:
+		return nil, goa.InvalidEnumValueError("type", u.kind, []any{
+			string(ContextRequestBodyKindReviseAnswers),
+			string(ContextRequestBodyKindArchitectureElement),
+			string(ContextRequestBodyKindStoryFlow),
+		})
+	}
+}
+
+// MarshalJSON marshals the union into the canonical {type,value} JSON shape.
+func (u ContextRequestBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Type  string `json:"type"`
+		Value any    `json:"value"`
+	}{
+		Type:  string(u.kind),
+		Value: value,
+	})
+}
+
+// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
+func (u *ContextRequestBody) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string          `json:"type"`
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.Value) == 0 {
+		return goa.MissingFieldError("value", "ContextRequestBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(raw.Value), []byte("null")) {
+		return goa.InvalidFieldTypeError("value", nil, "non-null JSON value")
+	}
+	switch raw.Type {
+	case string(ContextRequestBodyKindReviseAnswers):
+		var v *ReviseAnswersContextRequestBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetReviseAnswers(v)
+	case string(ContextRequestBodyKindArchitectureElement):
+		var v *ArchitectureElementContextRequestBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetArchitectureElement(v)
+	case string(ContextRequestBodyKindStoryFlow):
+		var v *StoryFlowContextRequestBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetStoryFlow(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("type", "ContextRequestBody")
+		}
+		return goa.InvalidEnumValueError("type", raw.Type, []any{
+			string(ContextRequestBodyKindReviseAnswers),
+			string(ContextRequestBodyKindArchitectureElement),
+			string(ContextRequestBodyKindStoryFlow),
 		})
 	}
 	return nil
@@ -7943,6 +8826,229 @@ func (u *MappingResponseBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ServerFrameResponseBody holds exactly one of its branch values.
+type ServerFrameResponseBody struct {
+	kind   ServerFrameResponseBodyKind
+	output *TerminalOutputFrameResponseBody
+	resize *TerminalResizeResponseBody
+	closed *TerminalClosedResponseBody
+}
+
+// ServerFrameResponseBodyKind records which ServerFrameResponseBody branch is selected.
+type ServerFrameResponseBodyKind string
+
+const (
+	// ServerFrameResponseBodyKindOutput identifies the output branch.
+	ServerFrameResponseBodyKindOutput ServerFrameResponseBodyKind = "output"
+	// ServerFrameResponseBodyKindResize identifies the resize branch.
+	ServerFrameResponseBodyKindResize ServerFrameResponseBodyKind = "resize"
+	// ServerFrameResponseBodyKindClosed identifies the closed branch.
+	ServerFrameResponseBodyKindClosed ServerFrameResponseBodyKind = "closed"
+)
+
+// Kind returns the selected branch.
+func (u ServerFrameResponseBody) Kind() ServerFrameResponseBodyKind {
+	return u.kind
+}
+
+// NewServerFrameResponseBodyOutput constructs ServerFrameResponseBody with the output branch set.
+func NewServerFrameResponseBodyOutput(v *TerminalOutputFrameResponseBody) ServerFrameResponseBody {
+	return ServerFrameResponseBody{
+		kind:   ServerFrameResponseBodyKindOutput,
+		output: v,
+	}
+}
+
+// AsOutput returns the value when the output branch is selected.
+func (u ServerFrameResponseBody) AsOutput() (_ *TerminalOutputFrameResponseBody, ok bool) {
+	if u.kind != ServerFrameResponseBodyKindOutput {
+		return
+	}
+	return u.output, true
+}
+
+// SetOutput selects the output branch and stores v.
+func (u *ServerFrameResponseBody) SetOutput(v *TerminalOutputFrameResponseBody) {
+	*u = ServerFrameResponseBody{
+		kind:   ServerFrameResponseBodyKindOutput,
+		output: v,
+	}
+}
+
+// NewServerFrameResponseBodyResize constructs ServerFrameResponseBody with the resize branch set.
+func NewServerFrameResponseBodyResize(v *TerminalResizeResponseBody) ServerFrameResponseBody {
+	return ServerFrameResponseBody{
+		kind:   ServerFrameResponseBodyKindResize,
+		resize: v,
+	}
+}
+
+// AsResize returns the value when the resize branch is selected.
+func (u ServerFrameResponseBody) AsResize() (_ *TerminalResizeResponseBody, ok bool) {
+	if u.kind != ServerFrameResponseBodyKindResize {
+		return
+	}
+	return u.resize, true
+}
+
+// SetResize selects the resize branch and stores v.
+func (u *ServerFrameResponseBody) SetResize(v *TerminalResizeResponseBody) {
+	*u = ServerFrameResponseBody{
+		kind:   ServerFrameResponseBodyKindResize,
+		resize: v,
+	}
+}
+
+// NewServerFrameResponseBodyClosed constructs ServerFrameResponseBody with the closed branch set.
+func NewServerFrameResponseBodyClosed(v *TerminalClosedResponseBody) ServerFrameResponseBody {
+	return ServerFrameResponseBody{
+		kind:   ServerFrameResponseBodyKindClosed,
+		closed: v,
+	}
+}
+
+// AsClosed returns the value when the closed branch is selected.
+func (u ServerFrameResponseBody) AsClosed() (_ *TerminalClosedResponseBody, ok bool) {
+	if u.kind != ServerFrameResponseBodyKindClosed {
+		return
+	}
+	return u.closed, true
+}
+
+// SetClosed selects the closed branch and stores v.
+func (u *ServerFrameResponseBody) SetClosed(v *TerminalClosedResponseBody) {
+	*u = ServerFrameResponseBody{
+		kind:   ServerFrameResponseBodyKindClosed,
+		closed: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u ServerFrameResponseBody) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u ServerFrameResponseBody) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("kind", "", []any{
+			string(ServerFrameResponseBodyKindOutput),
+			string(ServerFrameResponseBodyKindResize),
+			string(ServerFrameResponseBodyKindClosed),
+		})
+	case ServerFrameResponseBodyKindOutput:
+		if u.output == nil {
+			return nil, goa.MissingFieldError("value", "ServerFrameResponseBody")
+		}
+		return u.output, nil
+	case ServerFrameResponseBodyKindResize:
+		if u.resize == nil {
+			return nil, goa.MissingFieldError("value", "ServerFrameResponseBody")
+		}
+		return u.resize, nil
+	case ServerFrameResponseBodyKindClosed:
+		if u.closed == nil {
+			return nil, goa.MissingFieldError("value", "ServerFrameResponseBody")
+		}
+		return u.closed, nil
+	default:
+		return nil, goa.InvalidEnumValueError("kind", u.kind, []any{
+			string(ServerFrameResponseBodyKindOutput),
+			string(ServerFrameResponseBodyKindResize),
+			string(ServerFrameResponseBodyKindClosed),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u ServerFrameResponseBody) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("kind", nil, "non-null JSON object")
+	}
+	if _, exists := fields["kind"]; exists {
+		return nil, fmt.Errorf("ServerFrameResponseBody branch already contains discriminator %q", "kind")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["kind"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *ServerFrameResponseBody) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["kind"]
+	if !exists {
+		return goa.MissingFieldError("kind", "ServerFrameResponseBody")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("kind", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "kind")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(ServerFrameResponseBodyKindOutput):
+		var v *TerminalOutputFrameResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetOutput(v)
+	case string(ServerFrameResponseBodyKindResize):
+		var v *TerminalResizeResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetResize(v)
+	case string(ServerFrameResponseBodyKindClosed):
+		var v *TerminalClosedResponseBody
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetClosed(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("kind", "ServerFrameResponseBody")
+		}
+		return goa.InvalidEnumValueError("kind", raw.Type, []any{
+			string(ServerFrameResponseBodyKindOutput),
+			string(ServerFrameResponseBodyKindResize),
+			string(ServerFrameResponseBodyKindClosed),
+		})
+	}
+	return nil
+}
+
 // StateResponseBody holds exactly one of its branch values.
 type StateResponseBody struct {
 	kind         StateResponseBodyKind
@@ -8326,11 +9432,9 @@ func (u *StoryContextResponseBody) UnmarshalJSON(data []byte) error {
 
 // TeamResponseBody holds exactly one of its branch values.
 type TeamResponseBody struct {
-	kind           TeamResponseBodyKind
-	ready          *ProjectTeamResponseBody
-	windowBusy     *BuildTeamWindowBusyResponseBody
-	ambiguousSpace *BuildTeamAmbiguousSpaceResponseBody
-	unavailable    *BuildTeamUnavailableResponseBody
+	kind        TeamResponseBodyKind
+	ready       *ProjectTeamResponseBody
+	unavailable *BuildTeamUnavailableResponseBody
 }
 
 // TeamResponseBodyKind records which TeamResponseBody branch is selected.
@@ -8339,10 +9443,6 @@ type TeamResponseBodyKind string
 const (
 	// TeamResponseBodyKindReady identifies the ready branch.
 	TeamResponseBodyKindReady TeamResponseBodyKind = "ready"
-	// TeamResponseBodyKindWindowBusy identifies the window_busy branch.
-	TeamResponseBodyKindWindowBusy TeamResponseBodyKind = "window_busy"
-	// TeamResponseBodyKindAmbiguousSpace identifies the ambiguous_space branch.
-	TeamResponseBodyKindAmbiguousSpace TeamResponseBodyKind = "ambiguous_space"
 	// TeamResponseBodyKindUnavailable identifies the unavailable branch.
 	TeamResponseBodyKindUnavailable TeamResponseBodyKind = "unavailable"
 )
@@ -8373,54 +9473,6 @@ func (u *TeamResponseBody) SetReady(v *ProjectTeamResponseBody) {
 	*u = TeamResponseBody{
 		kind:  TeamResponseBodyKindReady,
 		ready: v,
-	}
-}
-
-// NewTeamResponseBodyWindowBusy constructs TeamResponseBody with the window_busy branch set.
-func NewTeamResponseBodyWindowBusy(v *BuildTeamWindowBusyResponseBody) TeamResponseBody {
-	return TeamResponseBody{
-		kind:       TeamResponseBodyKindWindowBusy,
-		windowBusy: v,
-	}
-}
-
-// AsWindowBusy returns the value when the window_busy branch is selected.
-func (u TeamResponseBody) AsWindowBusy() (_ *BuildTeamWindowBusyResponseBody, ok bool) {
-	if u.kind != TeamResponseBodyKindWindowBusy {
-		return
-	}
-	return u.windowBusy, true
-}
-
-// SetWindowBusy selects the window_busy branch and stores v.
-func (u *TeamResponseBody) SetWindowBusy(v *BuildTeamWindowBusyResponseBody) {
-	*u = TeamResponseBody{
-		kind:       TeamResponseBodyKindWindowBusy,
-		windowBusy: v,
-	}
-}
-
-// NewTeamResponseBodyAmbiguousSpace constructs TeamResponseBody with the ambiguous_space branch set.
-func NewTeamResponseBodyAmbiguousSpace(v *BuildTeamAmbiguousSpaceResponseBody) TeamResponseBody {
-	return TeamResponseBody{
-		kind:           TeamResponseBodyKindAmbiguousSpace,
-		ambiguousSpace: v,
-	}
-}
-
-// AsAmbiguousSpace returns the value when the ambiguous_space branch is selected.
-func (u TeamResponseBody) AsAmbiguousSpace() (_ *BuildTeamAmbiguousSpaceResponseBody, ok bool) {
-	if u.kind != TeamResponseBodyKindAmbiguousSpace {
-		return
-	}
-	return u.ambiguousSpace, true
-}
-
-// SetAmbiguousSpace selects the ambiguous_space branch and stores v.
-func (u *TeamResponseBody) SetAmbiguousSpace(v *BuildTeamAmbiguousSpaceResponseBody) {
-	*u = TeamResponseBody{
-		kind:           TeamResponseBodyKindAmbiguousSpace,
-		ambiguousSpace: v,
 	}
 }
 
@@ -8461,8 +9513,6 @@ func (u TeamResponseBody) Value() (any, error) {
 	case "":
 		return nil, goa.InvalidEnumValueError("state", "", []any{
 			string(TeamResponseBodyKindReady),
-			string(TeamResponseBodyKindWindowBusy),
-			string(TeamResponseBodyKindAmbiguousSpace),
 			string(TeamResponseBodyKindUnavailable),
 		})
 	case TeamResponseBodyKindReady:
@@ -8470,16 +9520,6 @@ func (u TeamResponseBody) Value() (any, error) {
 			return nil, goa.MissingFieldError("value", "TeamResponseBody")
 		}
 		return u.ready, nil
-	case TeamResponseBodyKindWindowBusy:
-		if u.windowBusy == nil {
-			return nil, goa.MissingFieldError("value", "TeamResponseBody")
-		}
-		return u.windowBusy, nil
-	case TeamResponseBodyKindAmbiguousSpace:
-		if u.ambiguousSpace == nil {
-			return nil, goa.MissingFieldError("value", "TeamResponseBody")
-		}
-		return u.ambiguousSpace, nil
 	case TeamResponseBodyKindUnavailable:
 		if u.unavailable == nil {
 			return nil, goa.MissingFieldError("value", "TeamResponseBody")
@@ -8488,8 +9528,6 @@ func (u TeamResponseBody) Value() (any, error) {
 	default:
 		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
 			string(TeamResponseBodyKindReady),
-			string(TeamResponseBodyKindWindowBusy),
-			string(TeamResponseBodyKindAmbiguousSpace),
 			string(TeamResponseBodyKindUnavailable),
 		})
 	}
@@ -8556,18 +9594,6 @@ func (u *TeamResponseBody) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		u.SetReady(v)
-	case string(TeamResponseBodyKindWindowBusy):
-		var v *BuildTeamWindowBusyResponseBody
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetWindowBusy(v)
-	case string(TeamResponseBodyKindAmbiguousSpace):
-		var v *BuildTeamAmbiguousSpaceResponseBody
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetAmbiguousSpace(v)
 	case string(TeamResponseBodyKindUnavailable):
 		var v *BuildTeamUnavailableResponseBody
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -8580,8 +9606,6 @@ func (u *TeamResponseBody) UnmarshalJSON(data []byte) error {
 		}
 		return goa.InvalidEnumValueError("state", raw.Type, []any{
 			string(TeamResponseBodyKindReady),
-			string(TeamResponseBodyKindWindowBusy),
-			string(TeamResponseBodyKindAmbiguousSpace),
 			string(TeamResponseBodyKindUnavailable),
 		})
 	}
@@ -9727,11 +10751,49 @@ func NewReadCheckOutputRequestBody(p *highbay.ReadCheckOutputPayload) *ReadCheck
 	return body
 }
 
-// NewShowTeamPaneRequestBody builds the HTTP request body from the payload of
-// the "show_team_pane" endpoint of the "highbay" service.
-func NewShowTeamPaneRequestBody(p *highbay.ShowTeamPanePayload) *ShowTeamPaneRequestBody {
-	body := &ShowTeamPaneRequestBody{
-		Role: p.Role,
+// NewSendTeamMessageRequestBody builds the HTTP request body from the payload
+// of the "send_team_message" endpoint of the "highbay" service.
+func NewSendTeamMessageRequestBody(p *highbay.SendTeamMessagePayload) *SendTeamMessageRequestBody {
+	body := &SendTeamMessageRequestBody{
+		To:      p.To,
+		Text:    p.Text,
+		ReplyTo: p.ReplyTo,
+	}
+	if p.GuideChoice != nil {
+		body.GuideChoice = marshalHighbayRoleAgentChoiceToRoleAgentChoiceRequestBody(p.GuideChoice)
+	}
+	if p.Context.Kind() != "" {
+		var contextValue ContextRequestBody
+		switch string(p.Context.Kind()) {
+		case "revise_answers":
+			actual, _ := p.Context.AsReviseAnswers()
+			var obj *ReviseAnswersContextRequestBody
+			if actual != nil {
+				obj = marshalHighbayReviseAnswersContextToReviseAnswersContextRequestBody(actual)
+			}
+			u := contextValue
+			u.SetReviseAnswers((*ReviseAnswersContextRequestBody)(obj))
+			contextValue = u
+		case "architecture_element":
+			actual, _ := p.Context.AsArchitectureElement()
+			var obj *ArchitectureElementContextRequestBody
+			if actual != nil {
+				obj = marshalHighbayArchitectureElementContextToArchitectureElementContextRequestBody(actual)
+			}
+			u := contextValue
+			u.SetArchitectureElement((*ArchitectureElementContextRequestBody)(obj))
+			contextValue = u
+		case "story_flow":
+			actual, _ := p.Context.AsStoryFlow()
+			var obj *StoryFlowContextRequestBody
+			if actual != nil {
+				obj = marshalHighbayStoryFlowContextToStoryFlowContextRequestBody(actual)
+			}
+			u := contextValue
+			u.SetStoryFlow((*StoryFlowContextRequestBody)(obj))
+			contextValue = u
+		}
+		body.Context = &contextValue
 	}
 	return body
 }
@@ -9749,6 +10811,63 @@ func NewStartTeamAgentsRequestBody(p *highbay.StartTeamAgentsPayload) *StartTeam
 				continue
 			}
 			body.Choices[tk] = marshalHighbayRoleAgentChoiceToRoleAgentChoiceRequestBody(val)
+		}
+	}
+	return body
+}
+
+// NewRestartTeamRoleRequestBody builds the HTTP request body from the payload
+// of the "restart_team_role" endpoint of the "highbay" service.
+func NewRestartTeamRoleRequestBody(p *highbay.RestartTeamRolePayload) *RestartTeamRoleRequestBody {
+	body := &RestartTeamRoleRequestBody{}
+	if p.Choice != nil {
+		body.Choice = marshalHighbayRoleAgentChoiceToRoleAgentChoiceRequestBody(p.Choice)
+	}
+	return body
+}
+
+// NewAttachRoleTerminalStreamingBody builds the HTTP request body from the
+// payload of the "attach_role_terminal" endpoint of the "highbay" service.
+func NewAttachRoleTerminalStreamingBody(p *highbay.TerminalClientFrame) *AttachRoleTerminalStreamingBody {
+	body := &AttachRoleTerminalStreamingBody{}
+	if p.ClientFrame.Kind() != "" {
+		switch string(p.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := p.ClientFrame.AsInput()
+			var obj *TerminalInputFrameStreamingBody
+			if actual != nil {
+				obj = marshalHighbayTerminalInputFrameToTerminalInputFrameStreamingBody(actual)
+			}
+			u := body.ClientFrame
+			u.SetInput((*TerminalInputFrameStreamingBody)(obj))
+			body.ClientFrame = u
+		case "resize":
+			actual, _ := p.ClientFrame.AsResize()
+			var obj *TerminalResizeStreamingBody
+			if actual != nil {
+				obj = marshalHighbayTerminalResizeToTerminalResizeStreamingBody(actual)
+			}
+			u := body.ClientFrame
+			u.SetResize((*TerminalResizeStreamingBody)(obj))
+			body.ClientFrame = u
+		case "focus":
+			actual, _ := p.ClientFrame.AsFocus()
+			var obj *TerminalFocusFrameStreamingBody
+			if actual != nil {
+				obj = marshalHighbayTerminalFocusFrameToTerminalFocusFrameStreamingBody(actual)
+			}
+			u := body.ClientFrame
+			u.SetFocus((*TerminalFocusFrameStreamingBody)(obj))
+			body.ClientFrame = u
+		case "credit":
+			actual, _ := p.ClientFrame.AsCredit()
+			var obj *TerminalCreditFrameStreamingBody
+			if actual != nil {
+				obj = marshalHighbayTerminalCreditFrameToTerminalCreditFrameStreamingBody(actual)
+			}
+			u := body.ClientFrame
+			u.SetCredit((*TerminalCreditFrameStreamingBody)(obj))
+			body.ClientFrame = u
 		}
 	}
 	return body
@@ -12600,8 +13719,8 @@ func NewUpdateDraftForbidden(body *UpdateDraftForbiddenResponseBody) *goa.Servic
 func NewGetTeamTeamSnapshotOK(body *GetTeamResponseBody) *highbay.TeamSnapshot {
 	v := &highbay.TeamSnapshot{
 		Team:         *body.Team,
-		HerdrMode:    *body.HerdrMode,
-		ChorusStatus: body.ChorusStatus,
+		Channel:      *body.Channel,
+		ChorusStatus: *body.ChorusStatus,
 	}
 	v.Roles = make([]*highbay.TeamRoleState, len(body.Roles))
 	for i, val := range body.Roles {
@@ -12643,9 +13762,32 @@ func NewGetTeamForbidden(body *GetTeamForbiddenResponseBody) *goa.ServiceError {
 	return v
 }
 
-// NewShowTeamPaneWindowBusy builds a highbay service show_team_pane endpoint
-// window_busy error.
-func NewShowTeamPaneWindowBusy(body *ShowTeamPaneWindowBusyResponseBody) *goa.ServiceError {
+// NewGetTeamConversationTeamConversationOK builds a "highbay" service
+// "get_team_conversation" endpoint result from a HTTP "OK" response.
+func NewGetTeamConversationTeamConversationOK(body *GetTeamConversationResponseBody) *highbay.TeamConversation {
+	v := &highbay.TeamConversation{
+		Team:         *body.Team,
+		Channel:      *body.Channel,
+		ChorusStatus: *body.ChorusStatus,
+	}
+	if body.Pin != nil {
+		v.Pin = unmarshalTeamMessageResponseBodyToHighbayTeamMessage(body.Pin)
+	}
+	v.Messages = make([]*highbay.TeamMessage, len(body.Messages))
+	for i, val := range body.Messages {
+		if val == nil {
+			v.Messages[i] = nil
+			continue
+		}
+		v.Messages[i] = unmarshalTeamMessageResponseBodyToHighbayTeamMessage(val)
+	}
+
+	return v
+}
+
+// NewGetTeamConversationForbidden builds a highbay service
+// get_team_conversation endpoint forbidden error.
+func NewGetTeamConversationForbidden(body *GetTeamConversationForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12658,24 +13800,27 @@ func NewShowTeamPaneWindowBusy(body *ShowTeamPaneWindowBusyResponseBody) *goa.Se
 	return v
 }
 
-// NewShowTeamPanePaneUnavailable builds a highbay service show_team_pane
-// endpoint pane_unavailable error.
-func NewShowTeamPanePaneUnavailable(body *ShowTeamPanePaneUnavailableResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
+// NewSendTeamMessageTeamMessageCreated builds a "highbay" service
+// "send_team_message" endpoint result from a HTTP "Created" response.
+func NewSendTeamMessageTeamMessageCreated(body *SendTeamMessageResponseBody) *highbay.TeamMessage {
+	v := &highbay.TeamMessage{
+		ID:         *body.ID,
+		Target:     *body.Target,
+		Seq:        *body.Seq,
+		Sender:     *body.Sender,
+		SenderRole: *body.SenderRole,
+		Model:      body.Model,
+		Text:       *body.Text,
+		ReplyTo:    body.ReplyTo,
+		SentAtMs:   *body.SentAtMs,
 	}
 
 	return v
 }
 
-// NewShowTeamPaneTeamUnavailable builds a highbay service show_team_pane
+// NewSendTeamMessageTeamUnavailable builds a highbay service send_team_message
 // endpoint team_unavailable error.
-func NewShowTeamPaneTeamUnavailable(body *ShowTeamPaneTeamUnavailableResponseBody) *goa.ServiceError {
+func NewSendTeamMessageTeamUnavailable(body *SendTeamMessageTeamUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12688,9 +13833,24 @@ func NewShowTeamPaneTeamUnavailable(body *ShowTeamPaneTeamUnavailableResponseBod
 	return v
 }
 
-// NewShowTeamPaneForbidden builds a highbay service show_team_pane endpoint
-// forbidden error.
-func NewShowTeamPaneForbidden(body *ShowTeamPaneForbiddenResponseBody) *goa.ServiceError {
+// NewSendTeamMessageUnprocessable builds a highbay service send_team_message
+// endpoint unprocessable error.
+func NewSendTeamMessageUnprocessable(body *SendTeamMessageUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSendTeamMessageForbidden builds a highbay service send_team_message
+// endpoint forbidden error.
+func NewSendTeamMessageForbidden(body *SendTeamMessageForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12707,10 +13867,8 @@ func NewShowTeamPaneForbidden(body *ShowTeamPaneForbiddenResponseBody) *goa.Serv
 // "start_team_agents" endpoint result from a HTTP "OK" response.
 func NewStartTeamAgentsProjectTeamOK(body *StartTeamAgentsResponseBody) *highbay.ProjectTeam {
 	v := &highbay.ProjectTeam{
-		Team:      *body.Team,
-		Space:     *body.Space,
-		HerdrMode: *body.HerdrMode,
-		Step:      *body.Step,
+		Team: *body.Team,
+		Step: *body.Step,
 	}
 	v.Roles = make([]*highbay.ProjectTeamRole, len(body.Roles))
 	for i, val := range body.Roles {
@@ -12719,36 +13877,6 @@ func NewStartTeamAgentsProjectTeamOK(body *StartTeamAgentsResponseBody) *highbay
 			continue
 		}
 		v.Roles[i] = unmarshalProjectTeamRoleResponseBodyToHighbayProjectTeamRole(val)
-	}
-
-	return v
-}
-
-// NewStartTeamAgentsAmbiguousSpace builds a highbay service start_team_agents
-// endpoint ambiguous_space error.
-func NewStartTeamAgentsAmbiguousSpace(body *StartTeamAgentsAmbiguousSpaceResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewStartTeamAgentsWindowBusy builds a highbay service start_team_agents
-// endpoint window_busy error.
-func NewStartTeamAgentsWindowBusy(body *StartTeamAgentsWindowBusyResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
 	}
 
 	return v
@@ -12787,6 +13915,279 @@ func NewStartTeamAgentsUnprocessable(body *StartTeamAgentsUnprocessableResponseB
 // NewStartTeamAgentsForbidden builds a highbay service start_team_agents
 // endpoint forbidden error.
 func NewStartTeamAgentsForbidden(body *StartTeamAgentsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTeamRoleRoleNotRunning builds a highbay service
+// interrupt_team_role endpoint role_not_running error.
+func NewInterruptTeamRoleRoleNotRunning(body *InterruptTeamRoleRoleNotRunningResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTeamRoleTeamUnavailable builds a highbay service
+// interrupt_team_role endpoint team_unavailable error.
+func NewInterruptTeamRoleTeamUnavailable(body *InterruptTeamRoleTeamUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewInterruptTeamRoleForbidden builds a highbay service interrupt_team_role
+// endpoint forbidden error.
+func NewInterruptTeamRoleForbidden(body *InterruptTeamRoleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStopTeamRoleRoleNotRunning builds a highbay service stop_team_role
+// endpoint role_not_running error.
+func NewStopTeamRoleRoleNotRunning(body *StopTeamRoleRoleNotRunningResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStopTeamRoleTeamUnavailable builds a highbay service stop_team_role
+// endpoint team_unavailable error.
+func NewStopTeamRoleTeamUnavailable(body *StopTeamRoleTeamUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStopTeamRoleForbidden builds a highbay service stop_team_role endpoint
+// forbidden error.
+func NewStopTeamRoleForbidden(body *StopTeamRoleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRestartTeamRoleRoleNotRunning builds a highbay service restart_team_role
+// endpoint role_not_running error.
+func NewRestartTeamRoleRoleNotRunning(body *RestartTeamRoleRoleNotRunningResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRestartTeamRoleUnprocessable builds a highbay service restart_team_role
+// endpoint unprocessable error.
+func NewRestartTeamRoleUnprocessable(body *RestartTeamRoleUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRestartTeamRoleTeamUnavailable builds a highbay service restart_team_role
+// endpoint team_unavailable error.
+func NewRestartTeamRoleTeamUnavailable(body *RestartTeamRoleTeamUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRestartTeamRoleForbidden builds a highbay service restart_team_role
+// endpoint forbidden error.
+func NewRestartTeamRoleForbidden(body *RestartTeamRoleForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTerminalTicketResultCreated builds a "highbay" service
+// "create_terminal_ticket" endpoint result from a HTTP "Created" response.
+func NewCreateTerminalTicketResultCreated(body *CreateTerminalTicketResponseBody) *highbay.TerminalTicketResult {
+	v := &highbay.TerminalTicketResult{
+		Ticket:    *body.Ticket,
+		ExpiresAt: *body.ExpiresAt,
+	}
+
+	return v
+}
+
+// NewCreateTerminalTicketTerminalUnavailable builds a highbay service
+// create_terminal_ticket endpoint terminal_unavailable error.
+func NewCreateTerminalTicketTerminalUnavailable(body *CreateTerminalTicketTerminalUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateTerminalTicketForbidden builds a highbay service
+// create_terminal_ticket endpoint forbidden error.
+func NewCreateTerminalTicketForbidden(body *CreateTerminalTicketForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachRoleTerminalTerminalServerFrameOK builds a "highbay" service
+// "attach_role_terminal" endpoint result from a HTTP "OK" response.
+func NewAttachRoleTerminalTerminalServerFrameOK(body *AttachRoleTerminalResponseBody) *highbay.TerminalServerFrame {
+	v := &highbay.TerminalServerFrame{}
+	switch string(body.ServerFrame.Kind()) {
+	case "output":
+		actual, _ := body.ServerFrame.AsOutput()
+		var obj *highbay.TerminalOutputFrame
+		if actual != nil {
+			obj = unmarshalTerminalOutputFrameResponseBodyToHighbayTerminalOutputFrame(actual)
+		}
+		u := v.ServerFrame
+		u.SetOutput((*highbay.TerminalOutputFrame)(obj))
+		v.ServerFrame = u
+	case "resize":
+		actual, _ := body.ServerFrame.AsResize()
+		var obj *highbay.TerminalResize
+		if actual != nil {
+			obj = unmarshalTerminalResizeResponseBodyToHighbayTerminalResize(actual)
+		}
+		u := v.ServerFrame
+		u.SetResize((*highbay.TerminalResize)(obj))
+		v.ServerFrame = u
+	case "closed":
+		actual, _ := body.ServerFrame.AsClosed()
+		var obj *highbay.TerminalClosed
+		if actual != nil {
+			obj = unmarshalTerminalClosedResponseBodyToHighbayTerminalClosed(actual)
+		}
+		u := v.ServerFrame
+		u.SetClosed((*highbay.TerminalClosed)(obj))
+		v.ServerFrame = u
+	}
+
+	return v
+}
+
+// NewAttachRoleTerminalTerminalUnavailable builds a highbay service
+// attach_role_terminal endpoint terminal_unavailable error.
+func NewAttachRoleTerminalTerminalUnavailable(body *AttachRoleTerminalTerminalUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachRoleTerminalUnprocessable builds a highbay service
+// attach_role_terminal endpoint unprocessable error.
+func NewAttachRoleTerminalUnprocessable(body *AttachRoleTerminalUnprocessableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAttachRoleTerminalForbidden builds a highbay service attach_role_terminal
+// endpoint forbidden error.
+func NewAttachRoleTerminalForbidden(body *AttachRoleTerminalForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -12885,6 +14286,9 @@ func NewOpenViewsResultOK(body *OpenViewsResponseBody) *highbay.OpenViewsResult 
 	v := &highbay.OpenViewsResult{
 		Opened:  *body.Opened,
 		Message: *body.Message,
+		Team:    *body.Team,
+		Channel: *body.Channel,
+		Handle:  *body.Handle,
 	}
 
 	return v
@@ -13096,24 +14500,6 @@ func NewStartBuildResultOK(body *StartBuildResponseBody) *highbay.StartBuildResu
 		}
 		u := v.Team
 		u.SetReady((*highbay.ProjectTeam)(obj))
-		v.Team = u
-	case "window_busy":
-		actual, _ := body.Team.AsWindowBusy()
-		var obj *highbay.BuildTeamWindowBusy
-		if actual != nil {
-			obj = unmarshalBuildTeamWindowBusyResponseBodyToHighbayBuildTeamWindowBusy(actual)
-		}
-		u := v.Team
-		u.SetWindowBusy((*highbay.BuildTeamWindowBusy)(obj))
-		v.Team = u
-	case "ambiguous_space":
-		actual, _ := body.Team.AsAmbiguousSpace()
-		var obj *highbay.BuildTeamAmbiguousSpace
-		if actual != nil {
-			obj = unmarshalBuildTeamAmbiguousSpaceResponseBodyToHighbayBuildTeamAmbiguousSpace(actual)
-		}
-		u := v.Team
-		u.SetAmbiguousSpace((*highbay.BuildTeamAmbiguousSpace)(obj))
 		v.Team = u
 	case "unavailable":
 		actual, _ := body.Team.AsUnavailable()
@@ -15352,11 +16738,11 @@ func ValidateGetTeamResponseBody(body *GetTeamResponseBody) (err error) {
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
+	if body.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.SavedChoices == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("saved_choices", "body"))
@@ -15364,16 +16750,14 @@ func ValidateGetTeamResponseBody(body *GetTeamResponseBody) (err error) {
 	if body.DismissedNotices == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("dismissed_notices", "body"))
 	}
+	if body.ChorusStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chorus_status", "body"))
+	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateTeamRoleStateResponseBody(e, "body.roles[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	for k, v := range body.SavedChoices {
@@ -15387,13 +16771,90 @@ func ValidateGetTeamResponseBody(body *GetTeamResponseBody) (err error) {
 		}
 	}
 	for _, e := range body.DismissedNotices {
-		if !(e == "single_agent_family" || e == "outside_herdr" || e == "herdr_unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		if !(e == "single_agent_family") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.dismissed_notices[*]", e, []any{"single_agent_family"}))
 		}
 	}
 	if body.ChorusStatus != nil {
-		if !(*body.ChorusStatus == "connected" || *body.ChorusStatus == "unavailable" || *body.ChorusStatus == "not_used") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *body.ChorusStatus, []any{"connected", "unavailable", "not_used"}))
+		if !(*body.ChorusStatus == "connected" || *body.ChorusStatus == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *body.ChorusStatus, []any{"connected", "unavailable"}))
+		}
+	}
+	return
+}
+
+// ValidateGetTeamConversationResponseBody runs the validations defined on
+// GetTeamConversationResponseBody
+func ValidateGetTeamConversationResponseBody(body *GetTeamConversationResponseBody) (err error) {
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if body.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if body.ChorusStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("chorus_status", "body"))
+	}
+	if body.Messages == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("messages", "body"))
+	}
+	if body.ChorusStatus != nil {
+		if !(*body.ChorusStatus == "connected" || *body.ChorusStatus == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.chorus_status", *body.ChorusStatus, []any{"connected", "unavailable"}))
+		}
+	}
+	if body.Pin != nil {
+		if err2 := validateTeamMessageResponseBody(body.Pin, "body.pin"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.Messages {
+		if e != nil {
+			if err2 := validateTeamMessageResponseBody(e, "body.messages[*]"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateSendTeamMessageResponseBody runs the validations defined on
+// SendTeamMessageResponseBody
+func ValidateSendTeamMessageResponseBody(body *SendTeamMessageResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	if body.Seq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seq", "body"))
+	}
+	if body.Sender == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender", "body"))
+	}
+	if body.SenderRole == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender_role", "body"))
+	}
+	if body.Text == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("text", "body"))
+	}
+	if body.SentAtMs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sent_at_ms", "body"))
+	}
+	if body.Seq != nil {
+		if *body.Seq < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.seq", *body.Seq, 1, true))
+		}
+	}
+	if body.SenderRole != nil {
+		if !(*body.SenderRole == "you" || *body.SenderRole == "guide" || *body.SenderRole == "builder" || *body.SenderRole == "test_writer" || *body.SenderRole == "service" || *body.SenderRole == "peer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sender_role", *body.SenderRole, []any{"you", "guide", "builder", "test_writer", "service", "peer"}))
+		}
+	}
+	if body.ReplyTo != nil {
+		if *body.ReplyTo < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.reply_to", *body.ReplyTo, 1, true))
 		}
 	}
 	return
@@ -15405,14 +16866,8 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if body.Space == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("space", "body"))
-	}
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -15420,22 +16875,11 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
-	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-		if utf8.RuneCountInString(*body.Space) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
-		}
-	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleResponseBody(e, "body.roles[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -15445,6 +16889,66 @@ func ValidateStartTeamAgentsResponseBody(body *StartTeamAgentsResponseBody) (err
 		if utf8.RuneCountInString(*body.Step) > 512 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
 		}
+	}
+	return
+}
+
+// ValidateCreateTerminalTicketResponseBody runs the validations defined on
+// CreateTerminalTicketResponseBody
+func ValidateCreateTerminalTicketResponseBody(body *CreateTerminalTicketResponseBody) (err error) {
+	if body.Ticket == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ticket", "body"))
+	}
+	if body.ExpiresAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_at", "body"))
+	}
+	if body.Ticket != nil {
+		if utf8.RuneCountInString(*body.Ticket) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.ticket", *body.Ticket, utf8.RuneCountInString(*body.Ticket), 16, true))
+		}
+	}
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAttachRoleTerminalResponseBody runs the validations defined on
+// AttachRoleTerminalResponseBody
+func ValidateAttachRoleTerminalResponseBody(body *AttachRoleTerminalResponseBody) (err error) {
+	if body.ServerFrame == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("server_frame", "body"))
+	}
+	if body.ServerFrame != nil {
+
+		if err2 := body.ServerFrame.Validate(); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		} else {
+			switch string(body.ServerFrame.Kind()) {
+			case "output":
+				actual, _ := body.ServerFrame.AsOutput()
+				if actual != nil {
+					if err2 := validateTerminalOutputFrameResponseBody(actual, "body.server_frame.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "resize":
+				actual, _ := body.ServerFrame.AsResize()
+				if actual != nil {
+					if err2 := validateTerminalResizeResponseBody(actual, "body.server_frame.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			case "closed":
+				actual, _ := body.ServerFrame.AsClosed()
+				if actual != nil {
+					if err2 := validateTerminalClosedResponseBody(actual, "body.server_frame.value"); err2 != nil {
+						err = goa.MergeErrors(err, err2)
+					}
+				}
+			}
+		}
+
 	}
 	return
 }
@@ -15487,6 +16991,15 @@ func ValidateOpenViewsResponseBody(body *OpenViewsResponseBody) (err error) {
 	}
 	if body.Message == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Team == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
+	}
+	if body.Channel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("channel", "body"))
+	}
+	if body.Handle == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
 	return
 }
@@ -15563,20 +17076,6 @@ func ValidateStartBuildResponseBody(body *StartBuildResponseBody) (err error) {
 				actual, _ := body.Team.AsReady()
 				if actual != nil {
 					if err2 := validateProjectTeamResponseBody(actual, "body.team.value"); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "window_busy":
-				actual, _ := body.Team.AsWindowBusy()
-				if actual != nil {
-					if err2 := validateBuildTeamWindowBusyResponseBody(actual, "body.team.value"); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			case "ambiguous_space":
-				actual, _ := body.Team.AsAmbiguousSpace()
-				if actual != nil {
-					if err2 := validateBuildTeamAmbiguousSpaceResponseBody(actual, "body.team.value"); err2 != nil {
 						err = goa.MergeErrors(err, err2)
 					}
 				}
@@ -18914,9 +20413,9 @@ func ValidateGetTeamForbiddenResponseBody(body *GetTeamForbiddenResponseBody) (e
 	return
 }
 
-// ValidateShowTeamPaneWindowBusyResponseBody runs the validations defined on
-// ShowTeamPaneWindowBusyResponseBody
-func ValidateShowTeamPaneWindowBusyResponseBody(body *ShowTeamPaneWindowBusyResponseBody) (err error) {
+// ValidateGetTeamConversationForbiddenResponseBody runs the validations
+// defined on GetTeamConversationForbiddenResponseBody
+func ValidateGetTeamConversationForbiddenResponseBody(body *GetTeamConversationForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -18938,9 +20437,9 @@ func ValidateShowTeamPaneWindowBusyResponseBody(body *ShowTeamPaneWindowBusyResp
 	return
 }
 
-// ValidateShowTeamPanePaneUnavailableResponseBody runs the validations defined
-// on ShowTeamPanePaneUnavailableResponseBody
-func ValidateShowTeamPanePaneUnavailableResponseBody(body *ShowTeamPanePaneUnavailableResponseBody) (err error) {
+// ValidateSendTeamMessageTeamUnavailableResponseBody runs the validations
+// defined on SendTeamMessageTeamUnavailableResponseBody
+func ValidateSendTeamMessageTeamUnavailableResponseBody(body *SendTeamMessageTeamUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -18962,9 +20461,9 @@ func ValidateShowTeamPanePaneUnavailableResponseBody(body *ShowTeamPanePaneUnava
 	return
 }
 
-// ValidateShowTeamPaneTeamUnavailableResponseBody runs the validations defined
-// on ShowTeamPaneTeamUnavailableResponseBody
-func ValidateShowTeamPaneTeamUnavailableResponseBody(body *ShowTeamPaneTeamUnavailableResponseBody) (err error) {
+// ValidateSendTeamMessageUnprocessableResponseBody runs the validations
+// defined on SendTeamMessageUnprocessableResponseBody
+func ValidateSendTeamMessageUnprocessableResponseBody(body *SendTeamMessageUnprocessableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -18986,57 +20485,9 @@ func ValidateShowTeamPaneTeamUnavailableResponseBody(body *ShowTeamPaneTeamUnava
 	return
 }
 
-// ValidateShowTeamPaneForbiddenResponseBody runs the validations defined on
-// ShowTeamPaneForbiddenResponseBody
-func ValidateShowTeamPaneForbiddenResponseBody(body *ShowTeamPaneForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateStartTeamAgentsAmbiguousSpaceResponseBody runs the validations
-// defined on StartTeamAgentsAmbiguousSpaceResponseBody
-func ValidateStartTeamAgentsAmbiguousSpaceResponseBody(body *StartTeamAgentsAmbiguousSpaceResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateStartTeamAgentsWindowBusyResponseBody runs the validations defined
-// on StartTeamAgentsWindowBusyResponseBody
-func ValidateStartTeamAgentsWindowBusyResponseBody(body *StartTeamAgentsWindowBusyResponseBody) (err error) {
+// ValidateSendTeamMessageForbiddenResponseBody runs the validations defined on
+// SendTeamMessageForbiddenResponseBody
+func ValidateSendTeamMessageForbiddenResponseBody(body *SendTeamMessageForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -19109,6 +20560,366 @@ func ValidateStartTeamAgentsUnprocessableResponseBody(body *StartTeamAgentsUnpro
 // ValidateStartTeamAgentsForbiddenResponseBody runs the validations defined on
 // StartTeamAgentsForbiddenResponseBody
 func ValidateStartTeamAgentsForbiddenResponseBody(body *StartTeamAgentsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTeamRoleRoleNotRunningResponseBody runs the validations
+// defined on InterruptTeamRoleRoleNotRunningResponseBody
+func ValidateInterruptTeamRoleRoleNotRunningResponseBody(body *InterruptTeamRoleRoleNotRunningResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTeamRoleTeamUnavailableResponseBody runs the validations
+// defined on InterruptTeamRoleTeamUnavailableResponseBody
+func ValidateInterruptTeamRoleTeamUnavailableResponseBody(body *InterruptTeamRoleTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateInterruptTeamRoleForbiddenResponseBody runs the validations defined
+// on InterruptTeamRoleForbiddenResponseBody
+func ValidateInterruptTeamRoleForbiddenResponseBody(body *InterruptTeamRoleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStopTeamRoleRoleNotRunningResponseBody runs the validations defined
+// on StopTeamRoleRoleNotRunningResponseBody
+func ValidateStopTeamRoleRoleNotRunningResponseBody(body *StopTeamRoleRoleNotRunningResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStopTeamRoleTeamUnavailableResponseBody runs the validations defined
+// on StopTeamRoleTeamUnavailableResponseBody
+func ValidateStopTeamRoleTeamUnavailableResponseBody(body *StopTeamRoleTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStopTeamRoleForbiddenResponseBody runs the validations defined on
+// StopTeamRoleForbiddenResponseBody
+func ValidateStopTeamRoleForbiddenResponseBody(body *StopTeamRoleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRestartTeamRoleRoleNotRunningResponseBody runs the validations
+// defined on RestartTeamRoleRoleNotRunningResponseBody
+func ValidateRestartTeamRoleRoleNotRunningResponseBody(body *RestartTeamRoleRoleNotRunningResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRestartTeamRoleUnprocessableResponseBody runs the validations
+// defined on RestartTeamRoleUnprocessableResponseBody
+func ValidateRestartTeamRoleUnprocessableResponseBody(body *RestartTeamRoleUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRestartTeamRoleTeamUnavailableResponseBody runs the validations
+// defined on RestartTeamRoleTeamUnavailableResponseBody
+func ValidateRestartTeamRoleTeamUnavailableResponseBody(body *RestartTeamRoleTeamUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRestartTeamRoleForbiddenResponseBody runs the validations defined on
+// RestartTeamRoleForbiddenResponseBody
+func ValidateRestartTeamRoleForbiddenResponseBody(body *RestartTeamRoleForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTerminalTicketTerminalUnavailableResponseBody runs the
+// validations defined on CreateTerminalTicketTerminalUnavailableResponseBody
+func ValidateCreateTerminalTicketTerminalUnavailableResponseBody(body *CreateTerminalTicketTerminalUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCreateTerminalTicketForbiddenResponseBody runs the validations
+// defined on CreateTerminalTicketForbiddenResponseBody
+func ValidateCreateTerminalTicketForbiddenResponseBody(body *CreateTerminalTicketForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachRoleTerminalTerminalUnavailableResponseBody runs the
+// validations defined on AttachRoleTerminalTerminalUnavailableResponseBody
+func ValidateAttachRoleTerminalTerminalUnavailableResponseBody(body *AttachRoleTerminalTerminalUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachRoleTerminalUnprocessableResponseBody runs the validations
+// defined on AttachRoleTerminalUnprocessableResponseBody
+func ValidateAttachRoleTerminalUnprocessableResponseBody(body *AttachRoleTerminalUnprocessableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAttachRoleTerminalForbiddenResponseBody runs the validations defined
+// on AttachRoleTerminalForbiddenResponseBody
+func ValidateAttachRoleTerminalForbiddenResponseBody(body *AttachRoleTerminalForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -22479,14 +24290,14 @@ func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err err
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
 	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
+	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
 	}
 	if body.Attention == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attention", "body"))
-	}
-	if body.Watcher == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", "body"))
 	}
 	if body.Assignment == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", "body"))
@@ -22502,18 +24313,18 @@ func ValidateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody) (err err
 		}
 	}
 	if body.Attention != nil {
-		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "assignment" || *body.Attention == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-		}
-	}
-	if body.Watcher != nil {
-		if !(*body.Watcher == "held" || *body.Watcher == "gone" || *body.Watcher == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.watcher", *body.Watcher, []any{"held", "gone", "unknown"}))
+		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 		}
 	}
 	if body.Assignment != nil {
 		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+		}
+	}
+	if body.Choice != nil {
+		if err2 := validateRoleAgentChoiceResponseBody(body.Choice, "body.choice"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -22528,14 +24339,14 @@ func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path str
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", path))
 	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", path))
+	}
 	if body.State == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("state", path))
 	}
 	if body.Attention == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("attention", path))
-	}
-	if body.Watcher == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("watcher", path))
 	}
 	if body.Assignment == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assignment", path))
@@ -22551,18 +24362,18 @@ func validateTeamRoleStateResponseBody(body *TeamRoleStateResponseBody, path str
 		}
 	}
 	if body.Attention != nil {
-		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "assignment" || *body.Attention == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "assignment", "unknown"}))
-		}
-	}
-	if body.Watcher != nil {
-		if !(*body.Watcher == "held" || *body.Watcher == "gone" || *body.Watcher == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".watcher", *body.Watcher, []any{"held", "gone", "unknown"}))
+		if !(*body.Attention == "none" || *body.Attention == "permission" || *body.Attention == "question" || *body.Attention == "auth" || *body.Attention == "silent" || *body.Attention == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".attention", *body.Attention, []any{"none", "permission", "question", "auth", "silent", "unknown"}))
 		}
 	}
 	if body.Assignment != nil {
 		if !(*body.Assignment == "unread" || *body.Assignment == "nothing_owed" || *body.Assignment == "no_work" || *body.Assignment == "unknown") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".assignment", *body.Assignment, []any{"unread", "nothing_owed", "no_work", "unknown"}))
+		}
+	}
+	if body.Choice != nil {
+		if err2 := validateRoleAgentChoiceResponseBody(body.Choice, path+".choice"); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -22618,6 +24429,89 @@ func validateRoleAgentChoiceResponseBody(body *RoleAgentChoiceResponseBody, path
 	return
 }
 
+// ValidateTeamMessageResponseBody runs the validations defined on TeamMessage
+func ValidateTeamMessageResponseBody(body *TeamMessageResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	if body.Seq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seq", "body"))
+	}
+	if body.Sender == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender", "body"))
+	}
+	if body.SenderRole == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender_role", "body"))
+	}
+	if body.Text == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("text", "body"))
+	}
+	if body.SentAtMs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sent_at_ms", "body"))
+	}
+	if body.Seq != nil {
+		if *body.Seq < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.seq", *body.Seq, 1, true))
+		}
+	}
+	if body.SenderRole != nil {
+		if !(*body.SenderRole == "you" || *body.SenderRole == "guide" || *body.SenderRole == "builder" || *body.SenderRole == "test_writer" || *body.SenderRole == "service" || *body.SenderRole == "peer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sender_role", *body.SenderRole, []any{"you", "guide", "builder", "test_writer", "service", "peer"}))
+		}
+	}
+	if body.ReplyTo != nil {
+		if *body.ReplyTo < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.reply_to", *body.ReplyTo, 1, true))
+		}
+	}
+	return
+}
+
+// validateTeamMessageResponseBody checks TeamMessage and reports errors using
+// the path supplied by its caller
+func validateTeamMessageResponseBody(body *TeamMessageResponseBody, path string) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", path))
+	}
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", path))
+	}
+	if body.Seq == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("seq", path))
+	}
+	if body.Sender == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender", path))
+	}
+	if body.SenderRole == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sender_role", path))
+	}
+	if body.Text == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("text", path))
+	}
+	if body.SentAtMs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sent_at_ms", path))
+	}
+	if body.Seq != nil {
+		if *body.Seq < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".seq", *body.Seq, 1, true))
+		}
+	}
+	if body.SenderRole != nil {
+		if !(*body.SenderRole == "you" || *body.SenderRole == "guide" || *body.SenderRole == "builder" || *body.SenderRole == "test_writer" || *body.SenderRole == "service" || *body.SenderRole == "peer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".sender_role", *body.SenderRole, []any{"you", "guide", "builder", "test_writer", "service", "peer"}))
+		}
+	}
+	if body.ReplyTo != nil {
+		if *body.ReplyTo < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".reply_to", *body.ReplyTo, 1, true))
+		}
+	}
+	return
+}
+
 // ValidateProjectTeamRoleResponseBody runs the validations defined on
 // ProjectTeamRole
 func ValidateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody) (err error) {
@@ -22626,6 +24520,9 @@ func ValidateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody) (err
 	}
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", "body"))
+	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", "body"))
 	}
 	if body.Running == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("running", "body"))
@@ -22647,12 +24544,139 @@ func validateProjectTeamRoleResponseBody(body *ProjectTeamRoleResponseBody, path
 	if body.Handle == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("handle", path))
 	}
+	if body.HasTerminal == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("has_terminal", path))
+	}
 	if body.Running == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("running", path))
 	}
 	if body.Role != nil {
 		if !(*body.Role == "guide" || *body.Role == "builder" || *body.Role == "test_writer") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".role", *body.Role, []any{"guide", "builder", "test_writer"}))
+		}
+	}
+	return
+}
+
+// ValidateTerminalOutputFrameResponseBody runs the validations defined on
+// TerminalOutputFrame
+func ValidateTerminalOutputFrameResponseBody(body *TerminalOutputFrameResponseBody) (err error) {
+	if body.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", "body"))
+	}
+	return
+}
+
+// validateTerminalOutputFrameResponseBody checks TerminalOutputFrame and
+// reports errors using the path supplied by its caller
+func validateTerminalOutputFrameResponseBody(body *TerminalOutputFrameResponseBody, path string) (err error) {
+	if body.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", path))
+	}
+	return
+}
+
+// ValidateTerminalResizeResponseBody runs the validations defined on
+// TerminalResize
+func ValidateTerminalResizeResponseBody(body *TerminalResizeResponseBody) (err error) {
+	if body.Cols == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cols", "body"))
+	}
+	if body.Rows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rows", "body"))
+	}
+	if body.Cols != nil {
+		if *body.Cols < 20 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.cols", *body.Cols, 20, true))
+		}
+		if *body.Cols > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.cols", *body.Cols, 500, false))
+		}
+	}
+	if body.Rows != nil {
+		if *body.Rows < 5 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.rows", *body.Rows, 5, true))
+		}
+		if *body.Rows > 250 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.rows", *body.Rows, 250, false))
+		}
+	}
+	return
+}
+
+// validateTerminalResizeResponseBody checks TerminalResize and reports errors
+// using the path supplied by its caller
+func validateTerminalResizeResponseBody(body *TerminalResizeResponseBody, path string) (err error) {
+	if body.Cols == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("cols", path))
+	}
+	if body.Rows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rows", path))
+	}
+	if body.Cols != nil {
+		if *body.Cols < 20 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".cols", *body.Cols, 20, true))
+		}
+		if *body.Cols > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".cols", *body.Cols, 500, false))
+		}
+	}
+	if body.Rows != nil {
+		if *body.Rows < 5 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".rows", *body.Rows, 5, true))
+		}
+		if *body.Rows > 250 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".rows", *body.Rows, 250, false))
+		}
+	}
+	return
+}
+
+// ValidateTerminalClosedResponseBody runs the validations defined on
+// TerminalClosed
+func ValidateTerminalClosedResponseBody(body *TerminalClosedResponseBody) (err error) {
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.ExitCode != nil {
+		if *body.ExitCode < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.exit_code", *body.ExitCode, 0, true))
+		}
+		if *body.ExitCode > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.exit_code", *body.ExitCode, 255, false))
+		}
+	}
+	if body.Signal != nil {
+		if *body.Signal < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.signal", *body.Signal, 1, true))
+		}
+		if *body.Signal > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.signal", *body.Signal, 255, false))
+		}
+	}
+	return
+}
+
+// validateTerminalClosedResponseBody checks TerminalClosed and reports errors
+// using the path supplied by its caller
+func validateTerminalClosedResponseBody(body *TerminalClosedResponseBody, path string) (err error) {
+	if body.Reason == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("reason", path))
+	}
+	if body.ExitCode != nil {
+		if *body.ExitCode < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".exit_code", *body.ExitCode, 0, true))
+		}
+		if *body.ExitCode > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".exit_code", *body.ExitCode, 255, false))
+		}
+	}
+	if body.Signal != nil {
+		if *body.Signal < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".signal", *body.Signal, 1, true))
+		}
+		if *body.Signal > 255 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".signal", *body.Signal, 255, false))
 		}
 	}
 	return
@@ -22684,9 +24708,6 @@ func ValidateInstalledAgentOptionResponseBody(body *InstalledAgentOptionResponse
 	}
 	if body.YoloSupported == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("yolo_supported", "body"))
-	}
-	if body.HeadlessSupported == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headless_supported", "body"))
 	}
 	if body.Client != nil {
 		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
@@ -22722,9 +24743,6 @@ func validateInstalledAgentOptionResponseBody(body *InstalledAgentOptionResponse
 	}
 	if body.YoloSupported == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("yolo_supported", path))
-	}
-	if body.HeadlessSupported == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("headless_supported", path))
 	}
 	if body.Client != nil {
 		if !(*body.Client == "claude" || *body.Client == "codex" || *body.Client == "antigravity" || *body.Client == "cursor" || *body.Client == "gemini" || *body.Client == "opencode") {
@@ -23663,14 +25681,8 @@ func ValidateProjectTeamResponseBody(body *ProjectTeamResponseBody) (err error) 
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", "body"))
 	}
-	if body.Space == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("space", "body"))
-	}
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", "body"))
-	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", "body"))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
@@ -23678,22 +25690,11 @@ func ValidateProjectTeamResponseBody(body *ProjectTeamResponseBody) (err error) 
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
-	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-		if utf8.RuneCountInString(*body.Space) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
-		}
-	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleResponseBody(e, "body.roles[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
 		}
 	}
 	if body.Step != nil {
@@ -23713,14 +25714,8 @@ func validateProjectTeamResponseBody(body *ProjectTeamResponseBody, path string)
 	if body.Team == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("team", path))
 	}
-	if body.Space == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("space", path))
-	}
 	if body.Roles == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("roles", path))
-	}
-	if body.HerdrMode == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("herdr_mode", path))
 	}
 	if body.Step == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("step", path))
@@ -23728,106 +25723,11 @@ func validateProjectTeamResponseBody(body *ProjectTeamResponseBody, path string)
 	if body.Team != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern(path+".team", *body.Team, "^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$"))
 	}
-	if body.Space != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern(path+".space", *body.Space, "^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]{0,63}|\\.[A-Za-z0-9_-][A-Za-z0-9_.-]{0,62}|\\.\\.[A-Za-z0-9_.-]{1,62})?$"))
-		if utf8.RuneCountInString(*body.Space) > 64 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".space", *body.Space, utf8.RuneCountInString(*body.Space), 64, false))
-		}
-	}
 	for _, e := range body.Roles {
 		if e != nil {
 			if err2 := validateProjectTeamRoleResponseBody(e, path+".roles[*]"); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
-		}
-	}
-	if body.HerdrMode != nil {
-		if !(*body.HerdrMode == "attached" || *body.HerdrMode == "available" || *body.HerdrMode == "unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError(path+".herdr_mode", *body.HerdrMode, []any{"attached", "available", "unavailable"}))
-		}
-	}
-	if body.Step != nil {
-		if utf8.RuneCountInString(*body.Step) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".step", *body.Step, utf8.RuneCountInString(*body.Step), 1, true))
-		}
-		if utf8.RuneCountInString(*body.Step) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
-		}
-	}
-	return
-}
-
-// ValidateBuildTeamWindowBusyResponseBody runs the validations defined on
-// BuildTeamWindowBusy
-func ValidateBuildTeamWindowBusyResponseBody(body *BuildTeamWindowBusyResponseBody) (err error) {
-	if body.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
-	}
-	if body.Step != nil {
-		if utf8.RuneCountInString(*body.Step) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 1, true))
-		}
-		if utf8.RuneCountInString(*body.Step) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
-		}
-	}
-	return
-}
-
-// validateBuildTeamWindowBusyResponseBody checks BuildTeamWindowBusy and
-// reports errors using the path supplied by its caller
-func validateBuildTeamWindowBusyResponseBody(body *BuildTeamWindowBusyResponseBody, path string) (err error) {
-	if body.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", path))
-	}
-	if body.Step != nil {
-		if utf8.RuneCountInString(*body.Step) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".step", *body.Step, utf8.RuneCountInString(*body.Step), 1, true))
-		}
-		if utf8.RuneCountInString(*body.Step) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError(path+".step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
-		}
-	}
-	return
-}
-
-// ValidateBuildTeamAmbiguousSpaceResponseBody runs the validations defined on
-// BuildTeamAmbiguousSpace
-func ValidateBuildTeamAmbiguousSpaceResponseBody(body *BuildTeamAmbiguousSpaceResponseBody) (err error) {
-	if body.Count == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
-	}
-	if body.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", "body"))
-	}
-	if body.Count != nil {
-		if *body.Count < 2 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("body.count", *body.Count, 2, true))
-		}
-	}
-	if body.Step != nil {
-		if utf8.RuneCountInString(*body.Step) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 1, true))
-		}
-		if utf8.RuneCountInString(*body.Step) > 512 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.step", *body.Step, utf8.RuneCountInString(*body.Step), 512, false))
-		}
-	}
-	return
-}
-
-// validateBuildTeamAmbiguousSpaceResponseBody checks BuildTeamAmbiguousSpace
-// and reports errors using the path supplied by its caller
-func validateBuildTeamAmbiguousSpaceResponseBody(body *BuildTeamAmbiguousSpaceResponseBody, path string) (err error) {
-	if body.Count == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("count", path))
-	}
-	if body.Step == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("step", path))
-	}
-	if body.Count != nil {
-		if *body.Count < 2 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError(path+".count", *body.Count, 2, true))
 		}
 	}
 	if body.Step != nil {
@@ -24770,6 +26670,233 @@ func validateRoleAgentChoiceRequestBody(body *RoleAgentChoiceRequestBody, path s
 	}
 	if utf8.RuneCountInString(body.Program) < 1 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".program", body.Program, utf8.RuneCountInString(body.Program), 1, true))
+	}
+	return
+}
+
+// ValidateReviseAnswersContextRequestBody runs the validations defined on
+// ReviseAnswersContext
+func ValidateReviseAnswersContextRequestBody(body *ReviseAnswersContextRequestBody) (err error) {
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", "body"))
+	}
+	if utf8.RuneCountInString(body.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+	}
+	if utf8.RuneCountInString(body.RequestRevision) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
+	}
+	return
+}
+
+// validateReviseAnswersContextRequestBody checks ReviseAnswersContext and
+// reports errors using the path supplied by its caller
+func validateReviseAnswersContextRequestBody(body *ReviseAnswersContextRequestBody, path string) (err error) {
+	if body.Answers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answers", path))
+	}
+	if utf8.RuneCountInString(body.ChangeID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".change_id", body.ChangeID, utf8.RuneCountInString(body.ChangeID), 1, true))
+	}
+	if utf8.RuneCountInString(body.RequestRevision) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".request_revision", body.RequestRevision, utf8.RuneCountInString(body.RequestRevision), 1, true))
+	}
+	return
+}
+
+// ValidateArchitectureElementContextRequestBody runs the validations defined
+// on ArchitectureElementContext
+func ValidateArchitectureElementContextRequestBody(body *ArchitectureElementContextRequestBody) (err error) {
+	if utf8.RuneCountInString(body.ElementID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.element_id", body.ElementID, utf8.RuneCountInString(body.ElementID), 1, true))
+	}
+	if utf8.RuneCountInString(body.ElementName) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.element_name", body.ElementName, utf8.RuneCountInString(body.ElementName), 1, true))
+	}
+	return
+}
+
+// validateArchitectureElementContextRequestBody checks
+// ArchitectureElementContext and reports errors using the path supplied by its
+// caller
+func validateArchitectureElementContextRequestBody(body *ArchitectureElementContextRequestBody, path string) (err error) {
+	if utf8.RuneCountInString(body.ElementID) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".element_id", body.ElementID, utf8.RuneCountInString(body.ElementID), 1, true))
+	}
+	if utf8.RuneCountInString(body.ElementName) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".element_name", body.ElementName, utf8.RuneCountInString(body.ElementName), 1, true))
+	}
+	return
+}
+
+// ValidateStoryFlowContextRequestBody runs the validations defined on
+// StoryFlowContext
+func ValidateStoryFlowContextRequestBody(body *StoryFlowContextRequestBody) (err error) {
+	if utf8.RuneCountInString(body.Story) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.story", body.Story, utf8.RuneCountInString(body.Story), 1, true))
+	}
+	return
+}
+
+// validateStoryFlowContextRequestBody checks StoryFlowContext and reports
+// errors using the path supplied by its caller
+func validateStoryFlowContextRequestBody(body *StoryFlowContextRequestBody, path string) (err error) {
+	if utf8.RuneCountInString(body.Story) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError(path+".story", body.Story, utf8.RuneCountInString(body.Story), 1, true))
+	}
+	return
+}
+
+// ValidateTerminalClientFrameStreamingBody runs the validations defined on
+// TerminalClientFrame
+func ValidateTerminalClientFrameStreamingBody(body *TerminalClientFrameStreamingBody) (err error) {
+	if body.ClientFrame.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_frame", "body"))
+	}
+
+	if err2 := body.ClientFrame.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(body.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := body.ClientFrame.AsInput()
+			if actual != nil {
+				if err2 := validateTerminalInputFrameStreamingBody(actual, "body.client_frame.value"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "resize":
+			actual, _ := body.ClientFrame.AsResize()
+			if actual != nil {
+				if err2 := validateTerminalResizeStreamingBody(actual, "body.client_frame.value"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "credit":
+			actual, _ := body.ClientFrame.AsCredit()
+			if actual != nil {
+				if err2 := validateTerminalCreditFrameStreamingBody(actual, "body.client_frame.value"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return
+}
+
+// validateTerminalClientFrameStreamingBody checks TerminalClientFrame and
+// reports errors using the path supplied by its caller
+func validateTerminalClientFrameStreamingBody(body *TerminalClientFrameStreamingBody, path string) (err error) {
+	if body.ClientFrame.Kind() == "" {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_frame", path))
+	}
+
+	if err2 := body.ClientFrame.Validate(); err2 != nil {
+		err = goa.MergeErrors(err, err2)
+	} else {
+		switch string(body.ClientFrame.Kind()) {
+		case "input":
+			actual, _ := body.ClientFrame.AsInput()
+			if actual != nil {
+				if err2 := validateTerminalInputFrameStreamingBody(actual, path+".client_frame.value"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "resize":
+			actual, _ := body.ClientFrame.AsResize()
+			if actual != nil {
+				if err2 := validateTerminalResizeStreamingBody(actual, path+".client_frame.value"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		case "credit":
+			actual, _ := body.ClientFrame.AsCredit()
+			if actual != nil {
+				if err2 := validateTerminalCreditFrameStreamingBody(actual, path+".client_frame.value"); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+	}
+
+	return
+}
+
+// ValidateTerminalInputFrameStreamingBody runs the validations defined on
+// TerminalInputFrame
+func ValidateTerminalInputFrameStreamingBody(body *TerminalInputFrameStreamingBody) (err error) {
+	if body.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", "body"))
+	}
+	return
+}
+
+// validateTerminalInputFrameStreamingBody checks TerminalInputFrame and
+// reports errors using the path supplied by its caller
+func validateTerminalInputFrameStreamingBody(body *TerminalInputFrameStreamingBody, path string) (err error) {
+	if body.Data == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("data", path))
+	}
+	return
+}
+
+// ValidateTerminalResizeStreamingBody runs the validations defined on
+// TerminalResize
+func ValidateTerminalResizeStreamingBody(body *TerminalResizeStreamingBody) (err error) {
+	if body.Cols < 20 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.cols", body.Cols, 20, true))
+	}
+	if body.Cols > 500 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.cols", body.Cols, 500, false))
+	}
+	if body.Rows < 5 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.rows", body.Rows, 5, true))
+	}
+	if body.Rows > 250 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.rows", body.Rows, 250, false))
+	}
+	return
+}
+
+// validateTerminalResizeStreamingBody checks TerminalResize and reports errors
+// using the path supplied by its caller
+func validateTerminalResizeStreamingBody(body *TerminalResizeStreamingBody, path string) (err error) {
+	if body.Cols < 20 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError(path+".cols", body.Cols, 20, true))
+	}
+	if body.Cols > 500 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError(path+".cols", body.Cols, 500, false))
+	}
+	if body.Rows < 5 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError(path+".rows", body.Rows, 5, true))
+	}
+	if body.Rows > 250 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError(path+".rows", body.Rows, 250, false))
+	}
+	return
+}
+
+// ValidateTerminalCreditFrameStreamingBody runs the validations defined on
+// TerminalCreditFrame
+func ValidateTerminalCreditFrameStreamingBody(body *TerminalCreditFrameStreamingBody) (err error) {
+	if body.Bytes < 1 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.bytes", body.Bytes, 1, true))
+	}
+	if body.Bytes > 1.6777216e+07 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError("body.bytes", body.Bytes, 1.6777216e+07, false))
+	}
+	return
+}
+
+// validateTerminalCreditFrameStreamingBody checks TerminalCreditFrame and
+// reports errors using the path supplied by its caller
+func validateTerminalCreditFrameStreamingBody(body *TerminalCreditFrameStreamingBody, path string) (err error) {
+	if body.Bytes < 1 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError(path+".bytes", body.Bytes, 1, true))
+	}
+	if body.Bytes > 1.6777216e+07 {
+		err = goa.MergeErrors(err, goa.InvalidRangeError(path+".bytes", body.Bytes, 1.6777216e+07, false))
 	}
 	return
 }

@@ -29,6 +29,10 @@ const (
 	// declares Stories without declaring a Goa API or Service.
 	harnessStoryAPIGuard = "(hadGoaAPI || len(out.Stories) == 0) && "
 
+	// harnessModelRecordCall records C4 Model elements and relationships when
+	// the target module loads goa.design/model.
+	harnessModelRecordCall = "\n\trecordModelRoot(&out, addContainer, addEdge)"
+
 	// harnessMainHead contains the package declarations, structured record types,
 	// and main evaluation flow of the standalone evaluator program.
 	harnessMainHead = `package main
@@ -51,7 +55,6 @@ import (
 	agentexpr "goa.design/goa-ai/expr/agent"
 	"goa.design/goa/v3/eval"
 	goaexpr "goa.design/goa/v3/expr"
-	modelexpr "goa.design/model/expr"
 )
 
 type (
@@ -232,25 +235,6 @@ type (
 		Description string     ` + "`json:\"description,omitempty\"`" + `
 		Tags        []string   ` + "`json:\"tags,omitempty\"`" + `
 		Input       schemaDecl ` + "`json:\"input\"`" + `
-	}
-
-	modelRelDecl struct {
-		Destination     string ` + "`json:\"destination\"`" + `
-		Description     string ` + "`json:\"description,omitempty\"`" + `
-		Technology      string ` + "`json:\"technology,omitempty\"`" + `
-		InteractionKind int    ` + "`json:\"interaction_kind,omitempty\"`" + `
-		Tags            string ` + "`json:\"tags,omitempty\"`" + `
-	}
-
-	modelElementDecl struct {
-		Kind          string            ` + "`json:\"kind\"`" + `
-		Name          string            ` + "`json:\"name\"`" + `
-		Description   string            ` + "`json:\"description,omitempty\"`" + `
-		Technology    string            ` + "`json:\"technology,omitempty\"`" + `
-		Tags          string            ` + "`json:\"tags,omitempty\"`" + `
-		URL           string            ` + "`json:\"url,omitempty\"`" + `
-		Properties    map[string]string ` + "`json:\"properties,omitempty\"`" + `
-		Relationships []modelRelDecl    ` + "`json:\"relationships,omitempty\"`" + `
 	}
 )
 
@@ -553,9 +537,7 @@ func main() {
 				}
 			}
 		}
-	}
-
-	recordModelRoot(&out, addContainer, addEdge)
+	}{{MODEL_RECORD_CALL}}
 
 	if evalexpr.Root != nil {
 		for _, suite := range evalexpr.Root.Suites {
@@ -609,21 +591,28 @@ func main() {
 var storyReaderSource string
 
 // evaluateProgram returns the evaluator harness sources for the target's
-// loaded modules, omitting Story extraction when the target does not load the
-// portable Story DSL module.
+// loaded modules, omitting Model and Story extraction when the target does not
+// load those DSL modules.
 func evaluateProgram(loaded map[string]bool) map[string]string {
-	var field, preEval, call, apiGuard string
+	var field, preEval, call, apiGuard, modelCall string
 	if loaded[harnessStoryModule] {
 		field = harnessStoryOutputField
 		preEval = harnessStoryPreEval
 		call = harnessStoryRecordCall
 		apiGuard = harnessStoryAPIGuard
 	}
+	if loaded[harnessModelModule] {
+		modelCall = harnessModelRecordCall
+	}
 	mainSrc := strings.ReplaceAll(harnessMainTemplate, "{{STORY_OUTPUT_FIELD}}", field)
 	mainSrc = strings.ReplaceAll(mainSrc, "{{STORY_PRE_EVAL}}", preEval)
 	mainSrc = strings.ReplaceAll(mainSrc, "{{STORY_RECORD_CALL}}", call)
 	mainSrc = strings.ReplaceAll(mainSrc, "{{STORY_API_GUARD}}", apiGuard)
+	mainSrc = strings.ReplaceAll(mainSrc, "{{MODEL_RECORD_CALL}}", modelCall)
 	files := map[string]string{"main.go": mainSrc}
+	if loaded[harnessModelModule] {
+		files["model.go"] = harnessModelFile
+	}
 	if loaded[harnessStoryModule] {
 		_, reader, ok := strings.Cut(storyReaderSource, "\npackage designeval\n")
 		if !ok {

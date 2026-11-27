@@ -19,7 +19,7 @@ side, and the reference gives the exact contract of
 | Change Card | The saved record of one requested change: the request, its open questions and the user's answers, its examples, its Story and its design source. |
 | `request_revision` | The identifier of one exact saved revision of a Change Card, including its Story. |
 | Agreed revision | The revision of a Change Card the user confirmed. A revision the guide proposes later waits beside it until the user adopts or declines it. |
-| The server | The project's Highbay server, started by `hbay` in the project folder. |
+| The server | The project's Highbay server, started by `highbay` in the project folder. |
 | The guide | The coding agent the user talks to. It writes the Story in its draft and proposes changes. |
 | The guide's draft | The folder `.highbay-draft` in the project folder: the copy of the design that the guide edits. `refresh_story` returns its path as `draft_folder`. |
 | The builder | The coding agent that writes the application code in its own working copy, `.highbay-build`, and asks the server to verify a commit. |
@@ -29,7 +29,7 @@ side, and the reference gives the exact contract of
 | Required test | The evaluation scenario Highbay generates for one finished flow, with the hook method the test writer implements for it. |
 | Holdout | The scenario tag that hides a scenario's details from the builder. Tests the builder can read are never hidden, so Highbay refuses the tag in written tests. |
 | Run directory | The folder in which one verification run keeps its request, its lock, its result and its logs. |
-| Stored verification settings | A settings file stored for the project with `hbay verification set`. It names one evaluator suite at one commit, and every run uses that suite instead of written tests. |
+| Stored verification settings | A settings file stored for the project with `highbay verification set`. It names one evaluator suite at one commit, and every run uses that suite instead of written tests. |
 | Tests commit | The commit of the tests a run uses: the commit of the accepted tests on `highbay/tests-<n>`, or the suite commit the stored verification settings name. |
 
 ## What a Story is
@@ -62,10 +62,10 @@ error. Actor names are the user's business roles: `warehouse-worker` and
 `insurance-agent` are valid, and no keyword rule refuses one.
 
 A project's design imports the language, so the project's `go.mod` must
-require the Story module. A project made by `hbay init` or `init_project`
+require the Story module. A project made by `highbay init` or `init_project`
 requires it at the version Highbay itself requires. Its `design/story.go`
 imports the language and declares no Story, so its Story table requires no
-test. Highbay's worked example (`hbay init -example`) ships a first Story
+test. Highbay's worked example (`highbay init -example`) ships a first Story
 instead, with one finished flow, `prices-cookie`, and the hook method that
 flow requires, `PricesCookie` in `eval/acceptance`.
 
@@ -155,7 +155,7 @@ scenario `starts_and_listens` that every new project's suite declares, and
 generating the required tests fails naming the duplicate.
 
 The required tests are declared in the project's test module, the `eval/`
-module that `hbay init` creates in the project folder, by its Story table:
+module that `highbay init` creates in the project folder, by its Story table:
 `eval/design/story_tests.go`, a source file of the module's own design.
 `StoryTests`, in
 [`internal/designeval/story_table.go`](../internal/designeval/story_table.go),
@@ -184,7 +184,7 @@ leaves `Hooks`, and an old hand-written method still compiles and is unused.
 Because the required tests are part of the module's design, every generation
 of the module keeps them, whoever runs it and with any tool: Highbay's own
 writing of the required tests and its check of a report, `generate_code` with
-`target: "eval"`, `hbay gen`, `hbay init`, and `goa gen` run by hand. A
+`target: "eval"`, `highbay gen`, `highbay init`, and `goa gen` run by hand. A
 module without a Story table declares no Story scenario. The test writer
 leaves the table as it is: Highbay generates the module with the table it
 renders from the build's saved Story in place of whatever the test writer
@@ -194,7 +194,7 @@ are still `assigned`, which is the test writer's first read after a build
 start, and again at each report. A build start itself writes nothing into
 the test writer's working copy. The table is replaced by renaming a new file
 over it, so a symbolic link at its path is replaced, not followed.
-`hbay init` writes the new project's table from its own Story: no row for
+`highbay init` writes the new project's table from its own Story: no row for
 the blank project, one for the worked example. A
 project whose operator stored verification settings for another suite keeps
 whatever table its test module last received: no test writer has work there
@@ -219,7 +219,7 @@ branch. The test writer does not commit: Highbay commits the tests it accepts
 on `highbay/tests-<n>`. A project with stored verification settings uses no
 test writer, so a build there uses only `.highbay-build`. Without stored
 settings a build needs Highbay's test layout, the `eval/` test module that
-`hbay init` makes; a project with neither is refused with `no_test_layout`.
+`highbay init` makes; a project with neither is refused with `no_test_layout`.
 
 ### What a build start does
 
@@ -515,7 +515,7 @@ Without stored verification settings, the choice and the plan refuse too:
 | Refusal | Cause | Next step |
 | --- | --- | --- |
 | `tests_not_accepted` | The build's tests are `assigned`, `reported`, `needs_changes` or `could_not_run`. | The message names the state and who acts: the test writer reports or fixes its findings, Highbay is still checking a report, or the user takes the check's step. It ends with the builder's step: keep its Chorus watcher running, and read its assignment and verify again once Highbay messages it that the tests are accepted. |
-| `no_test_layout` | A commit lacks the layout `hbay init` makes, the tests commit is not in the repository, or the project folder is in no Git repository. | The message names who acts: the builder commits the layout, the test writer reports again so Highbay records its tests anew, or the user builds again or makes the folder a repository. |
+| `no_test_layout` | A commit lacks the layout `highbay init` makes, the tests commit is not in the repository, or the project folder is in no Git repository. | The message names who acts: the builder commits the layout, the test writer reports again so Highbay records its tests anew, or the user builds again or makes the folder a repository. |
 | `conflict` | The candidate changes hand-written files of the test module or shares no history with the tests commit, or the project folder was replaced. | The builder restores the test module's files and commits; for no shared history, the user builds the change again; for a replaced folder, the user stops and starts Highbay in the project folder. |
 
 Each refusal says what Highbay found and who acts. The reference lists every

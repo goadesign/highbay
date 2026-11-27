@@ -49,7 +49,7 @@ type (
 	// build and launch plan comes from Options.Verification, and targets
 	// live in <CardsDir>/live.
 	LiveConfig struct {
-		// Command is the argument list that runs this hbay executable;
+		// Command is the argument list that runs this highbay executable;
 		// targets start `<Command> verify-run live <dir> <build-cache-dir>`.
 		Command []string
 		// Env is the environment live targets start from: the server's own
@@ -124,7 +124,7 @@ type (
 		// liveConfigured records whether live launch settings were supplied.
 		// A verification plan is also required before a target can start.
 		liveConfigured bool
-		// liveCommand is the argument list that runs this hbay executable;
+		// liveCommand is the argument list that runs this highbay executable;
 		// targets start `<liveCommand> verify-run live <dir> <build-cache-dir>`.
 		liveCommand []string
 		// liveTimeout bounds how long building and starting a target may

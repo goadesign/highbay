@@ -598,28 +598,111 @@ func BuildListTracesPayload(highbayListTracesStatus string, highbayListTracesLim
 	return v, nil
 }
 
-// BuildShowTeamPanePayload builds the payload for the highbay show_team_pane
-// endpoint from CLI flags.
-func BuildShowTeamPanePayload(highbayShowTeamPaneBody *string) (*highbay.ShowTeamPanePayload, error) {
+// BuildSendTeamMessagePayload builds the payload for the highbay
+// send_team_message endpoint from CLI flags.
+func BuildSendTeamMessagePayload(highbaySendTeamMessageBody *string) (*highbay.SendTeamMessagePayload, error) {
 	var err error
-	var body ShowTeamPaneRequestBody
+	var body SendTeamMessageRequestBody
 	{
-		if highbayShowTeamPaneBody == nil {
+		if highbaySendTeamMessageBody == nil {
 			return nil, fmt.Errorf("missing required flag --body")
 		}
-		err = json.Unmarshal([]byte(*highbayShowTeamPaneBody), &body)
+		err = json.Unmarshal([]byte(*highbaySendTeamMessageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"role\": \"guide\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"context\": {\n         \"type\": \"architecture_element\",\n         \"value\": {\n            \"change_id\": \"Dolores molestiae.\",\n            \"element_id\": \"wm1\",\n            \"element_name\": \"u\"\n         }\n      },\n      \"guide_choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      },\n      \"reply_to\": 8303348737552024948,\n      \"text\": \"n9\",\n      \"to\": \"team\"\n   }'")
 		}
-		if !(body.Role == "guide" || body.Role == "builder" || body.Role == "test_writer") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", body.Role, []any{"guide", "builder", "test_writer"}))
+		if !(body.To == "team" || body.To == "guide" || body.To == "builder" || body.To == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.to", body.To, []any{"team", "guide", "builder", "test_writer"}))
+		}
+		if utf8.RuneCountInString(body.Text) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", body.Text, utf8.RuneCountInString(body.Text), 1, true))
+		}
+		if utf8.RuneCountInString(body.Text) > 3500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.text", body.Text, utf8.RuneCountInString(body.Text), 3500, false))
+		}
+		if body.ReplyTo != nil {
+			if *body.ReplyTo < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("body.reply_to", *body.ReplyTo, 1, true))
+			}
+		}
+		if body.GuideChoice != nil {
+			if err2 := validateRoleAgentChoiceRequestBody(body.GuideChoice, "body.guide_choice"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Context != nil {
+
+			if err2 := body.Context.Validate(); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			} else {
+				switch string(body.Context.Kind()) {
+				case "revise_answers":
+					actual, _ := body.Context.AsReviseAnswers()
+					if actual != nil {
+						if err2 := validateReviseAnswersContextRequestBody(actual, "body.context.value"); err2 != nil {
+							err = goa.MergeErrors(err, err2)
+						}
+					}
+				case "architecture_element":
+					actual, _ := body.Context.AsArchitectureElement()
+					if actual != nil {
+						if err2 := validateArchitectureElementContextRequestBody(actual, "body.context.value"); err2 != nil {
+							err = goa.MergeErrors(err, err2)
+						}
+					}
+				case "story_flow":
+					actual, _ := body.Context.AsStoryFlow()
+					if actual != nil {
+						if err2 := validateStoryFlowContextRequestBody(actual, "body.context.value"); err2 != nil {
+							err = goa.MergeErrors(err, err2)
+						}
+					}
+				}
+			}
+
 		}
 		if err != nil {
 			return nil, err
 		}
 	}
-	v := &highbay.ShowTeamPanePayload{
-		Role: body.Role,
+	v := &highbay.SendTeamMessagePayload{
+		To:      body.To,
+		Text:    body.Text,
+		ReplyTo: body.ReplyTo,
+	}
+	if body.GuideChoice != nil {
+		v.GuideChoice = marshalRoleAgentChoiceRequestBodyToHighbayRoleAgentChoice(body.GuideChoice)
+	}
+	if body.Context != nil {
+		switch string(body.Context.Kind()) {
+		case "revise_answers":
+			actual, _ := body.Context.AsReviseAnswers()
+			var obj *highbay.ReviseAnswersContext
+			if actual != nil {
+				obj = marshalReviseAnswersContextRequestBodyToHighbayReviseAnswersContext(actual)
+			}
+			u := v.Context
+			u.SetReviseAnswers((*highbay.ReviseAnswersContext)(obj))
+			v.Context = u
+		case "architecture_element":
+			actual, _ := body.Context.AsArchitectureElement()
+			var obj *highbay.ArchitectureElementContext
+			if actual != nil {
+				obj = marshalArchitectureElementContextRequestBodyToHighbayArchitectureElementContext(actual)
+			}
+			u := v.Context
+			u.SetArchitectureElement((*highbay.ArchitectureElementContext)(obj))
+			v.Context = u
+		case "story_flow":
+			actual, _ := body.Context.AsStoryFlow()
+			var obj *highbay.StoryFlowContext
+			if actual != nil {
+				obj = marshalStoryFlowContextRequestBodyToHighbayStoryFlowContext(actual)
+			}
+			u := v.Context
+			u.SetStoryFlow((*highbay.StoryFlowContext)(obj))
+			v.Context = u
+		}
 	}
 
 	return v, nil
@@ -655,6 +738,202 @@ func BuildStartTeamAgentsPayload(highbayStartTeamAgentsBody *string) (*highbay.S
 	return v, nil
 }
 
+// BuildInterruptTeamRolePayload builds the payload for the highbay
+// interrupt_team_role endpoint from CLI flags.
+func BuildInterruptTeamRolePayload(highbayInterruptTeamRoleRole *string) (*highbay.InterruptTeamRolePayload, error) {
+	var err error
+	var role string
+	{
+		if highbayInterruptTeamRoleRole == nil {
+			return nil, fmt.Errorf("missing required flag --role")
+		}
+		role = *highbayInterruptTeamRoleRole
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &highbay.InterruptTeamRolePayload{}
+	v.Role = role
+
+	return v, nil
+}
+
+// BuildStopTeamRolePayload builds the payload for the highbay stop_team_role
+// endpoint from CLI flags.
+func BuildStopTeamRolePayload(highbayStopTeamRoleRole *string) (*highbay.StopTeamRolePayload, error) {
+	var err error
+	var role string
+	{
+		if highbayStopTeamRoleRole == nil {
+			return nil, fmt.Errorf("missing required flag --role")
+		}
+		role = *highbayStopTeamRoleRole
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &highbay.StopTeamRolePayload{}
+	v.Role = role
+
+	return v, nil
+}
+
+// BuildRestartTeamRolePayload builds the payload for the highbay
+// restart_team_role endpoint from CLI flags.
+func BuildRestartTeamRolePayload(highbayRestartTeamRoleBody *string, highbayRestartTeamRoleRole *string) (*highbay.RestartTeamRolePayload, error) {
+	var err error
+	var body RestartTeamRoleRequestBody
+	{
+		if highbayRestartTeamRoleBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*highbayRestartTeamRoleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      }\n   }'")
+		}
+		if body.Choice != nil {
+			if err2 := validateRoleAgentChoiceRequestBody(body.Choice, "body.choice"); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var role string
+	{
+		if highbayRestartTeamRoleRole == nil {
+			return nil, fmt.Errorf("missing required flag --role")
+		}
+		role = *highbayRestartTeamRoleRole
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &highbay.RestartTeamRolePayload{}
+	if body.Choice != nil {
+		v.Choice = marshalRoleAgentChoiceRequestBodyToHighbayRoleAgentChoice(body.Choice)
+	}
+	v.Role = role
+
+	return v, nil
+}
+
+// BuildCreateTerminalTicketPayload builds the payload for the highbay
+// create_terminal_ticket endpoint from CLI flags.
+func BuildCreateTerminalTicketPayload(highbayCreateTerminalTicketRole *string) (*highbay.CreateTerminalTicketPayload, error) {
+	var err error
+	var role string
+	{
+		if highbayCreateTerminalTicketRole == nil {
+			return nil, fmt.Errorf("missing required flag --role")
+		}
+		role = *highbayCreateTerminalTicketRole
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &highbay.CreateTerminalTicketPayload{}
+	v.Role = role
+
+	return v, nil
+}
+
+// BuildAttachRoleTerminalPayload builds the payload for the highbay
+// attach_role_terminal endpoint from CLI flags.
+func BuildAttachRoleTerminalPayload(highbayAttachRoleTerminalRole *string, highbayAttachRoleTerminalTicket *string, highbayAttachRoleTerminalCols string, highbayAttachRoleTerminalRows string, highbayAttachRoleTerminalObserve string) (*highbay.AttachRoleTerminalPayload, error) {
+	var err error
+	var role string
+	{
+		if highbayAttachRoleTerminalRole == nil {
+			return nil, fmt.Errorf("missing required flag --role")
+		}
+		role = *highbayAttachRoleTerminalRole
+		if !(role == "guide" || role == "builder" || role == "test_writer") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("role", role, []any{"guide", "builder", "test_writer"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var ticket string
+	{
+		if highbayAttachRoleTerminalTicket == nil {
+			return nil, fmt.Errorf("missing required flag --ticket")
+		}
+		ticket = *highbayAttachRoleTerminalTicket
+		if utf8.RuneCountInString(ticket) < 16 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("ticket", ticket, utf8.RuneCountInString(ticket), 16, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cols int
+	{
+		var v int64
+		v, err = strconv.ParseInt(highbayAttachRoleTerminalCols, 10, strconv.IntSize)
+		cols = int(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for cols, must be INT")
+		}
+		if cols < 20 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("cols", cols, 20, true))
+		}
+		if cols > 500 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("cols", cols, 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var rows int
+	{
+		var v int64
+		v, err = strconv.ParseInt(highbayAttachRoleTerminalRows, 10, strconv.IntSize)
+		rows = int(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for rows, must be INT")
+		}
+		if rows < 5 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("rows", rows, 5, true))
+		}
+		if rows > 250 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("rows", rows, 250, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var observe bool
+	{
+		observe, err = strconv.ParseBool(highbayAttachRoleTerminalObserve)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for observe, must be BOOL")
+		}
+	}
+	v := &highbay.AttachRoleTerminalPayload{}
+	v.Role = role
+	v.Ticket = ticket
+	v.Cols = cols
+	v.Rows = rows
+	v.Observe = observe
+
+	return v, nil
+}
+
 // BuildDismissTeamNoticePayload builds the payload for the highbay
 // dismiss_team_notice endpoint from CLI flags.
 func BuildDismissTeamNoticePayload(highbayDismissTeamNoticeBody *string) (*highbay.DismissTeamNoticePayload, error) {
@@ -666,10 +945,10 @@ func BuildDismissTeamNoticePayload(highbayDismissTeamNoticeBody *string) (*highb
 		}
 		err = json.Unmarshal([]byte(*highbayDismissTeamNoticeBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"notice\": \"outside_herdr\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"notice\": \"single_agent_family\"\n   }'")
 		}
-		if !(body.Notice == "single_agent_family" || body.Notice == "outside_herdr" || body.Notice == "herdr_unavailable") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.notice", body.Notice, []any{"single_agent_family", "outside_herdr", "herdr_unavailable"}))
+		if !(body.Notice == "single_agent_family") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.notice", body.Notice, []any{"single_agent_family"}))
 		}
 		if err != nil {
 			return nil, err

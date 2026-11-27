@@ -1089,6 +1089,270 @@ func (u *BuildTaking) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ClientFrame holds exactly one of its branch values.
+type ClientFrame struct {
+	kind   ClientFrameKind
+	input  *TerminalInputFrame
+	resize *TerminalResize
+	focus  *TerminalFocusFrame
+	credit *TerminalCreditFrame
+}
+
+// ClientFrameKind records which ClientFrame branch is selected.
+type ClientFrameKind string
+
+const (
+	// ClientFrameKindInput identifies the input branch.
+	ClientFrameKindInput ClientFrameKind = "input"
+	// ClientFrameKindResize identifies the resize branch.
+	ClientFrameKindResize ClientFrameKind = "resize"
+	// ClientFrameKindFocus identifies the focus branch.
+	ClientFrameKindFocus ClientFrameKind = "focus"
+	// ClientFrameKindCredit identifies the credit branch.
+	ClientFrameKindCredit ClientFrameKind = "credit"
+)
+
+// Kind returns the selected branch.
+func (u ClientFrame) Kind() ClientFrameKind {
+	return u.kind
+}
+
+// NewClientFrameInput constructs ClientFrame with the input branch set.
+func NewClientFrameInput(v *TerminalInputFrame) ClientFrame {
+	return ClientFrame{
+		kind:  ClientFrameKindInput,
+		input: v,
+	}
+}
+
+// AsInput returns the value when the input branch is selected.
+func (u ClientFrame) AsInput() (_ *TerminalInputFrame, ok bool) {
+	if u.kind != ClientFrameKindInput {
+		return
+	}
+	return u.input, true
+}
+
+// SetInput selects the input branch and stores v.
+func (u *ClientFrame) SetInput(v *TerminalInputFrame) {
+	*u = ClientFrame{
+		kind:  ClientFrameKindInput,
+		input: v,
+	}
+}
+
+// NewClientFrameResize constructs ClientFrame with the resize branch set.
+func NewClientFrameResize(v *TerminalResize) ClientFrame {
+	return ClientFrame{
+		kind:   ClientFrameKindResize,
+		resize: v,
+	}
+}
+
+// AsResize returns the value when the resize branch is selected.
+func (u ClientFrame) AsResize() (_ *TerminalResize, ok bool) {
+	if u.kind != ClientFrameKindResize {
+		return
+	}
+	return u.resize, true
+}
+
+// SetResize selects the resize branch and stores v.
+func (u *ClientFrame) SetResize(v *TerminalResize) {
+	*u = ClientFrame{
+		kind:   ClientFrameKindResize,
+		resize: v,
+	}
+}
+
+// NewClientFrameFocus constructs ClientFrame with the focus branch set.
+func NewClientFrameFocus(v *TerminalFocusFrame) ClientFrame {
+	return ClientFrame{
+		kind:  ClientFrameKindFocus,
+		focus: v,
+	}
+}
+
+// AsFocus returns the value when the focus branch is selected.
+func (u ClientFrame) AsFocus() (_ *TerminalFocusFrame, ok bool) {
+	if u.kind != ClientFrameKindFocus {
+		return
+	}
+	return u.focus, true
+}
+
+// SetFocus selects the focus branch and stores v.
+func (u *ClientFrame) SetFocus(v *TerminalFocusFrame) {
+	*u = ClientFrame{
+		kind:  ClientFrameKindFocus,
+		focus: v,
+	}
+}
+
+// NewClientFrameCredit constructs ClientFrame with the credit branch set.
+func NewClientFrameCredit(v *TerminalCreditFrame) ClientFrame {
+	return ClientFrame{
+		kind:   ClientFrameKindCredit,
+		credit: v,
+	}
+}
+
+// AsCredit returns the value when the credit branch is selected.
+func (u ClientFrame) AsCredit() (_ *TerminalCreditFrame, ok bool) {
+	if u.kind != ClientFrameKindCredit {
+		return
+	}
+	return u.credit, true
+}
+
+// SetCredit selects the credit branch and stores v.
+func (u *ClientFrame) SetCredit(v *TerminalCreditFrame) {
+	*u = ClientFrame{
+		kind:   ClientFrameKindCredit,
+		credit: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u ClientFrame) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u ClientFrame) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("kind", "", []any{
+			string(ClientFrameKindInput),
+			string(ClientFrameKindResize),
+			string(ClientFrameKindFocus),
+			string(ClientFrameKindCredit),
+		})
+	case ClientFrameKindInput:
+		if u.input == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrame")
+		}
+		return u.input, nil
+	case ClientFrameKindResize:
+		if u.resize == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrame")
+		}
+		return u.resize, nil
+	case ClientFrameKindFocus:
+		if u.focus == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrame")
+		}
+		return u.focus, nil
+	case ClientFrameKindCredit:
+		if u.credit == nil {
+			return nil, goa.MissingFieldError("value", "ClientFrame")
+		}
+		return u.credit, nil
+	default:
+		return nil, goa.InvalidEnumValueError("kind", u.kind, []any{
+			string(ClientFrameKindInput),
+			string(ClientFrameKindResize),
+			string(ClientFrameKindFocus),
+			string(ClientFrameKindCredit),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u ClientFrame) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("kind", nil, "non-null JSON object")
+	}
+	if _, exists := fields["kind"]; exists {
+		return nil, fmt.Errorf("ClientFrame branch already contains discriminator %q", "kind")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["kind"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *ClientFrame) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["kind"]
+	if !exists {
+		return goa.MissingFieldError("kind", "ClientFrame")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("kind", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "kind")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(ClientFrameKindInput):
+		var v *TerminalInputFrame
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetInput(v)
+	case string(ClientFrameKindResize):
+		var v *TerminalResize
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetResize(v)
+	case string(ClientFrameKindFocus):
+		var v *TerminalFocusFrame
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetFocus(v)
+	case string(ClientFrameKindCredit):
+		var v *TerminalCreditFrame
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetCredit(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("kind", "ClientFrame")
+		}
+		return goa.InvalidEnumValueError("kind", raw.Type, []any{
+			string(ClientFrameKindInput),
+			string(ClientFrameKindResize),
+			string(ClientFrameKindFocus),
+			string(ClientFrameKindCredit),
+		})
+	}
+	return nil
+}
+
 // Connection holds exactly one of its branch values.
 type Connection struct {
 	kind    ConnectionKind
@@ -1307,6 +1571,205 @@ func (u *Connection) UnmarshalJSON(data []byte) error {
 			string(ConnectionKindNone),
 			string(ConnectionKindDirect),
 			string(ConnectionKindGateway),
+		})
+	}
+	return nil
+}
+
+// Context holds exactly one of its branch values.
+type Context struct {
+	kind                ContextKind
+	reviseAnswers       *ReviseAnswersContext
+	architectureElement *ArchitectureElementContext
+	storyFlow           *StoryFlowContext
+}
+
+// ContextKind records which Context branch is selected.
+type ContextKind string
+
+const (
+	// ContextKindReviseAnswers identifies the revise_answers branch.
+	ContextKindReviseAnswers ContextKind = "revise_answers"
+	// ContextKindArchitectureElement identifies the architecture_element branch.
+	ContextKindArchitectureElement ContextKind = "architecture_element"
+	// ContextKindStoryFlow identifies the story_flow branch.
+	ContextKindStoryFlow ContextKind = "story_flow"
+)
+
+// Kind returns the selected branch.
+func (u Context) Kind() ContextKind {
+	return u.kind
+}
+
+// NewContextReviseAnswers constructs Context with the revise_answers branch set.
+func NewContextReviseAnswers(v *ReviseAnswersContext) Context {
+	return Context{
+		kind:          ContextKindReviseAnswers,
+		reviseAnswers: v,
+	}
+}
+
+// AsReviseAnswers returns the value when the revise_answers branch is selected.
+func (u Context) AsReviseAnswers() (_ *ReviseAnswersContext, ok bool) {
+	if u.kind != ContextKindReviseAnswers {
+		return
+	}
+	return u.reviseAnswers, true
+}
+
+// SetReviseAnswers selects the revise_answers branch and stores v.
+func (u *Context) SetReviseAnswers(v *ReviseAnswersContext) {
+	*u = Context{
+		kind:          ContextKindReviseAnswers,
+		reviseAnswers: v,
+	}
+}
+
+// NewContextArchitectureElement constructs Context with the architecture_element branch set.
+func NewContextArchitectureElement(v *ArchitectureElementContext) Context {
+	return Context{
+		kind:                ContextKindArchitectureElement,
+		architectureElement: v,
+	}
+}
+
+// AsArchitectureElement returns the value when the architecture_element branch is selected.
+func (u Context) AsArchitectureElement() (_ *ArchitectureElementContext, ok bool) {
+	if u.kind != ContextKindArchitectureElement {
+		return
+	}
+	return u.architectureElement, true
+}
+
+// SetArchitectureElement selects the architecture_element branch and stores v.
+func (u *Context) SetArchitectureElement(v *ArchitectureElementContext) {
+	*u = Context{
+		kind:                ContextKindArchitectureElement,
+		architectureElement: v,
+	}
+}
+
+// NewContextStoryFlow constructs Context with the story_flow branch set.
+func NewContextStoryFlow(v *StoryFlowContext) Context {
+	return Context{
+		kind:      ContextKindStoryFlow,
+		storyFlow: v,
+	}
+}
+
+// AsStoryFlow returns the value when the story_flow branch is selected.
+func (u Context) AsStoryFlow() (_ *StoryFlowContext, ok bool) {
+	if u.kind != ContextKindStoryFlow {
+		return
+	}
+	return u.storyFlow, true
+}
+
+// SetStoryFlow selects the story_flow branch and stores v.
+func (u *Context) SetStoryFlow(v *StoryFlowContext) {
+	*u = Context{
+		kind:      ContextKindStoryFlow,
+		storyFlow: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u Context) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u Context) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("type", "", []any{
+			string(ContextKindReviseAnswers),
+			string(ContextKindArchitectureElement),
+			string(ContextKindStoryFlow),
+		})
+	case ContextKindReviseAnswers:
+		if u.reviseAnswers == nil {
+			return nil, goa.MissingFieldError("value", "Context")
+		}
+		return u.reviseAnswers, nil
+	case ContextKindArchitectureElement:
+		if u.architectureElement == nil {
+			return nil, goa.MissingFieldError("value", "Context")
+		}
+		return u.architectureElement, nil
+	case ContextKindStoryFlow:
+		if u.storyFlow == nil {
+			return nil, goa.MissingFieldError("value", "Context")
+		}
+		return u.storyFlow, nil
+	default:
+		return nil, goa.InvalidEnumValueError("type", u.kind, []any{
+			string(ContextKindReviseAnswers),
+			string(ContextKindArchitectureElement),
+			string(ContextKindStoryFlow),
+		})
+	}
+}
+
+// MarshalJSON marshals the union into the canonical {type,value} JSON shape.
+func (u Context) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Type  string `json:"type"`
+		Value any    `json:"value"`
+	}{
+		Type:  string(u.kind),
+		Value: value,
+	})
+}
+
+// UnmarshalJSON unmarshals the union from the canonical {type,value} JSON shape.
+func (u *Context) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type  string          `json:"type"`
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.Value) == 0 {
+		return goa.MissingFieldError("value", "Context")
+	}
+	if bytes.Equal(bytes.TrimSpace(raw.Value), []byte("null")) {
+		return goa.InvalidFieldTypeError("value", nil, "non-null JSON value")
+	}
+	switch raw.Type {
+	case string(ContextKindReviseAnswers):
+		var v *ReviseAnswersContext
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetReviseAnswers(v)
+	case string(ContextKindArchitectureElement):
+		var v *ArchitectureElementContext
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetArchitectureElement(v)
+	case string(ContextKindStoryFlow):
+		var v *StoryFlowContext
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetStoryFlow(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("type", "Context")
+		}
+		return goa.InvalidEnumValueError("type", raw.Type, []any{
+			string(ContextKindReviseAnswers),
+			string(ContextKindArchitectureElement),
+			string(ContextKindStoryFlow),
 		})
 	}
 	return nil
@@ -1799,6 +2262,229 @@ func (u *Mapping) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// ServerFrame holds exactly one of its branch values.
+type ServerFrame struct {
+	kind   ServerFrameKind
+	output *TerminalOutputFrame
+	resize *TerminalResize
+	closed *TerminalClosed
+}
+
+// ServerFrameKind records which ServerFrame branch is selected.
+type ServerFrameKind string
+
+const (
+	// ServerFrameKindOutput identifies the output branch.
+	ServerFrameKindOutput ServerFrameKind = "output"
+	// ServerFrameKindResize identifies the resize branch.
+	ServerFrameKindResize ServerFrameKind = "resize"
+	// ServerFrameKindClosed identifies the closed branch.
+	ServerFrameKindClosed ServerFrameKind = "closed"
+)
+
+// Kind returns the selected branch.
+func (u ServerFrame) Kind() ServerFrameKind {
+	return u.kind
+}
+
+// NewServerFrameOutput constructs ServerFrame with the output branch set.
+func NewServerFrameOutput(v *TerminalOutputFrame) ServerFrame {
+	return ServerFrame{
+		kind:   ServerFrameKindOutput,
+		output: v,
+	}
+}
+
+// AsOutput returns the value when the output branch is selected.
+func (u ServerFrame) AsOutput() (_ *TerminalOutputFrame, ok bool) {
+	if u.kind != ServerFrameKindOutput {
+		return
+	}
+	return u.output, true
+}
+
+// SetOutput selects the output branch and stores v.
+func (u *ServerFrame) SetOutput(v *TerminalOutputFrame) {
+	*u = ServerFrame{
+		kind:   ServerFrameKindOutput,
+		output: v,
+	}
+}
+
+// NewServerFrameResize constructs ServerFrame with the resize branch set.
+func NewServerFrameResize(v *TerminalResize) ServerFrame {
+	return ServerFrame{
+		kind:   ServerFrameKindResize,
+		resize: v,
+	}
+}
+
+// AsResize returns the value when the resize branch is selected.
+func (u ServerFrame) AsResize() (_ *TerminalResize, ok bool) {
+	if u.kind != ServerFrameKindResize {
+		return
+	}
+	return u.resize, true
+}
+
+// SetResize selects the resize branch and stores v.
+func (u *ServerFrame) SetResize(v *TerminalResize) {
+	*u = ServerFrame{
+		kind:   ServerFrameKindResize,
+		resize: v,
+	}
+}
+
+// NewServerFrameClosed constructs ServerFrame with the closed branch set.
+func NewServerFrameClosed(v *TerminalClosed) ServerFrame {
+	return ServerFrame{
+		kind:   ServerFrameKindClosed,
+		closed: v,
+	}
+}
+
+// AsClosed returns the value when the closed branch is selected.
+func (u ServerFrame) AsClosed() (_ *TerminalClosed, ok bool) {
+	if u.kind != ServerFrameKindClosed {
+		return
+	}
+	return u.closed, true
+}
+
+// SetClosed selects the closed branch and stores v.
+func (u *ServerFrame) SetClosed(v *TerminalClosed) {
+	*u = ServerFrame{
+		kind:   ServerFrameKindClosed,
+		closed: v,
+	}
+}
+
+// Validate ensures exactly one valid branch is selected.
+func (u ServerFrame) Validate() error {
+	_, err := u.Value()
+	return err
+}
+
+// Value returns the selected branch value, or the same selection error as Validate.
+// Go templates can read this method directly; an invalid selection stops execution.
+func (u ServerFrame) Value() (any, error) {
+	switch u.kind {
+	case "":
+		return nil, goa.InvalidEnumValueError("kind", "", []any{
+			string(ServerFrameKindOutput),
+			string(ServerFrameKindResize),
+			string(ServerFrameKindClosed),
+		})
+	case ServerFrameKindOutput:
+		if u.output == nil {
+			return nil, goa.MissingFieldError("value", "ServerFrame")
+		}
+		return u.output, nil
+	case ServerFrameKindResize:
+		if u.resize == nil {
+			return nil, goa.MissingFieldError("value", "ServerFrame")
+		}
+		return u.resize, nil
+	case ServerFrameKindClosed:
+		if u.closed == nil {
+			return nil, goa.MissingFieldError("value", "ServerFrame")
+		}
+		return u.closed, nil
+	default:
+		return nil, goa.InvalidEnumValueError("kind", u.kind, []any{
+			string(ServerFrameKindOutput),
+			string(ServerFrameKindResize),
+			string(ServerFrameKindClosed),
+		})
+	}
+}
+
+// MarshalJSON writes the selected object branch beside its discriminator.
+func (u ServerFrame) MarshalJSON() ([]byte, error) {
+	value, err := u.Value()
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, goa.InvalidFieldTypeError("kind", nil, "non-null JSON object")
+	}
+	if _, exists := fields["kind"]; exists {
+		return nil, fmt.Errorf("ServerFrame branch already contains discriminator %q", "kind")
+	}
+	tag, err := json.Marshal(string(u.kind))
+	if err != nil {
+		return nil, err
+	}
+	fields["kind"] = tag
+	return json.Marshal(fields)
+}
+
+// UnmarshalJSON reads the discriminator and decodes its declared object branch.
+func (u *ServerFrame) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	tag, exists := fields["kind"]
+	if !exists {
+		return goa.MissingFieldError("kind", "ServerFrame")
+	}
+	if bytes.Equal(bytes.TrimSpace(tag), []byte("null")) {
+		return goa.InvalidFieldTypeError("kind", nil, "JSON string")
+	}
+	var raw struct {
+		Type  string
+		Value json.RawMessage
+	}
+	if err := json.Unmarshal(tag, &raw.Type); err != nil {
+		return err
+	}
+	delete(fields, "kind")
+	value, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	raw.Value = value
+	switch raw.Type {
+	case string(ServerFrameKindOutput):
+		var v *TerminalOutputFrame
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetOutput(v)
+	case string(ServerFrameKindResize):
+		var v *TerminalResize
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetResize(v)
+	case string(ServerFrameKindClosed):
+		var v *TerminalClosed
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetClosed(v)
+	default:
+		if raw.Type == "" {
+			return goa.MissingFieldError("kind", "ServerFrame")
+		}
+		return goa.InvalidEnumValueError("kind", raw.Type, []any{
+			string(ServerFrameKindOutput),
+			string(ServerFrameKindResize),
+			string(ServerFrameKindClosed),
+		})
+	}
+	return nil
+}
+
 // State holds exactly one of its branch values.
 type State struct {
 	kind         StateKind
@@ -2182,11 +2868,9 @@ func (u *StoryContext) UnmarshalJSON(data []byte) error {
 
 // Team holds exactly one of its branch values.
 type Team struct {
-	kind           TeamKind
-	ready          *ProjectTeam
-	windowBusy     *BuildTeamWindowBusy
-	ambiguousSpace *BuildTeamAmbiguousSpace
-	unavailable    *BuildTeamUnavailable
+	kind        TeamKind
+	ready       *ProjectTeam
+	unavailable *BuildTeamUnavailable
 }
 
 // TeamKind records which Team branch is selected.
@@ -2195,10 +2879,6 @@ type TeamKind string
 const (
 	// TeamKindReady identifies the ready branch.
 	TeamKindReady TeamKind = "ready"
-	// TeamKindWindowBusy identifies the window_busy branch.
-	TeamKindWindowBusy TeamKind = "window_busy"
-	// TeamKindAmbiguousSpace identifies the ambiguous_space branch.
-	TeamKindAmbiguousSpace TeamKind = "ambiguous_space"
 	// TeamKindUnavailable identifies the unavailable branch.
 	TeamKindUnavailable TeamKind = "unavailable"
 )
@@ -2229,54 +2909,6 @@ func (u *Team) SetReady(v *ProjectTeam) {
 	*u = Team{
 		kind:  TeamKindReady,
 		ready: v,
-	}
-}
-
-// NewTeamWindowBusy constructs Team with the window_busy branch set.
-func NewTeamWindowBusy(v *BuildTeamWindowBusy) Team {
-	return Team{
-		kind:       TeamKindWindowBusy,
-		windowBusy: v,
-	}
-}
-
-// AsWindowBusy returns the value when the window_busy branch is selected.
-func (u Team) AsWindowBusy() (_ *BuildTeamWindowBusy, ok bool) {
-	if u.kind != TeamKindWindowBusy {
-		return
-	}
-	return u.windowBusy, true
-}
-
-// SetWindowBusy selects the window_busy branch and stores v.
-func (u *Team) SetWindowBusy(v *BuildTeamWindowBusy) {
-	*u = Team{
-		kind:       TeamKindWindowBusy,
-		windowBusy: v,
-	}
-}
-
-// NewTeamAmbiguousSpace constructs Team with the ambiguous_space branch set.
-func NewTeamAmbiguousSpace(v *BuildTeamAmbiguousSpace) Team {
-	return Team{
-		kind:           TeamKindAmbiguousSpace,
-		ambiguousSpace: v,
-	}
-}
-
-// AsAmbiguousSpace returns the value when the ambiguous_space branch is selected.
-func (u Team) AsAmbiguousSpace() (_ *BuildTeamAmbiguousSpace, ok bool) {
-	if u.kind != TeamKindAmbiguousSpace {
-		return
-	}
-	return u.ambiguousSpace, true
-}
-
-// SetAmbiguousSpace selects the ambiguous_space branch and stores v.
-func (u *Team) SetAmbiguousSpace(v *BuildTeamAmbiguousSpace) {
-	*u = Team{
-		kind:           TeamKindAmbiguousSpace,
-		ambiguousSpace: v,
 	}
 }
 
@@ -2317,8 +2949,6 @@ func (u Team) Value() (any, error) {
 	case "":
 		return nil, goa.InvalidEnumValueError("state", "", []any{
 			string(TeamKindReady),
-			string(TeamKindWindowBusy),
-			string(TeamKindAmbiguousSpace),
 			string(TeamKindUnavailable),
 		})
 	case TeamKindReady:
@@ -2326,16 +2956,6 @@ func (u Team) Value() (any, error) {
 			return nil, goa.MissingFieldError("value", "Team")
 		}
 		return u.ready, nil
-	case TeamKindWindowBusy:
-		if u.windowBusy == nil {
-			return nil, goa.MissingFieldError("value", "Team")
-		}
-		return u.windowBusy, nil
-	case TeamKindAmbiguousSpace:
-		if u.ambiguousSpace == nil {
-			return nil, goa.MissingFieldError("value", "Team")
-		}
-		return u.ambiguousSpace, nil
 	case TeamKindUnavailable:
 		if u.unavailable == nil {
 			return nil, goa.MissingFieldError("value", "Team")
@@ -2344,8 +2964,6 @@ func (u Team) Value() (any, error) {
 	default:
 		return nil, goa.InvalidEnumValueError("state", u.kind, []any{
 			string(TeamKindReady),
-			string(TeamKindWindowBusy),
-			string(TeamKindAmbiguousSpace),
 			string(TeamKindUnavailable),
 		})
 	}
@@ -2412,18 +3030,6 @@ func (u *Team) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		u.SetReady(v)
-	case string(TeamKindWindowBusy):
-		var v *BuildTeamWindowBusy
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetWindowBusy(v)
-	case string(TeamKindAmbiguousSpace):
-		var v *BuildTeamAmbiguousSpace
-		if err := json.Unmarshal(raw.Value, &v); err != nil {
-			return err
-		}
-		u.SetAmbiguousSpace(v)
 	case string(TeamKindUnavailable):
 		var v *BuildTeamUnavailable
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -2436,8 +3042,6 @@ func (u *Team) UnmarshalJSON(data []byte) error {
 		}
 		return goa.InvalidEnumValueError("state", raw.Type, []any{
 			string(TeamKindReady),
-			string(TeamKindWindowBusy),
-			string(TeamKindAmbiguousSpace),
 			string(TeamKindUnavailable),
 		})
 	}

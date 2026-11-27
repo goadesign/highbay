@@ -25,7 +25,7 @@ func TestTestWriterTextsLetItRegenerate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			assert.Contains(t, text, "Highbay writes eval/design/story_tests.go, which declares the required tests")
-			assert.Contains(t, text, "hbay gen -dir eval in the working folder")
+			assert.Contains(t, text, "highbay gen -dir eval in the working folder")
 			assert.Contains(t, text, "regenerating keeps the required tests")
 			assert.NotContains(t, text, "drop")
 			assert.NotContains(t, text, "never regenerate")

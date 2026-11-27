@@ -27,7 +27,7 @@ const (
 	// assignments and reports them finished.
 	CallerTestWriter CallerKind = "test_writer"
 	// CallerManagement manages the server and credentials and hands over the
-	// model provider request settings of the shell running hbay, never
+	// model provider request settings of the shell running highbay, never
 	// application decisions.
 	CallerManagement CallerKind = "management"
 )
@@ -36,6 +36,11 @@ const (
 var operationRoles = map[string][]CallerKind{
 	"ensure_team": {CallerManagement}, "identity": {CallerManagement}, "stop": {CallerManagement}, "browser_link": {CallerManagement},
 	"attach_guide": {CallerManagement}, "status": {CallerManagement},
+	// A browser session asks whether the credential it stored is still its own.
+	"get_browser_session": {CallerUser},
+	// The page reads whether a newer release exists. The page and the
+	// highbay update command may each install one.
+	"get_update_status": {CallerUser}, "apply_update": {CallerUser, CallerManagement},
 	"open_views": {CallerUser, CallerGuide}, "merge_change": {CallerUser},
 	"list_team_agent_options": {CallerUser}, "dismiss_team_notice": {CallerUser},
 	"hand_over_model_settings": {CallerManagement}, "confirm_intent": {CallerUser}, "approve_merge": {CallerUser}, "configure_model": {CallerUser},
@@ -57,7 +62,12 @@ var operationRoles = map[string][]CallerKind{
 	"golden_path":          {CallerUser, CallerGuide, CallerBuilder, CallerTestWriter},
 	"list_changes":         {CallerUser, CallerGuide, CallerBuilder},
 	"wait_for_changes":     {CallerUser},
-	"get_team":             {CallerUser}, "show_team_pane": {CallerUser}, "start_team_agents": {CallerUser},
+	"get_team":             {CallerUser}, "start_team_agents": {CallerUser},
+	// The conversation and the terminals are the user's alone: an agent reads
+	// and posts through Chorus, and never types into another role's terminal.
+	"get_team_conversation": {CallerUser}, "send_team_message": {CallerUser},
+	"interrupt_team_role": {CallerUser}, "stop_team_role": {CallerUser}, "restart_team_role": {CallerUser},
+	"create_terminal_ticket": {CallerUser}, "attach_role_terminal": {CallerUser},
 	"start_build": {CallerUser}, "get_build": {CallerUser, CallerGuide, CallerBuilder, CallerTestWriter}, "get_test_findings": {CallerUser},
 	// get_builder_assignment and get_test_writer_assignment are GET routes that
 	// record that the assignment was read. The diagnostics history leaves out
@@ -134,7 +144,13 @@ func applyOperationPolicy(e *genhighbay.Endpoints, recorder trace.Tracer) {
 	e.ListChanges = wrap("list_changes", e.ListChanges)
 	e.WaitForChanges = wrap("wait_for_changes", e.WaitForChanges)
 	e.GetTeam = wrap("get_team", e.GetTeam)
-	e.ShowTeamPane = wrap("show_team_pane", e.ShowTeamPane)
+	e.GetTeamConversation = wrap("get_team_conversation", e.GetTeamConversation)
+	e.SendTeamMessage = wrap("send_team_message", e.SendTeamMessage)
+	e.InterruptTeamRole = wrap("interrupt_team_role", e.InterruptTeamRole)
+	e.StopTeamRole = wrap("stop_team_role", e.StopTeamRole)
+	e.RestartTeamRole = wrap("restart_team_role", e.RestartTeamRole)
+	e.CreateTerminalTicket = wrap("create_terminal_ticket", e.CreateTerminalTicket)
+	e.AttachRoleTerminal = wrap("attach_role_terminal", e.AttachRoleTerminal)
 	e.StartTeamAgents = wrap("start_team_agents", e.StartTeamAgents)
 	e.OpenViews = wrap("open_views", e.OpenViews)
 	e.MergeChange = wrap("merge_change", e.MergeChange)

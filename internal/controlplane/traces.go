@@ -52,14 +52,16 @@ type (
 		ended atomic.Bool
 	}
 
-	// httpReadKey marks the context of an HTTP request sent with GET. Every
-	// GET route the user's session may call only reads, so for its requests
-	// the method identifies a read without a list of operation names. The
-	// builder's and the test writer's assignment reads are GET routes that
-	// record that they were read; the operation table refuses them to the
-	// user's session, and TestUserGETRoutesOnlyRead checks every route it
-	// allows. NewHTTPHandler sets the mark; MCP calls, always sent with POST,
-	// never carry it.
+	// httpReadKey marks the context of an HTTP request sent with GET that is
+	// not a WebSocket upgrade. Every such route the user's session may call
+	// only reads, so for its requests the method identifies a read without a
+	// list of operation names. The terminal stream is opened with GET too,
+	// but as an upgrade, which can type and is never marked. The builder's
+	// and the test writer's assignment reads are GET routes that record that
+	// they were read; the operation table refuses them to the user's session,
+	// and TestUserGETRoutesOnlyRead checks every route it allows.
+	// NewHTTPHandler sets the mark; MCP calls, always sent with POST, never
+	// carry it.
 	httpReadKey struct{}
 )
 
@@ -87,7 +89,7 @@ func (c *ControlPlane) ListTraces(
 		return nil, errors.New("authenticated principal is required")
 	}
 	if c.traceProvider == nil {
-		return nil, genhighbay.MakeNotImplemented(errors.New("operation recording is not configured on this server; start the project with hbay, whose server records operations automatically"))
+		return nil, genhighbay.MakeNotImplemented(errors.New("operation recording is not configured on this server; start the project with highbay, whose server records operations automatically"))
 	}
 	_, span := c.tracer("highbay/controlplane").Start(ctx, "highbay.controlplane.list_traces")
 	defer span.End()

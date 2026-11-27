@@ -48,8 +48,14 @@ type Server struct {
 	GetStoryRefresh             http.Handler
 	UpdateDraft                 http.Handler
 	GetTeam                     http.Handler
-	ShowTeamPane                http.Handler
+	GetTeamConversation         http.Handler
+	SendTeamMessage             http.Handler
 	StartTeamAgents             http.Handler
+	InterruptTeamRole           http.Handler
+	StopTeamRole                http.Handler
+	RestartTeamRole             http.Handler
+	CreateTerminalTicket        http.Handler
+	AttachRoleTerminal          http.Handler
 	ListTeamAgentOptions        http.Handler
 	DismissTeamNotice           http.Handler
 	OpenViews                   http.Handler
@@ -94,7 +100,12 @@ func New(
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer *ConnConfigurer,
 ) *Server {
+	if configurer == nil {
+		configurer = &ConnConfigurer{}
+	}
 	return &Server{
 		Mounts: []*MountPoint{
 			{"GoldenPath", "GET", "/golden-path"},
@@ -126,8 +137,14 @@ func New(
 			{"GetStoryRefresh", "GET", "/workspace/story/refresh"},
 			{"UpdateDraft", "POST", "/workspace/draft/update"},
 			{"GetTeam", "GET", "/team"},
-			{"ShowTeamPane", "POST", "/team/pane"},
+			{"GetTeamConversation", "GET", "/team/conversation"},
+			{"SendTeamMessage", "POST", "/team/messages"},
 			{"StartTeamAgents", "POST", "/team/agents"},
+			{"InterruptTeamRole", "POST", "/team/roles/{role}/interrupt"},
+			{"StopTeamRole", "POST", "/team/roles/{role}/stop"},
+			{"RestartTeamRole", "POST", "/team/roles/{role}/restart"},
+			{"CreateTerminalTicket", "POST", "/team/roles/{role}/terminal-ticket"},
+			{"AttachRoleTerminal", "GET", "/team/roles/{role}/terminal"},
 			{"ListTeamAgentOptions", "GET", "/team/agent-options"},
 			{"DismissTeamNotice", "POST", "/team/notices/dismiss"},
 			{"OpenViews", "POST", "/views/open"},
@@ -176,8 +193,14 @@ func New(
 		GetStoryRefresh:             NewGetStoryRefreshHandler(e.GetStoryRefresh, mux, decoder, encoder, errhandler, formatter),
 		UpdateDraft:                 NewUpdateDraftHandler(e.UpdateDraft, mux, decoder, encoder, errhandler, formatter),
 		GetTeam:                     NewGetTeamHandler(e.GetTeam, mux, decoder, encoder, errhandler, formatter),
-		ShowTeamPane:                NewShowTeamPaneHandler(e.ShowTeamPane, mux, decoder, encoder, errhandler, formatter),
+		GetTeamConversation:         NewGetTeamConversationHandler(e.GetTeamConversation, mux, decoder, encoder, errhandler, formatter),
+		SendTeamMessage:             NewSendTeamMessageHandler(e.SendTeamMessage, mux, decoder, encoder, errhandler, formatter),
 		StartTeamAgents:             NewStartTeamAgentsHandler(e.StartTeamAgents, mux, decoder, encoder, errhandler, formatter),
+		InterruptTeamRole:           NewInterruptTeamRoleHandler(e.InterruptTeamRole, mux, decoder, encoder, errhandler, formatter),
+		StopTeamRole:                NewStopTeamRoleHandler(e.StopTeamRole, mux, decoder, encoder, errhandler, formatter),
+		RestartTeamRole:             NewRestartTeamRoleHandler(e.RestartTeamRole, mux, decoder, encoder, errhandler, formatter),
+		CreateTerminalTicket:        NewCreateTerminalTicketHandler(e.CreateTerminalTicket, mux, decoder, encoder, errhandler, formatter),
+		AttachRoleTerminal:          NewAttachRoleTerminalHandler(e.AttachRoleTerminal, mux, decoder, encoder, errhandler, formatter, upgrader, configurer.AttachRoleTerminalFn),
 		ListTeamAgentOptions:        NewListTeamAgentOptionsHandler(e.ListTeamAgentOptions, mux, decoder, encoder, errhandler, formatter),
 		DismissTeamNotice:           NewDismissTeamNoticeHandler(e.DismissTeamNotice, mux, decoder, encoder, errhandler, formatter),
 		OpenViews:                   NewOpenViewsHandler(e.OpenViews, mux, decoder, encoder, errhandler, formatter),
@@ -233,8 +256,14 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetStoryRefresh = m(s.GetStoryRefresh)
 	s.UpdateDraft = m(s.UpdateDraft)
 	s.GetTeam = m(s.GetTeam)
-	s.ShowTeamPane = m(s.ShowTeamPane)
+	s.GetTeamConversation = m(s.GetTeamConversation)
+	s.SendTeamMessage = m(s.SendTeamMessage)
 	s.StartTeamAgents = m(s.StartTeamAgents)
+	s.InterruptTeamRole = m(s.InterruptTeamRole)
+	s.StopTeamRole = m(s.StopTeamRole)
+	s.RestartTeamRole = m(s.RestartTeamRole)
+	s.CreateTerminalTicket = m(s.CreateTerminalTicket)
+	s.AttachRoleTerminal = m(s.AttachRoleTerminal)
 	s.ListTeamAgentOptions = m(s.ListTeamAgentOptions)
 	s.DismissTeamNotice = m(s.DismissTeamNotice)
 	s.OpenViews = m(s.OpenViews)
@@ -289,8 +318,14 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetStoryRefreshHandler(mux, h.GetStoryRefresh)
 	MountUpdateDraftHandler(mux, h.UpdateDraft)
 	MountGetTeamHandler(mux, h.GetTeam)
-	MountShowTeamPaneHandler(mux, h.ShowTeamPane)
+	MountGetTeamConversationHandler(mux, h.GetTeamConversation)
+	MountSendTeamMessageHandler(mux, h.SendTeamMessage)
 	MountStartTeamAgentsHandler(mux, h.StartTeamAgents)
+	MountInterruptTeamRoleHandler(mux, h.InterruptTeamRole)
+	MountStopTeamRoleHandler(mux, h.StopTeamRole)
+	MountRestartTeamRoleHandler(mux, h.RestartTeamRole)
+	MountCreateTerminalTicketHandler(mux, h.CreateTerminalTicket)
+	MountAttachRoleTerminalHandler(mux, h.AttachRoleTerminal)
 	MountListTeamAgentOptionsHandler(mux, h.ListTeamAgentOptions)
 	MountDismissTeamNoticeHandler(mux, h.DismissTeamNotice)
 	MountOpenViewsHandler(mux, h.OpenViews)
@@ -1783,21 +1818,21 @@ func NewGetTeamHandler(
 	})
 }
 
-// MountShowTeamPaneHandler configures the mux to serve the "highbay" service
-// "show_team_pane" endpoint.
-func MountShowTeamPaneHandler(mux goahttp.Muxer, h http.Handler) {
+// MountGetTeamConversationHandler configures the mux to serve the "highbay"
+// service "get_team_conversation" endpoint.
+func MountGetTeamConversationHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/team/pane", f)
+	mux.Handle("GET", "/team/conversation", f)
 }
 
-// NewShowTeamPaneHandler creates a HTTP handler which loads the HTTP request
-// and calls the "highbay" service "show_team_pane" endpoint.
-func NewShowTeamPaneHandler(
+// NewGetTeamConversationHandler creates a HTTP handler which loads the HTTP
+// request and calls the "highbay" service "get_team_conversation" endpoint.
+func NewGetTeamConversationHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -1806,13 +1841,59 @@ func NewShowTeamPaneHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeShowTeamPaneRequest(mux, decoder)
-		encodeResponse = EncodeShowTeamPaneResponse(encoder)
-		encodeError    = EncodeShowTeamPaneError(encoder, formatter)
+		encodeResponse = EncodeGetTeamConversationResponse(encoder)
+		encodeError    = EncodeGetTeamConversationError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "show_team_pane")
+		ctx = context.WithValue(ctx, goa.MethodKey, "get_team_conversation")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSendTeamMessageHandler configures the mux to serve the "highbay"
+// service "send_team_message" endpoint.
+func MountSendTeamMessageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/team/messages", f)
+}
+
+// NewSendTeamMessageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "highbay" service "send_team_message" endpoint.
+func NewSendTeamMessageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSendTeamMessageRequest(mux, decoder)
+		encodeResponse = EncodeSendTeamMessageResponse(encoder)
+		encodeError    = EncodeSendTeamMessageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "send_team_message")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -1885,6 +1966,292 @@ func NewStartTeamAgentsHandler(
 			if errhandler != nil {
 				errhandler(ctx, w, err)
 			}
+		}
+	})
+}
+
+// MountInterruptTeamRoleHandler configures the mux to serve the "highbay"
+// service "interrupt_team_role" endpoint.
+func MountInterruptTeamRoleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/team/roles/{role}/interrupt", f)
+}
+
+// NewInterruptTeamRoleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "highbay" service "interrupt_team_role" endpoint.
+func NewInterruptTeamRoleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeInterruptTeamRoleRequest(mux, decoder)
+		encodeResponse = EncodeInterruptTeamRoleResponse(encoder)
+		encodeError    = EncodeInterruptTeamRoleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "interrupt_team_role")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountStopTeamRoleHandler configures the mux to serve the "highbay" service
+// "stop_team_role" endpoint.
+func MountStopTeamRoleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/team/roles/{role}/stop", f)
+}
+
+// NewStopTeamRoleHandler creates a HTTP handler which loads the HTTP request
+// and calls the "highbay" service "stop_team_role" endpoint.
+func NewStopTeamRoleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeStopTeamRoleRequest(mux, decoder)
+		encodeResponse = EncodeStopTeamRoleResponse(encoder)
+		encodeError    = EncodeStopTeamRoleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "stop_team_role")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRestartTeamRoleHandler configures the mux to serve the "highbay"
+// service "restart_team_role" endpoint.
+func MountRestartTeamRoleHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/team/roles/{role}/restart", f)
+}
+
+// NewRestartTeamRoleHandler creates a HTTP handler which loads the HTTP
+// request and calls the "highbay" service "restart_team_role" endpoint.
+func NewRestartTeamRoleHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRestartTeamRoleRequest(mux, decoder)
+		encodeResponse = EncodeRestartTeamRoleResponse(encoder)
+		encodeError    = EncodeRestartTeamRoleError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "restart_team_role")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateTerminalTicketHandler configures the mux to serve the "highbay"
+// service "create_terminal_ticket" endpoint.
+func MountCreateTerminalTicketHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/team/roles/{role}/terminal-ticket", f)
+}
+
+// NewCreateTerminalTicketHandler creates a HTTP handler which loads the HTTP
+// request and calls the "highbay" service "create_terminal_ticket" endpoint.
+func NewCreateTerminalTicketHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateTerminalTicketRequest(mux, decoder)
+		encodeResponse = EncodeCreateTerminalTicketResponse(encoder)
+		encodeError    = EncodeCreateTerminalTicketError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "create_terminal_ticket")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAttachRoleTerminalHandler configures the mux to serve the "highbay"
+// service "attach_role_terminal" endpoint.
+func MountAttachRoleTerminalHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/team/roles/{role}/terminal", f)
+}
+
+// NewAttachRoleTerminalHandler creates a HTTP handler which loads the HTTP
+// request and calls the "highbay" service "attach_role_terminal" endpoint.
+func NewAttachRoleTerminalHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
+) http.Handler {
+	var (
+		decodeRequest = DecodeAttachRoleTerminalRequest(mux, decoder)
+		encodeError   = EncodeAttachRoleTerminalError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "attach_role_terminal")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "highbay")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		v := &highbay.AttachRoleTerminalEndpointInput{
+			Stream: &AttachRoleTerminalServerStream{
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
+			},
+			Payload: payload,
+		}
+		_, err = endpoint(ctx, v)
+		if err != nil {
+			var stream *AttachRoleTerminalServerStream
+			if wrapper, ok := v.Stream.(interface{ Unwrap() any }); ok {
+				stream = wrapper.Unwrap().(*AttachRoleTerminalServerStream)
+			} else {
+				stream = v.Stream.(*AttachRoleTerminalServerStream)
+			}
+			if stream != nil && stream.conn != nil {
+				// Response writer has been hijacked, do not encode the error
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
 		}
 	})
 }

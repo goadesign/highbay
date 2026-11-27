@@ -33,7 +33,6 @@ func (c *ControlPlane) ProjectStatus(ctx context.Context) (*genproject.ProjectSt
 		ProjectName: filepath.Base(c.initialWorkspaceRoot),
 		Directory:   c.initialWorkspaceRoot,
 		Team:        team.Team,
-		HerdrMode:   team.HerdrMode,
 		Stage:       stage,
 		Attention:   attention,
 		Roles:       make([]*genproject.TeamRoleState, 0, len(team.Roles)),
@@ -47,12 +46,12 @@ func (c *ControlPlane) ProjectStatus(ctx context.Context) (*genproject.ProjectSt
 	}
 	for _, role := range team.Roles {
 		status.Roles = append(status.Roles, &genproject.TeamRoleState{
-			Role:       role.Role,
-			Handle:     role.Handle,
-			State:      role.State,
-			Attention:  role.Attention,
-			Watcher:    role.Watcher,
-			Assignment: role.Assignment,
+			Role:        role.Role,
+			Handle:      role.Handle,
+			HasTerminal: role.HasTerminal,
+			State:       role.State,
+			Attention:   role.Attention,
+			Assignment:  role.Assignment,
 		})
 		if status.Attention == "" && role.State == "needs_you" {
 			status.Attention = projectRoleAttention(role.Role)

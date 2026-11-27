@@ -132,13 +132,37 @@ type Client struct {
 	// endpoint.
 	GetTeamDoer goahttp.Doer
 
-	// ShowTeamPane Doer is the HTTP client used to make requests to the
-	// show_team_pane endpoint.
-	ShowTeamPaneDoer goahttp.Doer
+	// GetTeamConversation Doer is the HTTP client used to make requests to the
+	// get_team_conversation endpoint.
+	GetTeamConversationDoer goahttp.Doer
+
+	// SendTeamMessage Doer is the HTTP client used to make requests to the
+	// send_team_message endpoint.
+	SendTeamMessageDoer goahttp.Doer
 
 	// StartTeamAgents Doer is the HTTP client used to make requests to the
 	// start_team_agents endpoint.
 	StartTeamAgentsDoer goahttp.Doer
+
+	// InterruptTeamRole Doer is the HTTP client used to make requests to the
+	// interrupt_team_role endpoint.
+	InterruptTeamRoleDoer goahttp.Doer
+
+	// StopTeamRole Doer is the HTTP client used to make requests to the
+	// stop_team_role endpoint.
+	StopTeamRoleDoer goahttp.Doer
+
+	// RestartTeamRole Doer is the HTTP client used to make requests to the
+	// restart_team_role endpoint.
+	RestartTeamRoleDoer goahttp.Doer
+
+	// CreateTerminalTicket Doer is the HTTP client used to make requests to the
+	// create_terminal_ticket endpoint.
+	CreateTerminalTicketDoer goahttp.Doer
+
+	// AttachRoleTerminal Doer is the HTTP client used to make requests to the
+	// attach_role_terminal endpoint.
+	AttachRoleTerminalDoer goahttp.Doer
 
 	// ListTeamAgentOptions Doer is the HTTP client used to make requests to the
 	// list_team_agent_options endpoint.
@@ -216,10 +240,12 @@ type Client struct {
 	// decoding so they can be read again.
 	RestoreResponseBody bool
 
-	scheme  string
-	host    string
-	encoder func(*http.Request) goahttp.Encoder
-	decoder func(*http.Response) goahttp.Decoder
+	scheme     string
+	host       string
+	encoder    func(*http.Request) goahttp.Encoder
+	decoder    func(*http.Response) goahttp.Decoder
+	dialer     goahttp.Dialer
+	configurer *ConnConfigurer
 }
 
 // NewClient instantiates HTTP clients for all the highbay service servers.
@@ -230,7 +256,12 @@ func NewClient(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restoreBody bool,
+	dialer goahttp.Dialer,
+	cfn *ConnConfigurer,
 ) *Client {
+	if cfn == nil {
+		cfn = &ConnConfigurer{}
+	}
 	return &Client{
 		GoldenPathDoer:                  doer,
 		ProposeChangeDoer:               doer,
@@ -261,8 +292,14 @@ func NewClient(
 		GetStoryRefreshDoer:             doer,
 		UpdateDraftDoer:                 doer,
 		GetTeamDoer:                     doer,
-		ShowTeamPaneDoer:                doer,
+		GetTeamConversationDoer:         doer,
+		SendTeamMessageDoer:             doer,
 		StartTeamAgentsDoer:             doer,
+		InterruptTeamRoleDoer:           doer,
+		StopTeamRoleDoer:                doer,
+		RestartTeamRoleDoer:             doer,
+		CreateTerminalTicketDoer:        doer,
+		AttachRoleTerminalDoer:          doer,
 		ListTeamAgentOptionsDoer:        doer,
 		DismissTeamNoticeDoer:           doer,
 		OpenViewsDoer:                   doer,
@@ -286,6 +323,8 @@ func NewClient(
 		host:                            host,
 		decoder:                         dec,
 		encoder:                         enc,
+		dialer:                          dialer,
+		configurer:                      cfn,
 	}
 }
 
@@ -920,15 +959,34 @@ func (c *Client) GetTeam() goa.Endpoint {
 	}
 }
 
-// ShowTeamPane returns an endpoint that makes HTTP requests to the highbay
-// service show_team_pane server.
-func (c *Client) ShowTeamPane() goa.Endpoint {
+// GetTeamConversation returns an endpoint that makes HTTP requests to the
+// highbay service get_team_conversation server.
+func (c *Client) GetTeamConversation() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeShowTeamPaneRequest(c.encoder)
-		decodeResponse = DecodeShowTeamPaneResponse(c.decoder, c.RestoreResponseBody)
+		decodeResponse = DecodeGetTeamConversationResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildShowTeamPaneRequest(ctx, v)
+		req, err := c.BuildGetTeamConversationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetTeamConversationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("highbay", "get_team_conversation", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SendTeamMessage returns an endpoint that makes HTTP requests to the highbay
+// service send_team_message server.
+func (c *Client) SendTeamMessage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSendTeamMessageRequest(c.encoder)
+		decodeResponse = DecodeSendTeamMessageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSendTeamMessageRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -936,9 +994,9 @@ func (c *Client) ShowTeamPane() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.ShowTeamPaneDoer.Do(req)
+		resp, err := c.SendTeamMessageDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("highbay", "show_team_pane", err)
+			return nil, goahttp.ErrRequestError("highbay", "send_team_message", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -965,6 +1023,118 @@ func (c *Client) StartTeamAgents() goa.Endpoint {
 			return nil, goahttp.ErrRequestError("highbay", "start_team_agents", err)
 		}
 		return decodeResponse(resp)
+	}
+}
+
+// InterruptTeamRole returns an endpoint that makes HTTP requests to the
+// highbay service interrupt_team_role server.
+func (c *Client) InterruptTeamRole() goa.Endpoint {
+	var (
+		decodeResponse = DecodeInterruptTeamRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildInterruptTeamRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.InterruptTeamRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("highbay", "interrupt_team_role", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// StopTeamRole returns an endpoint that makes HTTP requests to the highbay
+// service stop_team_role server.
+func (c *Client) StopTeamRole() goa.Endpoint {
+	var (
+		decodeResponse = DecodeStopTeamRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStopTeamRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StopTeamRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("highbay", "stop_team_role", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RestartTeamRole returns an endpoint that makes HTTP requests to the highbay
+// service restart_team_role server.
+func (c *Client) RestartTeamRole() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRestartTeamRoleRequest(c.encoder)
+		decodeResponse = DecodeRestartTeamRoleResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRestartTeamRoleRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RestartTeamRoleDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("highbay", "restart_team_role", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateTerminalTicket returns an endpoint that makes HTTP requests to the
+// highbay service create_terminal_ticket server.
+func (c *Client) CreateTerminalTicket() goa.Endpoint {
+	var (
+		decodeResponse = DecodeCreateTerminalTicketResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateTerminalTicketRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateTerminalTicketDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("highbay", "create_terminal_ticket", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AttachRoleTerminal returns an endpoint that makes HTTP requests to the
+// highbay service attach_role_terminal server.
+func (c *Client) AttachRoleTerminal() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAttachRoleTerminalRequest(c.encoder)
+		decodeResponse = DecodeAttachRoleTerminalResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAttachRoleTerminalRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
+		if err != nil {
+			if resp != nil {
+				return decodeResponse(resp)
+			}
+			return nil, goahttp.ErrRequestError("highbay", "attach_role_terminal", err)
+		}
+		if c.configurer.AttachRoleTerminalFn != nil {
+			conn = c.configurer.AttachRoleTerminalFn(conn, nil)
+		}
+		stream := &AttachRoleTerminalClientStream{conn: conn}
+		return stream, nil
 	}
 }
 

@@ -34,6 +34,7 @@ import (
 	genhighbay "github.com/goadesign/highbay/gen/highbay"
 	genmcpadapter "github.com/goadesign/highbay/gen/mcp_highbay"
 	"github.com/goadesign/highbay/internal/modelsettings"
+	"github.com/goadesign/highbay/internal/testmodule"
 	"github.com/goadesign/highbay/internal/verifyrun"
 )
 
@@ -52,7 +53,7 @@ const (
 // allSentinels lists every sentinel value a test may hand over or inherit.
 var allSentinels = []string{sentinelKey, sentinelToken, sentinelSecondKey, sentinelOpenAIKey, sentinelAdmin, sentinelURLCred, sentinelURL}
 
-// managementCaller is the hbay command's management principal.
+// managementCaller is the highbay command's management principal.
 var managementCaller = WithPrincipal(context.Background(), Principal{ID: "alice@example.com", CallerID: "management", Kind: CallerManagement})
 
 // TestHandOverModelSettingsReplacesOrKeepsByProvider hands settings over in
@@ -175,9 +176,9 @@ func TestModelChoiceTextsSayTheDefaultFollowsOnlyWithoutAChoice(t *testing.T) {
 	assert.Contains(t, strings.ToLower(readme), "while no model is chosen, live targets then use")
 	for _, stale := range []string{
 		"the first hand_over_model_settings that holds a provider's settings selects",
-		"until `hbay` hands over a provider's settings, which selects",
-		"the next `hbay` hands the settings over again, which selects",
-		"until `hbay stop` and starts live targets with",
+		"until `highbay` hands over a provider's settings, which selects",
+		"the next `highbay` hands the settings over again, which selects",
+		"until `highbay stop` and starts live targets with",
 	} {
 		for name, text := range map[string]string{"OpenAPI": openAPI, "REFERENCE.md": reference, "README.md": readme} {
 			assert.NotContains(t, text, stale, "%s says a hand-over always selects the default", name)
@@ -915,4 +916,82 @@ func documentText(t *testing.T, path string) string {
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return strings.Join(strings.Fields(string(raw)), " ")
+}
+
+// TestModelStatePassesToTheNextControlPlane follows the model state across a
+// server that replaces itself: what one control plane holds, a second one
+// started with it holds too, so a live target after the restart gets the same
+// model and settings without a new hand-over. A control plane started with
+// nothing holds nothing, and a state ModelState never returns is refused.
+func TestModelStatePassesToTheNextControlPlane(t *testing.T) {
+	user := asCaller("alice@example.com", CallerUser)
+	held := func(t *testing.T, provider string, values map[string]string) modelsettings.Settings {
+		t.Helper()
+		settings, err := modelsettings.New(provider, values)
+		require.NoError(t, err)
+		return settings
+	}
+
+	t.Run("held settings and an explicit choice", func(t *testing.T) {
+		first := newControlPlane(t, Options{})
+		handOverSettings(t, first, &genhighbay.HandOverModelSettingsPayload{
+			Anthropic: map[string]string{"ANTHROPIC_API_KEY": sentinelKey, "ANTHROPIC_BASE_URL": sentinelURL},
+			Openai:    map[string]string{"OPENAI_API_KEY": sentinelOpenAIKey},
+		})
+		provider, custom := "openai", "gpt-5.4-mini"
+		_, err := first.ConfigureModel(user, &genhighbay.ConfigureModelPayload{Provider: &provider, ModelName: &custom})
+		require.NoError(t, err)
+
+		state := first.ModelState()
+		require.Len(t, state.Settings, 2)
+		assert.Equal(t, []string{"anthropic", "openai"}, []string{state.Settings[0].Provider(), state.Settings[1].Provider()}, "in table order")
+
+		next := newControlPlane(t, Options{Model: state})
+		assert.Equal(t, state, next.ModelState())
+		connection, err := next.GetModelConnection(user)
+		require.NoError(t, err)
+		assert.Equal(t, directModel("openai", custom), connection.Connection)
+		_, settings, err := next.liveLaunch(true)
+		require.NoError(t, err)
+		require.Len(t, settings, 1)
+		assert.Equal(t, []string{"OPENAI_API_KEY=" + sentinelOpenAIKey}, settings[0].Environ())
+		assert.Len(t, next.evaluatorSettings(), 2, "a stored evaluator's run still receives every held provider")
+	})
+
+	t.Run("a gateway choice without settings", func(t *testing.T) {
+		gateway := genhighbay.NewConnectionGateway(&genhighbay.ModelGateway{GatewayAddr: "127.0.0.1:9000"})
+		next := newControlPlane(t, Options{Model: ModelState{Connection: gateway}})
+		assert.Equal(t, ModelState{Connection: gateway}, next.ModelState())
+	})
+
+	t.Run("nothing", func(t *testing.T) {
+		cp := newControlPlane(t, Options{})
+		assert.Equal(t, ModelState{Connection: genhighbay.NewConnectionNone(&genhighbay.ModelNone{})}, cp.ModelState())
+		next := newControlPlane(t, Options{Model: cp.ModelState()})
+		assert.Equal(t, cp.ModelState(), next.ModelState())
+	})
+
+	anthropic := held(t, "anthropic", map[string]string{"ANTHROPIC_API_KEY": sentinelKey})
+	for _, refused := range []struct {
+		name  string
+		state ModelState
+		want  string
+	}{
+		{name: "settings of no provider", state: ModelState{Settings: []modelsettings.Settings{{}}}, want: "name no known provider"},
+		{name: "one provider twice", state: ModelState{Settings: []modelsettings.Settings{anthropic, anthropic}}, want: "provider anthropic twice"},
+		{
+			name:  "a direct choice whose provider's settings are missing",
+			state: ModelState{Settings: []modelsettings.Settings{anthropic}, Connection: directModel("openai", "gpt-5.4-mini")},
+			want:  "needs the settings of provider openai",
+		},
+	} {
+		t.Run("refused/"+refused.name, func(t *testing.T) {
+			_, err := New(Options{
+				CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: testTeamBinding(),
+				BuildCacheDir: testmodule.CompilerCache(t), Model: refused.state,
+			})
+			require.ErrorContains(t, err, refused.want)
+			assertHoldsNoSentinel(t, err.Error())
+		})
+	}
 }

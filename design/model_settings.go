@@ -1,4 +1,4 @@
-// This file declares the model provider request settings the hbay command
+// This file declares the model provider request settings the highbay command
 // hands to the project server. The variable names come from the one provider
 // table in internal/modelsettings, so the generated validation accepts
 // exactly the names that table lets cross.
@@ -11,9 +11,9 @@ import (
 )
 
 // HandOverModelSettingsPayload carries the request settings of each provider
-// the hbay command found a key for.
+// the highbay command found a key for.
 var HandOverModelSettingsPayload = Type("HandOverModelSettingsPayload", func() {
-	Description("Request settings the hbay command read from the shell it runs in, by provider. Each attribute is optional: an absent provider keeps what the project server holds for it.")
+	Description("Request settings the highbay command read from the shell it runs in, by provider. Each attribute is optional: an absent provider keeps what the project server holds for it.")
 	for _, p := range modelsettings.Providers() {
 		providerSettings(p)
 	}

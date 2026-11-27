@@ -24,6 +24,12 @@ fi
 shift
 
 repository=${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel)}
+if [ -z "${HIGHBAY_TEST_BUILD_CACHE:-}" ]; then
+  default_build_cache=$(go env GOCACHE)
+  if [[ "$default_build_cache" = /* ]]; then
+    export HIGHBAY_TEST_BUILD_CACHE="$default_build_cache"
+  fi
+fi
 owners="$repository/.github/race-packages.txt"
 test -f "$owners"
 owner_names=$(tr -d '\r' < "$owners")

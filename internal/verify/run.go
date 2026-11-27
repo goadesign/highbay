@@ -203,7 +203,7 @@ func IsCommitID(commit string) bool {
 // Run starts its builds, the suite and the candidates the suite runs in the
 // caller's process group and does not stop processes they leave behind: its
 // caller must run it inside an owning group that it stops afterwards, as
-// `hbay verify-run execute` does under its supervisor.
+// `highbay verify-run execute` does under its supervisor.
 //
 // Preparation runs with the process environment. environ is the
 // environment the test program's own is derived from (ProgramEnv): the
@@ -471,7 +471,7 @@ func ValidateArtifactName(name string) error {
 // (gitenv.WithoutRedirects), so only repo and dir are ever used, whatever
 // repository the process's own environment names. Every other variable
 // stays, protocol, identity and credential settings among them, because a
-// plan's repository may be remote (hbay verify -candidate-repo <url>).
+// plan's repository may be remote (highbay verify -candidate-repo <url>).
 func (r *runner) checkout(ctx context.Context, label, repo, commit, dir string) error {
 	env := gitenv.WithoutRedirects(os.Environ())
 	if err := r.run(ctx, "clone-"+label, "", env, "git", "-c", "core.hooksPath=/dev/null",
@@ -516,7 +516,7 @@ func (r *runner) describe(ctx context.Context, env []string, suiteBin string) (S
 
 // runSuite runs the suite with env and returns its eval.Report and exit
 // status. The suite and the candidates it starts run in the caller's process
-// group, which stops and reaps them (hbay verify-run supervise owns that
+// group, which stops and reaps them (highbay verify-run supervise owns that
 // group).
 // Cancellation sends SIGTERM to the suite so it can stop its candidates and
 // report what it has; it is killed after suiteStopGrace. A report is decoded

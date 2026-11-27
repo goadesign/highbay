@@ -4,8 +4,10 @@ package controlplane
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +130,12 @@ func TestOneBuildRefusesLegacyMetadataBeforeEffects(t *testing.T) {
 	assert.Equal(t, card.RequestRevision, read.RequestRevision)
 }
 
+// TestBuildAndTeamStartSurfaceBoundedPolicyRefusal gives every operation that
+// can start an agent the team owner's refusal naming the coding client's
+// setting that blocks it. start_build keeps the saved build and returns the
+// setting's repair as the team step; start_team_agents and send_team_message,
+// which starts a missing guide, answer unprocessable with the same repair,
+// each ending with its own retry.
 func TestBuildAndTeamStartSurfaceBoundedPolicyRefusal(t *testing.T) {
 	refusals := []struct {
 		name       string
@@ -182,6 +190,10 @@ func TestBuildAndTeamStartSurfaceBoundedPolicyRefusal(t *testing.T) {
 				start: func(context.Context) (*genhighbay.ProjectTeam, error) {
 					return nil, tc.refusal
 				},
+				send: func(context.Context, *genhighbay.SendTeamMessagePayload) (*genhighbay.TeamMessage, error) {
+					return nil, fmt.Errorf("start the guide: %w", tc.refusal)
+				},
+				restartErr: fmt.Errorf("restart the role: %w", tc.refusal),
 			}
 			cp := newBuildControlPlane(t, Options{
 				Team: &TeamBinding{Owner: "alice@example.com", Service: team},
@@ -206,6 +218,19 @@ func TestBuildAndTeamStartSurfaceBoundedPolicyRefusal(t *testing.T) {
 			assertRefused(t, teamErr, "unprocessable")
 			assert.ErrorContains(t, teamErr, tc.wantSubstr)
 			assert.ErrorContains(t, teamErr, "then choose Start workers again.")
+
+			_, sendErr := cp.SendTeamMessage(user, &genhighbay.SendTeamMessagePayload{To: "guide", Text: "Add a refund receipt."})
+			assertRefused(t, sendErr, "unprocessable")
+			assert.ErrorContains(t, sendErr, tc.wantSubstr)
+			if assert.Error(t, sendErr) {
+				assert.True(t, strings.HasSuffix(sendErr.Error(), "then send your message again."), sendErr.Error())
+				assert.NotContains(t, sendErr.Error(), "Start workers")
+			}
+
+			restartErr := cp.RestartTeamRole(user, &genhighbay.RestartTeamRolePayload{Role: "builder"})
+			assertRefused(t, restartErr, "unprocessable")
+			assert.ErrorContains(t, restartErr, tc.wantSubstr)
+			assert.ErrorContains(t, restartErr, "then choose Restart again.")
 		})
 	}
 }

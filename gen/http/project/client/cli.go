@@ -73,3 +73,33 @@ func BuildExchangeBrowserLinkPayload(projectExchangeBrowserLinkBody *string) (*p
 
 	return v, nil
 }
+
+// BuildApplyUpdatePayload builds the payload for the project apply_update
+// endpoint from CLI flags.
+func BuildApplyUpdatePayload(projectApplyUpdateBody *string) (*project.ApplyUpdatePayload, error) {
+	var err error
+	var body ApplyUpdateRequestBody
+	{
+		if projectApplyUpdateBody == nil {
+			return nil, fmt.Errorf("missing required flag --body")
+		}
+		err = json.Unmarshal([]byte(*projectApplyUpdateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"version\": \"m9\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Version) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", body.Version, utf8.RuneCountInString(body.Version), 1, true))
+		}
+		if utf8.RuneCountInString(body.Version) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", body.Version, utf8.RuneCountInString(body.Version), 64, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	v := &project.ApplyUpdatePayload{
+		Version: body.Version,
+	}
+
+	return v, nil
+}

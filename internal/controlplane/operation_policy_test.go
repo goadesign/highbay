@@ -40,7 +40,12 @@ func TestOperationPolicyCoversEveryTool(t *testing.T) {
 		"stop_live_target": {CallerUser, CallerBuilder}, "get_live_target": {CallerUser, CallerBuilder}, "get_model_connection": {CallerUser},
 		"get_change": common, "preview_architecture": common, "diff": common, "get_verification": runReads, "list_verifications": runReads, "list_traces": common, "read_check_output": common, "get_story_refresh": common,
 		"list_changes": common, "wait_for_changes": {CallerUser}, "decline_revision": {CallerUser},
-		"get_team": {CallerUser}, "show_team_pane": {CallerUser}, "start_team_agents": {CallerUser},
+		"get_team": {CallerUser}, "start_team_agents": {CallerUser},
+		// The conversation and each role's terminal belong to the user's session
+		// alone; no agent or management credential reads, posts or types there.
+		"get_team_conversation": {CallerUser}, "send_team_message": {CallerUser},
+		"interrupt_team_role": {CallerUser}, "stop_team_role": {CallerUser}, "restart_team_role": {CallerUser},
+		"create_terminal_ticket": {CallerUser}, "attach_role_terminal": {CallerUser},
 		"start_build": {CallerUser}, "get_build": {CallerUser, CallerGuide, CallerBuilder, CallerTestWriter}, "get_test_findings": {CallerUser},
 		"list_builder_assignments": {CallerBuilder}, "get_builder_assignment": {CallerBuilder},
 		"list_test_writer_assignments": {CallerTestWriter}, "get_test_writer_assignment": {CallerTestWriter},

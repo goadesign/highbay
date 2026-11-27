@@ -43,7 +43,7 @@ type (
 	// Suite locates the project's evaluator suite: the Go module holding the
 	// evaluation design, its generated gen/ folder and the test writer's
 	// scenario hooks, and the suite command in it that follows Highbay's suite
-	// command contract (verify/suite). A hbay init starter has Module "eval"
+	// command contract (verify/suite). A highbay init starter has Module "eval"
 	// and Command "./gen/cmd/<name>-evals", the program the generator writes
 	// in every Highbay test module (designeval.SuiteCommandPackage).
 	Suite struct {
@@ -542,7 +542,7 @@ func (v Verdict) Accepted() bool {
 // server's death left in the module (genpublish.RemoveLeftoverStages). Highbay
 // writes the generated folder of a working copy and of its snapshots one
 // publication at a time, in the project's working-copy turn, so none of its
-// own publications is using one. A hbay gen the author runs in the copy at
+// own publications is using one. A highbay gen the author runs in the copy at
 // that moment loses its staging folder and fails; the copy's generated folder
 // is Highbay's to write, and this publication writes it. An entry with a
 // staging folder's name that is not one Highbay made, such as a link or a file,
@@ -943,7 +943,7 @@ func (c *Checker) generate(
 	program := path.Join(strings.TrimPrefix(s.Command, "./"), "main.go")
 	if _, ok := generated[program]; !ok {
 		return nil, author(nil, fmt.Sprintf("Highbay generated no test program at %s, because the test module is not "+
-			"a Highbay test module: its go.mod must declare the module path <service module>/%s, as hbay init writes it, "+
+			"a Highbay test module: its go.mod must declare the module path <service module>/%s, as highbay init writes it, "+
 			"and it must keep its %s package, which provides Name, Hooks, New, Live and LiveThroughGateway.",
 			s.Command, designeval.TestModuleDir, designeval.AcceptancePackage))
 	}

@@ -425,7 +425,7 @@ func (c *ControlPlane) currentCardWithPromotion(
 		unverified.UnverifiedApproval = &genhighbay.UnverifiedApprovalItem{
 			Approval: &a,
 			Reason: fmt.Sprintf(
-				"Saved approval for candidate commit %s could not be verified because the release binaries could not be read. Publish the binaries the run built into the release folder that the promotion settings name, in a folder named after the commit, and press Check current approval; or remove the promotion settings with hbay promotion remove and restart Highbay; or press Approve this result on a newly verified run.",
+				"Saved approval for candidate commit %s could not be verified because the release binaries could not be read. Publish the binaries the run built into the release folder that the promotion settings name, in a folder named after the commit, and press Check current approval; or remove the promotion settings with highbay promotion remove and restart Highbay; or press Approve this result on a newly verified run.",
 				a.CandidateCommit,
 			),
 		}

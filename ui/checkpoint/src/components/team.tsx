@@ -1,85 +1,69 @@
-// team.tsx presents the server's registered team facts and explicit user
-// actions. The page owns reads, action results, announcements and window effects.
+// team.tsx presents the server's registered team facts, terminal attachment
+// controls, and role lifecycle actions.
 
 import React, { useCallback, useLayoutEffect, useRef } from "react";
 import type { ProjectTeam, TeamRoleState, TeamSnapshot } from "../types";
-import { CopyPrompt } from "./copy-prompt";
 import { Alert, Badge, Button, Card } from "./shadcn";
 
 // Role is a registered role from the generated team contract.
 type Role = TeamRoleState["role"];
 
-// TeamFactsError says why the page cannot show current team facts. Only a
-// failed read is named by the view in fixed words; the other messages are
-// complete sentences and stand alone.
+// TeamFactsError says why the page cannot show current team facts.
 export interface TeamFactsError {
-  // readFailed adds the owner-read failure label. Session and update notices
-  // are already complete messages.
   readFailed: boolean;
-  // message is the server's diagnostic or the page's reason, shown unchanged.
   message: string;
 }
 
-// TeamStageProps supplies the shared team read and the page-owned actions.
+// TeamStageProps supplies the shared team read and page-owned role actions.
 export interface TeamStageProps {
-  // snapshot is the last successful read, retained when a refresh fails.
   snapshot: TeamSnapshot | null;
-  // loading reflects an outstanding team read.
   loading: boolean;
-  // error is why the facts are not current; retained facts are stale while it is set.
   error: TeamFactsError | null;
-  // starting prevents a second Start workers request while one is pending.
   starting: boolean;
-  // canStartWorkers reports that a registered worker has a build assignment.
   canStartWorkers: boolean;
-  // The page owns discovery and controlled choices for the workers with work.
   agentPicker: React.ReactNode;
   agentsReady: boolean;
-  // disabled prevents actions after the browser session has ended.
   disabled: boolean;
-  // showing identifies the roles with an outstanding Show pane request.
-  showing: readonly Role[];
-  // startReceipt records what Start workers returned at that action's time.
+  interruptingRoles: readonly Role[];
+  stoppingRoles: readonly Role[];
+  restartingRoles: readonly Role[];
+  openTerminalRole: Role | null;
   startReceipt: { at: string; result: ProjectTeam } | null;
-  // actionError is the owner's unchanged refusal or request failure text.
   actionError: string | null;
-  // onRefresh asks the page to read the team again.
   onRefresh: () => void;
-  // onStartWorkers asks the owner to start missing workers after an explicit click.
   onStartWorkers: () => void;
-  // onShowPane asks the owner to show the selected registered role's pane.
-  onShowPane: (role: Role) => void;
-  // onFocusedControlRemoved lets the page restore focus to the current view
-  // when a focused pane action disappears.
+  onOpenTerminal: (role: Role, invoker: HTMLElement | null) => void;
+  onInterruptRole: (role: Role) => void;
+  onStopRole: (role: Role) => void;
+  onRestartRole: (role: Role) => void;
+  onMessageRole: (role: Role) => void;
   onFocusedControlRemoved: () => void;
 }
 
-// GlobalTeamAttentionProps uses the same retained snapshot and pane actions
-// as the Team stage; the page identifies whether these are last-read facts.
+// GlobalTeamAttentionProps uses the retained snapshot to surface roles needing
+// user input on every stage.
 export interface GlobalTeamAttentionProps {
-  // snapshot is the last successful team read, or null before one succeeds.
   snapshot: TeamSnapshot | null;
-  // lastRead labels retained facts when the page cannot establish current status.
   lastRead: boolean;
-  // disabled prevents actions after the browser session has ended.
   disabled: boolean;
-  // showing identifies the roles with an outstanding Show pane request.
-  showing: readonly Role[];
-  // onShowPane runs only after the user clicks that role's Show pane button.
-  onShowPane: (role: Role) => void;
-  // onFocusedControlRemoved lets the page restore focus to the current view
-  // when a focused attention action disappears.
+  openTerminalRole: Role | null;
+  onOpenTerminal: (role: Role, invoker: HTMLElement | null) => void;
+  onMessageRole: (role: Role) => void;
   onFocusedControlRemoved: () => void;
 }
 
-// roleLabels keep registered handles in Details and human role names visible.
 const roleLabels: Record<Role, string> = {
   guide: "Coding agent (guide)",
   builder: "Builder",
   test_writer: "Test writer",
 };
 
-// stateLabels describe terminal observations without inferring work from assignments.
+const shortRoleLabels: Record<Role, string> = {
+  guide: "Guide",
+  builder: "Builder",
+  test_writer: "Test writer",
+};
+
 const stateLabels: Record<TeamRoleState["state"], string> = {
   not_started: "Not started",
   ended: "Ended",
@@ -91,25 +75,15 @@ const stateLabels: Record<TeamRoleState["state"], string> = {
   unknown: "Status unknown",
 };
 
-// attentionLabels add only the reason the owner reported; none adds no reason.
 const attentionLabels: Record<TeamRoleState["attention"], string> = {
   none: "",
-  permission: "permission",
-  question: "question",
+  permission: "permission prompt",
+  question: "waiting on your answer",
   auth: "sign-in required",
   silent: "no status reported (may be waiting at a startup or folder-trust prompt)",
-  assignment: "idle with an unread assignment.",
   unknown: "reason unknown",
 };
 
-// watcherLabels distinguish a held watcher, observed absence and unknown status.
-const watcherLabels: Record<TeamRoleState["watcher"], string> = {
-  held: "Chorus watcher held",
-  gone: "Chorus watcher absent",
-  unknown: "Chorus watcher unknown",
-};
-
-// assignmentLabels report assignment-read facts independently of terminal state.
 const assignmentLabels: Record<TeamRoleState["assignment"], string> = {
   unread: "Assignment unread",
   nothing_owed: "No unread assignment",
@@ -117,23 +91,14 @@ const assignmentLabels: Record<TeamRoleState["assignment"], string> = {
   unknown: "Assignment status unknown",
 };
 
-// roleHasPane distinguishes the guide's own attachment from a machine that
-// can run build workers in Herdr.
-export function roleHasPane(role: Role, mode: TeamSnapshot["herdr_mode"] | undefined): boolean {
-  return role === "guide" ? mode === "attached" : mode !== undefined && mode !== "unavailable";
-}
-
-// attentionReason adds pane guidance only for a role with a pane action.
-function attentionReason(role: TeamRoleState, hasPane: boolean, chorusStatus: TeamSnapshot["chorus_status"]): string {
+// teamAttentionText formats a concise human-readable summary for a needs_you role.
+export function teamAttentionText(role: TeamRoleState): string {
   const reason = attentionLabels[role.attention];
-  if (role.attention !== "assignment" || !hasPane) return reason;
-  return reason + (chorusStatus === "unavailable"
-    ? " Show its pane and ask it to read and wait for assignments through Highbay."
-    : " Show its pane and tell it to read its assignments and to keep its Chorus watcher running.");
+  return shortRoleLabels[role.role] + " needs you" + (reason !== "" ? ": " + reason : "");
 }
 
-// TeamStageView shows only registered roles, retaining and labeling the last
-// successful facts after a failed refresh. It performs no reads or window work.
+// TeamStageView lists registered roles, their live herdr-core terminal state,
+// and direct terminal/message controls.
 export function TeamStageView({
   snapshot,
   loading,
@@ -143,32 +108,47 @@ export function TeamStageView({
   agentPicker,
   agentsReady,
   disabled,
-  showing,
+  interruptingRoles,
+  stoppingRoles,
+  restartingRoles,
+  openTerminalRole,
   startReceipt,
   actionError,
   onRefresh,
   onStartWorkers,
-  onShowPane,
+  onOpenTerminal,
+  onInterruptRole,
+  onStopRole,
+  onRestartRole,
+  onMessageRole,
   onFocusedControlRemoved,
 }: TeamStageProps) {
-  const needsStart = error === null && snapshot !== null &&
-    snapshot.roles.some((role) => role.role !== "guide" && (role.state === "not_started" || role.state === "ended")) &&
+  const needsStart =
+    error === null &&
+    snapshot !== null &&
+    snapshot.roles.some(
+      (role) => role.role !== "guide" && (role.state === "not_started" || role.state === "ended")
+    ) &&
     !snapshot.roles.some((role) => role.state === "needs_you");
 
   return (
     <Card id="highbay-team-stage" className="highbay-card" role="region" aria-labelledby="highbay-team-title">
       <div className="highbay-region-header">
-        <h2 id="highbay-team-title" tabIndex={-1}>Project team</h2>
+        <h2 id="highbay-team-title" tabIndex={-1}>
+          Project team
+        </h2>
         <div className="highbay-field-row">
-          {canStartWorkers || starting ? <Button
-            id="highbay-team-start"
-            variant={needsStart ? "primary" : "default"}
-            disabled={disabled || starting || !agentsReady}
-            aria-busy={starting}
-            onClick={onStartWorkers}
-          >
-            {starting ? "Starting workers…" : "Start workers"}
-          </Button> : null}
+          {canStartWorkers || starting ? (
+            <Button
+              id="highbay-team-start"
+              variant={needsStart ? "primary" : "default"}
+              disabled={disabled || starting || !agentsReady}
+              aria-busy={starting}
+              onClick={onStartWorkers}
+            >
+              {starting ? "Starting workers…" : "Start workers"}
+            </Button>
+          ) : null}
           <Button
             id="highbay-team-refresh"
             variant={error !== null ? "primary" : "default"}
@@ -179,174 +159,231 @@ export function TeamStageView({
           </Button>
         </div>
       </div>
+
       {error !== null ? (
         <Alert id="highbay-team-read-error" variant="destructive" role="alert">
           {error.readFailed ? <strong>Could not read the project team. </strong> : null}
           {error.message}
         </Alert>
       ) : null}
+
       {loading ? (
-        <p id="highbay-team-loading">{snapshot === null ? "Reading the project team…" : "Updating team…"}</p>
+        <p id="highbay-team-loading">
+          {snapshot === null ? "Reading the project team…" : "Updating team…"}
+        </p>
       ) : null}
+
       {agentPicker}
-      {canStartWorkers ? <p>Workers already running keep their current sessions. These choices apply when a worker starts.</p> : null}
+      {canStartWorkers ? (
+        <p>Workers already running keep their current sessions. These choices apply when a worker starts.</p>
+      ) : null}
+
       {snapshot === null ? (
         !loading && error === null ? <p>The project team has not been read.</p> : null
       ) : (
         <div id="highbay-team-facts" aria-busy={loading} data-stale={error !== null}>
           {error !== null ? <p id="highbay-team-stale">Last-read team facts; they could not be refreshed.</p> : null}
-          <p id="highbay-team-name">Team: <strong>{snapshot.team}</strong></p>
+          <p id="highbay-team-name">
+            Team: <strong>{snapshot.team}</strong> · Channel: <code>{snapshot.channel}</code>
+          </p>
           {snapshot.roles.length === 0 ? (
-            <p id="highbay-team-empty">No agents are registered.</p>
+            <p id="highbay-team-empty">
+              No agents are running yet. Send a message in Team conversation or Describe to start Guide.
+            </p>
           ) : (
             <ul id="highbay-team-roles" className="highbay-trace-list">
               {snapshot.roles.map((role) => {
-                const hasPane = roleHasPane(role.role, snapshot.herdr_mode);
-                const guidePaneUnlinked = role.role === "guide" && !hasPane && role.state === "unknown";
-                return <li key={role.role} id={"highbay-team-role-" + role.role} data-state={role.state}>
-                  <div className="highbay-trace-heading">
-                    <strong>{roleLabels[role.role]}</strong>
-                    <Badge
-                      variant={
-                        role.state === "needs_you" ? "warning" :
-                        role.state === "error" ? "destructive" : "default"
-                      }
-                    >
-                      {guidePaneUnlinked ? "Coding agent registered · No Herdr pane linked" : stateLabels[role.state]}
-                      {role.state === "needs_you" && attentionLabels[role.attention] !== ""
-                        ? ": " + attentionReason(role, hasPane, snapshot.chorus_status) : ""}
-                    </Badge>
-                  </div>
-                  {guidePaneUnlinked && role.watcher === "unknown" ? null : <p>{watcherLabels[role.watcher]}</p>}
-                  <p>{role.role === "guide" ? "No assignments" : assignmentLabels[role.assignment]}</p>
-                  {hasPane ? <div className="highbay-field-row">
-                    <PaneButton
-                      role={role}
-                      showing={showing}
-                      disabled={disabled}
-                      onShowPane={onShowPane}
-                      onFocusedControlRemoved={onFocusedControlRemoved}
-                      global={false}
-                    />
-                  </div> : null}
-                  <details className="highbay-details">
-                    <summary>{roleLabels[role.role]} details</summary>
-                    {guidePaneUnlinked ? <p>To link a pane, open a project tab in Herdr and run <code>/highbay</code> there.</p> : null}
-                    <p>Registered handle: <code>{role.handle}</code></p>
-                  </details>
-                </li>;
+                const externalGuide =
+                  role.role === "guide" &&
+                  !role.has_terminal &&
+                  role.state !== "not_started" &&
+                  role.state !== "ended";
+                const interrupting = interruptingRoles.includes(role.role);
+                const stopping = stoppingRoles.includes(role.role);
+                const restarting = restartingRoles.includes(role.role);
+                const canRestart =
+                  !externalGuide &&
+                  (role.has_terminal || role.state === "ended" || role.state === "error");
+                return (
+                  <li key={role.role} id={"highbay-team-role-" + role.role} data-state={role.state}>
+                    <div className="highbay-trace-heading">
+                      <strong>{roleLabels[role.role]}</strong>
+                      <Badge
+                        variant={
+                          role.state === "needs_you"
+                            ? "warning"
+                            : role.state === "error"
+                            ? "destructive"
+                            : role.state === "working"
+                            ? "success"
+                            : "default"
+                        }
+                      >
+                        {externalGuide
+                          ? "External session · Chorus connected"
+                          : stateLabels[role.state]}
+                        {role.state === "needs_you" && attentionLabels[role.attention] !== ""
+                          ? ": " + attentionLabels[role.attention]
+                          : ""}
+                      </Badge>
+                    </div>
+                    <p>{role.role === "guide" ? "Guides intent, Story, and revisions" : assignmentLabels[role.assignment]}</p>
+                    <div className="highbay-field-row">
+                      {role.has_terminal ? (
+                        <TerminalActionButton
+                          role={role}
+                          disabled={disabled}
+                          active={openTerminalRole === role.role}
+                          global={false}
+                          onOpenTerminal={onOpenTerminal}
+                          onFocusedControlRemoved={onFocusedControlRemoved}
+                        />
+                      ) : null}
+                      <Button
+                        id={"highbay-team-message-" + role.role}
+                        disabled={disabled}
+                        onClick={() => onMessageRole(role.role)}
+                      >
+                        Message {shortRoleLabels[role.role]}
+                      </Button>
+                      {role.has_terminal && role.state !== "not_started" && role.state !== "ended" ? (
+                        <>
+                          <Button
+                            id={"highbay-team-interrupt-" + role.role}
+                            disabled={disabled || interrupting || stopping || restarting}
+                            onClick={() => onInterruptRole(role.role)}
+                          >
+                            {interrupting ? "Interrupting…" : "Interrupt"}
+                          </Button>
+                          <Button
+                            id={"highbay-team-stop-" + role.role}
+                            disabled={disabled || stopping || restarting}
+                            onClick={() => onStopRole(role.role)}
+                          >
+                            {stopping ? "Stopping…" : "Stop"}
+                          </Button>
+                        </>
+                      ) : null}
+                      {canRestart ? (
+                        <Button
+                          id={"highbay-team-restart-" + role.role}
+                          disabled={disabled || restarting || stopping}
+                          onClick={() => onRestartRole(role.role)}
+                        >
+                          {restarting ? "Restarting…" : "Restart"}
+                        </Button>
+                      ) : null}
+                    </div>
+                    <details className="highbay-details">
+                      <summary>{roleLabels[role.role]} details</summary>
+                      <p>
+                        Registered handle: <code>{role.handle}</code> · Terminal attached:{" "}
+                        <code>{String(role.has_terminal)}</code>
+                      </p>
+                      {role.choice !== undefined ? (
+                        <p>
+                          Client: <code>{role.choice.client}</code> ({role.choice.program})
+                        </p>
+                      ) : null}
+                    </details>
+                  </li>
+                );
               })}
             </ul>
           )}
         </div>
       )}
+
       {startReceipt !== null ? (
         <p id="highbay-team-start-receipt">
-          This start (begun <time dateTime={startReceipt.at}>{startReceipt.at}</time>) returned:{" "}
-          «{startReceipt.result.step}»
+          This start (begun <time dateTime={startReceipt.at}>{startReceipt.at}</time>) returned: «
+          {startReceipt.result.step}»
         </p>
       ) : null}
+
       {actionError !== null ? (
-        <Alert id="highbay-team-action-error" variant="destructive" tabIndex={-1}>{actionError}</Alert>
+        <Alert id="highbay-team-action-error" variant="destructive" tabIndex={-1}>
+          {actionError}
+        </Alert>
       ) : null}
     </Card>
   );
 }
 
-// GlobalTeamAttention renders one line per needs-you role without announcing
-// repeated snapshots, moving focus or deriving attention from a start receipt.
-// Its empty live region stays mounted so later attention can be announced.
+// GlobalTeamAttention renders one line per needs_you role with direct terminal
+// or conversation controls.
 export function GlobalTeamAttention({
   snapshot,
   lastRead,
-  showing,
   disabled,
-  onShowPane,
+  openTerminalRole,
+  onOpenTerminal,
+  onMessageRole,
   onFocusedControlRemoved,
 }: GlobalTeamAttentionProps) {
   const roles = snapshot?.roles.filter((role) => role.state === "needs_you") ?? [];
-  const chorusStatus = snapshot?.chorus_status;
-  const chorusUnavailable = chorusStatus === "unavailable";
+  const chorusUnavailable = snapshot?.chorus_status === "unavailable";
   return (
     <div id="highbay-team-attention" role="status" aria-live="polite">
-      {chorusUnavailable ? <p id="highbay-team-chorus-status">
-        {lastRead ? "Last read: " : ""}Chorus can’t be reached for this team. Running workers can wait for assignments through Highbay.
-      </p> : null}
-      {roles.map((role) => {
-        const hasPane = roleHasPane(role.role, snapshot?.herdr_mode);
-        const canNudge = !lastRead && chorusStatus !== "not_used" && role.role !== "guide" && role.attention === "assignment" &&
-          (chorusUnavailable || role.watcher === "gone");
-        return <div key={role.role} className="highbay-field-row" id={"highbay-team-attention-" + role.role}>
+      {chorusUnavailable ? (
+        <p id="highbay-team-chorus-status">
+          {lastRead ? "Last read: " : ""}Chorus cannot be reached for this team. Running workers can
+          still wait for assignments through Highbay.
+        </p>
+      ) : null}
+      {roles.map((role) => (
+        <div key={role.role} className="highbay-field-row" id={"highbay-team-attention-" + role.role}>
           <span className="highbay-live-wrap">
             {lastRead ? "Last read: " : ""}
-            {teamAttentionText(role, hasPane, chorusStatus)}
+            {teamAttentionText(role)}
           </span>
-          {hasPane ? <PaneButton
-            role={role}
-            showing={showing}
-            disabled={disabled}
-            onShowPane={onShowPane}
-            onFocusedControlRemoved={onFocusedControlRemoved}
-            global={true}
-          /> : null}
-          {canNudge ? <CopyPrompt label={"Copy " + roleLabels[role.role].toLowerCase() + " prompt"}
-            text={workerAssignmentPrompt(role.role, chorusUnavailable)} /> : null}
-        </div>;
-      })}
+          {role.has_terminal ? (
+            <TerminalActionButton
+              role={role}
+              disabled={disabled}
+              active={openTerminalRole === role.role}
+              global={true}
+              onOpenTerminal={onOpenTerminal}
+              onFocusedControlRemoved={onFocusedControlRemoved}
+            />
+          ) : (
+            <Button
+              id={"highbay-team-attention-message-" + role.role}
+              variant="primary"
+              disabled={disabled}
+              onClick={() => onMessageRole(role.role)}
+            >
+              Message {shortRoleLabels[role.role]}
+            </Button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
 
-// workerAssignmentPrompt gives the operator the role's read and wait path.
-// A Chorus outage uses Highbay's wait tool instead of a Chorus reminder.
-function workerAssignmentPrompt(role: Role, chorusUnavailable: boolean) {
-  if (!chorusUnavailable) {
-    return "Read your current Highbay assignments and continue your work. Keep your project’s Chorus watcher running while waiting.";
-  }
-  const [waitTool, listTool] = role === "test_writer"
-    ? ["wait_for_test_writer_assignment", "list_test_writer_assignments"]
-    : ["wait_for_builder_assignment", "list_builder_assignments"];
-  return "Read your current Highbay assignments and continue your work. Use " + waitTool +
-    " when waiting for changes. Pass its version as since_version on the next wait." +
-    " If the wait tool is unavailable, use " + listTool + " about every 30 seconds while waiting.";
-}
-
-// teamAttentionText supplies the same sentence to the live global notice and
-// the project title. Callers select needs_you roles first.
-export function teamAttentionText(role: TeamRoleState, hasPane: boolean, chorusStatus: TeamSnapshot["chorus_status"]): string {
-  const reason = attentionReason(role, hasPane, chorusStatus);
-  const label = role.role === "guide" ? "Coding agent" : roleLabels[role.role];
-  return label + " needs you" + (reason !== "" ? ": " + reason : "");
-}
-
-// PaneButton keeps role-specific names and pending behavior consistent across
-// both placements while leaving the actual window effect in the page callback.
-function PaneButton({
+// TerminalActionButton keeps focus-restoration semantics consistent when a
+// dynamic role attention button unmounts after the role resumes working.
+function TerminalActionButton({
   role,
-  showing,
   disabled,
-  onShowPane,
-  onFocusedControlRemoved,
+  active,
   global,
+  onOpenTerminal,
+  onFocusedControlRemoved,
 }: {
   role: TeamRoleState;
-  showing: readonly Role[];
   disabled: boolean;
-  onShowPane: (role: Role) => void;
-  onFocusedControlRemoved: () => void;
+  active: boolean;
   global: boolean;
+  onOpenTerminal: (role: Role, invoker: HTMLElement | null) => void;
+  onFocusedControlRemoved: () => void;
 }) {
-  const pending = showing.includes(role.role);
-  const label = role.role === "guide" ? "coding agent" : roleLabels[role.role].toLowerCase();
-  // notifyRemoval keeps the current page callback without changing the DOM
-  // ref's identity when the page renders again.
   const notifyRemoval = useRef(onFocusedControlRemoved);
   useLayoutEffect(() => {
     notifyRemoval.current = onFocusedControlRemoved;
   }, [onFocusedControlRemoved]);
 
-  // attachControl checks focus before React removes this pane action. Ordinary
-  // snapshot or pending-state updates retain the same ref and do not notify.
   const attachControl = useCallback((node: HTMLSpanElement | null) => {
     if (node === null) {
       return;
@@ -358,16 +395,17 @@ function PaneButton({
     };
   }, []);
 
+  const label = shortRoleLabels[role.role];
   return (
     <span ref={attachControl}>
       <Button
-        id={(global ? "highbay-team-attention-show-pane-" : "highbay-team-show-") + role.role}
+        id={(global ? "highbay-team-attention-terminal-" : "highbay-team-terminal-") + role.role}
         variant={role.state === "needs_you" ? "primary" : "default"}
-        disabled={disabled || pending}
-        aria-busy={pending}
-        onClick={() => onShowPane(role.role)}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={(event) => onOpenTerminal(role.role, event.currentTarget)}
       >
-        {pending ? "Showing " + label + " pane…" : "Show " + label + " pane"}
+        {active ? label + " terminal open" : "Open " + label + " terminal"}
       </Button>
     </span>
   );

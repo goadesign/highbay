@@ -35,7 +35,7 @@ type VerificationConfig struct {
 	// WorkDir are set per run and must be empty here. RunsDir grows by one
 	// directory per run, kept as evidence; the operator prunes it.
 	Plan verify.Plan
-	// Command is the argument list that runs this hbay executable; runs
+	// Command is the argument list that runs this highbay executable; runs
 	// start `<Command> verify-run supervise <dir> <build-cache-dir>`.
 	Command []string
 	// Timeout is how long a run may take before it is stopped and recorded

@@ -47,10 +47,16 @@ const (
 	// targetPseudoVersion is the version the harness requires the staged
 	// target at; a replace directive points it at the staged copy.
 	targetPseudoVersion = "v0.0.0-00010101000000-000000000000"
-	// harnessCoreModules are the generator modules the harness imports. Their
-	// versions come from the target when it requires them; otherwise from the
-	// evaluator's own go.mod.
-	harnessGoaModule, harnessGoaAIModule, harnessModelModule = "goa.design/goa/v3", "goa.design/goa-ai", "goa.design/model"
+	// harnessGoaModule and harnessGoaAIModule are the generator modules the
+	// harness always imports. Their versions come from the target when it
+	// requires them; otherwise from the evaluator's own go.mod.
+	harnessGoaModule, harnessGoaAIModule = "goa.design/goa/v3", "goa.design/goa-ai"
+	// harnessModelModule is the C4 architecture DSL module. Highbay's go.mod
+	// pins the version scaffolded starters use, while the harness imports and
+	// requires it only when the target's design packages load it, using the
+	// exact version the target selects so goa.design/model's own transitive
+	// dependencies never alter targets that do not import it.
+	harnessModelModule = "goa.design/model"
 	// harnessStoryModule is the portable Story DSL module. The harness imports
 	// and requires it only when the target's design packages load it, using
 	// the exact version the target selects.
@@ -98,7 +104,7 @@ func prepareHarnessModule(
 			return listedModule{}, fmt.Errorf("write evaluator %s: %w", name, err)
 		}
 	}
-	for _, core := range []string{harnessGoaModule, harnessGoaAIModule, harnessModelModule} {
+	for _, core := range []string{harnessGoaModule, harnessGoaAIModule} {
 		if _, ok := requiredVersion(target, core); ok {
 			loaded[core] = true
 		}
@@ -120,7 +126,7 @@ func prepareHarnessModule(
 			return listedModule{}, fmt.Errorf("write harness go.mod: %w", err)
 		}
 	}
-	for _, core := range []string{harnessGoaModule, harnessGoaAIModule, harnessModelModule} {
+	for _, core := range []string{harnessGoaModule, harnessGoaAIModule} {
 		// The target's own requirement wins, so evaluating a module never
 		// changes the versions it builds with; the evaluator's version only
 		// fills a core module the target does not require. sameVersions still
@@ -136,13 +142,16 @@ func prepareHarnessModule(
 			return listedModule{}, fmt.Errorf("write harness go.mod: %w", err)
 		}
 	}
-	if loaded[harnessStoryModule] {
-		storyMod, ok := targetModules[harnessStoryModule]
-		if !ok || (!storyMod.Main && storyMod.Version == "") {
-			return listedModule{}, fmt.Errorf("target module loads %s without a selected version", harnessStoryModule)
+	for _, optional := range []string{harnessModelModule, harnessStoryModule} {
+		if !loaded[optional] {
+			continue
 		}
-		if !storyMod.Main {
-			if err := harness.AddRequire(harnessStoryModule, storyMod.Version); err != nil {
+		selected, ok := targetModules[optional]
+		if !ok || (!selected.Main && selected.Version == "") {
+			return listedModule{}, fmt.Errorf("target module loads %s without a selected version", optional)
+		}
+		if !selected.Main {
+			if err := harness.AddRequire(optional, selected.Version); err != nil {
 				return listedModule{}, fmt.Errorf("write harness go.mod: %w", err)
 			}
 		}

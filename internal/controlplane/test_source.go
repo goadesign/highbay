@@ -18,11 +18,11 @@ type testSource string
 
 const (
 	// testSourceStoredEvaluator means the project verifies with the
-	// evaluator the operator stored with `hbay verification set`, so no
+	// evaluator the operator stored with `highbay verification set`, so no
 	// test writer is used.
 	testSourceStoredEvaluator testSource = "stored_evaluator"
 	// testSourceStarterLayout means the bound workspace has the test layout
-	// `hbay init` makes: a test module in eval/ beside the service module.
+	// `highbay init` makes: a test module in eval/ beside the service module.
 	testSourceStarterLayout testSource = "starter_layout"
 	// testSourceNone means neither: no stored evaluator and no layout Highbay
 	// knows.
@@ -101,7 +101,7 @@ func (c *ControlPlane) projectTestLayout(
 
 // storedEvaluator reports projectTestSource's first answer without reading
 // any file: this control plane verifies every change with the evaluator the
-// operator stored with `hbay verification set` (Options.Verification). The
+// operator stored with `highbay verification set` (Options.Verification). The
 // project server binds that exactly when the project has stored verification
 // settings. Reads of a build use it to show that no test writer is used.
 func (c *ControlPlane) storedEvaluator() bool {

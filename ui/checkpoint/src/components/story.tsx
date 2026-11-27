@@ -62,6 +62,8 @@ export interface StoryStageProps {
   error: string | null;
   // onRetry reads the evaluation again after a failure.
   onRetry: () => void;
+  // onAskAboutFlow attaches Story/flow context to the Guide conversation composer.
+  onAskAboutFlow?: (storyName: string, flowKey?: string) => void;
 }
 
 // STATE_ANNOUNCEMENTS is what assistive technology announces, once, when the
@@ -82,7 +84,7 @@ const STEP_KIND_LABELS: Record<StoryStepItem["kind"], string> = {
 
 // StoryStageView shows the Story of the open change and the current draft,
 // and, when both exist, whether the draft differs from the change's Story.
-export function StoryStageView({ card, evaluation, loading, error, onRetry }: StoryStageProps) {
+export function StoryStageView({ card, evaluation, loading, error, onRetry, onAskAboutFlow }: StoryStageProps) {
   const changeStories = card !== null ? card.stories ?? [] : [];
   return (
     <Card
@@ -111,7 +113,11 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
               Story.
             </p>
           ) : (
-            <StoryDrawing stories={changeStories} label={"Story of Change Card " + card.change_id} />
+            <StoryDrawing
+              stories={changeStories}
+              label={"Story of Change Card " + card.change_id}
+              onAskAboutFlow={onAskAboutFlow}
+            />
           )}
         </section>
       ) : null}
@@ -141,7 +147,7 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
         {evaluation === null ? (
           error === null ? <p role="status">Reading the current draft...</p> : null
         ) : (
-          <DraftBody card={card} evaluation={evaluation} />
+          <DraftBody card={card} evaluation={evaluation} onAskAboutFlow={onAskAboutFlow} />
         )}
       </section>
     </Card>
@@ -150,7 +156,15 @@ export function StoryStageView({ card, evaluation, loading, error, onRetry }: St
 
 // StoryDrawing draws stories in declaration order: each flow a row with its
 // title, its mark, and its steps as cards in order.
-export function StoryDrawing({ stories, label }: { stories: StorySummaryItem[]; label: string }) {
+export function StoryDrawing({
+  stories,
+  label,
+  onAskAboutFlow,
+}: {
+  stories: StorySummaryItem[];
+  label: string;
+  onAskAboutFlow?: (storyName: string, flowKey?: string) => void;
+}) {
   return (
     <div className="highbay-story" role="group" aria-label={label}>
       {stories.map((story) => {
@@ -162,14 +176,31 @@ export function StoryDrawing({ stories, label }: { stories: StorySummaryItem[]; 
             data-story-name={story.name}
             aria-label={"Story: " + story.name}
           >
-            <h4>{story.name}</h4>
+            <div className="highbay-story-flow-header">
+              <h4>{story.name}</h4>
+              {onAskAboutFlow !== undefined ? (
+                <Button
+                  variant="ghost"
+                  aria-label={"Ask Guide about Story " + story.name}
+                  onClick={() => onAskAboutFlow(story.name)}
+                >
+                  Ask Guide
+                </Button>
+              ) : null}
+            </div>
             {story.description ? <p className="highbay-story-muted">{story.description}</p> : null}
             {story.flows.length === 0 ? (
               <p>This Story declares no flows.</p>
             ) : (
               <ol className="highbay-story-flows">
                 {story.flows.map((flow) => (
-                  <FlowRow key={flow.key} flow={flow} actors={actors} />
+                  <FlowRow
+                    key={flow.key}
+                    storyName={story.name}
+                    flow={flow}
+                    actors={actors}
+                    onAskAboutFlow={onAskAboutFlow}
+                  />
                 ))}
               </ol>
             )}
@@ -294,12 +325,20 @@ export function compareStories(
 
 // DraftBody shows the evaluation's state and, once it succeeded, its Stories
 // and how they compare with the open change's Story.
-function DraftBody({ card, evaluation }: { card: ChangeCardResult | null; evaluation: StoryRefreshResult }) {
+function DraftBody({
+  card,
+  evaluation,
+  onAskAboutFlow,
+}: {
+  card: ChangeCardResult | null;
+  evaluation: StoryRefreshResult;
+  onAskAboutFlow?: (storyName: string, flowKey?: string) => void;
+}) {
   switch (evaluation.state) {
     case "none":
       return (
         <p id="highbay-story-draft-none">
-          Ask your coding agent to refresh the Story. The result appears here automatically.
+          Ask Guide in Team conversation to refresh the Story. The result appears here automatically.
         </p>
       );
     case "running":
@@ -318,24 +357,36 @@ function DraftBody({ card, evaluation }: { card: ChangeCardResult | null; evalua
             <code>{evaluation.snapshot_digest ?? "unknown"}</code>. The server reported:
           </p>
           <pre id="highbay-story-draft-diagnostic">{evaluation.diagnostic ?? evaluation.message}</pre>
-          <p>Ask your coding agent to fix the Story and refresh it.</p>
+          <p>Ask Guide in Team conversation to fix the Story and refresh it.</p>
         </div>
       );
     case "succeeded":
-      return <SucceededDraft card={card} evaluation={evaluation} />;
+      return <SucceededDraft card={card} evaluation={evaluation} onAskAboutFlow={onAskAboutFlow} />;
   }
 }
 
 // SucceededDraft draws a succeeded evaluation's Stories. With a change open
 // it first says whether they differ from the change's Story and keeps the
 // drawing behind a disclosure, since the change's Story is drawn above.
-function SucceededDraft({ card, evaluation }: { card: ChangeCardResult | null; evaluation: StoryRefreshResult }) {
+function SucceededDraft({
+  card,
+  evaluation,
+  onAskAboutFlow,
+}: {
+  card: ChangeCardResult | null;
+  evaluation: StoryRefreshResult;
+  onAskAboutFlow?: (storyName: string, flowKey?: string) => void;
+}) {
   const counts = storyCounts(evaluation.stories);
   const drawing =
     evaluation.stories.length === 0 ? (
       <p id="highbay-story-draft-empty">The design declares no Story.</p>
     ) : (
-      <StoryDrawing stories={evaluation.stories} label="Current Story draft" />
+      <StoryDrawing
+        stories={evaluation.stories}
+        label="Current Story draft"
+        onAskAboutFlow={onAskAboutFlow}
+      />
     );
   const summary =
     "Evaluated snapshot " +
@@ -413,7 +464,17 @@ function DifferenceItem({ kind, label, names }: { kind: string; label: string; n
 
 // FlowRow draws one flow: its title and mark, why it is a draft, its steps
 // as cards in a row that scrolls inside the stage, and its open questions.
-function FlowRow({ flow, actors }: { flow: StoryFlowItem; actors: Map<string, string> }) {
+function FlowRow({
+  storyName,
+  flow,
+  actors,
+  onAskAboutFlow,
+}: {
+  storyName: string;
+  flow: StoryFlowItem;
+  actors: Map<string, string>;
+  onAskAboutFlow?: (storyName: string, flowKey?: string) => void;
+}) {
   return (
     <li className="highbay-story-flow" data-flow-key={flow.key} data-complete={flow.complete ? "true" : "false"}>
       <div className="highbay-story-flow-header">
@@ -427,6 +488,16 @@ function FlowRow({ flow, actors }: { flow: StoryFlowItem; actors: Map<string, st
             draft: not tested
           </Badge>
         )}
+        {onAskAboutFlow !== undefined ? (
+          <Button
+            id={"highbay-story-ask-" + flow.key}
+            variant="ghost"
+            aria-label={"Ask Guide about flow " + flow.title}
+            onClick={() => onAskAboutFlow(storyName, flow.key)}
+          >
+            Ask Guide
+          </Button>
+        ) : null}
       </div>
       {flow.description ? <p className="highbay-story-muted">{flow.description}</p> : null}
       {!flow.complete ? (

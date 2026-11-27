@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/goadesign/highbay/internal/controlplane"
+	"github.com/goadesign/highbay/internal/hc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type (
-	// deadlineTeamHost advances only the test's virtual clock at the first host read.
-	deadlineTeamHost struct {
-		TeamHost
+	// deadlineTerminals advances only the test's virtual clock at the first
+	// read of herdr-core, then answers as the stand-in core does unless the
+	// accepted context has ended.
+	deadlineTerminals struct {
+		*fakeCore
 		beforeRead func(context.Context)
 		readError  error
 	}
@@ -28,9 +31,9 @@ func TestTeamStartDeadlineBoundary(t *testing.T) {
 		t.Run(elapsed.String(), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				state := testState(t)
-				deps := fixtureTeamDependencies(state)
-				host := &deadlineTeamHost{TeamHost: deps.Host}
-				deps.Host = host
+				fakes, deps := fixtureTeam(t.Context())
+				host := &deadlineTerminals{fakeCore: fakes.core}
+				deps.DialTerminals = func(context.Context) (TeamTerminals, error) { return host, nil }
 				server, err := NewServer(state, func() {}, deps)
 				require.NoError(t, err)
 				fixtureAssignments(server, false)
@@ -55,7 +58,7 @@ func TestTeamStartDeadlineBoundary(t *testing.T) {
 				if elapsed < teamStartTimeout {
 					assert.NoError(t, err)
 					assert.NoError(t, host.readError)
-					assert.Len(t, host.TeamHost.(*teamFixture).choices, 1)
+					assert.Len(t, fakes.core.runs, 1)
 					assert.ErrorIs(t, accepted.Err(), context.Canceled)
 					return
 				}
@@ -64,7 +67,7 @@ func TestTeamStartDeadlineBoundary(t *testing.T) {
 				assert.Equal(t, "team_unavailable", unavailable.GoaErrorName())
 				assert.ErrorIs(t, host.readError, context.DeadlineExceeded)
 				assert.ErrorIs(t, accepted.Err(), context.DeadlineExceeded)
-				assert.Empty(t, host.TeamHost.(*teamFixture).calls)
+				assert.Empty(t, fakes.core.runs)
 			})
 		})
 	}
@@ -73,12 +76,11 @@ func TestTeamStartDeadlineBoundary(t *testing.T) {
 func TestTeamStartServerLifetime(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		state := testState(t)
-		deps := fixtureTeamDependencies(state)
 		lifetime, stop := context.WithCancel(t.Context())
 		defer stop()
-		deps.Lifetime = lifetime
-		host := &deadlineTeamHost{TeamHost: deps.Host}
-		deps.Host = host
+		fakes, deps := fixtureTeam(lifetime)
+		host := &deadlineTerminals{fakeCore: fakes.core}
+		deps.DialTerminals = func(context.Context) (TeamTerminals, error) { return host, nil }
 		host.beforeRead = func(context.Context) {
 			stop()
 			synctest.Wait()
@@ -90,11 +92,12 @@ func TestTeamStartServerLifetime(t *testing.T) {
 		_, err = server.StartAgents(t.Context(), nil)
 		assert.Error(t, err)
 		assert.ErrorIs(t, host.readError, context.Canceled)
-		assert.Empty(t, host.TeamHost.(*teamFixture).calls)
+		assert.Empty(t, fakes.core.runs)
 	})
 }
 
-func (h *deadlineTeamHost) Spaces(ctx context.Context) ([]TeamSpace, error) {
+// List is the team's first read of herdr-core when it starts agents.
+func (h *deadlineTerminals) List(ctx context.Context, req hc.ListRequest) ([]hc.Terminal, error) {
 	if beforeRead := h.beforeRead; beforeRead != nil {
 		h.beforeRead = nil
 		beforeRead(ctx)
@@ -103,5 +106,5 @@ func (h *deadlineTeamHost) Spaces(ctx context.Context) ([]TeamSpace, error) {
 	if h.readError != nil {
 		return nil, h.readError
 	}
-	return h.TeamHost.Spaces(ctx)
+	return h.fakeCore.List(ctx, req)
 }

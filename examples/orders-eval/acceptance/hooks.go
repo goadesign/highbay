@@ -294,7 +294,7 @@ func (h *Hooks) OtherCustomersOrderRefused(ctx context.Context) (res eval.Result
 }
 
 // recordArtifacts adds to the scenario result the evidence of every pinned
-// candidate binary this run can execute, under the names hbay verify bound
+// candidate binary this run can execute, under the names highbay verify bound
 // them with (candidate.Artifact.Evidence), so the verifier can check the
 // report used exactly the binaries it bound.
 func (h *Hooks) recordArtifacts(res *eval.Result) {

@@ -523,7 +523,7 @@ func TestReadCheckOutputBudgetsTheTextTheCallerReceives(t *testing.T) {
 	t.Cleanup(srv.Close)
 	origin, err := url.Parse(srv.URL)
 	require.NoError(t, err)
-	transport := genhttpclient.NewClient(origin.Scheme, origin.Host, generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false)
+	transport := genhttpclient.NewClient(origin.Scheme, origin.Host, generationDoer{client: srv.Client()}, goahttp.RequestEncoder, goahttp.ResponseDecoder, false, nil, nil)
 	client := &genhighbay.Client{ReadCheckOutputEndpoint: transport.ReadCheckOutput()}
 
 	var got strings.Builder

@@ -78,7 +78,7 @@ function generatedConsumer(openApi) {
     bundle: true, platform: "node", format: "cjs", write: false,
   });
   const module = { exports: {} };
-  vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, URL, console });
+  vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, URL, URLSearchParams, console });
   return module.exports;
 }
 
@@ -126,16 +126,34 @@ test("dismissed notices are an array of enum values in types and results", () =>
   const openApi = JSON.parse(fs.readFileSync(openApiPath, "utf8"));
   const choices = openApi.components.schemas.TeamSnapshot.properties.dismissed_notices.items.enum;
   const union = choices.map((choice) => JSON.stringify(choice)).join(" | ");
+  const expectedArrayType = choices.length > 1 ? `(${union})[]` : `${union}[]`;
   const source = generateTypesModule(openApi);
-  assert.ok(source.includes(`dismissed_notices: (${union})[];`), "the array must contain the entire union");
+  assert.ok(source.includes(`dismissed_notices: ${expectedArrayType};`), "the array must contain the entire union");
 
   const { decode } = generatedConsumer(openApi).ROUTES.get_team;
-  const snapshot = { team: "team", roles: [], herdr_mode: "unavailable", saved_choices: {} };
+  const snapshot = { team: "team", channel: "#team", roles: [], saved_choices: {}, chorus_status: "connected" };
   assert.equal(decode({ ...snapshot, dismissed_notices: [] }), true);
   assert.equal(decode({ ...snapshot, dismissed_notices: choices }), true);
   assert.equal(decode({ ...snapshot, dismissed_notices: choices[0] }), false);
   assert.equal(decode({ ...snapshot, dismissed_notices: ["unknown_notice"] }), false);
   assert.equal(decode(snapshot), false);
+});
+
+test("websocket terminal route encodes upgrade parameters and validates server frames", () => {
+  const openApi = JSON.parse(fs.readFileSync(openApiPath, "utf8"));
+  const generated = generatedConsumer(openApi);
+  const ws = generated.WEBSOCKET_ROUTES.attach_role_terminal;
+  assert.ok(ws, "attach_role_terminal WebSocket route must be generated");
+
+  const encoded = ws.encode({ role: "builder", ticket: "0123456789abcdef", cols: 120, rows: 36, observe: false });
+  assert.equal(encoded.path, "/team/roles/builder/terminal?ticket=0123456789abcdef&cols=120&rows=36&observe=false");
+  assert.equal(encoded.body, undefined);
+
+  assert.equal(ws.decodeFrame({ server_frame: { kind: "output", data: "aGVsbG8=" } }), true);
+  assert.equal(ws.decodeFrame({ server_frame: { kind: "resize", cols: 120, rows: 36 } }), true);
+  assert.equal(ws.decodeFrame({ server_frame: { kind: "closed", reason: "exited", exit_code: 0 } }), true);
+  assert.equal(ws.decodeFrame({ server_frame: { kind: "output", data: 123 } }), false);
+  assert.equal(ws.decodeFrame({ server_frame: { kind: "resize", cols: 5, rows: 36 } }), false);
 });
 
 for (const [operation, name] of [["start_build", "previous_change_open"], ["drop_build", "build_changed"]]) {

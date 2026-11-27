@@ -22,6 +22,9 @@ type Endpoints struct {
 	Stop                goa.Endpoint
 	BrowserLink         goa.Endpoint
 	ExchangeBrowserLink goa.Endpoint
+	GetBrowserSession   goa.Endpoint
+	GetUpdateStatus     goa.Endpoint
+	ApplyUpdate         goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "project" service with endpoints.
@@ -34,6 +37,9 @@ func NewEndpoints(s Service) *Endpoints {
 		Stop:                NewStopEndpoint(s),
 		BrowserLink:         NewBrowserLinkEndpoint(s),
 		ExchangeBrowserLink: NewExchangeBrowserLinkEndpoint(s),
+		GetBrowserSession:   NewGetBrowserSessionEndpoint(s),
+		GetUpdateStatus:     NewGetUpdateStatusEndpoint(s),
+		ApplyUpdate:         NewApplyUpdateEndpoint(s),
 	}
 }
 
@@ -46,6 +52,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Stop = m(e.Stop)
 	e.BrowserLink = m(e.BrowserLink)
 	e.ExchangeBrowserLink = m(e.ExchangeBrowserLink)
+	e.GetBrowserSession = m(e.GetBrowserSession)
+	e.GetUpdateStatus = m(e.GetUpdateStatus)
+	e.ApplyUpdate = m(e.ApplyUpdate)
 }
 
 // NewIdentityEndpoint returns an endpoint function that calls the method
@@ -103,5 +112,30 @@ func NewExchangeBrowserLinkEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ExchangeBrowserLinkPayload)
 		return s.ExchangeBrowserLink(ctx, p)
+	}
+}
+
+// NewGetBrowserSessionEndpoint returns an endpoint function that calls the
+// method "get_browser_session" of service "project".
+func NewGetBrowserSessionEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetBrowserSession(ctx)
+	}
+}
+
+// NewGetUpdateStatusEndpoint returns an endpoint function that calls the
+// method "get_update_status" of service "project".
+func NewGetUpdateStatusEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetUpdateStatus(ctx)
+	}
+}
+
+// NewApplyUpdateEndpoint returns an endpoint function that calls the method
+// "apply_update" of service "project".
+func NewApplyUpdateEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ApplyUpdatePayload)
+		return s.ApplyUpdate(ctx, p)
 	}
 }

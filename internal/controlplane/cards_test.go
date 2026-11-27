@@ -359,7 +359,7 @@ func TestASavedApprovalNeedsAPromotionTarget(t *testing.T) {
 	require.NotNil(t, got.UnverifiedApproval)
 	assert.Equal(t, &expectedApproval, got.UnverifiedApproval.Approval)
 	assert.Contains(t, got.UnverifiedApproval.Reason, "Check current approval")
-	assert.Contains(t, got.UnverifiedApproval.Reason, "hbay promotion remove")
+	assert.Contains(t, got.UnverifiedApproval.Reason, "highbay promotion remove")
 	saved, ok, err := cp.cards.load("chg")
 	require.NoError(t, err)
 	require.True(t, ok)

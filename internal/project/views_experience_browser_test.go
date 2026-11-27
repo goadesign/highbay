@@ -180,8 +180,11 @@ func (s *browserExperienceService) MergeChange(
 
 // teamReceipt names the fixture's execution mode without starting a process.
 func (s *browserExperienceService) teamReceipt() *genhighbay.ProjectTeam {
-	return &genhighbay.ProjectTeam{Team: s.team.Team, Space: "fixture-space", HerdrMode: s.team.HerdrMode,
-		Roles: []*genhighbay.ProjectTeamRole{}, Step: "Read the build assignments."}
+	return &genhighbay.ProjectTeam{
+		Team:  s.team.Team,
+		Roles: []*genhighbay.ProjectTeamRole{},
+		Step:  "Read the build assignments.",
+	}
 }
 
 // TestInlineWorkersAndApprovedMergeInChromium proves the changed user journey
@@ -213,7 +216,7 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 	}
 	require.NoError(t, os.MkdirAll(capture, 0o700))
 	browser := startBrowser(t, executable, t.TempDir())
-	for _, state := range []string{"picker", "headless", "single", "builder_only", "configured_permissions", "merge", "build_merge", "dirty_worktree", "merge_conflict"} {
+	for _, state := range []string{"picker", "single", "builder_only", "merge", "build_merge", "dirty_worktree", "merge_conflict"} {
 		t.Run(state, func(t *testing.T) {
 			mergeJourney := state == "merge" || state == "build_merge" || state == "dirty_worktree" || state == "merge_conflict"
 			views := []string{"desktop", "phone"}
@@ -227,25 +230,24 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 				newer.AcceptedAt = "2026-11-16T12:00:00Z"
 				fixtureCard := *card
 				fixtureCard.Approval, _ = review.Review.Approval.AsRecorded()
-				team := &genhighbay.TeamSnapshot{Team: "browser-team", HerdrMode: "attached",
+				team := &genhighbay.TeamSnapshot{
+					Team:         "browser-team",
+					Channel:      "#browser-team",
+					ChorusStatus: "connected",
 					Roles: []*genhighbay.TeamRoleState{
-						{Role: "builder", Handle: "builder", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unread"},
-						{Role: "test_writer", Handle: "test-writer", State: "not_started", Attention: "none", Watcher: "unknown", Assignment: "unread"},
-					}, SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}}
-				options := browserWorkerOptions()
-				if state == "headless" || state == "configured_permissions" {
-					team.HerdrMode = "unavailable"
+						{Role: "builder", Handle: "builder", HasTerminal: false, State: "not_started", Attention: "none", Assignment: "unread"},
+						{Role: "test_writer", Handle: "test-writer", HasTerminal: false, State: "not_started", Attention: "none", Assignment: "unread"},
+					},
+					SavedChoices:     map[string]*genhighbay.RoleAgentChoice{},
+					DismissedNotices: []string{},
 				}
+				options := browserWorkerOptions()
 				if state == "single" {
 					options.Agents = options.Agents[:1]
 				}
 				if state == "builder_only" {
 					options.BuildRoles = []string{"builder"}
 					team.Roles = team.Roles[:1]
-				}
-				if state == "configured_permissions" {
-					options.Agents = []*genhighbay.InstalledAgentOption{{Client: "opencode", Program: "/fixture/opencode",
-						Title: "OpenCode", Models: []string{}, Efforts: []string{}, ModelSupported: true, HeadlessSupported: true}}
 				}
 				if !mergeJourney {
 					started, ok := build.Build.AsStarted()
@@ -287,9 +289,6 @@ func TestInlineWorkersAndApprovedMergeInChromium(t *testing.T) {
 						assert.True(t, view.ClientChanged, view.Name)
 						assert.True(t, view.DraftPreserved, view.Name)
 						assert.Contains(t, view.KeyboardControls, "highbay-build-agents-builder-client", view.Name)
-						if state == "headless" || state == "configured_permissions" {
-							assert.True(t, view.BackgroundGated, view.Name)
-						}
 						if state == "single" {
 							assert.Equal(t, []string{"codex", "codex"}, view.InitialClients)
 							assert.True(t, view.NoticeDismissed, view.Name)
@@ -342,8 +341,8 @@ func browserWorkerOptions() *genhighbay.ListTeamAgentOptionsResult {
 	return &genhighbay.ListTeamAgentOptionsResult{BuildRoles: []string{"builder", "test_writer"},
 		Agents: []*genhighbay.InstalledAgentOption{
 			{Client: "codex", Program: "/fixture/codex", Title: "Codex", Models: []string{"codex-model"}, Efforts: []string{"low", "high"},
-				ModelSupported: true, ThinkingSupported: true, YoloSupported: true, HeadlessSupported: true},
+				ModelSupported: true, ThinkingSupported: true, YoloSupported: true},
 			{Client: "claude", Program: "/fixture/claude", Title: "Claude Code", Models: []string{"claude-model"}, Efforts: []string{"low", "high"},
-				ModelSupported: true, ThinkingSupported: true, YoloSupported: true, HeadlessSupported: true},
+				ModelSupported: true, ThinkingSupported: true, YoloSupported: true},
 		}}
 }

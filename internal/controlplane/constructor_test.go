@@ -67,7 +67,10 @@ func TestNewRefusesMissingOrInvalidProjectInputs(t *testing.T) {
 // TestNewKeepsItsTeamBinding proves edits to the caller's options do not
 // change the project owner or the service of a running control plane.
 func TestNewKeepsItsTeamBinding(t *testing.T) {
-	snapshot := genhighbay.TeamSnapshot{HerdrMode: "attached", SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{}, Team: "original-team", Roles: []*genhighbay.TeamRoleState{}}
+	snapshot := genhighbay.TeamSnapshot{
+		Team: "original-team", Channel: "#original-team", ChorusStatus: "connected",
+		Roles: []*genhighbay.TeamRoleState{}, SavedChoices: map[string]*genhighbay.RoleAgentChoice{}, DismissedNotices: []string{},
+	}
 	binding := &TeamBinding{Owner: "alice@example.com", Service: &teamServiceFixture{snapshot: snapshot}}
 	cp, err := New(Options{CardsDir: t.TempDir(), WorkspaceDir: realTempDir(t), Team: binding})
 	require.NoError(t, err)

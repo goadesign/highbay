@@ -216,8 +216,8 @@ func (a Artifact) Digest() string {
 
 // Evidence returns the record an evaluator suite attaches to a scenario result
 // to state that the scenario ran this pinned binary. name is the binary's name
-// in the verification plan: the name in `hbay verify -binary name=package`,
-// which the suite receives as `--artifact name=path`. hbay verify accepts a
+// in the verification plan: the name in `highbay verify -binary name=package`,
+// which the suite receives as `--artifact name=path`. highbay verify accepts a
 // scenario only when its result carries one such record for every bound
 // binary, with the digest the verifier measured. For example, the binary bound
 // as orders with digest 9f2c… yields

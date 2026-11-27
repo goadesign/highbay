@@ -59,7 +59,10 @@ expect(stepQuestion && stepQuestion.textContent.includes("Is $50.00 itself insta
 expect(JSON.stringify(reasons(flows[2])) === JSON.stringify(["No step starts the flow.", "No step is an outcome.", "Open questions: Who approves a partial refund?"]), "the third draft's reasons are wrong: " + JSON.stringify(reasons(flows[2])));
 const flowQuestion = flows[2].querySelector(':scope > .highbay-story-questions [data-question-key="approver"]');
 expect(flowQuestion && JSON.stringify(Array.from(flowQuestion.querySelectorAll(".highbay-story-options li")).map((li) => li.textContent)) === JSON.stringify(["Support Manager", "Finance"]), "a flow's open question lacks its options");
-expect(page.$$("#highbay-story-change input, #highbay-story-change textarea, #highbay-story-change select, #highbay-story-change button").length === 0, "the change's Story offers editing controls");
+// The Story is read-only: its only controls ask the guide about a Story or a flow.
+expect(page.$$("#highbay-story-change input, #highbay-story-change textarea, #highbay-story-change select").length === 0, "the change's Story offers editing controls");
+expect(page.$$("#highbay-story-change button").every((button) => button.textContent.trim() === "Ask Guide" && button.getAttribute("aria-label").startsWith("Ask Guide about ")),
+       "the change's Story has a control other than asking the guide: " + JSON.stringify(page.$$("#highbay-story-change button").map((button) => button.textContent)));
 
 const row = flows[2].querySelector(".highbay-story-steps");
 expect(row.getAttribute("aria-label") === "Steps of Partial refund", "a row of steps has no name");
@@ -112,7 +115,7 @@ const announced = () => page.text("#highbay-story-draft-announcement");
 const liveRegions = () => page.$$("#highbay-story-draft [role=status]").length;
 expect(announced() === "" && liveRegions() === 1, "the none state was announced or the draft has several live regions");
 expect(!page.$("#highbay-story-change"), "a Story of a change is shown with no change open");
-expect(page.text("#highbay-story-draft-none").includes("Ask your coding agent to refresh the Story"), "the none state does not name the step to take");
+expect(page.text("#highbay-story-draft-none").includes("Ask Guide in Team conversation to refresh the Story"), "the none state does not name the step to take: " + page.text("#highbay-story-draft-none"));
 expect(page.text("#highbay-frame-next dd").includes("Ask your coding agent to refresh the Story"), "Story did not surface the available next step");
 const context = page.text("#highbay-workspace-context");
 expect(context.includes("Story") && context.includes("current draft none"), "the context strip does not name what is shown: " + context);

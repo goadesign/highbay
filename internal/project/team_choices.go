@@ -70,7 +70,7 @@ func (s *Server) DismissNotice(ctx context.Context, notice string) error {
 // resolveChoices validates explicit requests against the current installed
 // inventory and fills each required role from its saved or installed default.
 func (s *Server) resolveChoices(
-	ctx context.Context, roster []launcherRole, requested map[string]*genhighbay.RoleAgentChoice,
+	ctx context.Context, roster []teamRole, requested map[string]*genhighbay.RoleAgentChoice,
 ) (map[string]*genhighbay.RoleAgentChoice, error) {
 	for role, choice := range requested {
 		if !choiceRole(role) || choice == nil || !validChoice(roleChoice(*choice)) {
@@ -84,9 +84,8 @@ func (s *Server) resolveChoices(
 	if err != nil {
 		return nil, err
 	}
-	headless := !s.team.dependencies.HerdrAvailable
 	for _, choice := range requested {
-		if !installedChoice(choice, options, headless) {
+		if !installedChoice(choice, options) {
 			return nil, invalidWorkerChoice()
 		}
 	}
@@ -99,14 +98,14 @@ func (s *Server) resolveChoices(
 		selected, explicit := requested[role.Role]
 		if !explicit {
 			preference := genhighbay.RoleAgentChoice(saved[role.Role])
-			if installedChoice(&preference, options, headless) {
+			if installedChoice(&preference, options) {
 				selected = &preference
 			} else {
-				selected = defaultChoice(role.Role, options, choices, headless)
+				selected = defaultChoice(role.Role, options, choices)
 			}
 		}
 		if selected == nil {
-			return nil, genhighbay.MakeTeamUnavailable(errors.New("install a supported coding agent, then start the workers again"))
+			return nil, genhighbay.MakeTeamUnavailable(errors.New("install a supported coding agent, then start the agents again"))
 		}
 		choices[role.Role] = selected
 	}
@@ -152,9 +151,10 @@ func cloneChoiceOption(value *string) *string {
 // installedChoice verifies trusted inventory membership and supported option
 // flags. Model IDs may be supplied by the user even when absent from a
 // client's discovery list. The installed client resolves access at launch.
-func installedChoice(choice *genhighbay.RoleAgentChoice, options []*genhighbay.InstalledAgentOption, headless bool) bool {
+func installedChoice(choice *genhighbay.RoleAgentChoice, options []*genhighbay.InstalledAgentOption) bool {
 	if choice.Client == "antigravity" && choice.Model != nil && choice.Thinking != nil {
-		// Chorus treats a suffixed Antigravity model as an effort selection.
+		// The command line Highbay builds passes Antigravity's effort
+		// separately, so a model that already ends in an effort is refused.
 		model := *choice.Model
 		if separator := strings.LastIndexByte(model, '-'); separator >= 0 {
 			switch model[separator+1:] {
@@ -165,8 +165,7 @@ func installedChoice(choice *genhighbay.RoleAgentChoice, options []*genhighbay.I
 	}
 	for _, option := range options {
 		if choice.Client == option.Client && choice.Program == option.Program {
-			return (!headless || option.HeadlessSupported) &&
-				(choice.Model == nil || option.ModelSupported) &&
+			return (choice.Model == nil || option.ModelSupported) &&
 				(choice.Thinking == nil || option.ThinkingSupported && slices.Contains(option.Efforts, *choice.Thinking)) &&
 				(!choice.Yolo || option.YoloSupported)
 		}
@@ -177,8 +176,7 @@ func installedChoice(choice *genhighbay.RoleAgentChoice, options []*genhighbay.I
 // defaultChoice prefers separate families when available and reuses the sole
 // installed agent for both worker roles.
 func defaultChoice(
-	role string, options []*genhighbay.InstalledAgentOption,
-	selected map[string]*genhighbay.RoleAgentChoice, headless bool,
+	role string, options []*genhighbay.InstalledAgentOption, selected map[string]*genhighbay.RoleAgentChoice,
 ) *genhighbay.RoleAgentChoice {
 	preferred := "codex"
 	var already string
@@ -190,9 +188,6 @@ func defaultChoice(
 	}
 	var first, distinct *genhighbay.InstalledAgentOption
 	for _, option := range options {
-		if headless && !option.HeadlessSupported {
-			continue
-		}
 		if first == nil {
 			first = option
 		}
@@ -264,11 +259,7 @@ func choiceRole(role string) bool {
 
 // knownNotice closes the persisted dismissal set.
 func knownNotice(notice string) bool {
-	switch notice {
-	case "single_agent_family", "outside_herdr", "herdr_unavailable":
-		return true
-	}
-	return false
+	return notice == "single_agent_family"
 }
 
 // invalidWorkerChoice names a refused role option without echoing caller input.

@@ -3,8 +3,9 @@ package design
 
 import . "goa.design/goa/v3/dsl"
 
-// RoleAgentChoice is a validated client selection for one missing project role.
+// RoleAgentChoice is a validated client selection for one project role.
 var RoleAgentChoice = Type("RoleAgentChoice", func() {
+	Description("Selected coding-agent CLI executable, optional model/reasoning settings, and unattended permission switch for one project role.")
 	Attribute("client", String, "Installed coding-agent client family.", func() {
 		Enum("claude", "codex", "antigravity", "cursor", "gemini", "opencode")
 	})
@@ -17,6 +18,7 @@ var RoleAgentChoice = Type("RoleAgentChoice", func() {
 
 // InstalledAgentOption describes one discovered local executable and its choices.
 var InstalledAgentOption = Type("InstalledAgentOption", func() {
+	Description("Discovered coding-agent CLI executable on PATH and the configuration switches it supports.")
 	Attribute("client", String, "Coding-agent client family.", func() {
 		Enum("claude", "codex", "antigravity", "cursor", "gemini", "opencode")
 	})
@@ -28,8 +30,7 @@ var InstalledAgentOption = Type("InstalledAgentOption", func() {
 	Attribute("thinking_supported", Boolean, "Whether reasoning effort can be selected.")
 	Attribute("yolo_supported", Boolean, "Whether an unattended permission mode is supported.")
 	Attribute("yolo_effect", String, "What this client's unattended permission mode permits.")
-	Attribute("headless_supported", Boolean, "Whether Highbay supports this client's finite noninteractive mode.")
-	Required("client", "program", "title", "models", "efforts", "model_supported", "thinking_supported", "yolo_supported", "headless_supported")
+	Required("client", "program", "title", "models", "efforts", "model_supported", "thinking_supported", "yolo_supported")
 })
 
 // roleAgentChoices constrains map keys at the transport boundary.

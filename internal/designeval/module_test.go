@@ -101,7 +101,7 @@ func TestEvaluateUsesTheBuildToolchainToResolveModules(t *testing.T) {
 }
 
 // TestEvaluatorGoModIgnoresTheWorkingDirectory checks that the generator
-// versions come from the go.mod compiled into Highbay even when hbay runs
+// versions come from the go.mod compiled into Highbay even when highbay runs
 // inside another module, such as a user's application that does not require
 // goa.design/model.
 func TestEvaluatorGoModIgnoresTheWorkingDirectory(t *testing.T) {

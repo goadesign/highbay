@@ -1,5 +1,5 @@
 // This file owns the model choice on a running control plane and the model
-// provider request settings the hbay command hands over: the choice live
+// provider request settings the highbay command hands over: the choice live
 // targets started afterwards receive, the settings permitted programs
 // receive, and the environment a live target starts with. Settings live in
 // memory only, as modelsettings values, and no result, error or span carries
@@ -24,7 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// HandOverModelSettings holds the request settings the hbay command read
+// HandOverModelSettings holds the request settings the highbay command read
 // from its shell, by provider. Each provider present in p replaces
 // everything held for it and must include its key variable; an absent one
 // keeps what is held, so a request with neither changes nothing. Every
@@ -153,6 +153,50 @@ func (c *ControlPlane) GetModelConnection(ctx context.Context) (*genhighbay.Mode
 	return &genhighbay.ModelConnection{Connection: c.liveModel}, nil
 }
 
+// ModelState returns the held provider settings, in table order, and the
+// model choice, in one modelMu section. Only the composition root calls it,
+// to pass them to the process that replaces this server.
+func (c *ControlPlane) ModelState() ModelState {
+	c.modelMu.Lock()
+	defer c.modelMu.Unlock()
+	state := ModelState{Connection: c.liveModel}
+	for _, provider := range modelsettings.Providers() {
+		if settings, held := c.heldSettings[provider.Name]; held {
+			state.Settings = append(state.Settings, settings)
+		}
+	}
+	return state
+}
+
+// startWithModel gives a new control plane the model state of the server it
+// replaces. It refuses settings that name no known provider or name one
+// twice, and a direct choice whose provider's settings are not among them:
+// the states ModelState never returns.
+func (c *ControlPlane) startWithModel(state ModelState) error {
+	for _, settings := range state.Settings {
+		if _, known := modelsettings.Lookup(settings.Provider()); !known {
+			return errors.New("the model settings to start with name no known provider")
+		}
+		if _, twice := c.heldSettings[settings.Provider()]; twice {
+			return fmt.Errorf("the model settings to start with name provider %s twice", settings.Provider())
+		}
+		c.heldSettings[settings.Provider()] = settings
+	}
+	if state.Connection.Kind() == "" {
+		return nil
+	}
+	if err := state.Connection.Validate(); err != nil {
+		return fmt.Errorf("the model choice to start with is invalid: %w", err)
+	}
+	if direct, ok := state.Connection.AsDirect(); ok {
+		if _, held := c.heldSettings[direct.Provider]; !held {
+			return fmt.Errorf("the model choice to start with needs the settings of provider %s", direct.Provider)
+		}
+	}
+	c.liveModel = state.Connection
+	return nil
+}
+
 // chooseModel makes choice the one live targets started afterwards receive,
 // after checking, under the same lock, that a direct provider's settings are
 // held. It returns the unprocessable refusal configure_model reports.
@@ -163,7 +207,7 @@ func (c *ControlPlane) chooseModel(choice genhighbay.Connection) error {
 		if _, held := c.heldSettings[direct.Provider]; !held {
 			provider, _ := modelsettings.Lookup(direct.Provider)
 			return genhighbay.MakeUnprocessable(fmt.Errorf(
-				"provider %s needs %s: export it, with any %s request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run hbay; the project server keeps running. Or choose a model gateway.",
+				"provider %s needs %s: export it, with any %s request settings it needs, in the shell your coding agent starts from and restart the agent, whose first Highbay tool call hands the settings over, or in a shell where you run highbay; the project server keeps running. Or choose a model gateway.",
 				provider.Name, provider.Key, provider.Prefix,
 			))
 		}

@@ -737,8 +737,6 @@ function StartReceipts({ receipt }: { receipt: BuildStartReceipt }) {
   let teamText = "";
   switch (team.state) {
     case "ready": break;
-    case "window_busy": teamText = "the build was saved and the team window was busy"; break;
-    case "ambiguous_space": teamText = team.count + " matching team spaces"; break;
     case "unavailable": teamText = "the build was saved and team startup was unavailable"; break;
   }
   return (

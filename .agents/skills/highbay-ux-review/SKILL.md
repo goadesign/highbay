@@ -5,22 +5,20 @@ description: Run a moderated usability study of Highbay. One subagent plays a fi
 
 # Highbay UX review
 
-This skill runs a moderated, think-aloud usability test of Highbay and turns it
-into a UX research report. The product goal is a journey driven by the
-participant's existing coding-agent session: after installation and one-time
-`hbay up`, the participant describes the goal through `/highbay` (`$highbay`),
-uses the browser for human decisions, and reaches an approved merge without
-typing terminal commands to move between stages. Commands the coding agent
-runs internally are distinct from commands the user must enter. Observe whether the product
-actually enables that journey; never supply missing steps as hidden coaching.
+This skill runs a moderated, think-aloud usability test of Highbay and turns
+it into a UX research report. After installation and one-time `highbay up`,
+the participant runs `highbay`, states a product goal in the browser, and works
+through an approved merge. If the task starts in an existing coding-agent
+session, the participant can invoke `/highbay` (`$highbay` in Codex) to attach
+it, then work in the same browser workspace. Observe whether the product
+enables the journey. Record commands run by the participant, the coding
+agents, and the study harness separately.
 
-The study judges Highbay by what its screens show at the moment they show it.
-A person who asked for a product watches three things: their coding agent's
-pane, the browser page, and, when Herdr is open, the Herdr window. They do
-not read Git history or run status commands to learn whether anything is
-happening, and they lose patience quickly. So the study keeps a timed record
-of those screens from the first second, and the participant waits the way
-that person waits: by looking.
+Judge the browser workspace by what it shows while the participant is
+working. Include **Conversation** and each **Terminal** the participant opens.
+If studying guide attachment, also record the original coding session
+where the participant sees it. Observe how long the participant waits and
+what signals they can see before providing any help.
 
 That person also knows only what they asked for. A new project starts
 blank, and they have never seen its starting files, Highbay's worked example,
@@ -99,13 +97,11 @@ source out of its view.
 - whether the participant's `work/` folder is empty apart from permitted
   coding-agent settings, and any known pre-existing example destinations.
   Leave existing folders alone and label their ownership unconfirmed;
-- the global setup writes this attempt may make. `hbay up` and
-  `hbay setup -global` update the real machine's detected coding-agent MCP
-  configuration and skill files, and may install the Herdr mod and add its
-  free macOS shortcut in `keys.json`. Record the paths setup reports and
-  pre-existing registrations or bindings without recording credentials.
-  These files are outside `work/` and may be used by other sessions; do not
-  delete or restore them as attempt cleanup;
+- the global setup writes this attempt may make. `highbay up` may install
+  dependency executables and updates detected coding-agent MCP registrations
+  and skill files. Record the reported paths and any previous registrations
+  without credentials. These paths can be used by other sessions. Keep
+  them outside attempt cleanup;
 - the version of Highbay installed by the README and the version its starter
   module will download. Record whether they match the commit under test;
 - the versions of `go`, `goa`, and `temporal`, or that they are missing;
@@ -129,69 +125,22 @@ source out of its view.
   reports it as a missing capability. If the access Highbay needs is not
   available, that is an environment limitation: the tester marks the
   milestones it blocks as not supported;
-- **how the participant reaches Highbay's MCP server.** The current README
-  uses one-time `hbay up` (or `hbay setup -global`) to register `hbay stdio`
-  and the `/highbay` (`$highbay`) skill. A subagent cannot add an MCP server to
-  its own session, so the participant may run an installed coding-agent CLI
-  in `work/` and invoke the skill there. Record which clients can run, which
-  load the global registration, whether a session reload is needed, and
-  whether the environment can show the browser for human decisions. Record
-  harness-only CLI launches separately from user workflow steps; a harness
-  that cannot preserve the coding session is a study limitation. Do not
-  hand it an HTTP route, credential, prewritten MCP configuration or lifecycle
-  command. Failure to discover or use the documented integration is evidence;
-- whether Herdr and Chorus are installed, whether the Herdr app's window is
-  open (`herdr-app status` reports on the open window), whether the agent
-  starts inside a live Herdr pane, whether its client has been observed forwarding
-  `HC_TERMINAL_ID` and provider settings to stdio, the installed agent
-  families and background-worker support, and any project choices or
-  dismissed recommendations already present. Do not install a second family just to hide the one-family path;
-- **how the study sees and uses the screen** (section 2 depends on these).
-  Record the tool that captures each study surface as an image: the tab
-  Highbay opens in the default browser, and the Herdr window
-  (`herdr-app shot`). Record how the study learns which application is in
-  front without an image, how the participant clicks on the page, and whether
-  anything can click inside the Herdr window. If no tool can see the tab
-  Highbay opens, record the second browser window the study uses instead
-  (section 2). If nothing can click inside the Herdr window, record that
-  the companion's buttons cannot be pressed in this run. A run that cannot
-  capture the browser page as an image cannot grade the screen: stop and
-  say so. Capture those two surfaces and nothing else. An image of the
-  whole desktop, or of a browser window with the person's other tabs, saves
-  things the study has no business with: take one only when the person
-  running the study has said that screen holds nothing but the study, and
-  otherwise rely on the name of the application in front. The Herdr window
-  can show the person's other spaces, so section 2 limits what is kept of
-  its frames. Keep what you do capture in the tester's folder; storing a
-  frame privately does not make it right to capture more;
-- **which `hbay` a program started from the desktop finds.** An app opened
-  from the Dock, Finder or a desktop launcher does not read the shell
-  startup files that add a Go or personal `bin` folder to `PATH`. A button
-  in that app can then fail to run a command that works in every terminal,
-  or run an older build. Run these lookups before the attempt and again
-  when the participant first reports Highbay installed:
-
-  ```sh
-  # the interactive shell
-  command -v hbay
-  # a clean login shell
-  env -i HOME="$HOME" USER="$USER" SHELL="$SHELL" \
-    PATH=/usr/bin:/bin:/usr/sbin:/sbin "$SHELL" -lc 'command -v hbay'
-  # the bare system path, with no startup files
-  env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/sh -c 'command -v hbay'
-  ```
-
-  Record each result as "the build under test", "another build" (compare
-  `hbay version`) or "not found", never the `PATH` value. When the Herdr
-  app is running, also record whether the folder holding `hbay` is in the
-  `PATH` entry of the app's own process, and whether the app was started
-  from the desktop or from a terminal. Read that one entry only: filter the
-  process's environment down to its `PATH` line inside the command, print
-  just yes or no, and never print or save the rest of the environment. An app started from a terminal can
-  inherit that terminal's `PATH` and hide the difference; record then that
-  the desktop-started path was not exercised. Do not repair a difference
-  for the attempt: no symlink, no edited startup file, no relaunch from a
-  terminal. Give the tester the results as environment facts;
+- **how the participant opens the workspace.** The README uses one-time
+  `highbay up` to register Highbay with coding agents, then `highbay` in the
+  project folder to open the browser. Record the available coding-agent
+  clients, installed Herdr Core and Chorus versions, and whether global
+  registration is already present. If testing existing-agent attachment,
+  record which client can load the integration and whether the study can
+  observe its original session. Use documented entry points and record
+  any harness-only launches separately;
+- **how the study sees and uses the screen.** Record the tools for viewing,
+  clicking, typing, and capturing the Highbay tab, including Conversation
+  and the Terminal drawer. Use an isolated browser window or profile if the
+  study can control the window Highbay opens. Capture only the study's
+  surface, and keep captured frames in the tester's folder. If the tool
+  cannot see Highbay's original tab, say how that limits the startup
+  observation. A run needs an image of the workspace to grade the
+  interface;
 - **what each mid-build change needs** (see the tester brief's "Mid-build
   changes"), recorded as two separate facts: what this machine provides,
   such as model credentials or the access a live demo needs, and what the
@@ -201,137 +150,31 @@ source out of its view.
 
 ## 2. Put the session on the screen and record it
 
-A first-time user meets Highbay on three surfaces. Set each one up before the
-participant sends its first message, and record all of them until the attempt
-ends.
+Use the participant's documented launch command and observe the tab it
+opens. If the study can see only a separate browser, record that limitation.
+Use a new link through the documented command when necessary. Treat launch
+links, browser session tokens, and terminal tickets as credentials.
+Keep them out of captures and transcripts.
 
-**The coding agent's pane.** When the Herdr app's window is open, the
-participant's coding-agent session runs in a pane of that window, where a
-person could watch it and type. The participant creates it the way a user
-starts work on a new project, as a new space (or a new tab) for `work/` with
-the agent as its program:
-
-```sh
-herdr-app do space.new --name <short name> --folder <participant>/work --argv '["<agent>"]'
-```
-
-The command prints the IDs it created, and `herdr-app ls` lists the new
-space with its terminal. The participant types into that terminal with
-`hc send` and `hc keys`, reads it with `hc read`, and waits on it in short
-steps with `hc wait --timeout 60`. These stand in for a keyboard and a pair
-of eyes; record them as harness-only steps.
-
-Do not run the participant's agent as a background terminal (`hc run --bg`)
-or as a one-shot non-interactive command while the Herdr window is open.
-Neither puts a pane on the screen, so Highbay has no pane of the user's to
-link, and the companion and the page's button that shows the coding agent's
-pane go untested.
-
-When no Herdr window is open, the agent runs in an interactive terminal
-session the participant can type into and read between turns. Record that,
-and mark pane linking, the companion and the show-pane button as not
-exercised. Never present such a run as covering them.
-
-**The browser page.** Start looking when the page opens, not when the agent
-says it is done. The agent opens the page early and keeps working for
-minutes. Those minutes are what a user stares at, and a study that first
-looks afterwards never sees them.
-
-- From the participant's first message, record the application in front
-  every 2 seconds. The default browser coming to the front, or the agent's
-  pane saying it opened the page, is a cue to look and not proof: either
-  can happen with no Highbay tab.
-- Count Highbay's tab as open, or open again, only when it is observed: a
-  tool shows the tab itself, or the browser confirms a tab at the page's
-  address. Ask the browser about that address only, never the link, and
-  print just yes or no. Record when the tab was observed and what was in
-  front then. If no tab has been observed after two minutes, check every 15
-  seconds and say so in the log. If nothing on this machine can observe the
-  tab, record each opening as "cue only: tab not observed".
-- Use that tab for the rest of the attempt when a tool can both see it and
-  click in it.
-- Otherwise open a second window on the same page within seconds of
-  observing the tab, or of a cue when the tab cannot be observed: run
-  `hbay --print-link` in `work/` yourself and open its link
-  in the browser window the participant uses, without printing the link.
-  Record it as a harness-only step. Open it again, the same way, each time
-  the screen record shows Highbay opening its tab again, and at no
-  other time. A second window the product did not open would hide a page the
-  user lost.
-- The second window shows the same page, but it is not the tab Highbay
-  opened. Keep recording the application in front. A second window that is
-  not on the screen can never be in front, so a click in it cannot show
-  whether a button brings another window forward: record window focus as
-  not exercised.
-- When the participant closes its page, record what was closed: the tab
-  Highbay opened, the second window, or both. Close Highbay's own tab as well
-  when a tool can. Count the page as back only when Highbay's new tab is
-  observed, and record which tab that was. If only the second window could
-  be closed, Highbay's own tab stayed open throughout and nothing was
-  reopened: record closing and reopening the page as not exercised.
-
-**The Herdr window.** `herdr-app status` prints the showing `space` and
-`tab`, the `focused_pane`, and the `overlays` and `errors`.
-`herdr-app shot <file>` saves the window as a person sees it, including
-Highbay's companion and any other overlay. The window can be showing one of
-the person's other projects, so read the status before taking any image:
-
-- Take and keep the status output at every capture.
-- When the status says the study's space is the one showing, take the shot.
-  Crop it to the study's panes and Highbay's overlays, leaving out the list of
-  the person's other spaces and tabs, before anyone views or receives it
-  where the tool can crop unseen. Never keep the uncropped file. Read each
-  overlay in the crop: an error line in the companion is a finding even
-  when the browser page looks fine.
-- When the status says another space is showing, take no shot. The status
-  already names the space, tab and pane, which is what a focus check needs,
-  and it lists the overlays and errors. Capture one of Highbay's overlays only
-  if a tool can capture that overlay alone; otherwise record that its
-  contents could not be inspected.
-
-Give the participant the same rule and the same cropped view.
-
-A shot captures the app even when another window covers it, so it cannot
-show whether Herdr is in front; the application in front shows that. Do not
-start, stop or restart the person's Herdr app or its core for the study.
-
-**The screen record.** Save frames in `attempt-<N>/screen/`, named by time
-and surface, and index them in `attempt-<N>/screen/screen-log.md`. Each row
-holds the time, the surface, the file, the page's heading and status line
-word for word, Herdr's `space`, `tab`, `focused_pane`, `overlays` and
-`errors`, and the application in front (on macOS,
-`lsappinfo info -only name "$(lsappinfo front)"`).
+Save frames in `attempt-<N>/screen/`, named by time and surface, and index
+them in `attempt-<N>/screen/screen-log.md`. Each row gives the time, surface,
+file, and exact heading or status text.
 
 | When | Capture |
 | --- | --- |
-| Before the participant's first message | Herdr's status, and its window when the rule above allows, and the application in front |
-| From the first message until Highbay's tab appears | The application in front every 2 seconds |
-| When the agent's first Highbay call returns | Herdr's status, and its window when the rule above allows at about 2 and 10 seconds: is Highbay's companion among `overlays`, and what does it show? |
-| When the tab appears | The page at about 2, 5 and 10 seconds |
-| While an agent or Highbay is working: project setup (`init_project`), the stretch between setup and the first proposal (`propose_change`), builds, tests, verification | The page's text every 15 seconds; a frame each time its heading or status changes, and at least one a minute. Herdr's status, and its window when the rule above allows once a minute, and when `overlays` or `errors` change |
-| Each proposal, revised proposal or other text the user must read before deciding | The page's complete text, saved word for word as a text file beside the frames, with every section, question, option and example expanded, and a frame of each part |
-| Each human decision on the page | The page just before and just after |
-| Each click on the page or in the Herdr window | Just before, then about 2 and 10 seconds after: the page, Herdr's status, and its window when the rule above allows, and the application in front. The row just before is the baseline: a click proves a change only against it |
+| Before sending the first request | The workspace, its primary action and available agent choices. For attachment, include the original coding session. |
+| At 2, 5 and 10 seconds after sending | The visible message, any startup feedback, and which view still has focus. |
+| During setup, proposal, build, and verification | Visible text every 15 seconds, with a frame for heading or status changes and at least once a minute. |
+| When a role asks for help | The attention notice, what opening its Terminal displays, and what changes after the participant responds. |
+| Before every human decision | The full text the participant can read, including the expanded questions, options, and examples. |
+| After a click, reload or reopening | The state just before, then at about 2 and 10 seconds after the action. Record whether the browser retained sign-in and recovered the current task. |
 
-A script may take the captures. Viewing them is your job: look at every kept
-frame in the round it was taken. A saved file nobody looked at is not an
-observation.
-
-**Flag at once.** Mark the row and tell the tester with the next relay when a
-frame shows any of these. State what the frames show and for how long; do
-not explain it from the source.
-
-- The page showed work in progress, then returned to an earlier or empty
-  state, or asked again for something already given, while work continued.
-- A click after which nothing a user can see changed within 10 seconds: the
-  same page, the same application in front, the same focused pane.
-- Error text on the page, in an overlay, or in the companion.
-- Text the user must read, answer or confirm that names something the
-  participant never asked for and Highbay never explained: the project's
-  starting files, Highbay's worked example or its features, a file path, a
-  command-line flag, a framework term. Quote it from the saved page text.
-- No visible change and no explanation for two minutes while an agent is
-  working.
+Look at each kept frame during the round it was captured. Mark evidence of
+an unexplained reset, an error message, or a control whose result is still
+unclear after 10 seconds. Notify the moderator at the next relay. Quote any
+text that assumes the participant already knows a framework, a starter
+feature, or an internal command. Record stretches when work continues but
+the workspace gives the participant no feedback for two minutes.
 
 ## 3. Start the two subagents
 
@@ -344,7 +187,7 @@ fill in every placeholder:
 | `{{PARTICIPANT_PROFILE}}` | the participant profile |
 | `{{ENVIRONMENT_FACTS}}` | the recorded facts that matter to a user: installed tools, credentials set, network access and coding-agent sandbox restrictions |
 | `{{CODING_AGENTS}}` | the coding-agent CLIs the participant may run, or "none" |
-| `{{SCREEN_TOOLS}}` | from section 2: the exact commands the participant uses to start, type into and read its coding agent's pane, to view and click the browser page, and to capture the Herdr window and name the application in front. Say which of these this run lacks |
+| `{{SCREEN_TOOLS}}` | The tools the participant can use to capture, read, click and type in the workspace. If the study uses an existing agent session, include how it can observe and use that session. |
 | `{{PARTICIPANT}}` | the participant's folder |
 | `{{TESTER}}` | the tester's folder |
 | `{{CHALLENGE}}` | the tester's challenge text, word for word |
@@ -409,7 +252,7 @@ whether or not a report is due. The participant's brief limits it to the
 screen while its agent or Highbay is working. From its actual tool calls, count
 each off-screen check: a command or file read used to learn what is
 happening, such as `git log`, `git status`, listing or reading project
-files, or `hbay status`. Tell the tester each one, with the screen state it
+files, or `highbay status`. Tell the tester each one, with the screen state it
 followed. An off-screen check does not end the attempt. It shows that the
 screen left a question open, and the tester grades the screen as it stood
 before the check.
@@ -442,15 +285,12 @@ limitations that leaks were only self-reported.
 
 **When an attempt or the session ends**, do two things:
 
-- Stop the long-running processes the participant reported, such as `hbay
-  serve` or a Temporal dev server. Check first that each PID still runs the
-  command the participant started in this attempt, for example that
-  `ps -p <pid> -o command=` shows the reported binary and folder. PIDs get
-  reused. Leave running any process you cannot match. The participant's
-  coding agent in its Herdr pane is one of them: end its program with
-  `hc kill` after checking the terminal is the one this attempt created.
-  Leave the Herdr space in place and record its name; never close a space
-  the attempt did not create.
+- In the workspace's **Team** view, stop only the managed role terminals
+  this attempt started. Then run `highbay stop` in the attempt's project. For
+  any other process the participant reported, such as a Temporal dev server,
+  check that its PID still matches the command and folder from this attempt
+  before stopping it. Leave other projects and shared companion services
+  running.
 - Delete nothing else. Every project folder the participant created is
   evidence for the report, including a project initialized outside `work/`,
   and may hold a Git repository with unpushed work. Keep machine-wide setup
@@ -519,21 +359,16 @@ set a limit on attempts, stop and report when it is reached.
 
 ## 6. Debrief and report
 
-Keep these outcomes separate: product built, verified, approved, and merged;
-one-time installation/setup; later user-entered terminal commands; commands
-the coding agent runs internally; harness-only invocations; and steps
-completed with help. For each applicable path, record observed success or why it was not
-exercised: live guide adoption, page recovery through the guide or companion,
-inline agent choices, builder-only builds with configured tests, one-family
-operation, missing Herdr, persisted choices/notices after reload, human
-Merge with refusal recovery, what the page showed from its first seconds to
-the first proposal, the page's button that shows the coding agent's pane,
-the companion's overlay and its buttons, and commands the Herdr app runs
-when it was started from the desktop. Do not add fixtures or hints to force
-coverage.
-A source claim, successful command or assignment is not proof of a visible
-outcome. The report's severity ratings and transcript evidence remain the
-moderator's responsibility.
+Report separate outcomes for installing and setting up Highbay, building,
+verifying, approving, and merging the product. Identify participant
+commands, agent commands, harness invocations, and steps completed with
+help. Record the path exercised and the evidence for each step. Where
+applicable, cover starting a guide from the browser, attaching an existing
+guide, sending a message and seeing a reply, answering a Terminal prompt,
+reloading during work, reviewing a proposed revision, and recovering from a
+refused merge. Include which agent choices were available and whether the
+configured tests called for a test writer. Use the moderator's transcript and
+screen evidence to support each severity rating.
 
 When the tester decides `end_session`, it sends the participant its debrief
 questions. Relay the questions and the answers. Then send the tester the text

@@ -386,7 +386,7 @@ func EncodeBrowserLinkError(encoder func(context.Context, http.ResponseWriter) g
 // by the project exchange_browser_link endpoint.
 func EncodeExchangeBrowserLinkResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*project.ExchangeBrowserLinkResult)
+		res, _ := v.(*project.BrowserSessionResult)
 		enc := encoder(ctx, w)
 		body := NewExchangeBrowserLinkResponseBody(res)
 		w.WriteHeader(http.StatusCreated)
@@ -466,14 +466,259 @@ func EncodeExchangeBrowserLinkError(encoder func(context.Context, http.ResponseW
 	}
 }
 
+// EncodeGetBrowserSessionResponse returns an encoder for responses returned by
+// the project get_browser_session endpoint.
+func EncodeGetBrowserSessionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*project.BrowserSessionResult)
+		enc := encoder(ctx, w)
+		body := NewGetBrowserSessionResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeGetBrowserSessionError returns an encoder for errors returned by the
+// get_browser_session project endpoint.
+func EncodeGetBrowserSessionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBrowserSessionUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBrowserSessionForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetBrowserSessionUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetUpdateStatusResponse returns an encoder for responses returned by
+// the project get_update_status endpoint.
+func EncodeGetUpdateStatusResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*project.UpdateStatusResult)
+		enc := encoder(ctx, w)
+		body := NewGetUpdateStatusResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// EncodeGetUpdateStatusError returns an encoder for errors returned by the
+// get_update_status project endpoint.
+func EncodeGetUpdateStatusError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "release_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpdateStatusReleaseUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpdateStatusForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetUpdateStatusUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeApplyUpdateResponse returns an encoder for responses returned by the
+// project apply_update endpoint.
+func EncodeApplyUpdateResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*project.ApplyUpdateResult)
+		enc := encoder(ctx, w)
+		body := NewApplyUpdateResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeApplyUpdateRequest returns a decoder for requests sent to the project
+// apply_update endpoint.
+func DecodeApplyUpdateRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*project.ApplyUpdatePayload, error) {
+	return func(r *http.Request) (*project.ApplyUpdatePayload, error) {
+		var payload *project.ApplyUpdatePayload
+		var (
+			body ApplyUpdateRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateApplyUpdateRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewApplyUpdatePayload(&body)
+
+		return payload, nil
+	}
+}
+
+// EncodeApplyUpdateError returns an encoder for errors returned by the
+// apply_update project endpoint.
+func EncodeApplyUpdateError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyUpdateConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "release_unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyUpdateReleaseUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyUpdateForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "unprocessable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewApplyUpdateUnprocessableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalProjectProjectTeamRoleToProjectTeamRoleResponseBody builds a value of
 // type *ProjectTeamRoleResponseBody from a value of type
 // *project.ProjectTeamRole.
 func marshalProjectProjectTeamRoleToProjectTeamRoleResponseBody(v *project.ProjectTeamRole) *ProjectTeamRoleResponseBody {
 	res := &ProjectTeamRoleResponseBody{
-		Role:    v.Role,
-		Handle:  v.Handle,
-		Running: v.Running,
+		Role:        v.Role,
+		Handle:      v.Handle,
+		HasTerminal: v.HasTerminal,
+		Running:     v.Running,
 	}
 
 	return res
@@ -483,12 +728,30 @@ func marshalProjectProjectTeamRoleToProjectTeamRoleResponseBody(v *project.Proje
 // type *TeamRoleStateResponseBody from a value of type *project.TeamRoleState.
 func marshalProjectTeamRoleStateToTeamRoleStateResponseBody(v *project.TeamRoleState) *TeamRoleStateResponseBody {
 	res := &TeamRoleStateResponseBody{
-		Role:       v.Role,
-		Handle:     v.Handle,
-		State:      v.State,
-		Attention:  v.Attention,
-		Watcher:    v.Watcher,
-		Assignment: v.Assignment,
+		Role:        v.Role,
+		Handle:      v.Handle,
+		HasTerminal: v.HasTerminal,
+		State:       v.State,
+		Attention:   v.Attention,
+		Assignment:  v.Assignment,
+	}
+	if v.Choice != nil {
+		res.Choice = marshalProjectRoleAgentChoiceToRoleAgentChoiceResponseBody(v.Choice)
+	}
+
+	return res
+}
+
+// marshalProjectRoleAgentChoiceToRoleAgentChoiceResponseBody builds a value of
+// type *RoleAgentChoiceResponseBody from a value of type
+// *project.RoleAgentChoice.
+func marshalProjectRoleAgentChoiceToRoleAgentChoiceResponseBody(v *project.RoleAgentChoice) *RoleAgentChoiceResponseBody {
+	res := &RoleAgentChoiceResponseBody{
+		Client:   v.Client,
+		Program:  v.Program,
+		Model:    v.Model,
+		Thinking: v.Thinking,
+		Yolo:     v.Yolo,
 	}
 
 	return res

@@ -1,25 +1,28 @@
 # Highbay Agent Guide
 
-Highbay is a Goa and goa-ai control plane that takes a feature request through
-intent (CP1), architecture preview (CP2), live prompt drafts (CP3),
-verification (CP4), and promotion checks (CP5). Make the smallest correct
-change while preserving strong contracts, clear ownership, and required
-capabilities.
+Highbay is a Goa and Goa-AI software factory control plane that takes a feature
+request through intent (CP1), architecture preview (CP2), live prompt drafts
+(CP3), verification (CP4), and promotion checks (CP5). Reason top-down from the
+user's goal, architectural boundaries, trust edges, and true resource limits—never
+bottom-up from whichever file is open, adjacent local hooks, or historical test
+shapes. Optimize for strong contracts, clear ownership, conceptual correctness,
+and less code: the best code is deleted or never written, never at the expense
+of correctness, elegance, exactness, robustness, performance, or security. Do
+not add fallbacks, coercions, or defensive code that hides bugs.
 
 These instructions are self-contained and apply throughout this repository;
-nested `AGENTS.md` files specialize their directories. Personal/global rules
-may add applicable defaults when available; this guide does not require a
-private instruction file. Explicit user instructions govern the task within
-platform safety. Explain material conflicts before editing and apply each
-review or design requirement once, without duplicate approval gates.
+nested `AGENTS.md` files specialize their directories. Explicit user
+instructions govern the task within platform safety. Explain material conflicts
+before editing and apply each review or design requirement once, without
+duplicate approval gates.
 
-This repository is public. Never publish private projects, customers,
-internal services/repositories, credentials, or telemetry in any repository
-or GitHub artifact.
+This repository is public. Never publish private projects, customers, internal
+services or repositories, credentials, or telemetry in any repository or GitHub
+artifact.
 
 ## 1. Find the contract and active work
 
-Use the relevant entry below, not the entire document set before each task:
+Use the relevant entry below rather than preloading every document:
 
 | Question | Authoritative starting point |
 | --- | --- |
@@ -32,391 +35,340 @@ Use the relevant entry below, not the entire document set before each task:
 
 For sustained team work, the channel pin points to one long-term work index
 outside the pin's size limit. The index links requirements, interaction
-specifications/exports, engineering designs, current milestones, and evidence.
-Each subject has one authoritative home. Keep the pin a short lead/ownership/
-next-action summary; do not create competing plans in the pin and documents.
-For work without a channel, make the existing index discoverable from its
-owning documentation or task handoff. Create one only when sustained work
-needs it and none exists, in a location appropriate to its audience.
+specifications, engineering designs, current milestones, and verification
+evidence; each subject has one authoritative home. Keep the pin a short
+lead/ownership/next-action summary rather than a competing plan. Update the
+work index at milestone transitions, scope/decision changes, or real blockers
+(in place, without diaries, and without making tracker edits a prerequisite for
+ready work). Shared docs must not contain machine-local paths or private
+evidence.
 
-The work index identifies the active milestone, owner, completion conditions,
-unresolved decisions, dependencies, next ready tasks, and deferred requests.
-Record user requests and decisions when received, including deferred work.
-Label product requirements,
-interaction specifications, engineering designs, code, and verification
-separately; a visual export or draft is not proof that implementation is ready
-or tested. Private operational reports stay outside the public repository;
-shared docs must not contain machine-local paths or private evidence.
+### Plain-English contract (replies, design gates, comments, docs, PRs, release notes)
 
-### Work and review rules
+- Always state the concrete caller/input, owner action (downstream calls and
+  state changes), and observable/returned result (and error meaning) before any
+  category label or abstraction.
+- Define domain terms (`Change Card`, `request_revision`, `holdout`, `run
+  directory`) on first use. For example, `get_change` reads the Change Card for
+  the caller's `change_id` and returns it only to its creator.
+- Never rely on unexplained session shorthand or metaphors (`CAS`, `sidecar`,
+  `fence`, `receipt`, `aggregate`, `shell`, `hydration`, `projection`, `bridge`,
+  `canonical path`, `provider boundary`). For example, write *"a revision check
+  ensures only the current Change Card revision is updated"* instead of *"CAS
+  fences card writes."* Include a concrete example whenever a label could hide
+  accepted input, a decision, or changed output.
 
-- Identify the deliverable, completion conditions, unresolved decisions, and
-  next step. Explain outcome, steps, and risks before changing three or more
-  files. Answer questions before mutations; then continue authorized work
-  through implementation, verification, and authorized publication. Ask only
-  for missing facts, material user decisions, or required permission. Explain
-  choices with a concrete example and Pros/Cons; do not re-ask settled ones.
-- Resolve findings that prevent completion; record independent improvements
-  without broadening the task. A blocked activity pauses that activity, not
-  independent ready work. Give concise updates at meaningful milestones,
-  findings, or blockers. Explain failures and recovery before repairing them;
-  never claim an outcome from an assignment or successful command alone.
-- Read owning source, affected callers, and tests before technical claims or
-  edits. Trackers, summaries, and peer notes locate work and decisions, not
-  implementation truth. Distinguish positive requirements from rejection
-  fixtures. Verify the specific claim in a question; stop investigating when
-  required decisions have evidence and acceptance checks are defined.
-- Fix mechanical corrections directly. For bounded behavior changes, state
-  before/after behavior, owner, affected callers, and proof. Before ownership,
-  schema/public-contract, auth, persistence, lifecycle, or external-semantic
-  changes, trace all affected `origin/main` callers from input through
-  storage/output, check composition roots and owning contracts, compare
-  deletion/correcting the owner/adding a mechanism, and state journey,
-  compatibility, migration, rollback, and proof where relevant. Revisit only
-  decisions affected by new evidence; do not impose the full gate on status
-  questions or factual corrections.
-- For each new field, endpoint, dependency, record, helper, retry, setting,
-  limit, or caller step, identify the required case existing mechanisms
-  cannot serve. Delete unnecessary state, copies, scans, and hops before
-  managing them with caps, caches, wrappers, or modes. Helpers enforce an
-  invariant, own a contract, remove meaningful duplication, or add domain
-  language. Correct consumers instead of hiding truthful errors or telemetry.
-  Limits belong to their protected resource and narrowest invariant lifetime.
-- Before changing/removing a capability, cite the requiring request or
-  product contract. Preserve affected configured, persisted, and observed
-  callers, including valid cases outside a failure, with positive tests in
-  the owning layer (Section 5).
-  Test thresholds below/at/above with units/alignment/inclusivity; verify migrations
-  before removal. Give temporary compatibility paths removal conditions.
-  Search/delete downstream branches with no remaining producer. Do not treat
-  accidental validation loopholes or negative fixtures as capabilities.
-  Verify preserved outcomes after rollout; stop promotion on new rejections,
-  missing data, routing changes, or material latency regressions.
-- Explain delegation before assigning it. Give one owner, scope/files,
-  inputs, dependencies, and completion conditions; preserve others' edits.
-  A lead may also implement, but unblocks teammates first. Settle shared
-  contracts before dependent work; use independent fact-finding while they
-  are unsettled. Necessary waiting beats invented work or duplicate checks.
-- One non-author peer explicitly approves a non-trivial change before final
-  publication/merge. A design-touching change starts with a fresh read-only
-  reviewer given the original outcome, contracts/callers, and diff without
-  author defenses. Check the workflow first, then challenge simpler designs
-  and net deletion. The same reviewer may verify scoped fixes and approve
-  the resulting head; changed code never inherits approval automatically.
-  Use a fresh reviewer for fundamental redesign or unavailability. Concrete
-  correctness/security/compatibility/outcome defects block; preferences do
-  not. Resolve or explain final review comments and state uncovered files.
-- Prefer direct tools and `rg`; batch independent reads and inspect every
-  result, keeping dependencies/mutations sequential. Close stdin and use
-  non-interactive flags for package runners and CLIs. Bound
-  waits by success/failure/unexpected-state/timeout exits and verify actual
-  client wake-up support; a background session ID alone is not monitoring.
-- Before parsing costly/transient diagnostics, privately save bounded
-  stdout/stderr, including partial failure/timeout output, with command,
-  target, timestamps, exit status, truncation/capture errors, and cleanup.
-  Capture only authorized data, never credentials/customer content; share
-  redacted evidence. Reuse complete captures and fix readers before reruns.
-  Verify consumer-visible success, including save/reload persistence when
-  claimed; exit zero or file readback alone does not prove that outcome.
+### Work, necessity, pre-edit gate, and adversarial review
+
+- **Deliverable and communication:** Identify the outcome, completion
+  conditions, unresolved decisions, and next step. Explain outcome, steps, and
+  risks before changing three or more files. Answer questions visibly before
+  mutations; then continue authorized work through implementation, verification,
+  and authorized publication. Ask only for missing facts, material user
+  decisions (with a concrete example, explicit Pros/Cons, and a recommendation),
+  or required permission; never re-ask settled choices. A blocked activity
+  pauses only that activity—unblock teammates first and pursue independent
+  ready work.
+- **Read the owner:** Source, schemas, and contracts establish implementation
+  truth; summaries, trackers, and peer notes only locate work. Distinguish
+  positive product requirements from negative rejection fixtures and accidental
+  validation loopholes.
+- **Five automatic-"No" symptom-management patterns & Hypothesis 0:** Treat
+  every added or retained state, copy, hop, wrapper, serialization step, size
+  cap, cache, coordination step, retry, or setting as a reason to recheck the
+  premise. Automatically reject:
+  1. Eviction/LRU/TTL/numeric caps on retained in-memory state,
+  2. In-process caches or overflow stashes,
+  3. Copy/clone helpers or duplicate decoded representations alongside raw bytes,
+  4. Intermediate filters or suppressors on truthful spans, errors, or payloads
+     (when a downstream consumer or alert misfires on truthful data $x$, fix the
+     consumer predicate or resource lifecycle rather than distorting $x$),
+  5. Repeated internal checks, wrappers, or mode flags inside an already
+     validated flow.
+  First enumerate every caller across `origin/main` and test **Hypothesis 0
+  (deleting the offending state, copy helper, hop, or scan outright)**. Map any
+  surviving field, record, dependency, or limit to the exact physical resource
+  or decision it protects at its narrowest invariant lifetime, and test a valid
+  counterexample at the next wider lifetime.
+- **Proportionate pre-edit gate (`MECHANICAL` vs. `DESIGN-TOUCHING`):** Fix
+  mechanical corrections (formatting, ordering, tests of established behavior,
+  factual doc drift) directly. For bounded local changes, state before/after
+  behavior, owner, affected callers, and focused proof. Before changing
+  ownership, Goa schemas/public contracts, auth/trust, persistence, lifecycle,
+  or external-system semantics, read the owning contract and all `origin/main`
+  callers and state concisely before editing:
+  1. **Workflow & caller inventory:** Actor, input, owner action, visible
+     result, and every `origin/main` caller across ingress, storage, and UI/CLI.
+  2. **Before/after contract & strength:** What becomes required, derived,
+     rejected, removed, or preserved (optional fields, dual modes,
+     presence-dependent semantics, and wider enums weaken contracts; two honest
+     methods beat one method with modes).
+  3. **Owning layer & Hypothesis 0:** Best from-scratch design across `origin/main`
+     flows, concrete proof of why deletion or the existing owner cannot serve
+     the required case, and domain-only API boundaries (APIs expose domain
+     resources, capabilities, state, and stable IDs; UI code owns layout).
+  4. **Journey, compatibility, and proof:** First-use, replay/iteration,
+     recovery, migration/cutover (with explicit removal conditions for any
+     temporary bridge), and verification checks.
+- **Zero-producer vertical-slice cleanup & helpers:** Whenever removing or
+  replacing a producer (tool, event, enum value, route, or workflow branch),
+  search repo-wide across state, RPCs, routes, UI, CLI, skills, fixtures, and
+  docs, and delete every branch with no remaining live producer plus superseded
+  helpers in the same change. Helpers must enforce an invariant, own a boundary
+  contract, remove meaningful duplication, or add domain language—never wrap a
+  lookup, field access, literal, or pass-through call.
+- **Zero-sunk-cost adversarial review:** Every non-trivial change requires one
+  non-author peer's explicit approval before final publication/merge (changed
+  code never inherits prior approval). Design-touching changes start with a
+  fresh read-only reviewer given only the original outcome, owning `origin/main`
+  contracts/callers, and diff without author defenses, starting from *"Is this
+  the simplest, most elegant from-scratch approach given all `origin/main`
+  flows? Assume No until proven."* When a review identifies high-priority or
+  design-touching defects, apply the fixes and automatically run a follow-up
+  read-only review pass until zero high-priority or design-touching findings
+  remain. Block on concrete correctness, security, compatibility, or outcome
+  defects; resolve or explain every comment and state any uncovered files.
+- **Direct, non-interactive execution & bounded captures:** Prefer direct tools
+  and `rg`; batch independent reads and keep mutations sequential. Close stdin
+  (`</dev/null`) and pass non-interactive flags to CLIs and test runners. Bound
+  background waits with explicit completion/failure/timeout exits and verified
+  wake-ups. Privately capture costly/transient diagnostics with bounded
+  credential-free output and metadata so readers can be fixed without rerunning.
 
 ## 2. Preserve Highbay's user journey
 
-- For a new surface or substantial redesign, establish the user, value,
-  built-in rules, and scope from the README, Golden Path, and user decisions.
-  Ask only about genuinely unknown product purpose/users before designing.
-- An LLM drives the full lifecycle through MCP with one running server.
-  Derive known paths, targets, and inputs from the workspace; do not require
-  file/state uploads the server can read, phase-specific restarts, or CLI
-  escape steps. Each unavailable capability names the step that enables it.
-- Preserve in-place refinement, replays, and backward loops on the same
-  identity. State what stays valid and what needs reconfirmation; do not
-  silently reuse stale decisions. Managed and user-attached agents share
-  the execution boundary. Developers build/test before committing.
-- Before splitting a usability report into fixes, identify shared flaws
-  across the whole journey. Verify onboarding or multistep changes with
-  `highbay-ux-review` or an equivalent end-to-end walkthrough and record the
-  findings; a walkthrough is evidence for the change, not a test to repeat
-  in every package. Keep examples/starters focused on CP1–CP5 and validate
-  them through the real CLI/MCP entrypoints in the named journey tests,
-  using existing test support, not parallel harnesses.
-- Explain the concrete input, owner action, and returned result. Define
-  Change Card, `request_revision`, holdout, and run directory on first use.
-  For example, `get_change` reads the card for the caller's `change_id` and
-  returns it only to its creator. Separate current behavior from proposals.
+- Establish the user, problem, value, built-in rules, and scope from
+  [README.md](README.md), [Golden Path](internal/goldenpath/GOLDEN_PATH.md), and
+  user decisions; ask only about genuinely unknown product purpose or users.
+- An LLM drives the full CP1–CP5 lifecycle through MCP with one running server,
+  while the user reviews, converses with the team, and approves checkpoints in
+  the `/views` browser workspace. Derive known paths, targets, and inputs from
+  the bound workspace and credentials—never require manual file/state uploads
+  the server can read, phase-specific restarts, or CLI escape steps. Each
+  unavailable capability names the step that enables it.
+- Preserve in-place refinement, replays, and backward loops on the same Change
+  Card identity, stating what stays valid and what requires reconfirmation;
+  never silently reuse stale decisions. Managed `hc` terminals and user-attached
+  agent sessions share the same MCP/Chorus execution boundary. Developers build
+  and test working-tree changes before committing.
+- Synthesize shared journey flaws before splitting usability reports into
+  patches. Verify onboarding or multistep changes end to end or with
+  `highbay-ux-review` once as journey evidence rather than repeating full
+  walkthroughs in every package test. Keep examples and starters focused on
+  CP1–CP5 through the real CLI/MCP entrypoints.
 
-## 3. Ownership and model-facing contracts
+## 3. Ownership, Goa contracts, and Goa-AI runtime rules
 
-- `internal/controlplane` owns Change Card files. `internal/verifyrun` owns
-  verification run directories; the project server that `hbay` starts and
-  its `hbay verify-run` processes share them through that package as one
-  logical service. Distinct
-  services do not share private storage. Ask the owner through its generated
-  API rather than adding shared persistence or copying running facts into
-  configuration.
-- The project server binds `PromotionTarget` from the promotion settings
-  stored with `hbay promotion set`; Highbay never fabricates the promotion
-  inputs it reports. Accepted verification work
-  runs in a server-owned process and survives client disconnects; correctness
-  must not depend on client retries except fresh client-held credentials.
-- Structural HTTP/MCP validation belongs in Goa design. Reject unknown
-  fields and trailing data in stored files. Validate/authorize at owning
-  boundaries and trust constructed invariants internally; fail fast rather
-  than hide missing guaranteed values. Authorize once at entry, not in
-  internal loops/pages, and never infer authority from role/privilege names.
-  Handwritten validation covers cross-field rules, access, storage loads,
-  model semantics, security, or documented generator gaps. Internal service
-  calls use generated typed clients and gRPC/Protobuf; domain APIs expose
-  resources/operations, while UI code owns layout.
-- Derive mechanical context from typed results/runtime state; do not ask
-  the model to repeat identity, proofs, or handles code can correlate.
-  goa-ai `Inject` is for required string context fixed at run start, not
-  changing result history. Never choose a heuristic latest result across
-  concurrent calls. Preserve original model arguments separately from
-  injected values and reject invalid model output rather than repairing it
-  with heuristics. Semantic interpretation remains model-driven.
-- Author prompts and tool descriptions against the rendered task, visible
-  schemas, and actual results. Include only facts that change valid actions,
-  arguments, or stopping; specialize facts known at generation/render time.
-  Describe that tool's contract, name returned IDs needed next, and keep
-  cross-tool routing in the caller. Never reference invisible context/tools;
-  tool-only prompts produce calls, not post-loop synthesis. Review model
-  controls through schema, codec, executor, correction, prompt, UI,
-  persistence, and tests rather than adding a prompt protocol for missing APIs.
-- Before relying on deployed external behavior, compare its public contract,
-  actual target configuration, and observed execution. Defaults/comments/tests
-  alone do not prove it. Stop the affected change on disagreement and disclose
-  inaccessible evidence; for greenfield work, prove against proposed contracts
-  without claiming live evidence. Deployment resources belong with their
-  owning service, not another service's configuration.
-- A goa-ai `BoundedResult` page bounds one model-visible tool result; an
-  operator's verification `timeout` bounds one CP4 run. Apply limits before
-  expensive reads. Use generated continuation, with code owning cursors and
-  progress per independent call chain and the model choosing whether more
-  evidence is useful. Each continuation progresses or explains its blocker.
-  Keep counts/summaries separate from detail pages; report coverage and more
-  remaining. No unbounded pagination, identical retries, or claims of full
-  coverage from partial/empty evidence.
-- Builder-facing output goes through `Report.ForBuilders()`. Never expose
-  holdout scenario names, checks, or logs to a coding agent.
-- Build and start agent-written candidate binaries only through
-  `verify/candidate` (digest-pinned, explicit environment, own state folder),
-  inside a process group an operation owns and stops: verification and live
-  targets use `internal/verifyrun`'s supervised group; any other caller
-  passes a runner that gives the command its own group. A process that starts
-  its own session leaves the group and is not stopped. These are ordinary
-  processes with the user's file and network access; never describe them as
-  confined.
+- **Storage and process ownership:** `internal/controlplane` owns Change Card
+  files. `internal/verifyrun` owns verification run directories (shared only
+  between the `highbay` project server and its `highbay verify-run` child processes as
+  one logical service). Distinct services never share files, tables, keys, or
+  storage packages; query the owner through its generated typed API rather than
+  copying running facts into configuration.
+- **Server-owned completion & promotion:** The project server binds
+  `PromotionTarget` from settings stored with `highbay promotion set`; Highbay
+  never fabricates promotion inputs or accepts caller-claimed digests. Accepted
+  verification and check operations run in server-owned processes and complete
+  independently of client disconnects (correctness never depends on client
+  retries except fresh client-held credentials).
+- **Candidate execution:** Build and start agent-written candidate binaries only
+  through `verify/candidate` (digest-pinned, explicit environment, isolated
+  state directory) inside a supervised process group owned and stopped by the
+  operation. These are ordinary OS processes with the user's file and network
+  access; never describe them as sandboxed or confined. Builder-facing output
+  always goes through `Report.ForBuilders()`, never exposing holdout scenario
+  names, checks, or logs to coding agents.
+- **Service-lifetime loops, fault isolation, and replay keys:** Long-lived
+  supervision and observation loops (`hc` event subscriptions, Chorus watchers)
+  retry transient downstream failures for the server's lifetime rather than
+  stopping after finite attempts, while isolating per-operation errors onto
+  OpenTelemetry spans without crashing sibling work. Separate episode identity
+  from payload-strict `IdempotencyKey`s, pair durable start operations with
+  stop/cancel operations, and scale coupled heartbeat/staleness intervals
+  together in tests.
+- **Goa design & generated clients:**
+  - Treat `design/` as the single source of truth for payloads, results,
+    structural validation (`Required`, `Enum`, `Format`, `Pattern`, `Minimum`,
+    `Maximum`, `MinLength`, `MaxLength`), transport mappings, and OpenAPI. Avoid
+    `Any`. Validate and authorize once at entry boundaries; trust constructed
+    invariants internally and fail fast without nil/empty fallbacks. Normalize
+    whitespace only at external edges where insignificant.
+  - Every `Service`, `Method`, `Type`, `ResultType`, and `Attribute`/`Field`
+    carries a domain `Description(...)` stating its role, calling flow, and
+    result. Model `Error(...)` at the narrowest Goa scope (method vs. service
+    vs. API—never list method-specific errors at service scope merely for
+    constructor convenience).
+  - Required arrays accept `[]` unless `MinLength(1)` forbids empty; never
+    encode domain meaning via `nil` vs. `[]`, and require exactly one active
+    variant on `OneOf` sum types. Expected absence is a typed value; reserve
+    `not_found` for required resources that failed to load. When defining gRPC
+    messages, use unique literal `Field(n, ...)` tags across full `Extend`
+    chains and never renumber or reuse released tags.
+  - Call downstream Goa services (such as Chorus and CP3 target prompt servers)
+    through their generated Goa HTTP/gRPC clients behind narrow caller-owned
+    interfaces—never handwritten `http.NewRequest`, URL concatenation, or
+    duplicate JSON structs.
+- **Codegen-time specialization (partial evaluation):** In generators
+  (`internal/scaffold`, `ui/checkpoint/build.mjs`, `story`, and Goa/Goa-AI
+  templates), decide every static branch, name, type ref (`NameScope`), import,
+  and metadata artifact at generation time. Emit only the selected code—never
+  emit runtime type reflection, JSON Schema walks, string-concatenated type
+  refs, or generator mode flags for facts known during generation.
+- **Goa-AI agent, tool, prompt, and budget contracts:**
+  - **Mechanical vs. semantic ownership:** Code, schemas, and runtime own
+    derivable facts (caller identity, auth scope, membership, correlation,
+    cursors, pagination, valid transitions); models own semantic judgment
+    (intent, ambiguity framing, tradeoffs). Never ask the model to repeat
+    ambient context or opaque handles/proofs code can correlate, never pick a
+    heuristic "latest" result across concurrent calls, and never repair invalid
+    model arguments with heuristics—reject them at the schema/codec boundary.
+  - **Runtime & schema invariants:** Keep tool schemas, projections, and
+    examples as `rawjson.Message` / `tools.RawJSON` (never `map[string]any`
+    outside provider SDK adapters), and consume generated `tool_specs` codecs
+    and `tools.TypeSpec.Fields` rather than parsing JSON Schema or `docs.json`.
+    Read `RunID`, `SessionID`, `TurnID`, and `ToolCallID` from `ToolCallMeta`
+    (never `context.Context`). Use `Inject` only for required string context
+    fixed at run start. Register all toolsets and agents before calling
+    `rt.Seal(ctx)`, run agent-as-tool via `agenttools.NewRegistration`
+    (`ExecuteAgentChild`), and choose exactly one streaming path
+    (`PlannerModelClient` vs. `ModelClient` + `planner.ConsumeStream`).
+  - **Prompts & tool descriptions:** Specialize templates at render/codegen
+    time; include only facts that change valid next actions, arguments, or stop
+    conditions, without internal orchestration jargon or references to invisible
+    tools. Tool descriptions state only that tool's contract and returned IDs
+    needed next; caller prompts own cross-tool routing.
+  - **Physical size budgets & `BoundedResult`:** Match limits to their physical
+    boundary (model-visible tool result budget vs. `1 MiB` durable workflow
+    record vs. `4 MiB` gRPC frame; never choke internal RPCs at a model-output
+    cap). Bound expensive reads *before* fetching, separate total counts from
+    detail pages, and use `BoundedResult` + `ContinueWith` so code owns cursors
+    and each continuation either advances or reports its specific blocker
+    (partial/empty windows never imply zero matches or full coverage).
 
-## 4. Generated code and UI
+## 4. Go, TypeScript, Observability, and Generated Artifacts
 
-Use the toolchain in the affected module's `go.mod`, not another repository's
-version policy. Format Go with `go fmt ./...`, separate standard-library
-imports, and prefix generated-package aliases with `gen`. Use short lowercase
-packages, `lower_snake_case.go`, and new files under 1000 lines; do not move
-unchanged code/tests in bugfixes merely to meet a size guideline. Use `any`,
-`%w` with `errors.Is/As`, `len(x) == 0` without nil checks, and `min`/`max`/`clear`;
-never discard errors with `_ =`.
+- **Go style & structure:** Use the module's `go.mod` toolchain and format with
+  `go fmt ./...`. Group stdlib imports separately from external imports and
+  prefix every generated-package alias with `gen` (`genhighbay`,
+  `genhighbayhttp`, `genmcphighbay`). Use short lowercase package names,
+  `lower_snake_case.go` files (new files <=1000 lines; do not move unchanged
+  code in scoped fixes), `any`, `%w` with `errors.Is`/`errors.As`, `len(x) == 0`
+  without nil checks, `min`/`max`/`clear`, multiline blocks, trailing-comma
+  literals, combined adjacent same-type parameters, and signatures <=100
+  columns. Never discard errors with `_ =`.
+- **Declaration order & composition roots:** Order declarations top-down as
+  `types`, `consts`, `vars`, exported functions, exported methods, unexported
+  functions, unexported methods, with entry-point logic before helpers and named
+  helpers for concurrency. Command entrypoints (`cmd/highbay`) parse flags/env,
+  construct downstream clients, and inject interfaces; runtime packages never
+  read env/flags or build external clients from raw addresses.
+- **Comments:** Add plain-English header comments (Section 1) to packages,
+  files, types, struct fields, constants/vars, functions, and methods, plus
+  entry/phase comments on multistep flows. Exported GoDoc covers purpose,
+  callers, invariants, ownership/lifetime, and error semantics. Re-read changed
+  files end to end before finishing.
+- **Never hand-edit generated files:**
+  - `gen/`
+  - `internal/targetprompt/gen/`
+  - `ui/checkpoint/src/types.ts`
+  - `internal/controlplane/checkpoint.html`
+  - `internal/controlplane/views_page_script_gen.go`
+  - `internal/goldenpath/decision_catalog.md`
 
-Order types, consts, vars, public functions/methods, then private functions/
-methods, keeping main logic before helpers. Prefer named concurrency helpers,
-grouped type declarations, combined adjacent same-type parameters, multiline
-blocks/trailing-comma literals, and signatures within 100 columns. Unused
-parameters are only for interface satisfaction. Composition roots read
-flags/environment and inject clients; runtime libraries do not construct
-clients from deployment addresses/settings.
+  Regenerate with the module-pinned generator (closing stdin):
 
-Comment every non-trivial declaration, including private functions and fields.
-Exported GoDoc explains purpose, callers, invariants, ownership/lifetime, and
-errors; private comments state contracts rather than repeat names. Comment
-multistep entries/phase transitions. Re-read changed files end to end.
+  ```sh
+  go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design </dev/null
+  go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design/targetprompt -o internal/targetprompt </dev/null
+  node ui/checkpoint/build.mjs </dev/null
+  node ui/checkpoint/build.mjs --check </dev/null
+  ```
 
-Expected absence is a value; `not_found` means a required resource failed to
-load. Do not encode operations with nil versus empty collections or weaken
-required fields to repair one caller. Keep required fields, enums, formats,
-and lengths in the owning design. Normalize strings only at external
-boundaries where whitespace is insignificant.
-
-Never hand-edit these generated files/directories:
-
-- `gen/`
-- `internal/targetprompt/gen/`
-- `ui/checkpoint/src/types.ts`
-- `internal/controlplane/checkpoint.html`
-- `internal/controlplane/views_page_script_gen.go`
-- `internal/goldenpath/decision_catalog.md`
-
-After changing `design/`, run the module-pinned generator:
-
-```sh
-go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design </dev/null
-```
-
-After changing `design/targetprompt/`:
-
-```sh
-go run goa.design/goa/v3/cmd/goa gen github.com/goadesign/highbay/design/targetprompt -o internal/targetprompt </dev/null
-```
-
-After changing `design/` or `ui/checkpoint/src/`, rebuild (this also writes
-the views page script's digest to
-`internal/controlplane/views_page_script_gen.go`) and check consistency:
-
-```sh
-node ui/checkpoint/build.mjs </dev/null
-node ui/checkpoint/build.mjs --check </dev/null
-```
-
-Examples under `examples/` are separate Go modules with their own design and
-generated code. Run each affected module's pinned generator from its directory
-using its design import path. Repair contracts through design/generation,
-never generated edits, casts, duplicate transport types, or handwritten schema
-walks. Keep raw schemas/payloads raw until their owning generated codec needs
-them. Service/method descriptions explain domain role, calling flow, and result.
-
-In `ui/checkpoint/`, reuse existing components, tokens, and generated client/
-types. Use explicit types without `any`, casts, augmentation, duplicate enums,
-or handwritten parallel transports; narrow untyped external `unknown`
-immediately. Preserve the visual language for scoped fixes. Use one clear primary
-action, visible state, expandable ID/digest details, semantic keyboard-accessible
-controls, and actionable empty/loading/error states. Never lose unsaved edits
-on conflict or refresh. Check responsive behavior, focus, and long/error
-content; meet WCAG AA and Core Web Vitals budgets, and keep state/hook
-ownership small and explicit.
-
-Use OpenTelemetry spans for meaningful application operations, with parent/
-child links, bounded attributes, and events for state/results. Actual failures
-record both error and error status; expected negative states do not. Use spans
-instead of app logs/custom metrics where they carry the evidence, and query
-spans for app alerts. Never suppress truthful spans; fix alert predicates or
-resource lifecycles. Missing telemetry is unknown; periodic observed-state
-spans can establish continuity. CPU, memory, and restarts use infrastructure
-metrics.
+  Examples under `examples/` are separate Go modules; run each affected module's
+  pinned generator from its own directory using its Go import path.
+- **Browser UI (`ui/checkpoint/`):** Consume generated `types.ts` routes,
+  request types, and closed validators directly—never use `any`, type casts,
+  module augmentation, duplicate enums, or parallel handwritten `fetch`
+  transports; narrow external `unknown` immediately. Reuse shared UI primitives
+  and design tokens, give each view one clear primary action, preserve unsaved
+  drafts across conflicts/refreshes, maintain semantic keyboard accessibility
+  (including explicit focus escape from terminal widgets), and meet WCAG AA and
+  Core Web Vitals budgets with small, explicit React state/hook ownership.
+- **OpenTelemetry observability:** Emit spans per meaningful operation with
+  parent/child links, bounded attributes, and state/result events. Record actual
+  operation failures with both `span.RecordError(err)` and `codes.Error` status;
+  never mark expected negative results (refusals, empty waits) as span errors,
+  and never filter or suppress truthful spans. Use periodic observed-state spans
+  for liveness continuity; reserve logs for startup, shutdown, and unrecoverable
+  process errors.
 
 ## 5. Verification
 
-Choose the smallest checks exercising the changed contract, then applicable
-module/CI checks at the integration gate. The CI workflow is the command
-reference; locally, use its partitions and time limits rather than a broader
-or narrower aggregate. From the root, use applicable checks below; run
-example-module commands in their named directories. Close stdin on all
-invocations.
+Run the narrowest checks that prove the changed contract first, then the
+applicable CI partitions from [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+within the 5-minute PR budget. Close stdin (`</dev/null`) on all commands:
 
 | Changed area | Check |
 | --- | --- |
-| Root Go module | `bash .github/scripts/go-test.sh -count=1 -- ./...` and `go run ./.github/scripts/racecheck` |
-| Portable Story language | `bash ../.github/scripts/go-test.sh -vet=all -- ./...` from `story` |
-| Verification flow | `go test -count=1 -tags e2e ./internal/verify` |
-| `hbay gen` / `hbay init` generation | `go test -race -count=1 -tags e2e ./cmd/hbay` |
-| `examples/orders` | `bash ../../.github/scripts/go-test.sh -- ./...` from `examples/orders` |
-| `examples/orders` or `examples/orders-eval` | `go test -race -tags e2e ./acceptance` from `examples/orders-eval` |
-| Starter generation | `go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold` |
-| Project server with Herdr (opt-in) | `go test -race -count=1 -tags herdr -run TestHC ./cmd/hbay` |
-| Views page policy, session, or layout (opt-in) | `go test -race -count=1 -tags browser ./internal/project` |
-| Views page TypeScript | `npm --prefix ui/checkpoint run typecheck` |
+| Root Go module | `bash .github/scripts/go-test.sh -count=1 -- ./... </dev/null` and `go run ./.github/scripts/racecheck </dev/null` |
+| Portable Story language | `(cd story && bash ../.github/scripts/go-test.sh -vet=all -- ./...) </dev/null` |
+| Verification flow | `go test -count=1 -tags e2e ./internal/verify </dev/null` |
+| `highbay gen` / `highbay init` generation | `go test -race -count=1 -tags e2e ./cmd/highbay </dev/null` |
+| `examples/orders` | `(cd examples/orders && bash ../../.github/scripts/go-test.sh -- ./...) </dev/null` |
+| `examples/orders` or `examples/orders-eval` | `(cd examples/orders-eval && go test -race -tags e2e ./acceptance) </dev/null` |
+| Starter generation | `go test -race -count=1 -timeout 60m -tags scaffold ./internal/scaffold </dev/null` |
+| `hc` integration (opt-in) | `go test -race -count=1 -tags herdr -run TestHC ./internal/hc ./cmd/highbay </dev/null` |
+| Views page policy, session, or layout (opt-in) | `go test -race -count=1 -tags browser ./internal/project </dev/null` |
+| Views page TypeScript | `npm --prefix ui/checkpoint run typecheck </dev/null` |
 
-`go-test.sh` applies the race detector to the packages in
-`.github/race-packages.txt`, which own production concurrency; `racecheck`
-fails when an unlisted package gains goroutines, channels, or `sync`. The
-Herdr test needs `hc` and skips without it. The browser test needs Node 22
-or newer and Chrome or Chromium (set `HIGHBAY_TEST_BROWSER` when it is not in
-a standard location).
+- **One owning test per contract:** Test each invariant once at the cheapest
+  layer that observes it; forwarding layers (`verifyrun`, `controlplane`,
+  `cmd/highbay`) test one passing and one refused case rather than duplicating
+  their owner's table, and every declared error/refusal has a triggering test.
+  Real compilers, containers, `hc`, and browsers run only in their owning
+  packages and named tagged journeys; elsewhere use saved snapshots/fixtures.
+- **Fast `-race` & shared immutable fixtures:** `go-test.sh` runs `-race` on
+  packages in `.github/race-packages.txt`, enforced by `racecheck`. Share
+  expensive immutable inputs (`sync.Once` fixtures and compiled packages).
+  When `go env GOCACHE` reports an absolute path, `go-test.sh` uses it
+  as the default for `HIGHBAY_TEST_BUILD_CACHE`.
+  Isolate mutable scratch in `t.TempDir()` (never `sync.Pool` or GC/memory
+  sweeps in functional tests). Use deterministic table-driven `testify/assert`
+  tests (`require` only when continuation is impossible), update all affected
+  callers/fixtures on contract changes, and test semantic model judgment with
+  `goa-ai/eval` rather than keyword/regex grading. Disclose skipped or
+  credential-blocked checks; never claim mocked paths as end-to-end proof.
 
-Each contract has one owning test, at the cheapest layer that can observe
-it. Before adding a test, find that owner and extend it; answer a reviewer's
-request for proof with the owning test when one exists. Real compilation and
-code generation belong in their owners (`verify/candidate`,
-`internal/designeval`, `internal/testwriter`, `internal/scaffold`) and the
-named tagged journeys. Control-plane, project, page, and CLI tests start from
-saved fixtures or snapshots, or the control plane's build-copy seam, unless
-their own contract is that compilation. A forwarding layer (`verifyrun`,
-`controlplane`, `cmd/hbay`) tests one passing and one refused case, not its
-owner's table. Every declared refusal has a test that triggers it.
+## 6. Documentation, Positioning, and Repository Safety
 
-Tests share expensive immutable inputs and isolate mutable state:
-`t.TempDir()` holds scratch and outputs, while compiled packages come from
-the job's shared cache (`HIGHBAY_TEST_BUILD_CACHE`, or the project build
-cache). A fresh cache belongs only in tests about the cache. Each CI job runs
-an explicit set of tests that no other job runs; a build tag adds files and
-does not select tests, so a tagged job names its tests with `-run`. An opt-in
-suite needs a scheduled run, or it rots.
-
-Pull-request checks finish within five minutes of a push, queue included.
-A new test that compiles, starts processes, or waits states its cost and why
-a cheaper layer cannot prove its contract. When a package or job nears its
-time limit, fix the slow tests at their owner; a raised limit is a disclosed
-stopgap with a follow-up, never the fix.
-
-Use fast deterministic table-driven `testify/assert` tests, with `require`
-only when continuation is impossible. Tests write inside `t.TempDir()`, never
-the source tree. Use bounded concurrency and construct expensive immutable
-fixtures once per package; do not turn functional tests into
-GC/memory/timing sweeps. Update affected Go/TypeScript tests and fixtures
-when contracts change; do not add dummy values or rewrite assertions merely
-to match new output. Diagnose model evaluations from actual visible calls and
-results before changing prompts, tools, or assertions.
-Trace incomplete/failed/timed-out claims to their producer and raw stop
-condition, including child calls. Test code-owned invariants deterministically
-and model judgment with focused evaluations and valid counterexamples; call
-ordering/count alone is not correctness. Never replace semantic judgment with
-keyword rules or tailor assertions merely to make one evaluation pass.
-
-For text-only instructions/docs, check accuracy, references, links, and
-applicable doc checks; do not regenerate or run runtime/browser suites.
-Required generated-consistency and other CI still apply to the final PR head.
-Reuse completed evidence until changed inputs, incomplete results, or failure
-justify another run. Disclose skipped/setup-blocked cases and model settings;
-never call a mocked or credential-blocked path verified end to end, or change
-credentials/access policy to make an evaluation run. That rule limits what a
-result may claim; it does not move fixture-level contracts into end-to-end
-tests.
-
-## 6. Documentation and repository safety
-
-Update affected behavior documentation in the same change: `README.md`,
-`docs/HOW_IT_WORKS.md`, `docs/REFERENCE.md`, `docs/ARCHITECTURE_PLAYBOOK.md`, and
-affected `examples/*/README.md`. Link authoritative contracts instead of
-copying them. Preserve anchors, distinguish proposals from current behavior,
-and keep current docs free of incident/PR/migration diaries. Write active,
-connected plain English: input, owner action, visible result/error; define
-terms and add examples where labels hide decisions. Put dense field/type/key
-references in tables or examples. Keep customer guidance separate from
-internal engineering/operations details and read changed pages end to end.
-
-Use `author-pull-request` when available. A PR explains the affected feature,
-failure, consequence, resulting behavior, and why the change solves it before
-implementation details. Make title/body understandable without the chat or
-diff, including follow-ups. Distinguish test/live examples and include material
-compatibility, migration, deployment, rollback, and verification gaps; omit
-routine file/command lists. Release notes describe shipped changes since the
-prior release and required upgrade actions, explicitly stating when none are
-needed. Do not announce unfinished behavior.
-
-Keep the primary checkout clean on `origin/main`. Unless the user explicitly
-asks for in-place edits, use an isolated clone under `~/src` and a feature
-branch from `origin/main`, with a PR by default. One writer per tree; read-only
-reviewers may inspect it. Never switch/reset/restore/clean/stash/rewrite refs
-or indexes in the primary. Stop on unexpected modifications and preserve
-unrelated work. Stage explicit paths only, never `git add .`/`-u`, discard
-work, or force-push. Check `git diff --stat origin/main...HEAD` before pushes,
-PR creation, and merges. Read both PRs' context before resolving conflicts;
-preserve compatible intentions rather than choose ours/theirs wholesale.
-
-Use locally authenticated `gh` for GitHub writes. Preserve contributor
-authorship and verify user authorship; no assistant/generated-by attribution
-or model-prefixed branch names. Use body files for multiline descriptions
-and quote shell data safely. Never repurpose `HOME`, `CODEX_HOME`, or shell
-reserved parameters. Before deleting a completed clone, verify its exact
-target, nested repositories, clean status, and no unpushed commits. Preserve
-unrelated QA projects/captures. Fast-forward the clean primary after verified
-merge/cleanup, without discarding local work. Never run `go clean -cache`.
-
-Before destructive filesystem/database/cloud work, resolve the exact target
-read-only, explain impact/recovery, and verify session authorization. Use the
-smallest reset, preserving unrelated clusters/images/volumes/services. Before
-production writes, migrations, rollout, or traffic changes, state the action,
-evidence, stop condition, and rollback. Authorized read-only probes must be
-bounded and credential-safe; they do not authorize repairs or policy changes.
-Read active sandbox permissions, use supported escalation when required,
-and report rejected/unavailable access without bypassing it. `kubectl` always
-names `--context` and one resource kind per positional command. Explain the
-need before adding a dependency.
+- **Documentation & positioning:** Update affected docs in the same change:
+  [README.md](README.md), [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md),
+  [docs/REFERENCE.md](docs/REFERENCE.md),
+  [docs/ARCHITECTURE_PLAYBOOK.md](docs/ARCHITECTURE_PLAYBOOK.md), and affected
+  `examples/*/README.md`. Put the **first successful user task before internal
+  runtime details**, clearly distinguish *using coding agents* (Highbay, Chorus,
+  `hc`) from *building product agents* (Goa-AI), ground capability claims in
+  source and runnable examples, and never publish unmeasured productivity or
+  token-savings numbers. Link one authoritative contract instead of copying it,
+  preserve `#anchor` targets, exclude PR/migration diaries, keep user guides
+  free of internal persistence/admin plumbing, and read changed pages end to
+  end.
+- **Pull requests & release notes:** Follow `author-pull-request` when
+  available. Lead with the affected capability, concrete problem, why it
+  matters, and before/after behavior for a reader unfamiliar with the chat or
+  diff; cover ownership tradeoffs, compatibility/migration/rollback, and
+  verification evidence without routine file/command boilerplate. Release notes
+  cover shipped diffs since the prior tag grouped by user outcome and explicit
+  upgrade actions (or state none are required). Never add AI co-author trailers,
+  generated-by notices, or model-prefixed branch names (`codex/`, `claude/`,
+  `gpt/`).
+- **Git & operational safety:** Keep the primary checkout clean on
+  `origin/main`. Use one isolated clone under `~/src` per writer on a feature
+  branch from `origin/main` (never `/tmp`, never concurrent writers in one
+  worktree). Never run `git clean`, `git stash`, `git reset`, `git checkout` (in
+  primary), `git add .`, `git add -u`, force-push, or `go clean -cache`. Stage
+  explicit paths only, inspect `git diff --stat origin/main...HEAD` before
+  pushing/merging, and read both sides' context before resolving conflicts
+  (preserving compatible outcomes rather than choosing ours/theirs wholesale).
+  Explain new dependencies before adding them, and confirm destructive or
+  external publishing actions first.

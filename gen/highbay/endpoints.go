@@ -44,8 +44,14 @@ type Endpoints struct {
 	GetStoryRefresh             goa.Endpoint
 	UpdateDraft                 goa.Endpoint
 	GetTeam                     goa.Endpoint
-	ShowTeamPane                goa.Endpoint
+	GetTeamConversation         goa.Endpoint
+	SendTeamMessage             goa.Endpoint
 	StartTeamAgents             goa.Endpoint
+	InterruptTeamRole           goa.Endpoint
+	StopTeamRole                goa.Endpoint
+	RestartTeamRole             goa.Endpoint
+	CreateTerminalTicket        goa.Endpoint
+	AttachRoleTerminal          goa.Endpoint
 	ListTeamAgentOptions        goa.Endpoint
 	DismissTeamNotice           goa.Endpoint
 	OpenViews                   goa.Endpoint
@@ -64,6 +70,16 @@ type Endpoints struct {
 	GetTestWriterAssignment     goa.Endpoint
 	ReportTestsFinished         goa.Endpoint
 	ReviewVerification          goa.Endpoint
+}
+
+// AttachRoleTerminalEndpointInput holds both the payload and the server stream
+// of the "attach_role_terminal" method.
+type AttachRoleTerminalEndpointInput struct {
+	// Payload is the method payload.
+	Payload *AttachRoleTerminalPayload
+	// Stream is the server stream used by the "attach_role_terminal" method to
+	// send data.
+	Stream AttachRoleTerminalServerStream
 }
 
 // NewEndpoints wraps the methods of the "highbay" service with endpoints.
@@ -98,8 +114,14 @@ func NewEndpoints(s Service) *Endpoints {
 		GetStoryRefresh:             NewGetStoryRefreshEndpoint(s),
 		UpdateDraft:                 NewUpdateDraftEndpoint(s),
 		GetTeam:                     NewGetTeamEndpoint(s),
-		ShowTeamPane:                NewShowTeamPaneEndpoint(s),
+		GetTeamConversation:         NewGetTeamConversationEndpoint(s),
+		SendTeamMessage:             NewSendTeamMessageEndpoint(s),
 		StartTeamAgents:             NewStartTeamAgentsEndpoint(s),
+		InterruptTeamRole:           NewInterruptTeamRoleEndpoint(s),
+		StopTeamRole:                NewStopTeamRoleEndpoint(s),
+		RestartTeamRole:             NewRestartTeamRoleEndpoint(s),
+		CreateTerminalTicket:        NewCreateTerminalTicketEndpoint(s),
+		AttachRoleTerminal:          NewAttachRoleTerminalEndpoint(s),
 		ListTeamAgentOptions:        NewListTeamAgentOptionsEndpoint(s),
 		DismissTeamNotice:           NewDismissTeamNoticeEndpoint(s),
 		OpenViews:                   NewOpenViewsEndpoint(s),
@@ -152,8 +174,14 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetStoryRefresh = m(e.GetStoryRefresh)
 	e.UpdateDraft = m(e.UpdateDraft)
 	e.GetTeam = m(e.GetTeam)
-	e.ShowTeamPane = m(e.ShowTeamPane)
+	e.GetTeamConversation = m(e.GetTeamConversation)
+	e.SendTeamMessage = m(e.SendTeamMessage)
 	e.StartTeamAgents = m(e.StartTeamAgents)
+	e.InterruptTeamRole = m(e.InterruptTeamRole)
+	e.StopTeamRole = m(e.StopTeamRole)
+	e.RestartTeamRole = m(e.RestartTeamRole)
+	e.CreateTerminalTicket = m(e.CreateTerminalTicket)
+	e.AttachRoleTerminal = m(e.AttachRoleTerminal)
 	e.ListTeamAgentOptions = m(e.ListTeamAgentOptions)
 	e.DismissTeamNotice = m(e.DismissTeamNotice)
 	e.OpenViews = m(e.OpenViews)
@@ -425,12 +453,20 @@ func NewGetTeamEndpoint(s Service) goa.Endpoint {
 	}
 }
 
-// NewShowTeamPaneEndpoint returns an endpoint function that calls the method
-// "show_team_pane" of service "highbay".
-func NewShowTeamPaneEndpoint(s Service) goa.Endpoint {
+// NewGetTeamConversationEndpoint returns an endpoint function that calls the
+// method "get_team_conversation" of service "highbay".
+func NewGetTeamConversationEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ShowTeamPanePayload)
-		return nil, s.ShowTeamPane(ctx, p)
+		return s.GetTeamConversation(ctx)
+	}
+}
+
+// NewSendTeamMessageEndpoint returns an endpoint function that calls the
+// method "send_team_message" of service "highbay".
+func NewSendTeamMessageEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SendTeamMessagePayload)
+		return s.SendTeamMessage(ctx, p)
 	}
 }
 
@@ -440,6 +476,51 @@ func NewStartTeamAgentsEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*StartTeamAgentsPayload)
 		return s.StartTeamAgents(ctx, p)
+	}
+}
+
+// NewInterruptTeamRoleEndpoint returns an endpoint function that calls the
+// method "interrupt_team_role" of service "highbay".
+func NewInterruptTeamRoleEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*InterruptTeamRolePayload)
+		return nil, s.InterruptTeamRole(ctx, p)
+	}
+}
+
+// NewStopTeamRoleEndpoint returns an endpoint function that calls the method
+// "stop_team_role" of service "highbay".
+func NewStopTeamRoleEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StopTeamRolePayload)
+		return nil, s.StopTeamRole(ctx, p)
+	}
+}
+
+// NewRestartTeamRoleEndpoint returns an endpoint function that calls the
+// method "restart_team_role" of service "highbay".
+func NewRestartTeamRoleEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RestartTeamRolePayload)
+		return nil, s.RestartTeamRole(ctx, p)
+	}
+}
+
+// NewCreateTerminalTicketEndpoint returns an endpoint function that calls the
+// method "create_terminal_ticket" of service "highbay".
+func NewCreateTerminalTicketEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateTerminalTicketPayload)
+		return s.CreateTerminalTicket(ctx, p)
+	}
+}
+
+// NewAttachRoleTerminalEndpoint returns an endpoint function that calls the
+// method "attach_role_terminal" of service "highbay".
+func NewAttachRoleTerminalEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*AttachRoleTerminalEndpointInput)
+		return nil, s.AttachRoleTerminal(ctx, ep.Payload, ep.Stream)
 	}
 }
 

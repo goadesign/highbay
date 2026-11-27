@@ -63,8 +63,9 @@ func Snapshot(t testing.TB, goaVersion, design string) map[string]string {
 
 // Module returns the files of a tidy module at modulePath holding files. It
 // requires goa.design/goa/v3 at goaVersion (Highbay's own version when empty)
-// and goa.design/goa-ai and goa.design/model at Highbay's versions; go mod
-// tidy drops the ones the files do not import and completes go.mod and go.sum.
+// plus goa.design/goa-ai and goa.design/model at Highbay's versions only when
+// files import them, so unused newer generator dependencies never raise
+// indirect module versions in historical target snapshots before go mod tidy.
 func Module(t testing.TB, modulePath, goaVersion string, files map[string]string) map[string]string {
 	t.Helper()
 	if goaVersion == "" {
@@ -76,6 +77,7 @@ func Module(t testing.TB, modulePath, goaVersion string, files map[string]string
 		goaVersion,
 		HighbayVersion(t, "goa.design/goa-ai"),
 		HighbayVersion(t, "goa.design/model"),
+		files,
 	)
 	return Tidy(t, out)
 }
@@ -118,14 +120,28 @@ func Replace(t testing.TB, files map[string]string, name, old, replacement strin
 	return WithFile(files, name, strings.Replace(files[name], old, replacement, 1))
 }
 
-// moduleGoMod returns the initial go.mod content for Module before go mod tidy
-// prunes unused requirements and writes go.sum.
-func moduleGoMod(modulePath, goaVersion, goaAIVersion, modelVersion string) string {
-	return "module " + modulePath + "\n\ngo 1.24\n\nrequire (\n" +
-		"\tgoa.design/goa/v3 " + goaVersion + "\n" +
-		"\tgoa.design/goa-ai " + goaAIVersion + "\n" +
-		"\tgoa.design/model " + modelVersion + "\n" +
-		"\tgithub.com/kr/text " + KRTextVersion + "\n)\n"
+// moduleGoMod returns the initial go.mod content for Module, always including
+// goa and goa-ai (matching the evaluator harness) and requiring model only when
+// referenced in files so model's newer x/tools requirement never contaminates
+// historical target snapshots that do not import goa.design/model.
+func moduleGoMod(modulePath, goaVersion, goaAIVersion, modelVersion string, files map[string]string) string {
+	var usesModel bool
+	for name, src := range files {
+		if strings.HasSuffix(name, ".go") && strings.Contains(src, `"goa.design/model/`) {
+			usesModel = true
+			break
+		}
+	}
+	var b strings.Builder
+	b.WriteString("module " + modulePath + "\n\ngo 1.24\n\nrequire (\n")
+	b.WriteString("\tgoa.design/goa/v3 " + goaVersion + "\n")
+	b.WriteString("\tgoa.design/goa-ai " + goaAIVersion + "\n")
+	if usesModel {
+		b.WriteString("\tgoa.design/model " + modelVersion + "\n")
+	}
+	b.WriteString("\tgithub.com/kr/text " + KRTextVersion + "\n")
+	b.WriteString(")\n")
+	return b.String()
 }
 
 // tidyInDir writes files into dir, runs go mod tidy with the isolated test

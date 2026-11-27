@@ -20,10 +20,9 @@ and brings back their step reports.
 - The complete text of each proposal the page showed, saved word for word
   beside the screen record's frames.
 - The screen record of each attempt, `{{TESTER}}/attempt-<N>/screen/`: timed
-  frames of the browser page and of the study's part of the Herdr window,
-  with Herdr's status and the application in front at each one, indexed in
-  `screen-log.md`. It holds only what a user could see. View the frames
-  themselves; the index is a guide to them.
+  frames of the browser workspace, including Conversation and Terminal,
+  indexed in `screen-log.md`. If the user attaches an existing session,
+  the record may include that client. View the frames themselves.
 - Your own notes file, `{{TESTER}}/observations.md`, which you keep up to
   date after every report.
 - If this study is compared with an earlier one, that study's report,
@@ -38,18 +37,18 @@ excuse things a real user cannot see.
 ## The study
 
 - **Research questions:** Can a first-time user reach a working result with
-  Highbay alone? After one-time installation/setup, can they keep the current
-  coding-agent conversation and make human decisions in the browser through
-  a verified, approved merge without typing terminal commands? From the
-  first second a page is open, does the screen tell them what is happening
-  and what to do next, and do the buttons it offers do what they say? Where do they
-  hesitate, misread, or take a wrong action, and why? Which bugs block them?
+  Highbay alone? After one-time installation/setup and opening the workspace,
+  can they direct agents, make decisions, and reach a verified, approved
+  merge from the browser? Can an existing guide session join this journey?
+  From the first second a page is open, does it show what is happening and
+  what to do next? Where do users hesitate, misread, or take a wrong action,
+  and why? Which bugs block them?
 - **Participant profile:** {{PARTICIPANT_PROFILE}}
 - **Task:** {{TASK}}
 - **Environment:** {{ENVIRONMENT_FACTS}}
 - **Setup given to the participant:** a plain clone of the Highbay repository,
   of which it may read only `README.md`, an empty project folder, and this
-  permission to run these coding-agent CLIs to reach Highbay's MCP server:
+  installed coding-agent clients the participant may use:
   {{CODING_AGENTS}}
 - **A rule the participant must follow:** it never compiles, generates code
   from, or runs its product's code itself (`goa gen`, `go build`, `go run`,
@@ -59,7 +58,7 @@ excuse things a real user cannot see.
   code as ordinary processes with the user's file and network access; working
   copies and process groups do not confine it. A coding-agent sandbox is a
   separate environment restriction. Never hint a direct product-code step or
-  replace the documented agent-driven entrypoint with hidden HTTP
+  bypass the documented workspace entrypoint with hidden HTTP
   configuration or lifecycle commands.
   A participant who needs one has found a missing capability, not made a
   wrong turn.
@@ -75,19 +74,15 @@ excuse things a real user cannot see.
    Separate installation/setup, later user-entered terminal commands,
    commands the coding agent runs internally, and harness-only invocations. Include agreement,
    build, verification, approval and merge as distinct outcomes, and record
-   whether the original guide session remains usable. Cover the applicable
-   environment paths without steering the participant: inline agent choices,
-   missing Herdr, one installed family, builder-only configured tests, page
-   recovery, persistence of choices and dismissed recommendations, and Merge
-   refusal/recovery. Unexercised paths stay unexercised.
-   Add screen milestones in the docs' terms: what the page shows while a
-   new project is prepared, how a first proposal reaches the page, what the
-   Herdr companion shows, and what each button that leads back to the agent
-   or to the page promises.
-   Also note, as your first observations, any gap you can already see between
-   the README and this setup, such as an unavailable client session reload,
-   unverified environment forwarding, or browser action. Record global MCP,
-   skill and Herdr configuration writes as machine setup, not project edits.
+   whether the user can start a guide, send a message, read its reply, open
+   a role's Terminal, and recover the current work after reloading the tab.
+   Cover applicable choices: existing-guide attachment, one installed
+   family, builder-only configured tests, saved choices and dismissed
+   notices, and merge refusal/recovery. Record what the workspace shows
+   during initialization and until the first proposal appears.
+   Note any known gaps between the README and the study setup, such as
+   unavailable browser controls or an unobserved client session. Record
+   updates to dependencies, MCP configuration and skills as machine setup.
    Distinguish harness limits from product failures.
 3. Write a private **change plan** in `observations.md` (see "Mid-build
    changes" below): the changes you will hand the participant partway
@@ -206,7 +201,7 @@ only that screen would conclude: is anything happening, is it going well,
 what should I do now? Work that was going fine behind a misleading screen
 does not soften the finding. Neither does a later screen that was right, or
 anything the participant learned from a command. When the facilitator
-reports an off-screen check, such as `git log` or `hbay status` during a
+reports an off-screen check, such as `git log` or `highbay status` during a
 wait, record it as evidence that the screen left that question open, and
 grade the screen as it stood before the check.
 
@@ -216,14 +211,11 @@ the user no way forward on the screen:
 - The page showed work in progress and then returned to an earlier or empty
   state, or asked again for something already given, while the work was
   still going on.
-- A button on Highbay's page or in Highbay's Herdr companion changed nothing the
-  user could see within ten seconds. A button that promises to show the
-  coding agent's pane counts when the browser stays in front, or when
-  another space, tab or pane keeps the focus.
-- Highbay's page or Highbay's Herdr companion showed an error that the user's
-  own choice did not cause, such as a command that could not run or a
-  request that failed, whether or not the participant noticed it. A refusal
-  the docs describe, shown with its recovery step, is not this case.
+- A workspace control changes nothing the user can see within ten seconds.
+  For example, the attention notice offers Terminal and the drawer fails to
+  open.
+- The workspace shows an unexpected request or command failure. Rate
+  documented refusals by the recovery step the user actually sees.
 - Text the user must read, answer or confirm told them about Highbay's
   starting files, worked example or internals instead of their own product (see "Read the
   page's words as the user" below). Rate it 4 when they could not answer or
@@ -267,9 +259,9 @@ naming a button:
 
 | Task | Trigger | Text | Success sub-milestones |
 | --- | --- | --- | --- |
-| S1, back to the agent | A Herdr window is open, and a frame shows the page offering a way to the coding agent | "From the browser page, get back to your coding agent without typing a command or switching windows yourself. Tell us what your screen shows ten seconds later." | S1a: the participant found the control. S1b: the browser was the application in front just before the click, and the Herdr window is in front within ten seconds after it. S1c: within those ten seconds the agent's space and tab are showing and its pane has the focus. |
-| S2, the page again | A first proposal is on the page | "Close the browser tab that shows your project. Then get the page back without typing a command in a terminal." | S2a: the participant found a way that the screen offered. S2b: the page came back on the same change and stage. S2c: nothing the participant had entered was lost. |
-| S3, the page from Herdr | S2 closed, a frame shows Highbay's companion in the Herdr window, and the environment facts say something can click inside that window | "Close that tab once more. This time get the page back from the Herdr window, without typing anything." | S3a: the Herdr window showed a control for it. S3b: pressing it brought the page back within ten seconds. S3c: no error appeared in the companion. |
+| S1, contact the guide | A change is visible and the guide is available | "Ask your guide about one detail of the proposal from this workspace. Find its reply." | S1a: the user finds a way to ask. S1b: the request appears with the correct recipient or context. S1c: the user locates the reply. |
+| S2, answer a prompt | A role naturally asks for user input in a live terminal | "See what this role is waiting for and respond without leaving the workspace." | S2a: the user finds the role's Terminal. S2b: it shows the actual prompt and lets the user answer. S2c: keyboard focus can leave the Terminal and return to the workspace. |
+| S3, return to work | The first saved proposal is visible | "Reload the tab and continue from the proposal you were reviewing." | S3a: the session stays signed in. S3b: the saved proposal is available. S3c: the participant can continue without relaunching the guide or opening a fresh link. |
 
 Hand over at most one screen task at a time, each once per attempt, and
 never while the participant is blocked, waiting on a hint, or working on an
@@ -283,22 +275,12 @@ cannot find a way. Record each as one of these:
   it, and a sub-milestone did not follow. Name that sub-milestone and the
   rows just before and after the click;
 - not offered by the screen;
-- not exercised, with the reason: no Herdr window, nothing can click inside
-  the Herdr window, Highbay's own tab could not be closed or observed, or the
-  trigger was never reached.
+- not exercised, with the reason the trigger or needed screen was unavailable.
 
-Judge S1b, S1c and S3b from the rows and frames around the click, not from
-the participant's account alone. A sub-milestone is met only by a change the
-click caused: the row just before the click must show a different state from
-the one the sub-milestone asks for. If Herdr was already in front, or the
-agent's pane already had the focus, record that sub-milestone as not
-exercised: already in that state. If the browser the participant clicks in
-cannot be in front, S1b is not exercised. For S2 and S3, record which tab or
-window was closed, and judge S2b and S3b from the row that shows Highbay's
-new tab observed, not from a cue such as the browser coming to the front,
-and not from a second window the facilitator opened after it. If only the
-study's second window could be closed, or the new tab could not be
-observed, S2 and S3 are not exercised.
+Use the before and after frames to assign each screen outcome. Record which
+tab the participant reloaded and whether the workspace still showed the
+same project and proposal. Where the task needs a live terminal or
+permission prompt, use what naturally occurs in the study.
 
 ## Mid-build changes
 

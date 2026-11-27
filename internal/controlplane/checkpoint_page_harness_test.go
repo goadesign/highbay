@@ -115,6 +115,7 @@ func startPageServer(t *testing.T, svc genhighbay.Service) *pageServer {
 	mux := http.NewServeMux()
 	mux.Handle("GET /views", ViewsPage())
 	mux.HandleFunc("POST /project/browser-session", ps.exchange)
+	mux.HandleFunc("GET /project/browser-session", ps.session)
 	mux.HandleFunc("POST /__test/hold", ps.control(func(r pageReply) { ps.gates[r.Key] = &pageGate{open: make(chan struct{})} }))
 	mux.HandleFunc("POST /__test/answer-later", ps.control(func(r pageReply) {
 		ps.gates[r.Key] = &pageGate{open: make(chan struct{}), answered: true}
@@ -268,7 +269,7 @@ func (ps *pageServer) exchange(w http.ResponseWriter, r *http.Request) {
 	ps.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	if !ok {
-		serviceErr := genhighbay.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with hbay"))
+		serviceErr := genhighbay.MakeUnprocessable(errors.New("browser link is used or expired; open the project's views with highbay"))
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		if err := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), serviceErr)); err != nil {
 			ps.t.Logf("write exchange refusal: %v", err)
@@ -276,8 +277,36 @@ func (ps *pageServer) exchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]string{"session": pageSession, "project_name": "Refunds café"}); err != nil {
+	if err := json.NewEncoder(w).Encode(pageSessionResult()); err != nil {
 		ps.t.Logf("write exchange answer: %v", err)
+	}
+}
+
+// session answers the page's check of the credential it stored, as the
+// project server does: the session again for the page's own request with
+// that credential, and unauthorized otherwise.
+func (ps *pageServer) session(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Header.Get("Authorization") != "Bearer "+pageSession || r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+		serviceErr := genhighbay.MakeForbidden(errors.New("open the project's views with highbay"))
+		serviceErr.Name = "unauthorized"
+		w.WriteHeader(http.StatusUnauthorized)
+		if err := goahttp.ResponseEncoder(r.Context(), w).Encode(goahttp.NewErrorResponse(r.Context(), serviceErr)); err != nil {
+			ps.t.Logf("write session refusal: %v", err)
+		}
+		return
+	}
+	if err := json.NewEncoder(w).Encode(pageSessionResult()); err != nil {
+		ps.t.Logf("write session answer: %v", err)
+	}
+}
+
+// pageSessionResult is the session the test project server reports, with the
+// version and page build a real one adds.
+func pageSessionResult() map[string]string {
+	return map[string]string{
+		"session": pageSession, "project_name": "Refunds café",
+		"version": "(devel)", "ui_build": ViewsPageScriptSHA256,
 	}
 }
 

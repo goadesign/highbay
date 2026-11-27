@@ -1,0 +1,277 @@
+name: Publish Highbay
+
+# Bootstrap the npm package once, then configure a trusted publisher for
+# this workflow. HOMEBREW_TAP_TOKEN needs Contents write access to the tap.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions: {}
+
+concurrency:
+  group: highbay-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate release tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Expected a stable release tag, got $TAG" >&2
+            exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Build the tagged module for macOS and Linux
+        env:
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          GOWORK: "off"
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/highbay-assets"
+          build="$RUNNER_TEMP/highbay-build"
+          mkdir -p "$assets" "$build"
+          cp LICENSE "$build/"
+          cd "$build"
+          # A tagged module dependency stamps the version used by highbay version
+          # and by starters generated with this binary.
+          module=github.com/goadesign/highbay
+          go mod init highbay-release.invalid
+          go get "$module/cmd/highbay@$TAG"
+          for os in darwin linux; do
+            for arch in amd64 arm64; do
+              CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+                go build -trimpath -o highbay "$module/cmd/highbay"
+              go version -m highbay | awk -v mod="$module" -v tag="$TAG" '
+                $1 == "mod" && $2 == mod && $3 == tag { found = 1 }
+                END { exit !found }
+              '
+              if [[ "$os/$arch" == "linux/amd64" ]]; then
+                test "$(./highbay version)" = "$TAG"
+              fi
+              tar --mtime=@0 --owner=0 --group=0 --numeric-owner \
+                -czf "$assets/highbay_${VERSION}_${os}_${arch}.tar.gz" highbay LICENSE
+            done
+          done
+          cd "$assets"
+          sha256sum -- ./*.tar.gz | sed 's|  \./|  |' > checksums.txt
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/highbay-assets"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            published="$RUNNER_TEMP/highbay-published"
+            gh release download "$TAG" --pattern 'highbay_*.tar.gz' \
+              --pattern checksums.txt --dir "$published"
+            cmp "$assets/checksums.txt" "$published/checksums.txt"
+            (cd "$published" && sha256sum --check checksums.txt)
+          else
+            gh release create "$TAG" --verify-tag --generate-notes \
+              "$assets"/*.tar.gz "$assets/checksums.txt"
+          fi
+
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Test the npm and shell launchers
+        run: node --test npm/highbay/test_cli.mjs
+
+      - name: Publish the tagged version to npm
+        working-directory: npm/highbay
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --max-time 30 --output /dev/null \
+            --write-out '%{http_code}' "https://registry.npmjs.org/@goadesign%2Fhighbay/$VERSION")"
+          case "$status" in
+            200) echo "@goadesign/highbay@$VERSION is already published"; exit 0 ;;
+            404) ;;
+            *) echo "npm registry returned HTTP $status" >&2; exit 1 ;;
+          esac
+          cp ../../LICENSE ./
+          npm version "$VERSION" --no-git-tag-version
+          npm publish --access public --provenance
+
+  publish-mcp-registry:
+    needs: [release, publish-npm]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.9
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - name: Check whether this release is already listed
+        id: registry
+        run: |
+          set -euo pipefail
+          endpoint="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.goadesign%2Fhighbay/versions/$VERSION"
+          status="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$endpoint")"
+          case "$status" in
+            200) echo "published=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "published=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "MCP Registry returned HTTP $status" >&2; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: steps.registry.outputs.published == 'false'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.registry.outputs.published == 'false'
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Verify npm visibility and stamp the registry listing
+        if: steps.registry.outputs.published == 'false'
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          endpoint="https://registry.npmjs.org/@goadesign%2Fhighbay/$VERSION"
+          for attempt in $(seq 1 30); do
+            status="$(curl -sS --max-time 10 -o "$RUNNER_TEMP/highbay-npm.json" -w '%{http_code}' "$endpoint")"
+            if [[ "$status" == "200" ]]; then
+              break
+            fi
+            if [[ "$status" != "404" || "$attempt" == "30" ]]; then
+              echo "npm registry returned HTTP $status for @goadesign/highbay@$VERSION" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+          node --input-type=module - "$RUNNER_TEMP/highbay-npm.json" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const version = process.env.VERSION;
+          const read = (file) => JSON.parse(readFileSync(file, 'utf8'));
+          const pkg = read('npm/highbay/package.json');
+          const published = read(process.argv[2]);
+          const srv = read('server.json');
+          const [entry] = srv.packages;
+          assert.equal(srv.packages.length, 1);
+          assert.equal(pkg.mcpName, srv.name);
+          assert.equal(pkg.name, entry.identifier);
+          assert.equal(published.name, pkg.name);
+          assert.equal(published.mcpName, srv.name);
+          assert.equal(published.version, version);
+          srv.version = version;
+          entry.version = version;
+          writeFileSync('server.json', JSON.stringify(srv, null, 2) + '\n');
+          NODE
+
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: steps.registry.outputs.published == 'false'
+
+      - name: Verify the registry publisher release
+        if: steps.registry.outputs.published == 'false'
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          base="https://github.com/modelcontextprotocol/registry/releases/download/$MCP_PUBLISHER_VERSION"
+          cd "$RUNNER_TEMP"
+          for file in "$archive" "$archive.sigstore.json"; do
+            curl -fsSL --proto '=https' --proto-redir '=https' --max-time 60 \
+              "$base/$file" -o "$file"
+          done
+          cosign verify-blob \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/$MCP_PUBLISHER_VERSION" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --bundle "$archive.sigstore.json" "$archive"
+          tar -xzf "$archive" mcp-publisher
+
+      - name: Publish the MCP Registry listing
+        if: steps.registry.outputs.published == 'false'
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish
+
+  update-homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: goadesign/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Generate and publish the formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release download "$TAG" --pattern checksums.txt --dir "$RUNNER_TEMP"
+          scripts/homebrew-formula.sh "$VERSION" "$RUNNER_TEMP/checksums.txt" > "$RUNNER_TEMP/highbay.rb"
+          ruby -c "$RUNNER_TEMP/highbay.rb"
+          # An older workflow can be retried after a newer release completes.
+          if [[ -f tap/Formula/highbay.rb ]]; then
+            if ruby -e '
+              installed = File.read(ARGV[0])[/^\s*version "(\d+\.\d+\.\d+)"$/, 1]
+              exit(installed && Gem::Version.new(installed) > Gem::Version.new(ARGV[1]) ? 0 : 1)
+            ' tap/Formula/highbay.rb "$VERSION"; then
+              echo "Homebrew already carries a newer Highbay release"
+              exit 0
+            fi
+          fi
+          mv "$RUNNER_TEMP/highbay.rb" tap/Formula/highbay.rb
+          git -C tap add -- Formula/highbay.rb
+          if git -C tap diff --cached --quiet; then
+            exit 0
+          fi
+          git -C tap -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "Highbay $TAG"
+          git -C tap push

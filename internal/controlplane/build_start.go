@@ -19,7 +19,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	goa "goa.design/goa/v3/pkg"
 )
 
 // defaultBuildStartTimeout bounds opening and refreshing one copy and one
@@ -511,25 +510,12 @@ func buildTeamOutcome(team *genhighbay.ProjectTeam, err error) genhighbay.Team {
 	if err == nil {
 		return genhighbay.NewTeamReady(team)
 	}
-	var spaces *TeamSpaceConflict
-	if errors.As(err, &spaces) {
-		return genhighbay.NewTeamAmbiguousSpace(&genhighbay.BuildTeamAmbiguousSpace{
-			Count: spaces.Count,
-			Step:  genhighbay.BuildStartStep(duplicateTeamSpacesStep()),
-		})
-	}
 	var policy *TeamPolicyRefusal
 	if errors.As(err, &policy) {
 		return genhighbay.NewTeamUnavailable(&genhighbay.BuildTeamUnavailable{
 			Step: genhighbay.BuildStartStep(policy.Step(
 				"then use Team → Start workers on the views page to start the team agents for this saved build.",
 			)),
-		})
-	}
-	var unavailable *goa.ServiceError
-	if errors.As(err, &unavailable) && unavailable.Name == "window_busy" {
-		return genhighbay.NewTeamWindowBusy(&genhighbay.BuildTeamWindowBusy{
-			Step: "Close the open Herdr dialog, then start the team agents.",
 		})
 	}
 	cause := ""
@@ -550,17 +536,13 @@ func buildTeamStep(cause string) string {
 	const retry = "then use Team → Start workers on the views page to start the team agents for this saved build."
 	switch cause {
 	case "stopping":
-		return "The project server is stopping. Ask your coding agent to open Highbay views, or choose Start Highbay " +
-			"in the Herdr companion; either starts the server again and opens a fresh page, " + retry
+		return "The project server is stopping. Run highbay in the project folder, or ask your coding agent to open Highbay views; " +
+			"either starts the server again and opens a fresh page, " + retry
 	case "chorus":
 		return "Chorus is not running or its settings are invalid. Run chorus up (or chorus status to see the error), " + retry
-	case "herdr":
-		return "Herdr did not complete a team command. Open the Herdr app, " + retry
-	case "saved_space":
-		return "This project's saved Herdr space has an ID this version of Highbay no longer accepts. Close that space in Herdr (its agents stop with it), then start the agents again; Highbay will prepare a replacement space."
-	case "roster_folder":
-		return "Herdr's launcher roster folder could not be written. Make data/chorus-launcher/rosters " +
-			"in Herdr's app folder (~/.config/herdr-app unless HERDR_APP_HOME is set) writable by this account, " + retry
+	case "hc":
+		return "herdr-core (hc), which runs each agent's terminal, did not complete a terminal command. " +
+			"Run hc server status to see the error (highbay up installs and starts it), " + retry
 	case "project_state":
 		return "This project's private state could not be read or written. Make sure this account can read and write " +
 			"this project's Highbay state (under highbay/operator in your user configuration folder) and restore anything " +

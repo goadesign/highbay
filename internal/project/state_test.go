@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,7 +16,7 @@ import (
 )
 
 // TestOpenServesOnlyTheNamedProjectState opens an initialized state folder exactly as
-// Discover found it under a physical root, as the `hbay` command's operator root is,
+// Discover found it under a physical root, as the `highbay` command's operator root is,
 // and refuses every folder that is not that project's private state.
 func TestOpenServesOnlyTheNamedProjectState(t *testing.T) {
 	root := physicalTempDir(t)
@@ -44,7 +45,7 @@ func TestOpenServesOnlyTheNamedProjectState(t *testing.T) {
 	inside := projectDirectory(insideRoot, state.Record.Directory)
 	writeStateCopy(t, inside, record)
 
-	// The same folder reached through a linked root is not the physical path hbay passes.
+	// The same folder reached through a linked root is not the physical path highbay passes.
 	alias := filepath.Join(physicalTempDir(t), "alias")
 	require.NoError(t, os.Symlink(root, alias))
 
@@ -82,12 +83,12 @@ func TestOpenServesOnlyTheNamedProjectState(t *testing.T) {
 	for _, tc := range []struct {
 		name, dir, want string
 	}{
-		{name: "relative path", dir: relative, want: "is not an absolute path; start the project with hbay"},
+		{name: "relative path", dir: relative, want: "is not an absolute path; start the project with highbay"},
 		{name: "missing folder", dir: filepath.Join(root, "absent"), want: "no such file or directory"},
 		{name: "folder other accounts can read", dir: shared, want: "must be private and owned by this account"},
 		{name: "symbolic link to the state", dir: linked, want: "must be private and owned by this account"},
 		{name: "folder reached through a linked root", dir: filepath.Join(alias, filepath.Base(state.Dir)), want: "is not its physical path " + state.Dir},
-		{name: "folder never initialized", dir: uninitialized.Dir, want: "holds no project; start the project with hbay"},
+		{name: "folder never initialized", dir: uninitialized.Dir, want: "holds no project; start the project with highbay"},
 		{name: "record of another project", dir: foreign, want: "does not belong to the project folder " + state.Record.Directory},
 		{name: "invalid record", dir: corrupt, want: "invalid project record"},
 		{name: "not the exact folder path", dir: state.Dir + string(filepath.Separator), want: "is not its physical path " + state.Dir},
@@ -114,7 +115,7 @@ func physicalTempDir(t *testing.T) string {
 }
 
 // TestAgentCredentialReadsOnlyAPrivateCredential reads a registered agent's
-// credential for `hbay stdio` and refuses missing, public or malformed files
+// credential for `highbay stdio` and refuses missing, public or malformed files
 // without returning their bytes.
 func TestAgentCredentialReadsOnlyAPrivateCredential(t *testing.T) {
 	state := initializedState(t, physicalTempDir(t), t.TempDir())
@@ -139,7 +140,7 @@ func TestAgentCredentialReadsOnlyAPrivateCredential(t *testing.T) {
 	assert.ErrorIs(t, err, errNotPrivateFile)
 }
 
-// initializedState creates the project for directory under root as `hbay` does.
+// initializedState creates the project for directory under root as `highbay` does.
 func initializedState(t *testing.T, root, directory string) *State {
 	t.Helper()
 	state, err := Discover(root, directory)
@@ -230,6 +231,26 @@ func TestBrokenStateNamesPathAndStep(t *testing.T) {
 			},
 			want: func(state *State) []string {
 				return []string{"Highbay project in " + state.Record.Directory, record(state), "restore it from a backup"}
+			},
+		},
+		{
+			// The desktop launcher's version saved its window placement here.
+			// No field of an earlier format is read: the record is refused
+			// like any other with a field this version does not know.
+			name: "record with a field this version does not know",
+			damage: func(t *testing.T, state *State) {
+				raw, err := os.ReadFile(record(state))
+				require.NoError(t, err)
+				withSpace := strings.Replace(string(raw), "{", `{"space":"space-1",`, 1)
+				require.NotEqual(t, string(raw), withSpace)
+				require.NoError(t, os.WriteFile(record(state), []byte(withSpace), 0o600))
+			},
+			want: func(state *State) []string {
+				return []string{
+					"Highbay project in " + state.Record.Directory, record(state),
+					"restore it from a backup and try again",
+					"move the folder " + state.Dir,
+				}
 			},
 		},
 		{

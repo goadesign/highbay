@@ -2,32 +2,32 @@
 // what to do when the session ends.
 
 import React from "react";
-import { CopyPrompt } from "./copy-prompt";
 import { Alert, Card } from "./shadcn";
 
-// The recovery prompt contains no project link or browser credential.
-const openViewsPrompt = "Open Highbay views";
-
-// SessionRecovery offers the same fresh-session routes on either side of a
-// session. The visible prompt remains selectable if clipboard access fails.
+// SessionRecovery explains the two ways to open or restore a project session:
+// running `highbay` in the project folder or invoking `/highbay` in a coding agent.
 function SessionRecovery() {
-  return <>
-    <p>
-      Ask your coding agent to open Highbay views, or choose Open Highbay Window in the Herdr companion.
-    </p>
-    <CopyPrompt text={openViewsPrompt} label="Copy prompt for coding agent" showText />
-    <details>
-      <summary>Open from a terminal without a coding agent</summary>
-      <p>In the project folder, use <code>hbay --print-link</code>. Open the one-use link privately within two minutes.</p>
-    </details>
-  </>;
+  return (
+    <>
+      <p>
+        In your project folder, run <code>highbay</code> to open this workspace in your browser, or run{" "}
+        <code>/highbay</code> (<code>$highbay</code> in Codex) inside your coding agent.
+      </p>
+      <details className="highbay-details">
+        <summary>Print a one-use link without opening a browser automatically</summary>
+        <p>
+          In the project folder, run <code>highbay --print-link</code> and open the printed link within two minutes.
+        </p>
+      </details>
+    </>
+  );
 }
 
 // SignedOutReason says why the page has no session.
 export type SignedOutReason = "no-link" | "link-used" | "link-failed";
 
-// SignedOutView names the agent and companion routes that open a fresh views
-// session. It never offers a way to type or paste a credential.
+// SignedOutView names the routes that open a fresh views session. It never
+// offers a way to type or paste a credential.
 export function SignedOutView({ reason, message }: { reason: SignedOutReason; message: string }) {
   return (
     <Card id="highbay-signed-out" className="highbay-card" aria-labelledby="highbay-signed-out-title">
@@ -40,8 +40,9 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
       </h2>
       {reason === "link-used" ? (
         <Alert id="highbay-link-used" variant="warning" role="alert">
-          This link was already used or has expired, so it cannot open a session. Each link
-          opens one page once. If you did not use it yourself, someone else may have.
+          This link was already used or has expired, so it cannot open a session. Each link opens a
+          browser session once. If you already opened this project in this browser, open{" "}
+          <code>/views</code> without the <code>#link=</code> fragment.
         </Alert>
       ) : null}
       {reason === "link-failed" ? (
@@ -51,8 +52,8 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
       ) : null}
       <SessionRecovery />
       <p className="highbay-muted">
-        Reloading or reopening this page, or opening it in another tab, needs a fresh session
-        through one of those routes.
+        Once signed in, reloading this page or opening another tab in the same browser keeps your
+        session active while the project server is running.
       </p>
     </Card>
   );
@@ -64,14 +65,13 @@ export function SignedOutView({ reason, message }: { reason: SignedOutReason; me
 export function SessionEndedNotice({ unsavedLines }: { unsavedLines: string[] }) {
   return (
     <Alert id="highbay-session-ended" variant="warning" role="alert">
-      <strong>This page's Highbay session has ended. </strong>
-      The Highbay server no longer accepts it, for example because the server restarted.
+      <strong>This page’s Highbay session has ended. </strong>
+      The Highbay server no longer accepts it, for example because the project server restarted.
       <SessionRecovery />
       {unsavedLines.length > 0 ? (
         <>
           <p>
-            Your unsaved edits are still in the form below. Copy them before you leave this
-            page:
+            Your unsaved edits are still in the form below. Copy them before you open a new session:
           </p>
           <pre id="highbay-session-ended-edits" tabIndex={0}>
             {unsavedLines.join("\n")}

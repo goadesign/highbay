@@ -204,7 +204,7 @@ func TestNewRefusesSettingsThatCannotBeHeld(t *testing.T) {
 }
 
 // TestSelectSendsRequestSettingsWithTheirKeyAndNamesTheRest covers what the
-// hbay command hands over from its shell.
+// highbay command hands over from its shell.
 func TestSelectSendsRequestSettingsWithTheirKeyAndNamesTheRest(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
