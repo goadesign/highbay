@@ -2037,10 +2037,13 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // loadAgentOptions is a stable mount callback; the owner is not probed by
-  // wait_for_changes or routine renders once discovery has completed.
+  // loadAgentOptions is a stable mount callback; queueMicrotask avoids calling
+  // flushSync inside a React effect commit, and the owner is not probed again
+  // once discovery has completed.
   function loadAgentOptions() {
-    if (agentOptions === null && agentOptionsError === null) readAgentOptions();
+    queueMicrotask(() => {
+      if (agentOptions === null && agentOptionsError === null) readAgentOptions();
+    });
   }
 
   // readAgentOptions is the explicit discovery and retry path. Failed reads

@@ -408,7 +408,7 @@ page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-approval-stage").dataset.runId === input.otherRun && !page.$("#highbay-cp5-observation-status"), "untaken pass B did not open in Approve");
 expect(page.text(".highbay-approval-basis").includes(otherMergedBasis) && !page.text(".highbay-approval-basis").includes("This run verified") && !page.text(".highbay-approval-basis").includes("Merged into your branch."), "Approve claimed untaken pass B was merged");
 expect(!verifyMerged(), "the untaken pass borrowed the approved merge's verification command");
-expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0, "observing the merge approved or started work");
+expect(page.sent("POST", "/changes/approve").length === 0 && !page.requests.some((r) => r.method === "POST" && /^\/changes\/[^/]+\/verifications$/.test(r.path)), "observing the merge approved or started work");
 page.close();
 `)
 }

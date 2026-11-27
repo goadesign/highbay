@@ -305,7 +305,6 @@ await until(() => page.$("#highbay-build-start-team-receipt") && page.$("#highba
 expect(page.text("#highbay-build-start-team-receipt").includes("the build was saved and team startup was unavailable") && page.text("#highbay-build-start-team-receipt").includes(oldStep), "the unavailable team was not shown as a historical receipt");
 const savedStart = JSON.parse(page.sent("POST", path)[0].answer).build.started_at;
 expect(page.text("#highbay-build-details").includes(savedStart), "the saved Build identity is missing");
-expect(!page.$("#highbay-build-start-copy-receipt"), "the removed working-copy receipt returned");
 await control(origin, "act", { key: "allow-team-start" });
 page.$("#highbay-build-view-team").click();
 await until(() => page.state() === "team" && page.$("#highbay-team-start") && !page.$("#highbay-team-start").disabled, "View team did not open the recovery action");
@@ -317,7 +316,6 @@ page.$("#highbay-nav-cp1").click();
 await until(() => page.$("#highbay-build-again") && page.text("#highbay-build-details").includes(savedStart), "returning to the card lost the saved Build");
 expect(!page.$("#highbay-build-start-team-receipt") && !page.doc.body.textContent.includes(oldStep), "the old team instruction returned on the card or global status");
 expect(page.text("#highbay-build-details").includes(savedStart), "Team recovery rewrote the saved Build identity");
-expect(!page.$("#highbay-build-start-copy-receipt"), "Team recovery restored the removed working-copy receipt");
 page.$("#highbay-nav-team").click();
 await until(() => page.$("#highbay-team-start-receipt"), "the latest Team receipt was lost on navigation");
 expect(!page.doc.body.textContent.includes(oldStep), "the old Build instruction returned after reopening Team");

@@ -279,7 +279,7 @@ export function CP1EditorView({
             {card.unverified_approval ? <Badge variant="warning">Approval unverified</Badge> : null}
             {!cp4Open ? (
               <Button
-                id="highbay-load-verifications"
+                id="highbay-cp1-load-verifications"
                 disabled={loadingVerifications}
                 onClick={onLoadVerifications}
               >
@@ -308,7 +308,7 @@ export function CP1EditorView({
         <section className="highbay-approval-summary" aria-label="Saved approval">
           <p><strong>{card.unverified_approval !== undefined ? "Saved approval needs checking." : "Approval recorded."}</strong>
             {" Read its evidence, verified commits and current status in Approve."}</p>
-          {draftDirty ? <Alert id="highbay-cp5-approval-dirty-warning" variant="warning" role="status">
+          {draftDirty ? <Alert id="highbay-cp1-approval-dirty-warning" variant="warning" role="status">
             Saving different answers or examples creates a new revision and clears this approval.
           </Alert> : null}
           <Button id="highbay-review-approval" onClick={onReviewApproval}>Review saved approval</Button>

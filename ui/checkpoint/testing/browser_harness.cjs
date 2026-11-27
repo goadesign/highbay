@@ -1214,9 +1214,13 @@ async function workspaceScenario(input, facts, views) {
     throw new Error("TerminalDrawer did not connect and render PTY output: " + await evaluate(views, "document.getElementById('highbay-terminal-drawer')?.innerText || ''"));
   }
 
-  // Type inside xterm and verify Ctrl+Shift+Escape moves focus to Close terminal.
+  // Type inside xterm: plain Escape reaches the PTY without closing the drawer,
+  // while Ctrl+Shift+Escape moves focus to Close terminal.
   await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
   await views.dt.send("Input.insertText", { text: "y" }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  const plainEscapeInsideKeptOpen = await evaluate(views, "document.getElementById('highbay-terminal-drawer') !== null");
   await views.dt.send(
     "Input.dispatchKeyEvent",
     {
@@ -1269,15 +1273,23 @@ async function workspaceScenario(input, facts, views) {
     throw new Error("TerminalDrawer did not reconnect after role restart");
   }
 
+  // Plain Escape on a drawer header control outside xterm closes the drawer.
+  await evaluate(views, "document.getElementById('highbay-terminal-close')?.focus(), true");
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  const closedByPlainEscape = await until(views, "document.getElementById('highbay-terminal-drawer') === null");
+
   facts.workspace = {
     release_href: releaseHref,
     update_ready: !updateReady.timed_out,
     draft_survived_update: draftSurvivedUpdate,
     reply_rendered: !replyRendered.timed_out,
     terminal_connected: !connected.timed_out,
+    plain_escape_inside_kept_open: plainEscapeInsideKeptOpen,
     focus_escaped: focusEscaped,
     builder_kept_across_guide_restart: builderKeptAcrossGuideRestart,
     terminal_restarted: !restarted.timed_out,
+    plain_escape_outside_closed: !closedByPlainEscape.timed_out,
     browser_cookies: (await views.dt.send("Storage.getCookies", {})).cookies.length,
   };
 }

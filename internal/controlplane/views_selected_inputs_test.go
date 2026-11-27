@@ -108,7 +108,7 @@ await until(testsChanged, "the second acceptance did not restore the tests misma
 await control(origin, "act", { key: "drop-current-build" });
 await until(() => page.text("#highbay-cp4-inputs").includes("does not match") && !difference(), "the dropped build was still described as the current accepted tests");
 expect(/\breport 1\b/i.test(binding()) && page.text("#highbay-cp4-title") === verdict, "dropping the build hid the saved evidence");
-expect(page.sent("POST", "/changes/verify").length === 0, "reading saved proof started verification");
+expect(!page.requests.some((r) => r.method === "POST" && /^\/changes\/[^/]+\/verifications$/.test(r.path)), "reading saved proof started verification");
 page.close();
 `)
 }
@@ -574,7 +574,7 @@ const namesRevisedAgreement = (used) => {
 await until(() => namesRevisedAgreement(input.earlier), "the fresh list did not identify the revised agreement for the older run");
 page.$("#highbay-cp4-run-" + input.latest).click();
 await until(() => namesRevisedAgreement(input.listed), "the prior agreement's run did not name the newly confirmed agreement");
-expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0,
+expect(page.sent("POST", "/changes/approve").length === 0 && !page.requests.some((r) => r.method === "POST" && /^\/changes\/[^/]+\/verifications$/.test(r.path)),
   "reading saved proof approved or started verification");
 page.close();
 `)

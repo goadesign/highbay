@@ -83,7 +83,7 @@ page.$("#highbay-nav-cp4").click();
 await until(() => page.$("#highbay-result-view").dataset.runId === input.run && page.$("#highbay-cp4-test-source"), "the old saved proof could not be inspected");
 expect(page.text("#highbay-cp4-details").includes(input.revision), "the proof lost its recorded revision");
 expect(page.text("#highbay-cp4-test-source").includes("not isolated from the builder"), "inspecting history lost the written-test notice");
-expect(page.sent("POST", "/changes/chg-summary/build").length === 0 && page.sent("POST", "/changes/verify").length === 0, "reading history started work");
+expect(page.sent("POST", "/changes/chg-summary/build").length === 0 && !page.requests.some((r) => r.method === "POST" && /^\/changes\/[^/]+\/verifications$/.test(r.path)), "reading history started work");
 page.close();
 `)
 }

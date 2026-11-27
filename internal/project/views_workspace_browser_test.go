@@ -39,9 +39,11 @@ type (
 		DraftSurvivedUpdate           bool   `json:"draft_survived_update"`
 		ReplyRendered                 bool   `json:"reply_rendered"`
 		TerminalConnected             bool   `json:"terminal_connected"`
+		PlainEscapeInsideKeptOpen     bool   `json:"plain_escape_inside_kept_open"`
 		FocusEscaped                  bool   `json:"focus_escaped"`
 		BuilderKeptAcrossGuideRestart bool   `json:"builder_kept_across_guide_restart"`
 		TerminalRestarted             bool   `json:"terminal_restarted"`
+		PlainEscapeOutsideClosed      bool   `json:"plain_escape_outside_closed"`
 		BrowserCookies                int    `json:"browser_cookies"`
 	}
 
@@ -220,9 +222,11 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	assert.True(t, facts.Workspace.DraftSurvivedUpdate, "unsaved ConversationRail input was lost during Update & Restart")
 	assert.True(t, facts.Workspace.ReplyRendered, "ConversationRail did not post message and render Markdown reply")
 	assert.True(t, facts.Workspace.TerminalConnected, "TerminalDrawer did not attach over WebSocket and render PTY output")
+	assert.True(t, facts.Workspace.PlainEscapeInsideKeptOpen, "plain Escape inside xterm closed TerminalDrawer instead of forwarding to the PTY")
 	assert.True(t, facts.Workspace.FocusEscaped, "Ctrl+Shift+Escape did not move focus out of xterm to Close terminal")
 	assert.True(t, facts.Workspace.BuilderKeptAcrossGuideRestart, "restarting guide disconnected the open builder TerminalDrawer")
 	assert.True(t, facts.Workspace.TerminalRestarted, "Restart button did not restart role and reconnect TerminalDrawer")
+	assert.True(t, facts.Workspace.PlainEscapeOutsideClosed, "plain Escape on a drawer header control outside xterm did not close TerminalDrawer")
 	assert.Zero(t, facts.Workspace.BrowserCookies, "browser cookie store must remain empty")
 
 	assert.GreaterOrEqual(t, fixture.credits.Load(), int64(len("Allow tool? [y/N] ")), "xterm did not replenish stream byte credit")
@@ -242,6 +246,11 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	assert.Equal(t, map[string]int{"builder": 2}, ticketCounts, "guide restart must not request another builder terminal ticket")
 	assert.Equal(t, 1, sentCount)
 	assert.NotEmpty(t, inputs, "keystrokes typed in xterm were not delivered over WebSocket")
+	var flatInputs []byte
+	for _, chunk := range inputs {
+		flatInputs = append(flatInputs, chunk...)
+	}
+	assert.Contains(t, string(flatInputs), "\x1b", "plain Escape inside xterm was not forwarded as ESC (0x1b) over WebSocket")
 	browser.stopAndCheck(t)
 }
 
