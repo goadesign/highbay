@@ -223,6 +223,7 @@ page.$("#highbay-nav-cp1").click();
 await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-a", "chg-iso-a Agree did not open for composer isolation");
 expect(page.$("#highbay-composer-input").value === "", "chg-iso-a inherited B's composer draft");
 page.type(page.$("#highbay-composer-input"), "Sent rail note from A");
+await until(() => page.$("#highbay-composer-send")?.disabled === false, "A composer send remained disabled");
 await control(origin, "hold", { key: "POST /team/messages" });
 page.$("#highbay-composer-send").click();
 await until(() => page.sent("POST", "/team/messages").some((r) => r.status === undefined), "rail send on A was not held");
@@ -242,7 +243,7 @@ await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-iso-a
 expect(page.$("#highbay-composer-input").value === "", "settled rail send on A stayed cached in A's scope");
 page.type(page.$("#highbay-composer-input"), "Pre-existing note on A");
 page.$('button[data-option="safe"]').click();
-await until(() => page.$("#highbay-confirm-revision-needed-send"), "A RevisionAid did not appear");
+await until(() => page.$("#highbay-confirm-revision-needed-send")?.disabled === false, "A RevisionAid send button did not become enabled");
 await control(origin, "reply", { key: "POST /team/messages", status: 422, body: { name: "unprocessable", id: "u-iso", message: "Refused A agree send.", temporary: false, timeout: false, fault: false } });
 await control(origin, "hold", { key: "POST /team/messages" });
 page.$("#highbay-confirm-revision-needed-send").click();

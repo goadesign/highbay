@@ -228,6 +228,7 @@ await until(() => page.$("#highbay-describe-input") && page.$("#highbay-describe
 expect(page.$$('[data-primary-action="true"]').length === 1 && page.$("#highbay-describe-submit").dataset.primaryAction === "true", "Moment 0 must highlight #highbay-describe-submit as the sole primary action");
 
 page.type(page.$("#highbay-describe-input"), "Build refund workflows");
+await until(() => page.$("#highbay-describe-submit")?.disabled === false, "Moment 0 #highbay-describe-submit remained disabled");
 
 // 1a. Dropped network connection (status === 0) -> uncertain banner, draft preserved, no sent receipt.
 const realFetch = page.win.fetch.bind(page.win);
@@ -590,7 +591,7 @@ await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-guard
 // 1a. Select [qDrop=yes, qKeep=multi] while leaving qUnchanged at draft_option=on -> RevisionAid attaches ONLY 2 changed answers.
 page.$('button[data-ambiguity-id="' + input.qDrop + '"][data-option="yes"]').click();
 page.$('button[data-ambiguity-id="' + input.qKeep + '"][data-option="multi"]').click();
-await until(() => page.$("#highbay-confirm-revision-needed-send"), "RevisionAid did not appear");
+await until(() => page.$("#highbay-confirm-revision-needed-send")?.disabled === false, "RevisionAid send button did not become enabled");
 
 // 1b. Failed direct agree-aid send on an empty composer seeds composerDraft with the unsent request.
 await control(origin, "reply", { key: "POST /team/messages", status: 422, body: { name: "unprocessable", id: "u-aid", message: "Simulated agree refusal.", temporary: false, timeout: false, fault: false } });

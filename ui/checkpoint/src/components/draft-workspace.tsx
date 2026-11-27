@@ -197,13 +197,19 @@ export function DraftChangeWorkspace({
   const selectedOption = (agentOptions ?? []).find(
     (opt) => opt.client === guideChoice?.client && opt.program === guideChoice.program
   );
+  const initialTeamPending = snapshot === null && teamLoading;
   const choiceInvalid =
     guideNeedsLaunch &&
     (agentOptions === null ||
       guideChoice === undefined ||
       roleChoiceError(guideChoice, agentOptions) !== null);
   const canSubmit =
-    !disabled && !sending && !chorusUnavailable && draftText.trim() !== "" && !choiceInvalid;
+    !disabled &&
+    !sending &&
+    !chorusUnavailable &&
+    !initialTeamPending &&
+    draftText.trim() !== "" &&
+    !choiceInvalid;
 
   const cardId = isFirstProjectChange ? "highbay-change-list" : "highbay-new-change-stage";
   const titleId = isFirstProjectChange ? "highbay-change-list-title" : "highbay-new-change-title";

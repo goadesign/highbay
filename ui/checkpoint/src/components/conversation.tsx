@@ -43,6 +43,7 @@ export interface ConversationRailProps {
   detachedNotice: string | null;
   conversation: TeamConversation | null;
   snapshot: TeamSnapshot | null;
+  teamLoading: boolean;
   loading: boolean;
   sending: boolean;
   error: string | null;
@@ -191,6 +192,7 @@ export function ConversationRail({
   detachedNotice,
   conversation,
   snapshot,
+  teamLoading,
   loading,
   sending,
   error,
@@ -221,8 +223,9 @@ export function ConversationRail({
   const [customizeGuide, setCustomizeGuide] = useState(false);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
 
-  const needsGuideStart =
-    (draft.to === "guide" || draft.to === "team") && guideRoleNeedsStart(snapshot);
+  const targetsGuide = draft.to === "guide" || draft.to === "team";
+  const initialTeamPending = targetsGuide && snapshot === null && teamLoading;
+  const needsGuideStart = targetsGuide && guideRoleNeedsStart(snapshot);
 
   useEffect(() => {
     if (needsGuideStart) {
@@ -262,6 +265,7 @@ export function ConversationRail({
     !sending &&
     !staleHold &&
     !chorusUnavailable &&
+    !initialTeamPending &&
     draft.text.trim() !== "" &&
     !guideInvalid;
 

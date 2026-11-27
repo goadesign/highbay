@@ -978,9 +978,17 @@ export function bootstrapViewsPage() {
     );
   }
 
-  // isGuideChoiceInvalidForRecipient reports whether recipient requires starting Guide with an invalid choice.
+  // isGuideChoiceInvalidForRecipient reports whether recipient targets Guide while
+  // initial Team status is still unread or starting Guide lacks a valid choice.
   function isGuideChoiceInvalidForRecipient(to: ComposerRecipient): boolean {
-    const needsGuide = (to === "guide" || to === "team") && guideRoleNeedsStart(teamSnapshot);
+    const targetsGuide = to === "guide" || to === "team";
+    if (!targetsGuide) {
+      return false;
+    }
+    if (teamSnapshot === null && hasPending("get_team", "")) {
+      return true;
+    }
+    const needsGuide = guideRoleNeedsStart(teamSnapshot);
     return (
       needsGuide &&
       (agentOptions === null ||
@@ -3786,16 +3794,11 @@ export function bootstrapViewsPage() {
     ) {
       return;
     }
-    const needsGuide =
-      (payload.to === "guide" || payload.to === "team") && guideRoleNeedsStart(teamSnapshot);
-    if (
-      needsGuide &&
-      (agentOptions === null ||
-        guideChoice === undefined ||
-        roleChoiceError(guideChoice, agentOptions.agents) !== null)
-    ) {
+    if (isGuideChoiceInvalidForRecipient(payload.to)) {
       return;
     }
+    const needsGuide =
+      (payload.to === "guide" || payload.to === "team") && guideRoleNeedsStart(teamSnapshot);
     const fullPayload: SendTeamMessagePayload = {
       ...payload,
       ...(needsGuide && guideChoice !== undefined ? { guide_choice: guideChoice } : {}),
@@ -5691,11 +5694,7 @@ export function bootstrapViewsPage() {
     if (choices.length === 0) return null;
     const needsGuide = guideRoleNeedsStart(teamSnapshot);
     const sending = isScopeSending("change:" + changeId);
-    const guideInvalid =
-      needsGuide &&
-      (agentOptions === null ||
-        guideChoice === undefined ||
-        roleChoiceError(guideChoice, agentOptions.agents) !== null);
+    const guideInvalid = isGuideChoiceInvalidForRecipient("guide");
     const chorusDown = isChorusUnavailable();
     const changedAnswers: Record<string, string> = {};
     for (const item of choices) {
@@ -6743,6 +6742,7 @@ export function bootstrapViewsPage() {
           detachedNotice={composerDetachedNotice}
           conversation={teamConversation}
           snapshot={teamSnapshot}
+          teamLoading={hasPending("get_team", "")}
           loading={hasPending("get_team_conversation", "")}
           sending={isScopeSending(activeComposerScope)}
           error={conversationError}
