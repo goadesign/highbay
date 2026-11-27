@@ -30872,7 +30872,7 @@ components:
             properties:
                 channel:
                     type: string
-                    description: 'Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).'
+                    description: 'Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).'
                     example: Molestiae et cupiditate impedit aut ut eos.
                 handle:
                     type: string
@@ -38229,7 +38229,7 @@ components:
             properties:
                 id:
                     type: string
-                    description: 'Unique message key combining target and sequence (for example #refunds-8f3a1c902b4e:12).'
+                    description: 'Unique message key combining target and sequence (for example #ops-8f3a1c902b4e:12).'
                     example: Maiores ut modi.
                 model:
                     type: string

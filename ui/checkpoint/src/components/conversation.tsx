@@ -673,7 +673,7 @@ export function DescribeComposer({
           name="describe_text"
           className="shadcn-textarea highbay-input"
           rows={4}
-          placeholder="Example: Refunds up to $50 receive instant store credit; larger refunds require manager approval."
+          placeholder="Example: Build a multi-tenant incident platform: a triage agent and remediation agent with MCP tools to search pod logs, correlate deploys, and roll back services with on-call approval."
           value={draftText}
           disabled={disabled || sending}
           enterKeyHint="send"

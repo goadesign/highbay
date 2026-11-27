@@ -82,7 +82,7 @@ Rules for agents building services with Goa, Goa-AI, Model, Pulse and Clue. Rule
 ## 6. Durability
 
 - Agent turns and multi-step work run as durable workflows. Activities retry, so every side effect is idempotent. Key it by a stable ID such as the tool call ID or a domain key.
-- Pass downstream calls an idempotency key derived from the domain, for example `refund/<tenant>/<order>`.
+- Pass downstream calls an idempotency key derived from the domain, for example `rollback/<org>/<deploy>`.
 - Never retry a whole workflow. That repeats completed side effects.
 - Each complete workflow-engine input or output, including every tool call, result, transcript entry and metadata it carries, must fit the engine's payload limit (1 MiB). Keep large domain data in application storage and return a typed reference.
 - One host service owns the runtime store. Workers reach it through that service's typed API.

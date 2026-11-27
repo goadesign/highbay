@@ -135,7 +135,7 @@ Building adds a builder and a test writer, which Highbay starts in their own
 working copies and connects through Chorus. The project has one Chorus
 conversation, which the Highbay page shows to the user and lets them write in.
 Every `open_views` result names it: `team` is the project's Chorus swarm,
-`channel` is its channel (for example `#refunds-8f3a1c902b4e`), and `handle`
+`channel` is its channel (for example `#ops-8f3a1c902b4e`), and `handle`
 is your name there.
 
 When Chorus tools are available and `handle` is not empty, join swarm `<team>`

@@ -40,7 +40,7 @@ var TeamSnapshot = Type("TeamSnapshot", func() {
 // TeamMessage is one structured message in the project's Chorus conversation.
 var TeamMessage = Type("TeamMessage", func() {
 	Description("One message in the project's Chorus channel or direct-message thread.")
-	Attribute("id", String, "Unique message key combining target and sequence (for example #refunds-8f3a1c902b4e:12).")
+	Attribute("id", String, "Unique message key combining target and sequence (for example #ops-8f3a1c902b4e:12).")
 	Attribute("target", String, "Chorus target (#channel or @handle) carrying this message.")
 	Attribute("seq", Int, "Monotonic sequence number within target.", func() { Minimum(1) })
 	Attribute("sender", String, "Chorus handle of the sender.")

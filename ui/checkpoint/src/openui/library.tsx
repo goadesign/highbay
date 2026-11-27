@@ -670,12 +670,12 @@ export function generateDecisionCatalogMarkdown(): string {
     ],
     examples: [
       [
-        "Example — Refund threshold ambiguity with 2 options and 2 scenarios:",
-        "root = DecisionWorkspace(\"Refund Policy Decision Studio\", [sim, callout])",
-        "sim = PolicySimulatorTable(\"Threshold Tax Comparison\", 1, [row1, row2])",
-        "row1 = PolicySimulatorRow(\"Order with $48 subtotal and $4 tax\", \"$48 subtotal + $4 tax ($52 total)\", [\"Auto-approved (< $50 subtotal)\", \"Manager approval required (>= $50 total)\"], 1)",
-        "row2 = PolicySimulatorRow(\"Order with $55 subtotal\", \"$55 subtotal + $5 tax ($60 total)\", [\"Manager approval required\", \"Manager approval required\"], 2)",
-        "callout = ImpactCallout(\"info\", \"Tenant Isolation Invariant\", \"Cross-tenant refund lookups continue to return 404 Not Found.\")",
+        "Example — Rollback autonomy ambiguity with 2 options and 2 scenarios:",
+        "root = DecisionWorkspace(\"Remediation Rollback Policy\", [sim, callout])",
+        "sim = PolicySimulatorTable(\"Rollback Approval Matrix\", 1, [row1, row2])",
+        "row1 = PolicySimulatorRow(\"Staging service rollback\", \"rollback_staging on api-gateway\", [\"Autonomous self-healing\", \"Pauses at Confirmation\"], 1)",
+        "row2 = PolicySimulatorRow(\"Production service rollback\", \"rollback_production on api-gateway\", [\"Pauses at Confirmation for on-call\", \"Pauses at Confirmation for on-call\"], 2)",
+        "callout = ImpactCallout(\"info\", \"Tenant Isolation Invariant\", \"Cross-tenant incident and deploy lookups continue to return 403 Forbidden.\")",
       ].join("\n"),
     ],
   });

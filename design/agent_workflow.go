@@ -12,7 +12,7 @@ var OpenViewsResult = Type("OpenViewsResult", func() {
 	Attribute("opened", Boolean, "Whether the browser opener completed successfully.")
 	Attribute("message", String, "Safe handoff result without a URL or credential.")
 	Attribute("team", String, "Stable Chorus swarm name for this project.")
-	Attribute("channel", String, "Primary Chorus #channel for this project (for example #refunds-8f3a1c902b4e).")
+	Attribute("channel", String, "Primary Chorus #channel for this project (for example #ops-8f3a1c902b4e).")
 	Attribute("handle", String, "Registered Chorus handle for this project's guide (empty when no guide is registered yet).")
 	Required("opened", "message", "team", "channel", "handle")
 })
