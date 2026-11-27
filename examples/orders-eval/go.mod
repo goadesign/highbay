@@ -7,12 +7,12 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/stretchr/testify v1.12.1
 	goa.design/goa-ai v0.90.1-0.20261111075239-0114fb9d40d3
-	goa.design/goa/v3 v3.36.1-0.20261126175405-92d328af82bf
+	goa.design/goa/v3 v3.36.1-0.20261127003656-164e9345c403
 	google.golang.org/grpc v1.85.0
 )
 
 require (
-	github.com/aws/smithy-go v1.28.9 // indirect
+	github.com/aws/smithy-go v1.28.10 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dimfeld/httppath v0.0.0-20170720192232-ee938bf73598 // indirect
 	github.com/go-chi/chi/v5 v5.5.0 // indirect

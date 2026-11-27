@@ -333,6 +333,8 @@ goa.design/goa/v3 v3.35.1-0.20261114184515-dee88e893eb3 h1:ZD4QMuEdvDPtWU+r35H2S
 goa.design/goa/v3 v3.35.1-0.20261114184515-dee88e893eb3/go.mod h1:PKFE4NGYknvCYA2hKzbTqJ9Xvd5FUY15pz9jjqHCwy4=
 goa.design/goa/v3 v3.36.1-0.20261126175405-92d328af82bf h1:dI6iyhthKvCtj9epvYPgLFnLtzGl42sV0+KN9Gg5mts=
 goa.design/goa/v3 v3.36.1-0.20261126175405-92d328af82bf/go.mod h1:bbgAkS/u3NS9Cc4WsYPXvfebbvvVoa9sqhXHfRuA0xU=
+goa.design/goa/v3 v3.36.1-0.20261127003656-164e9345c403 h1:+nTRFhOufl+znRfg+JjqL+Ae3ZzqahatgNwL8BIJx0s=
+goa.design/goa/v3 v3.36.1-0.20261127003656-164e9345c403/go.mod h1:bbgAkS/u3NS9Cc4WsYPXvfebbvvVoa9sqhXHfRuA0xU=
 goa.design/model v1.16.11-0.20261030164016-5e17c2e932fb h1:t5EYsYPk6RGF1DMk2ZRBmBdRE1uCU4i0YNT27zv5Rlk=
 goa.design/model v1.16.11-0.20261030164016-5e17c2e932fb/go.mod h1:0HbdmjSXslRB+hyCEfYEjlCxoxur22rYovTNlyMU3xY=
 goa.design/model v1.16.11 h1:wNXgt/CQ/4irpNPQu5ja6q4RsVpzrjgV/MgwqRWLycw=

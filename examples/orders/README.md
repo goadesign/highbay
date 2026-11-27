@@ -62,9 +62,9 @@ go run ./cmd/highbay diff --old-dir examples/orders --new-dir examples/orders
 Here `examples/orders` is the project and Highbay runs a team of coding agents
 on it. Follow the [Highbay installation guide](../../README.md) for Go, Git,
 Docker, Herdr Core, Chorus, and a coding agent for each role. Docker runs the
-builder's Linux checks. Verification also needs the Temporal CLI
-(`brew install temporal`) because the Orders evaluator starts a local
-Temporal server for its scenarios.
+builder's Linux checks. Verification and the automated live-target test below
+also need the Temporal CLI (`brew install temporal`), because the Orders
+evaluator starts a local Temporal server for its scenarios.
 
 In this project no test writer writes tests for each change. (In a project
 without stored verification settings, a build also adds the test writer: an
@@ -118,7 +118,9 @@ EOF
 The subshell leaves your shell in the repository root for the next sections.
 `highbay up` prepares Highbay and starts its companion services.
 `highbay` starts or attaches to the project's Highbay server and opens its
-views page in your browser. Choose the coding agent that will be your guide.
+views page in your browser (or open `examples/orders` in a coding agent and
+invoke `/highbay`, `$highbay` in Codex, to attach that session as the guide).
+Choose the coding agent that will be your guide when starting from the browser.
 The guide is the agent you talk to about changes and works with you to write
 the Story, a Go description of the business's flows. The CLI confirms the
 project's folder and local server address. After changing stored verification
@@ -127,20 +129,23 @@ or promotion settings, run `highbay stop` and then `highbay` in
 
 One change then goes like this:
 
-1. In the views page, describe a change to the guide. For example, ask for a
-   second manager to approve card refunds above $100. The guide writes the
-   design change in `.highbay-draft` inside `examples/orders`. It proposes a
-   Change Card, the saved record of the request, its open questions, and the examples
-   that become checks. It appears on the views page.
+1. In **Conversation** on the views page (or in an attached guide session),
+   describe a change, for example "Card refunds above $100 need a second
+   manager". The guide writes the design change in its own draft, the folder
+   `.highbay-draft` that Highbay makes inside `examples/orders`, never in your
+   files. Then it proposes a Change Card: the saved record of the request, its
+   open questions, and the examples that become checks. It appears on the views
+   page.
 2. On the views page, answer the card's questions and confirm it. Only you
    can. The card's `request_revision` identifies the revision you agreed.
-3. Choose the builder's coding agent on the views page, then press
-   **Build this change**. The builder writes the code, and the stored
-   verification settings supply the tests.
-   The builder works in its own working copy of this repository: the folder
-   `.highbay-build` that Highbay makes inside `examples/orders`, on the branch
-   `highbay/build-<n>`, where `n` is the build's number. Your checkout and
-   the branch checked out in it stay as they are.
+3. In **Build**, choose the builder's coding agent and model inline, then press
+   **Build this change**. Because this project has stored verification
+   settings, the build adds only the builder, the agent that writes the code;
+   no test writer is used. The builder works in its own working copy of this
+   repository: the folder `.highbay-build` that Highbay makes inside
+   `examples/orders`, on the branch `highbay/build-<n>`, where `n` is the
+   build's number. Your checkout and the branch checked out in it stay as they
+   are.
 4. The builder writes the change in its working copy, commits it on
    `highbay/build-<n>` and asks Highbay to verify the commit (`verify_change`).
    Highbay builds `orders` and `orders-worker` from that commit and runs the
@@ -168,15 +173,15 @@ One change then goes like this:
    settings (`highbay promotion remove`, then `highbay stop` and `highbay`) to approve
    without that check.
 
-   The approval names the builder's commit and the tests commit, here the
-   stored suite commit. Highbay merges and deploys nothing.
-6. Merge the builder's commit, or drop the build. The builder's commit is on
-   `highbay/build-<n>`, not on the branch checked out in your checkout of this
-   repository. Once a run passed, the build shows **Passed**, and under
-   **To take this change, run in the project folder:** the page gives the
-   command to run in `examples/orders`: `git merge <candidate_commit>`, the
-   builder's commit. The tests are the stored suite's, so there is no tests
-   commit to merge. When your branch holds that commit, the build shows
+   Recording approval names the builder's commit and the tests commit, here the
+   stored suite commit; recording approval alone merges and deploys nothing.
+6. Merge the builder's commit, or drop the build. Once approval is recorded on
+   a current passing run, press **Merge into current branch** in **Approve** to
+   merge the verified candidate commit into the local branch checked out in
+   this repository (requires clean tracked files). **Manual merge instructions**
+   remain available as a secondary path (`git merge <candidate_commit>`;
+   because the tests come from the stored suite, there is no separate tests
+   commit to merge). When your branch holds that commit, the build shows
    **Merged**. To leave the change out instead, press **Drop…**, then
    **Drop change**: the builder's commits stay on `highbay/build-<n>`, and your
    branch is unchanged. Highbay builds another change only once this build is
