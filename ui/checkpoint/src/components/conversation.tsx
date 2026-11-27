@@ -58,6 +58,7 @@ export interface ConversationRailProps {
   onRefresh: () => void;
   onDraftChange: (patch: Partial<ComposerDraft>) => void;
   onSwitchRecipient: (nextTo: ComposerRecipient) => void;
+  onReplyToMessage: (seq: number, senderRole: TeamMessage["sender_role"]) => void;
   onGuideChoiceChange: (choice: RoleAgentChoice) => void;
   onLoadAgentOptions: () => void;
   onRefreshAgentOptions: () => void;
@@ -205,6 +206,7 @@ export function ConversationRail({
   onRefresh,
   onDraftChange,
   onSwitchRecipient,
+  onReplyToMessage,
   onGuideChoiceChange,
   onLoadAgentOptions,
   onRefreshAgentOptions,
@@ -285,6 +287,7 @@ export function ConversationRail({
     <Card
       id="highbay-conversation-panel"
       className="highbay-card highbay-conversation-card"
+      tabIndex={-1}
       aria-labelledby="highbay-conversation-title"
     >
       <div className="highbay-region-header">
@@ -447,24 +450,7 @@ export function ConversationRail({
                         variant="ghost"
                         disabled={disabled}
                         aria-label={"Reply to message #" + msg.seq + " from " + msg.sender}
-                        onClick={() => {
-                          const nextTo: ComposerRecipient =
-                            msg.sender_role === "builder"
-                              ? "builder"
-                              : msg.sender_role === "test_writer"
-                              ? "test_writer"
-                              : msg.sender_role === "guide"
-                              ? "guide"
-                              : draft.to;
-                          const clearGuideContext =
-                            nextTo !== "guide" && contextRequiresGuide(draft.context);
-                          onDraftChange({
-                            replyTo: msg.seq,
-                            to: nextTo,
-                            ...(clearGuideContext ? { context: null, seededText: undefined } : {}),
-                          });
-                          document.getElementById("highbay-composer-input")?.focus();
-                        }}
+                        onClick={() => onReplyToMessage(msg.seq, msg.sender_role)}
                       >
                         Reply
                       </Button>

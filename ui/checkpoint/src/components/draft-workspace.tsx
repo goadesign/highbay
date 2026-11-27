@@ -203,8 +203,9 @@ export function DraftChangeWorkspace({
   const cardId = isFirstProjectChange ? "highbay-change-list" : "highbay-new-change-stage";
   const titleId = isFirstProjectChange ? "highbay-change-list-title" : "highbay-new-change-title";
 
-  // 1. Terminal blocker: #highbay-team-attention-terminal-guide owns the page's primary action.
-  if (guideState === "needs_you") {
+  // 1. Terminal blocker: #highbay-team-attention-terminal-guide owns the page's primary action,
+  // unless an in-flight, uncertain, or refused send on this form requires user visibility/recovery.
+  if (guideState === "needs_you" && !sending && !sendUncertain && sendError === null) {
     return (
       <Card
         id={cardId}
@@ -236,14 +237,24 @@ export function DraftChangeWorkspace({
     );
   }
 
-  // 2. Actively working: show receipt + truthful milestones + passive Watch Guide terminal.
+  // 2. Actively working: on Moment 0, show receipt/project milestones while Guide or
+  // initialization runs; on + New change, enter working state only after this request
+  // has a confirmed sentMessageId, and never mask an uncertain send banner.
   const firstChangeInitializing = isFirstProjectChange && list?.initializing_phase !== undefined;
   const firstChangeEvaluating = isFirstProjectChange && list?.draft_state === "evaluating_story";
   const activelyWorking =
-    firstChangeInitializing ||
-    firstChangeEvaluating ||
-    guideState === "starting" ||
-    guideState === "working";
+    !sending &&
+    !sendUncertain &&
+    sendError === null &&
+    (isFirstProjectChange
+      ? firstChangeInitializing ||
+        firstChangeEvaluating ||
+        guideState === "starting" ||
+        guideState === "working"
+      : sentMessageId !== undefined &&
+        (guideState === "starting" ||
+          guideState === "working" ||
+          storyEvaluation?.state === "running"));
 
   if (activelyWorking) {
     let heading = isFirstProjectChange ? "Working on your request" : "Drafting new Change Card";
@@ -566,6 +577,16 @@ export function DraftChangeWorkspace({
         </Alert>
       ) : null}
 
+      {!isFirstProjectChange &&
+      sentMessageId === undefined &&
+      (guideState === "starting" ||
+        guideState === "working" ||
+        storyEvaluation?.state === "running") ? (
+        <p id="highbay-new-change-activity" className="highbay-muted" role="status">
+          Guide is currently working in this project. You can still describe a separate change below.
+        </p>
+      ) : null}
+
       {guideConnected && !guideHasTerminal ? (
         <p id="highbay-describe-guide-attached" className="highbay-muted">
           <Badge variant="success">Guide connected in your editor</Badge>{" "}
@@ -619,14 +640,18 @@ export function DraftChangeWorkspace({
                 event.currentTarget.form?.requestSubmit(submitButtonRef.current ?? undefined);
               }
             }}
+            // Both onInput and onChange call syncText: React requires onChange on controlled
+            // textareas, while programmatic DOM input events in tests bypass _valueTracker.
             onInput={(event) => {
-              if (event.currentTarget.value !== draftText) {
-                onDraftTextChange(event.currentTarget.value);
+              const next = event.currentTarget.value;
+              if (next !== draftText) {
+                onDraftTextChange(next);
               }
             }}
             onChange={(event) => {
-              if (event.currentTarget.value !== draftText) {
-                onDraftTextChange(event.currentTarget.value);
+              const next = event.currentTarget.value;
+              if (next !== draftText) {
+                onDraftTextChange(next);
               }
             }}
           />

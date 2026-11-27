@@ -34,20 +34,22 @@ import (
 type (
 	// workspaceBrowserFacts captures Headless Chrome observations from workspaceScenario.
 	workspaceBrowserFacts struct {
-		ReleaseHref                   string `json:"release_href"`
-		UpdateReady                   bool   `json:"update_ready"`
-		DraftSurvivedUpdate           bool   `json:"draft_survived_update"`
-		ReplyRendered                 bool   `json:"reply_rendered"`
-		TerminalConnected             bool   `json:"terminal_connected"`
-		PlainEscapeInsideKeptOpen     bool   `json:"plain_escape_inside_kept_open"`
-		FocusEscaped                  bool   `json:"focus_escaped"`
-		BuilderKeptAcrossGuideRestart bool   `json:"builder_kept_across_guide_restart"`
-		TerminalRestarted             bool   `json:"terminal_restarted"`
-		PlainEscapeOutsideClosed      bool   `json:"plain_escape_outside_closed"`
-		GuideObserveConnected         bool   `json:"guide_observe_connected"`
-		GuideInteractiveConnected     bool   `json:"guide_interactive_connected"`
-		ViewportsClean                bool   `json:"viewports_clean"`
-		BrowserCookies                int    `json:"browser_cookies"`
+		ReleaseHref                   string   `json:"release_href"`
+		UpdateReady                   bool     `json:"update_ready"`
+		DraftSurvivedUpdate           bool     `json:"draft_survived_update"`
+		ReplyRendered                 bool     `json:"reply_rendered"`
+		TerminalConnected             bool     `json:"terminal_connected"`
+		PlainEscapeInsideKeptOpen     bool     `json:"plain_escape_inside_kept_open"`
+		FocusEscaped                  bool     `json:"focus_escaped"`
+		BuilderKeptAcrossGuideRestart bool     `json:"builder_kept_across_guide_restart"`
+		TerminalRestarted             bool     `json:"terminal_restarted"`
+		PlainEscapeOutsideClosed      bool     `json:"plain_escape_outside_closed"`
+		GuideObserveConnected         bool     `json:"guide_observe_connected"`
+		GuideInteractiveConnected     bool     `json:"guide_interactive_connected"`
+		ViewportsClean                bool     `json:"viewports_clean"`
+		FailingViewports              []string `json:"failing_viewports"`
+		MobileSheetFocusClean         bool     `json:"mobile_sheet_focus_clean"`
+		BrowserCookies                int      `json:"browser_cookies"`
 	}
 
 	// workspaceBrowserFixture implements the conversation, terminal WebSocket,
@@ -237,7 +239,9 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	assert.True(t, facts.Workspace.PlainEscapeOutsideClosed, "plain Escape on a drawer header control outside xterm did not close TerminalDrawer")
 	assert.True(t, facts.Workspace.GuideObserveConnected, "waiting Guide terminal did not open in passive observe=true mode")
 	assert.True(t, facts.Workspace.GuideInteractiveConnected, "Type in terminal did not reconnect Guide interactively with observe=false")
-	assert.True(t, facts.Workspace.ViewportsClean, "responsive viewports (320..1280px) overflowed horizontally or rendered >1 primary action")
+	assert.Empty(t, facts.Workspace.FailingViewports, "responsive viewports failed overflow or single-primary checks")
+	assert.True(t, facts.Workspace.ViewportsClean, "responsive viewports (320..1280px) overflowed horizontally or rendered >1 primary action: %v", facts.Workspace.FailingViewports)
+	assert.True(t, facts.Workspace.MobileSheetFocusClean, "narrow-width Conversation and Terminal sheets did not move focus in and restore focus on close")
 	assert.Zero(t, facts.Workspace.BrowserCookies, "browser cookie store must remain empty")
 
 	assert.GreaterOrEqual(t, fixture.credits.Load(), int64(len("Allow tool? [y/N] ")), "xterm did not replenish stream byte credit")
@@ -258,8 +262,8 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 
 	assert.Equal(t, "v0.5.0", applied)
 	assert.Equal(t, []string{"guide", "builder"}, restartedRoles)
-	assert.Equal(t, map[string]int{"builder": 2, "guide": 2}, ticketCounts, "builder and guide each mint 2 tickets (initial + restart / Type in terminal)")
-	assert.Equal(t, []bool{true, false}, guideModes, "Guide terminal must attach passive observe=true first, then observe=false after Type in terminal")
+	assert.Equal(t, map[string]int{"builder": 2, "guide": 3}, ticketCounts, "builder mints 2 tickets and guide mints 3 (desktop observe, Type in terminal, and 375px mobile sheet observe)")
+	assert.Equal(t, []bool{true, false, true}, guideModes, "Guide terminal attaches passive observe=true on desktop and mobile sheet, and observe=false after Type in terminal")
 	assert.Zero(t, observeInputs, "passive observe=true terminal sent input frames")
 	assert.Zero(t, observeResize, "passive observe=true terminal sent resize frames")
 	assert.NotEmpty(t, guideInputs, "interactive Guide terminal did not deliver keystrokes after Type in terminal")

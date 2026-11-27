@@ -29,6 +29,7 @@ export interface TerminalDrawerProps {
   roleState: TeamRoleState | null;
   observeMode: boolean;
   size: TerminalDrawerSize;
+  primaryInteractive: boolean;
   primaryRestart: boolean;
   disabled: boolean;
   interrupting: boolean;
@@ -120,6 +121,7 @@ export function TerminalDrawer({
   roleState,
   observeMode,
   size,
+  primaryInteractive,
   primaryRestart,
   disabled,
   interrupting,
@@ -423,6 +425,7 @@ export function TerminalDrawer({
       id="highbay-terminal-drawer"
       className="highbay-card highbay-terminal-drawer"
       role="region"
+      tabIndex={-1}
       aria-labelledby="highbay-terminal-title"
       aria-describedby="highbay-terminal-escape-hint"
       data-role={role}
@@ -483,7 +486,7 @@ export function TerminalDrawer({
               {observeMode ? (
                 <Button
                   id="highbay-terminal-interactive"
-                  variant="secondary"
+                  variant={primaryInteractive ? "primary" : "secondary"}
                   disabled={disabled || restarting || stopping}
                   onClick={() => {
                     if (size === "minimized") {

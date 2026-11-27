@@ -66,10 +66,14 @@ if (input.state === "earlier_configured" || input.state === "merged_configured")
 await control(origin, "reply", { key: "GET " + path, status: 200,
   body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-nav-build"), "change navigation did not appear");
-await until(() => page.sent("GET", path).some((r) => r.status !== undefined), "initial build read did not finish");
-if (!page.$("#highbay-build-taking")) page.$("#highbay-nav-build").click();
-await until(() => page.$("#highbay-build-taking") && !page.$("#highbay-build-loading"), "taking state did not appear");
+const expectedOpenStage =
+  !input.state.startsWith("earlier_") &&
+  (variants[input.state].state === "passed" || variants[input.state].state === "merged")
+    ? "approve"
+    : "build";
+await until(() => page.$("#highbay-nav-build") && page.sent("GET", path).some((r) => r.status !== undefined) && page.state() === expectedOpenStage, "confirmed change did not open expected default stage " + expectedOpenStage);
+if (expectedOpenStage === "approve") page.$("#highbay-nav-build").click();
+await until(() => page.state() === "build" && page.$("#highbay-build-taking") && !page.$("#highbay-build-loading"), "taking state did not appear");
 await until(() => {
   const action = page.$("#highbay-build-start") ?? page.$("#highbay-build-again");
   return !action || !action.disabled;

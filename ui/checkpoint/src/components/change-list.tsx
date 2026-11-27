@@ -15,7 +15,7 @@ export interface ChangeListViewProps {
   openError: string | null;
   openChangeId: string | null;
   dirtyChangeIds: ReadonlySet<string>;
-  busy: boolean;
+  loadingChangeIds: ReadonlySet<string>;
   disabled: boolean;
   launchWorkspace: React.ReactNode;
   onNewChange: () => void;
@@ -40,7 +40,7 @@ export function ChangeListView({
   openError,
   openChangeId,
   dirtyChangeIds,
-  busy,
+  loadingChangeIds,
   disabled,
   launchWorkspace,
   onNewChange,
@@ -109,7 +109,7 @@ export function ChangeListView({
               item={item}
               open={item.change_id === openChangeId}
               unsaved={dirtyChangeIds.has(item.change_id)}
-              busy={busy}
+              busy={disabled || loadingChangeIds.has(item.change_id)}
               onOpen={onOpen}
             />
           ))}

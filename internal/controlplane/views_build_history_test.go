@@ -143,9 +143,7 @@ if (input.mode === "history_failure") await control(origin, "reply", { key: "GET
   body: { name: "unavailable", id: "history-read", message: "Saved verification history unavailable.", fault: false, temporary: true, timeout: false } });
 else await control(origin, "hold", { key: "GET " + history });
 const page = await openPage(origin, { link: input.link });
-await until(() => (page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval")) && page.sent("GET", history).length === 1, "initial saved approval did not automatically read its verification history");
-if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
-await until(() => page.$("#highbay-cp5-approval"), "the saved approval stage did not open");
+await until(() => page.state() === "approve" && page.$("#highbay-cp5-approval") && page.sent("GET", history).length === 1, "initial saved approval did not open Approve and read its verification history");
 if (input.mode !== "history_failure") {
   expect(page.text("#highbay-approval-stage").includes("Reading saved verification runs"), "held history was not explained");
   expect(!page.text("#highbay-cp5-approval").includes("git merge"), "unread history invented build membership");
@@ -355,9 +353,7 @@ func TestViewsPageApprovalFollowsTheRealMerge(t *testing.T) {
 	})
 	runPageScript(t, ps, map[string]any{"run": runID, "otherRun": otherRunID, "candidate": candidate, "otherCandidate": otherCandidate, "tests": tests, "revision": card.RequestRevision}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval"), "saved approval did not load");
-if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
-await until(() => page.$("#highbay-cp5-approval") && page.$("#highbay-cp5-merge") && !page.$("#highbay-cp5-merge").disabled, "approval did not show the open build's merge action");
+await until(() => page.state() === "approve" && page.$("#highbay-cp5-approval") && page.$("#highbay-cp5-merge") && !page.$("#highbay-cp5-merge").disabled, "approval did not open Approve and show the open build's merge action");
 const verifyMerged = () => page.$("#highbay-cp5-merge-feedback-verify-merged");
 expect(!verifyMerged(), "post-merge verification was offered before the merge");
 const record = page.text("#highbay-cp5-approval");

@@ -110,7 +110,7 @@ function browserFetch(win, origin, requests, tab, input, init) {
 // the page. hidden starts the tab hidden; storage copies origin-scoped
 // localStorage entries into the new window before bootstrap (modeling reload
 // or a sibling tab on the same origin).
-async function openPage(origin, { link, hidden, storage } = {}) {
+async function openPage(origin, { link, hidden, storage, historyState, historyEntries } = {}) {
   const shell = await fetch(origin + "/views", {
     headers: { "Sec-Fetch-Site": "none", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-Dest": "document" },
   });
@@ -131,6 +131,14 @@ async function openPage(origin, { link, hidden, storage } = {}) {
             win.localStorage.setItem(key, storage.getItem(key));
           }
         }
+      }
+      if (Array.isArray(historyEntries) && historyEntries.length > 0) {
+        win.history.replaceState(historyEntries[0], "", "/views");
+        for (let i = 1; i < historyEntries.length; i++) {
+          win.history.pushState(historyEntries[i], "", "/views");
+        }
+      } else if (historyState !== undefined) {
+        win.history.replaceState(historyState, "", "/views");
       }
       // jsdom has no layout. These interaction checks use a desktop media
       // observation; real-browser tests own viewport and reflow evidence.

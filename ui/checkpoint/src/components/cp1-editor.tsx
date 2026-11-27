@@ -35,7 +35,6 @@ export interface CP1EditorProps {
   draftExamples: ExampleItem[];
   rpcInFlight: boolean;
   loadingVerifications: boolean;
-  cp4Open: boolean;
   preservedDraft: PreservedDraft | null;
   formError: string | null;
   // revisionAid explains and resolves a choice the draft does not implement.
@@ -150,7 +149,6 @@ export function CP1EditorView({
   draftExamples,
   rpcInFlight,
   loadingVerifications,
-  cp4Open,
   preservedDraft,
   formError,
   revisionAid,
@@ -296,15 +294,13 @@ export function CP1EditorView({
                 Open Build →
               </Button>
             ) : null}
-            {!cp4Open ? (
-              <Button
-                id="highbay-cp1-load-verifications"
-                disabled={loadingVerifications}
-                onClick={onLoadVerifications}
-              >
-                {loadingVerifications ? "Loading saved verifications..." : "View saved verifications"}
-              </Button>
-            ) : null}
+            <Button
+              id="highbay-cp1-load-verifications"
+              disabled={loadingVerifications}
+              onClick={onLoadVerifications}
+            >
+              {loadingVerifications ? "Loading saved verifications..." : "View saved verifications"}
+            </Button>
           </div>
         </div>
         <p id="highbay-agreement-revision">

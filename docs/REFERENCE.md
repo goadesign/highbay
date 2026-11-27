@@ -522,7 +522,7 @@ that differs from the binary the run verified, prevents approval; the
 refusal names no folder path and ends with the step "publish the binaries
 the run built, whose folder the run's Proof view shows, into the release
 folder that the promotion settings name, in a folder named after the commit,
-or remove the promotion settings". The Check view shows the selected run's
+or remove the promotion settings". The Verify view shows the selected run's
 actual source folder under **Binaries built by this run**, as selectable code;
 the approval error panel repeats it. Without promotion settings, an approval
 records no release binaries. A stored file the server cannot accept, such
@@ -1690,7 +1690,7 @@ For a completed run, get and list responses also include optional
 `candidate_binaries_dir` when the caller is the user and the server has
 promotion settings. It names the actual folder of binaries built by that
 run, read from its recorded plan, rather than a reconstructed run layout.
-Agents never receive this path. The Check view shows it under **Binaries
+Agents never receive this path. The Verify view shows it under **Binaries
 built by this run**, as selectable code, and repeats it in the approval
 error panel for that selected run.
 

@@ -156,8 +156,9 @@ const openChange = async (page, changeId) => {
   await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === changeId, changeId + " did not open");
   // The initial build observation may invalidate selected proof. Settle this
   // opening's own read before testing status actions under unchanged inputs.
-  await until(() => page.sent("GET", buildPath).slice(buildReads).some((r) => r.status === 200) && !page.$("#highbay-build-loading") && !page.$("#highbay-build-error"), changeId + " did not settle its initial build read");
-  if (!page.$("#highbay-cp1-editor")) {
+  const expectedOpen = changeId === "chg-incoming" ? "agree" : "build";
+  await until(() => page.sent("GET", buildPath).slice(buildReads).some((r) => r.status === 200) && page.state() === expectedOpen && !page.$("#highbay-build-loading") && !page.$("#highbay-build-error"), changeId + " did not settle on " + expectedOpen);
+  if (expectedOpen === "build") {
     page.$("#highbay-nav-cp1").click();
     await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === changeId, changeId + " Agree did not open");
   }
@@ -436,7 +437,7 @@ for (const order of ["A_THEN_B", "B_THEN_A"]) {
   expect(revised.status === 200, "could not revise: " + JSON.stringify(revised));
   await until(() => page.$("#highbay-incoming-change-card") && page.$("#highbay-replace-incoming-card"), "incoming R2 did not render #highbay-incoming-change-card");
   page.$("#highbay-nav-cp4").click();
-  await until(() => page.$("#highbay-result-view").dataset.state === "cp4-verification", "did not switch to the runs while incoming R2 was held");
+  await until(() => page.state() === "verify", "did not switch to the runs while incoming R2 was held");
   page.$("#highbay-nav-cp1").click();
   expect(page.$("#highbay-incoming-change-card") && page.$("#highbay-replace-incoming-card"), "returning from the runs lost the held incoming R2");
   page.$("#highbay-nav-cp1").click();

@@ -490,7 +490,9 @@ function snapshotUnsavedDraft(
 }
 
 // nextPriorCard returns the immediately prior saved card when transitioning
-// between distinct revisions of the same change_id.
+// between distinct revisions of the same change_id, preserves the existing
+// priorCard when refreshing the same revision, and returns null when
+// mounting an initial card or switching to a different change_id.
 function nextPriorCard(
   current: ActiveEditorState | null,
   next: ChangeCardResult
@@ -504,7 +506,8 @@ function nextPriorCard(
   return current.card;
 }
 
-// editorDraftFrom initializes editable drafts from a saved card's own values.
+// editorDraftFrom starts editable drafts from a saved card's own values, with
+// no answers chosen yet for a waiting proposal.
 function editorDraftFrom(card: ChangeCardResult): {
   draftAnswers: Record<string, string>;
   draftExamples: ExampleItem[];
@@ -525,7 +528,9 @@ function editorDraftFrom(card: ChangeCardResult): {
   };
 }
 
-// keepProposalAnswers keeps choices that still fit the updated proposal.
+// keepProposalAnswers keeps the user's choices that still fit next: same
+// question ID, same question, and the option still offered. A re-read of the
+// same proposal therefore keeps every choice.
 function keepProposalAnswers(
   answers: Record<string, string>,
   previous: ProposedRevisionItem | undefined,
@@ -694,8 +699,10 @@ export function bootstrapViewsPage() {
   let activeChangeId: string | null = null;
   let navigationSeq = 0;
   let handlingPopState = false;
+  let restoringInitialHistory: HistoryViewState | null = null;
   let mobileSurface: MobileSurface = "stage";
   let mobileSurfaceInvoker: HTMLElement | null = null;
+  let terminalReturnSurface: MobileSurface = "stage";
 
   let changeList: ChangeList | null = null;
   let listError: string | null = null;
@@ -711,6 +718,18 @@ export function bootstrapViewsPage() {
   const cardRefreshInFlight = new Map<string, Promise<void>>();
   const cardRefreshAgain = new Set<string>();
   const cardRefreshAfterEditor = new Set<string>();
+  const seenCardRevisionsByChangeId = new Map<string, Set<string>>();
+  const knownAmbiguitiesByRevision = new Map<string, readonly AmbiguityQuestion[]>();
+  const pendingOpenByChangeId = new Map<
+    string,
+    {
+      openSeq: number;
+      explicitStage?: ChangeStageName;
+      historyMode: "push" | "replace";
+      mobileSurface: MobileSurface;
+    }
+  >();
+  const pendingDefaultVerifyCheck = new Map<string, number>();
 
   let traceOpen = false;
   let traceFilter: TraceFilter = "error";
@@ -764,6 +783,8 @@ export function bootstrapViewsPage() {
   let conversationError: string | null = null;
   let conversationReadAgain = false;
   let composerDraft: ComposerDraft = { to: "guide", text: "", replyTo: null, context: null };
+  let activeComposerScope = "draft";
+  const composerDraftsByScope = new Map<string, ComposerDraft>();
   let composerSendError: string | null = null;
   let composerDetachedNotice: string | null = null;
 
@@ -831,6 +852,7 @@ export function bootstrapViewsPage() {
   const lastLoadedListByChangeId = new Map<string, string[]>();
   let selectedVerificationChangeId: string | null = null;
   let selectedRunId: string | null = null;
+  const pendingRestoredRunByChangeId = new Map<string, string>();
   const selectionTouchedDuringList = new Map<string, boolean>();
   const runRequestErrors = new Map<string, string>();
   const listRequestErrors = new Map<string, string>();
@@ -838,6 +860,70 @@ export function bootstrapViewsPage() {
   const approveErrors = new Map<string, string>();
   let approvalUnavailable: string | null = null;
   let lastOpenAttempt: string | null = null;
+
+  // recordObservedCard records seen revisions and question definitions for card
+  // so stale-context guards reconcile by question identity and detect unseen revisions.
+  function recordObservedCard(card: ChangeCardResult) {
+    let seen = seenCardRevisionsByChangeId.get(card.change_id);
+    if (seen === undefined) {
+      seen = new Set<string>();
+      seenCardRevisionsByChangeId.set(card.change_id, seen);
+    }
+    seen.add(card.request_revision);
+    knownAmbiguitiesByRevision.set(
+      card.change_id + ":" + card.request_revision,
+      card.ambiguities ?? []
+    );
+    if (card.proposed_revision !== undefined) {
+      seen.add(card.proposed_revision.request_revision);
+      knownAmbiguitiesByRevision.set(
+        card.change_id + ":" + card.proposed_revision.request_revision,
+        card.proposed_revision.ambiguities ?? []
+      );
+    }
+  }
+
+  // composerScopeFor isolates per-change composer drafts from + New change / general drafts.
+  function composerScopeFor(viewKind: WorkspaceView["kind"], changeId: string | null): string {
+    if (
+      changeId !== null &&
+      (viewKind === "change" || viewKind === "story" || viewKind === "live")
+    ) {
+      return "change:" + changeId;
+    }
+    return "draft";
+  }
+
+  // switchComposerScope saves the current scope's unsent composer draft and restores nextScope's.
+  function switchComposerScope(nextScope: string) {
+    if (nextScope === activeComposerScope) {
+      return;
+    }
+    composerDraftsByScope.set(activeComposerScope, composerDraft);
+    activeComposerScope = nextScope;
+    composerDraft = composerDraftsByScope.get(nextScope) ?? {
+      to: "guide",
+      text: "",
+      replyTo: null,
+      context: null,
+    };
+    composerDetachedNotice = null;
+    composerSendError = null;
+  }
+
+  // isFocusableVisible reports whether el is attached and neither hidden nor inert.
+  function isFocusableVisible(el: HTMLElement | null): el is HTMLElement {
+    if (el === null || !document.contains(el)) {
+      return false;
+    }
+    if (el.closest("[hidden]") !== null || el.closest("[inert]") !== null) {
+      return false;
+    }
+    if (isNarrowViewport() && el.getClientRects().length === 0) {
+      return false;
+    }
+    return true;
+  }
 
   // getActiveEditor returns the isolated editor state for activeChangeId, if any.
   function getActiveEditor(): ActiveEditorState | null {
@@ -1145,10 +1231,13 @@ export function bootstrapViewsPage() {
     sessionState = "active";
     rootEl.dataset.session = "active";
     currentView = { kind: "changes" };
+    restoringInitialHistory = link === null ? initialHistory : null;
     readConversation();
     const loaded = await loadChanges();
-    if (loaded && link === null && initialHistory !== null) {
-      applyHistoryViewState(initialHistory);
+    const historyToRestore = restoringInitialHistory;
+    restoringInitialHistory = null;
+    if (loaded && historyToRestore !== null) {
+      applyHistoryViewState(historyToRestore);
     } else {
       syncHistoryState("replace");
     }
@@ -1448,6 +1537,41 @@ export function bootstrapViewsPage() {
     return pending;
   }
 
+  // loadCardIntoCache loads changeId into editorsByChangeId without altering currentView.
+  function loadCardIntoCache(changeId: string) {
+    if (
+      !changeId ||
+      editorsByChangeId.has(changeId) ||
+      editorRequestsByChangeId.has(changeId) ||
+      cardRefreshInFlight.has(changeId)
+    ) {
+      return;
+    }
+    callEditorServer(
+      "get_change",
+      { change_id: changeId },
+      changeId,
+      (loadedCard) => {
+        if (loadedCard.change_id === changeId && !editorsByChangeId.has(changeId)) {
+          recordObservedCard(loadedCard);
+          editorsByChangeId.set(changeId, {
+            card: loadedCard,
+            priorCard: null,
+            incomingCard: null,
+            ...editorDraftFrom(loadedCard),
+            preservedDraft: null,
+            formError: null,
+          });
+          if (activeChangeId === null) {
+            activeChangeId = changeId;
+          }
+          syncAllRegions();
+        }
+      },
+      () => {}
+    );
+  }
+
   // applyListChanges auto-opens the sole Change Card on 0 -> 1 transitions when
   // the user has no unsaved input, and refreshes any retained editors whose
   // saved revision or verification moved.
@@ -1460,7 +1584,10 @@ export function bootstrapViewsPage() {
       const onlyId = next.changes[0].change_id;
       if (
         !hasUnsavedPageInput() &&
-        ((previous === null && currentView.kind === "changes" && navigationSeq === 0) ||
+        ((previous === null &&
+          restoringInitialHistory === null &&
+          currentView.kind === "changes" &&
+          navigationSeq === 0) ||
           (previous !== null &&
             previous.changes.length === 0 &&
             (currentView.kind === "changes" || currentView.kind === "new")))
@@ -1468,32 +1595,13 @@ export function bootstrapViewsPage() {
         draftSentMessageId = undefined;
         describeSendUncertain = false;
         describeSendError = null;
-        openChange(onlyId);
+        openChange(onlyId, undefined, {
+          historyMode: previous === null ? "replace" : "push",
+        });
         return;
       }
-      if (previous === null && !editorRequestsByChangeId.has(onlyId)) {
-        callEditorServer(
-          "get_change",
-          { change_id: onlyId },
-          onlyId,
-          (loadedCard) => {
-            if (loadedCard.change_id === onlyId && !editorsByChangeId.has(onlyId)) {
-              editorsByChangeId.set(onlyId, {
-                card: loadedCard,
-                priorCard: null,
-                incomingCard: null,
-                ...editorDraftFrom(loadedCard),
-                preservedDraft: null,
-                formError: null,
-              });
-              if (activeChangeId === null) {
-                activeChangeId = onlyId;
-              }
-              syncAllRegions();
-            }
-          },
-          () => {}
-        );
+      if (previous === null && restoringInitialHistory?.view !== "change") {
+        loadCardIntoCache(onlyId);
       }
     }
     const initializing = next.initializing_phase !== undefined;
@@ -1646,8 +1754,9 @@ export function bootstrapViewsPage() {
   }
 
   // receiveLatestCard reconciles a background read of latest.change_id inside
-  // editorsByChangeId, checking dirty state strictly on that card (@fable-2 L2).
+  // editorsByChangeId, checking dirty state strictly on that card.
   function receiveLatestCard(latest: ChangeCardResult) {
+    recordObservedCard(latest);
     const ed = editorsByChangeId.get(latest.change_id);
     if (!ed) {
       return;
@@ -1744,7 +1853,25 @@ export function bootstrapViewsPage() {
         const loadedIds = payload.runs.map((r) => r.run_id);
         lastLoadedListByChangeId.set(changeId, loadedIds);
         listRequestErrors.delete(changeId);
-        if (
+        const restoredRun = pendingRestoredRunByChangeId.get(changeId);
+        if (restoredRun !== undefined) {
+          pendingRestoredRunByChangeId.delete(changeId);
+          if (selectedVerificationChangeId === changeId && selectedRunId === restoredRun) {
+            if (!loadedIds.includes(restoredRun)) {
+              const card = editorsByChangeId.get(changeId)?.card;
+              const approval = card?.approval ?? card?.unverified_approval?.approval;
+              const onApproveStage =
+                currentView.kind === "change" &&
+                currentView.changeId === changeId &&
+                currentView.stage === "approve";
+              selectedRunId =
+                onApproveStage && card !== undefined && approval !== undefined
+                  ? savedApprovalEvidenceRun(card, approval)?.run_id ?? loadedIds[0] ?? null
+                  : loadedIds[0] ?? null;
+              syncHistoryState("replace");
+            }
+          }
+        } else if (
           selectedVerificationChangeId === changeId &&
           selectedRunId === null &&
           loadedIds.length > 0
@@ -2199,7 +2326,14 @@ export function bootstrapViewsPage() {
     const onVerifyOrApprove =
       currentView.kind === "change" &&
       (currentView.stage === "verify" || currentView.stage === "approve");
-    const selected = onVerifyOrApprove ? resolveDisplayedVerificationRun() : null;
+    const displayed = resolveDisplayedVerificationRun();
+    const selected =
+      displayed !== null &&
+      displayed.change_id === changeId &&
+      (onVerifyOrApprove ||
+        (displayed.state.type === "completed" && displayed.state.value.report.passed))
+        ? displayed
+        : null;
     const ed = editorsByChangeId.get(changeId);
     const savedApproval = ed?.card.approval ?? ed?.card.unverified_approval?.approval;
     const savedRun =
@@ -2214,6 +2348,7 @@ export function bootstrapViewsPage() {
     selectedRunId = null;
     selectedVerificationChangeId = changeId;
     mobileSurface = "stage";
+    switchComposerScope(composerScopeFor("change", changeId));
     currentView = { kind: "change", changeId, stage: "approve" };
     refreshVerificationsInBackground(changeId);
     syncHistoryState("push");
@@ -2285,6 +2420,11 @@ export function bootstrapViewsPage() {
     ) {
       return true;
     }
+    for (const [scope, draft] of composerDraftsByScope.entries()) {
+      if (scope !== activeComposerScope && draft.text.trim() !== "") {
+        return true;
+      }
+    }
     for (const ed of editorsByChangeId.values()) {
       if (Object.keys(ed.proposalAnswers).length > 0) {
         return true;
@@ -2308,6 +2448,9 @@ export function bootstrapViewsPage() {
       });
     }
     composerDraft = { ...composerDraft, text: "", seededText: undefined };
+    for (const [scope, draft] of composerDraftsByScope.entries()) {
+      composerDraftsByScope.set(scope, { ...draft, text: "", seededText: undefined });
+    }
     describeText = "";
     if (!hasPending("configure_model", "")) {
       modelDraft = { kind: null, provider: "anthropic", modelName: "", gatewayAddr: "" };
@@ -2329,9 +2472,10 @@ export function bootstrapViewsPage() {
     window.location.reload();
   }
 
-  function showChanges() {
+  function showChanges(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
-    mobileSurface = "stage";
+    mobileSurface = options?.mobileSurface ?? "stage";
+    switchComposerScope("draft");
     currentView = { kind: "changes" };
     statusEl.textContent =
       changeList === null
@@ -2342,13 +2486,14 @@ export function bootstrapViewsPage() {
     if (changeList === null) {
       void loadChanges();
     }
-    syncHistoryState("push");
+    syncHistoryState(options?.historyMode ?? (handlingPopState ? "replace" : "push"));
     syncAllRegions();
   }
 
-  function openNewChange() {
+  function openNewChange(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
-    mobileSurface = "stage";
+    mobileSurface = options?.mobileSurface ?? "stage";
+    switchComposerScope("draft");
     if (changeList !== null && changeList.changes.length === 0) {
       currentView = { kind: "changes" };
     } else {
@@ -2358,14 +2503,15 @@ export function bootstrapViewsPage() {
     if (storyEvaluation === null || storyEvaluationStale) {
       readStoryEvaluation();
     }
-    syncHistoryState("push");
+    syncHistoryState(options?.historyMode ?? (handlingPopState ? "replace" : "push"));
     syncAllRegions();
     focusResult("#highbay-describe-input");
   }
 
-  function openStory() {
+  function openStory(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
-    mobileSurface = "stage";
+    mobileSurface = options?.mobileSurface ?? "stage";
+    switchComposerScope(composerScopeFor("story", activeChangeId));
     currentView = { kind: "story" };
     const ed = getActiveEditor();
     statusEl.textContent =
@@ -2375,7 +2521,7 @@ export function bootstrapViewsPage() {
     if (storyEvaluation === null || storyEvaluationStale) {
       readStoryEvaluation();
     }
-    syncHistoryState("push");
+    syncHistoryState(options?.historyMode ?? (handlingPopState ? "replace" : "push"));
     syncAllRegions();
   }
 
@@ -2411,15 +2557,16 @@ export function bootstrapViewsPage() {
     );
   }
 
-  function openTeam() {
+  function openTeam(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
-    mobileSurface = "stage";
+    mobileSurface = options?.mobileSurface ?? "stage";
+    switchComposerScope("draft");
     currentView = { kind: "team" };
     statusEl.textContent = "Showing the project team.";
     if (teamSnapshot === null || teamReadError !== null || waitTroubleShown) {
       readTeam();
     }
-    syncHistoryState("push");
+    syncHistoryState(options?.historyMode ?? (handlingPopState ? "replace" : "push"));
     syncAllRegions();
     document.getElementById("highbay-team-title")?.focus();
   }
@@ -2524,7 +2671,7 @@ export function bootstrapViewsPage() {
     }
   }
 
-  // loadAgentOptions starts initial discovery directly without nested microtasks (@fable-2 L1).
+  // loadAgentOptions starts initial discovery directly when options are unread.
   function loadAgentOptions() {
     if (agentOptions === null && agentOptionsError === null) {
       readAgentOptions();
@@ -3167,8 +3314,11 @@ export function bootstrapViewsPage() {
     terminalInvoker = invoker;
     terminalActionError = null;
     if (isNarrowViewport()) {
+      terminalReturnSurface = mobileSurface === "conversation" ? "conversation" : "stage";
       mobileSurface = "terminal";
-      mobileSurfaceInvoker = invoker;
+      if (terminalReturnSurface === "stage") {
+        mobileSurfaceInvoker = invoker;
+      }
     }
     syncHistoryState("replace");
     syncAllRegions();
@@ -3190,16 +3340,30 @@ export function bootstrapViewsPage() {
     terminalInvoker = null;
     terminalActionError = null;
     if (mobileSurface === "terminal") {
-      mobileSurface = "stage";
-      mobileSurfaceInvoker = null;
+      mobileSurface = isNarrowViewport() ? terminalReturnSurface : "stage";
+      terminalReturnSurface = "stage";
+      if (mobileSurface === "stage") {
+        mobileSurfaceInvoker = null;
+      }
     }
     syncHistoryState("replace");
     syncAllRegions();
-    if (returnTo !== null && document.contains(returnTo) && returnTo.getClientRects().length >= 0) {
+    if (isFocusableVisible(returnTo)) {
       returnTo.focus();
-    } else {
-      focusCurrentViewHeading();
+      return;
     }
+    if (isNarrowViewport()) {
+      const mobileToggle =
+        mobileSurface === "conversation"
+          ? document.getElementById("highbay-conversation-title")
+          : document.getElementById("highbay-mobile-terminal-toggle") ??
+            document.getElementById("highbay-mobile-conversation-toggle");
+      if (isFocusableVisible(mobileToggle)) {
+        mobileToggle.focus();
+        return;
+      }
+    }
+    focusCurrentViewHeading();
   }
 
   async function createTerminalTicket(
@@ -3315,7 +3479,7 @@ export function bootstrapViewsPage() {
   }
 
   // focusComposerForRole opens the conversation dock/sheet targeting role,
-  // detaching Guide-only contexts if switching away from Guide.
+  // detaching Guide-only contexts if switching away from Guide or starting an explicit reply.
   function focusComposerForRole(
     role: ComposerRecipient,
     context: ComposerContext | null = null,
@@ -3325,16 +3489,20 @@ export function bootstrapViewsPage() {
     openConversationSurface();
     composerDetachedNotice = null;
     const switchingAwayFromGuide = role !== "guide" && composerDraft.to === "guide";
-    const baseText = switchingAwayFromGuide
+    const stripSeeded = switchingAwayFromGuide || explicitReplyTo !== undefined;
+    const baseText = stripSeeded
       ? stripSeededBoilerplate(composerDraft.text, composerDraft.seededText)
       : composerDraft.text;
     const nextContext =
-      context !== null
+      explicitReplyTo !== undefined
+        ? context
+        : context !== null
         ? context
         : role !== "guide" && contextRequiresGuide(composerDraft.context)
         ? null
         : composerDraft.context;
     if (
+      explicitReplyTo === undefined &&
       context === null &&
       role !== "guide" &&
       (contextRequiresGuide(composerDraft.context) || composerDraft.replyTo !== null)
@@ -3357,9 +3525,52 @@ export function bootstrapViewsPage() {
       seededText:
         suggestedText !== ""
           ? suggestedText
-          : switchingAwayFromGuide
+          : stripSeeded
           ? undefined
           : composerDraft.seededText,
+    };
+    syncAllRegions();
+    document.getElementById("highbay-composer-input")?.focus();
+  }
+
+  // handleReplyToConversationMessage attaches msg.seq in ConversationRail while
+  // detaching Guide-only contexts and seeded boilerplate when replying to another role.
+  function handleReplyToConversationMessage(
+    seq: number,
+    senderRole: TeamConversation["messages"][number]["sender_role"]
+  ) {
+    const nextTo: ComposerRecipient =
+      senderRole === "builder"
+        ? "builder"
+        : senderRole === "test_writer"
+        ? "test_writer"
+        : senderRole === "guide"
+        ? "guide"
+        : composerDraft.to;
+    let detached = false;
+    let nextContext = composerDraft.context;
+    let nextText = composerDraft.text;
+    let nextSeeded = composerDraft.seededText;
+    if (nextTo !== "guide") {
+      if (contextRequiresGuide(nextContext)) {
+        nextContext = null;
+        detached = true;
+      }
+      if (nextSeeded !== undefined) {
+        nextText = stripSeededBoilerplate(nextText, nextSeeded);
+        nextSeeded = undefined;
+        detached = true;
+      }
+    }
+    composerDetachedNotice = detached
+      ? "Detached the Guide-only revision attachment when switching recipient. Your message text is preserved."
+      : null;
+    composerDraft = {
+      to: nextTo,
+      text: nextText,
+      replyTo: seq,
+      context: nextContext,
+      seededText: nextSeeded,
     };
     syncAllRegions();
     document.getElementById("highbay-composer-input")?.focus();
@@ -3409,36 +3620,45 @@ export function bootstrapViewsPage() {
     syncAllRegions();
   }
 
-  // latestRevisionTargetForChange returns the newest known revision + ambiguities for changeId.
+  // latestRevisionTargetForChange returns the newest observed revision + ambiguities
+  // for changeId, preferring incomingCard and unseen server-listed revisions over stale proposals.
   function latestRevisionTargetForChange(
     changeId: string
-  ): { revision: string; ambiguities: readonly AmbiguityQuestion[] | undefined; knownAmbiguities: boolean } | null {
+  ): {
+    revision: string;
+    ambiguities: readonly AmbiguityQuestion[] | undefined;
+    knownAmbiguities: boolean;
+  } | null {
+    const listed = changeList?.changes.find((c) => c.change_id === changeId);
+    const listedRev =
+      listed !== undefined ? listed.proposed_revision ?? listed.request_revision : null;
+    const seen = seenCardRevisionsByChangeId.get(changeId);
     const ed = editorsByChangeId.get(changeId);
     if (ed !== undefined) {
-      if (ed.card.proposed_revision !== undefined) {
+      if (listedRev !== null && !(seen?.has(listedRev) ?? false)) {
         return {
-          revision: ed.card.proposed_revision.request_revision,
-          ambiguities: ed.card.proposed_revision.ambiguities,
-          knownAmbiguities: true,
+          revision: listedRev,
+          ambiguities: undefined,
+          knownAmbiguities: false,
         };
       }
-      if (ed.incomingCard !== null) {
+      const newestCard = ed.incomingCard ?? ed.card;
+      if (newestCard.proposed_revision !== undefined) {
         return {
-          revision: ed.incomingCard.request_revision,
-          ambiguities: ed.incomingCard.ambiguities,
+          revision: newestCard.proposed_revision.request_revision,
+          ambiguities: newestCard.proposed_revision.ambiguities,
           knownAmbiguities: true,
         };
       }
       return {
-        revision: ed.card.request_revision,
-        ambiguities: ed.card.ambiguities,
+        revision: newestCard.request_revision,
+        ambiguities: newestCard.ambiguities,
         knownAmbiguities: true,
       };
     }
-    const listed = changeList?.changes.find((c) => c.change_id === changeId);
-    if (listed !== undefined) {
+    if (listedRev !== null) {
       return {
-        revision: listed.proposed_revision ?? listed.request_revision,
+        revision: listedRev,
         ambiguities: undefined,
         knownAmbiguities: false,
       };
@@ -3519,6 +3739,15 @@ export function bootstrapViewsPage() {
             readTeam();
           }
         } else {
+          if (source === "agree") {
+            composerDraft = {
+              to: payload.to,
+              text: payload.text,
+              replyTo: payload.reply_to ?? null,
+              context: payload.context ?? null,
+              seededText: payload.text,
+            };
+          }
           openConversationSurface();
           composerSendError = knownPrePostRefusal
             ? message
@@ -3535,16 +3764,17 @@ export function bootstrapViewsPage() {
     );
   }
 
-  function openLive() {
+  function openLive(options?: { historyMode?: "push" | "replace"; mobileSurface?: MobileSurface }) {
     navigationSeq++;
-    mobileSurface = "stage";
+    mobileSurface = options?.mobileSurface ?? "stage";
+    switchComposerScope(composerScopeFor("live", activeChangeId));
     currentView = { kind: "live" };
     statusEl.textContent = "Showing the live target and the model connection.";
     if (liveTarget === null || liveTargetStale) {
       readLiveTarget();
     }
     readModelConnection();
-    syncHistoryState("push");
+    syncHistoryState(options?.historyMode ?? (handlingPopState ? "replace" : "push"));
     syncAllRegions();
   }
 
@@ -3753,7 +3983,8 @@ export function bootstrapViewsPage() {
   }
 
   // resolvePrimaryAttentionRole orders needs_you roles by stage affinity, then
-  // guide -> builder -> test_writer, returning the first role whose terminal is not open.
+  // guide -> builder -> test_writer, returning the first role whose interactive
+  // terminal is not yet open.
   function resolvePrimaryAttentionRole(): TeamRoleState["role"] | null {
     const roles = teamSnapshot?.roles ?? [];
     const buildCentric =
@@ -3767,7 +3998,10 @@ export function bootstrapViewsPage() {
       : ["guide", "builder", "test_writer"];
     for (const roleName of order) {
       const role = roles.find((item) => item.role === roleName && item.state === "needs_you");
-      if (role !== undefined && !(role.has_terminal && openTerminalRole === role.role)) {
+      if (
+        role !== undefined &&
+        !(role.has_terminal && openTerminalRole === role.role && !terminalObserveMode)
+      ) {
         return role.role;
       }
     }
@@ -3780,11 +4014,18 @@ export function bootstrapViewsPage() {
     attentionRole: TeamRoleState["role"] | null;
     actionId: string | null;
   } {
+    const narrow = isNarrowViewport();
     const attentionRole = resolvePrimaryAttentionRole();
     if (attentionRole !== null) {
+      if (
+        openTerminalRole === attentionRole &&
+        terminalObserveMode &&
+        (!narrow || mobileSurface === "terminal")
+      ) {
+        return { attentionRole: null, actionId: "highbay-terminal-interactive" };
+      }
       return { attentionRole, actionId: "attention:" + attentionRole };
     }
-    const narrow = isNarrowViewport();
     if (narrow && mobileSurface === "conversation") {
       return { attentionRole: null, actionId: "highbay-composer-send" };
     }
@@ -4110,20 +4351,12 @@ export function bootstrapViewsPage() {
         (latestRun.state.type === "completed" && !latestRun.state.value.report.passed));
 
     const latestReview = latestRun !== null ? reviewForRun(latestRun.run_id) : null;
-    const cardApprovalMatchesLatest =
-      ed?.card.approval !== undefined &&
-      latestRun !== null &&
-      latestRun.state.type === "completed" &&
-      ed.card.approval.report_digest === latestRun.state.value.report.report_digest &&
-      ed.card.approval.candidate_commit === latestRun.candidate_commit &&
-      ed.card.approval.suite_commit === latestRun.suite_commit;
     const approveDone =
       verifyDone &&
       latestRun !== null &&
-      ((latestReview !== null &&
-        approvalReviewFresh(latestRun) &&
-        latestReview.approval.state === "recorded") ||
-        (latestReview === null && cardApprovalMatchesLatest));
+      latestReview !== null &&
+      approvalReviewFresh(latestRun) &&
+      latestReview.approval.state === "recorded";
     const merged = inForce?.taking.state === "merged";
 
     const steps: JourneyStep[] = [];
@@ -4134,6 +4367,13 @@ export function bootstrapViewsPage() {
         active: activeStage === "agree",
         status: agreeAttention ? "attention" : agreeDone ? "done" : "neutral",
         glyph: agreeAttention ? "!" : agreeUnsaved ? "Unsaved" : agreeDone ? "✓" : undefined,
+        srStatus: agreeAttention
+          ? "needs attention"
+          : agreeUnsaved
+          ? "unsaved edits"
+          : agreeDone
+          ? "completed"
+          : undefined,
         unsaved: agreeUnsaved,
         onClick: handleReturnToChangeCard,
       });
@@ -4143,6 +4383,7 @@ export function bootstrapViewsPage() {
         active: activeStage === "arch",
         status: "neutral",
         glyph: ed.card.status !== "confirmed" ? "(After Agree)" : "Optional",
+        srStatus: ed.card.status !== "confirmed" ? "available after Agree" : "optional",
         onClick: openArchitecture,
       });
       steps.push({
@@ -4158,6 +4399,14 @@ export function bootstrapViewsPage() {
             : buildDone
             ? "✓"
             : undefined,
+        srStatus:
+          ed.card.status !== "confirmed" && savedBuild === null
+            ? "available after Agree"
+            : buildAttention
+            ? "needs attention"
+            : buildDone
+            ? "completed"
+            : undefined,
         onClick: () => {
           showChangeEditor("build");
           focusResult("#highbay-build-title, #highbay-prerequisite-title");
@@ -4170,6 +4419,7 @@ export function bootstrapViewsPage() {
       active: activeStage === "verify",
       status: verifyAttention ? "attention" : verifyDone ? "done" : "neutral",
       glyph: verifyAttention ? "!" : verifyDone ? "✓" : undefined,
+      srStatus: verifyAttention ? "needs attention" : verifyDone ? "completed" : undefined,
       onClick: openProof,
     });
     steps.push({
@@ -4178,6 +4428,7 @@ export function bootstrapViewsPage() {
       active: activeStage === "approve",
       status: approveDone || merged ? "done" : "neutral",
       glyph: merged ? "Merged" : approveDone ? "✓" : undefined,
+      srStatus: merged ? "merged" : approveDone ? "completed" : undefined,
       onClick: openApproval,
     });
     return steps;
@@ -4958,7 +5209,6 @@ export function bootstrapViewsPage() {
                           : anyTerminalRole === "builder"
                           ? "Builder"
                           : "Test writer") + " terminal",
-                  primary: false,
                   onClick: (invoker) => {
                     if (mobileSurface === "terminal") {
                       mobileSurface = "stage";
@@ -5102,6 +5352,11 @@ export function bootstrapViewsPage() {
     if (composerDraft.text.trim() !== "") {
       lines.push("[Conversation draft to " + composerDraft.to + "] " + composerDraft.text);
     }
+    for (const [scope, draft] of composerDraftsByScope.entries()) {
+      if (scope !== activeComposerScope && draft.text.trim() !== "") {
+        lines.push("[Conversation draft (" + scope + ") to " + draft.to + "] " + draft.text);
+      }
+    }
     return lines;
   }
 
@@ -5202,7 +5457,7 @@ export function bootstrapViewsPage() {
               snapshot={teamSnapshot}
               lastRead={teamFactsError() !== null}
               disabled={sessionState !== "active"}
-              openTerminalRole={openTerminalRole}
+              openTerminalRole={terminalObserveMode ? null : openTerminalRole}
               primaryRole={primaryAttentionRole}
               onOpenTerminal={(role, invoker) => openRoleTerminal(role, invoker, false)}
               onMessageRole={(role) => focusComposerForRole(role)}
@@ -5265,7 +5520,6 @@ export function bootstrapViewsPage() {
     id: string,
     changeId: string,
     requestRevision: string,
-    answers: Record<string, string>,
     choices: ReturnType<typeof answersNeedingRevision>,
     primarySend: boolean
   ) {
@@ -5277,9 +5531,13 @@ export function bootstrapViewsPage() {
       (agentOptions === null ||
         guideChoice === undefined ||
         roleChoiceError(guideChoice, agentOptions.agents) !== null);
+    const changedAnswers: Record<string, string> = {};
+    for (const item of choices) {
+      changedAnswers[item.id] = item.answer;
+    }
     const context: ComposerContext = {
       type: "revise_answers",
-      value: { change_id: changeId, request_revision: requestRevision, answers },
+      value: { change_id: changeId, request_revision: requestRevision, answers: changedAnswers },
     };
     const summaryText =
       "Please revise change " +
@@ -5519,7 +5777,7 @@ export function bootstrapViewsPage() {
       viewEl.dataset.stage = signedOutReason === "link-used" ? "link-used" : "signed-out";
       flushSync(() => {
         viewRoot.render(
-          <div id="highbay-result-view" data-state="signed-out">
+          <div id="highbay-result-view">
             <SignedOutView reason={signedOutReason} message={signedOutMessage} />
           </div>
         );
@@ -5531,7 +5789,7 @@ export function bootstrapViewsPage() {
       viewEl.dataset.stage = "changes";
       flushSync(() => {
         viewRoot.render(
-          <div id="highbay-result-view" data-state="changes">
+          <div id="highbay-result-view">
             <ChangeListView
               list={changeList}
               loading={hasPending("list_changes", "")}
@@ -5539,10 +5797,16 @@ export function bootstrapViewsPage() {
               openError={lastOpenAttempt !== null ? cardLoadErrors.get(lastOpenAttempt) ?? null : null}
               openChangeId={activeChangeId}
               dirtyChangeIds={dirtyChangeIds()}
-              busy={editorRequestsByChangeId.size > 0}
+              loadingChangeIds={
+                new Set(
+                  Array.from(editorRequestsByChangeId.entries())
+                    .filter(([id, op]) => op === "get_change" && !editorsByChangeId.has(id))
+                    .map(([id]) => id)
+                )
+              }
               disabled={sessionState !== "active"}
               launchWorkspace={renderDraftWorkspace(true, primaryActionId)}
-              onNewChange={openNewChange}
+              onNewChange={() => openNewChange()}
               onOpen={(id) => openChange(id)}
               onRetry={() => void loadChanges()}
             />
@@ -5556,7 +5820,7 @@ export function bootstrapViewsPage() {
       viewEl.dataset.stage = "new";
       flushSync(() => {
         viewRoot.render(
-          <div id="highbay-result-view" data-state="new">
+          <div id="highbay-result-view">
             {renderDraftWorkspace(false, primaryActionId)}
           </div>
         );
@@ -5571,7 +5835,6 @@ export function bootstrapViewsPage() {
         viewRoot.render(
           <div
             id="highbay-result-view"
-            data-state="story"
             data-change-id={openCard?.change_id}
             data-request-revision={openCard?.request_revision}
           >
@@ -5602,7 +5865,7 @@ export function bootstrapViewsPage() {
       viewEl.dataset.stage = "team";
       flushSync(() => {
         viewRoot.render(
-          <div id="highbay-result-view" data-state="team">
+          <div id="highbay-result-view">
             <TeamStageView
               snapshot={teamSnapshot}
               loading={hasPending("get_team", "")}
@@ -5643,7 +5906,7 @@ export function bootstrapViewsPage() {
       viewEl.dataset.stage = "live";
       flushSync(() => {
         viewRoot.render(
-          <div id="highbay-result-view" data-state="live">
+          <div id="highbay-result-view">
             <LiveTargetStageView
               target={liveTarget}
               targetLoading={hasPending("get_live_target", "")}
@@ -5694,7 +5957,6 @@ export function bootstrapViewsPage() {
         viewRoot.render(
           <div
             id="highbay-cp1-editor"
-            data-state="cp1-change-card"
             data-change-id={ed.card.change_id}
             data-request-revision={ed.card.request_revision}
             tabIndex={-1}
@@ -5713,7 +5975,9 @@ export function bootstrapViewsPage() {
                   }
                   const preserved = snapshotUnsavedDraft(currentEd);
                   const prior = nextPriorCard(currentEd, currentEd.incomingCard);
-                  mountChangeCard(currentEd.incomingCard, preserved, prior, "agree");
+                  mountChangeCard(currentEd.incomingCard, preserved, prior, "agree", {
+                    forceActivate: true,
+                  });
                 }}
               />
             ) : null}
@@ -5728,7 +5992,6 @@ export function bootstrapViewsPage() {
                   "highbay-proposal-revision-needed",
                   ed.card.change_id,
                   proposal.request_revision,
-                  ed.proposalAnswers,
                   answersNeedingRevision(proposal.ambiguities, ed.proposalAnswers),
                   primaryActionId === "highbay-proposal-revision-needed-send"
                 )}
@@ -5776,7 +6039,6 @@ export function bootstrapViewsPage() {
                       "highbay-confirm-revision-needed",
                       ed.card.change_id,
                       ed.card.request_revision,
-                      ed.draftAnswers,
                       answersNeedingRevision(ed.card.ambiguities, ed.draftAnswers),
                       primaryActionId === "highbay-confirm-revision-needed-send"
                     )
@@ -5787,7 +6049,6 @@ export function bootstrapViewsPage() {
               draftExamples={ed.draftExamples}
               rpcInFlight={editorReq !== null}
               loadingVerifications={hasPending("list_verifications", ed.card.change_id)}
-              cp4Open={false}
               preservedDraft={ed.preservedDraft}
               formError={ed.formError?.message ?? null}
               onSetAnswer={(ambId, opt) => {
@@ -5833,7 +6094,7 @@ export function bootstrapViewsPage() {
                 showChangeEditor("build");
                 focusResult("#highbay-build-title");
               }}
-              onOpenStory={openStory}
+              onOpenStory={() => openStory()}
               onReviewApproval={openRecordedApproval}
             />
           </div>
@@ -5867,7 +6128,6 @@ export function bootstrapViewsPage() {
         viewRoot.render(
           <div
             id="highbay-result-view"
-            data-state="build"
             data-change-id={ed.card.change_id}
             data-request-revision={ed.card.request_revision}
           >
@@ -5927,10 +6187,10 @@ export function bootstrapViewsPage() {
                   onBuild={startBuild}
                   onPrepareBuild={prepareBuildConfirmation}
                   onDrop={dropBuild}
-                  onOpenTeam={openTeam}
+                  onOpenTeam={() => openTeam()}
                   onOpenAgree={handleReturnToChangeCard}
                   onOpenArchitecture={openArchitecture}
-                  onOpenLive={openLive}
+                  onOpenLive={() => openLive()}
                   onOpenChange={(id) => openChange(id)}
                   onReviewCheck={() => {
                     if (latestCheck !== null) reviewSavedCheck(latestCheck);
@@ -5957,7 +6217,6 @@ export function bootstrapViewsPage() {
           viewRoot.render(
             <div
               id="highbay-result-view"
-              data-state="cp2-architecture-preview"
               data-change-id={card.change_id}
               data-request-revision={card.request_revision}
             >
@@ -5980,7 +6239,6 @@ export function bootstrapViewsPage() {
         viewRoot.render(
           <div
             id="highbay-result-view"
-            data-state="cp2-architecture-preview"
             data-change-id={preview?.change_id}
             data-request-revision={preview?.request_revision}
             data-design-digest={preview?.design_digest}
@@ -6041,7 +6299,6 @@ export function bootstrapViewsPage() {
         viewRoot.render(
           <div
             id="highbay-result-view"
-            data-state="cp5-approval"
             data-run-id={run?.run_id}
             data-change-id={run?.change_id}
             data-request-revision={run?.request_revision}
@@ -6098,7 +6355,6 @@ export function bootstrapViewsPage() {
       viewRoot.render(
         <div
           id="highbay-result-view"
-          data-state="cp4-verification"
           data-run-id={displayedRun?.run_id}
           data-change-id={displayedRun ? displayedRun.change_id : changeId || undefined}
           data-request-revision={displayedRun?.request_revision}
@@ -6174,12 +6430,33 @@ export function bootstrapViewsPage() {
       };
     }
 
-    // ctx.type === "revise_answers": reconcile selected answers against latest.ambiguities.
+    // ctx.type === "revise_answers": reconcile selected answers against latest.ambiguities
+    // by exact question text (never positional <changeId>-ambiguity-NN index alone) and
+    // omit choices the new revision's draft_option already satisfies.
     const reconciled: Record<string, string> = {};
+    const sourceAmbiguities = knownAmbiguitiesByRevision.get(
+      ctx.value.change_id + ":" + ctx.value.request_revision
+    );
+    const chosenByQuestionText = new Map<string, string>();
+    if (sourceAmbiguities !== undefined) {
+      for (const srcQ of sourceAmbiguities) {
+        const chosen = ctx.value.answers[srcQ.id];
+        if (chosen !== undefined) {
+          chosenByQuestionText.set(srcQ.question, chosen);
+        }
+      }
+    }
     if (latest.knownAmbiguities) {
       for (const q of latest.ambiguities ?? []) {
-        const chosen = ctx.value.answers[q.id];
-        if (chosen !== undefined && q.options.includes(chosen)) {
+        const chosen =
+          sourceAmbiguities !== undefined
+            ? chosenByQuestionText.get(q.question)
+            : ctx.value.answers[q.id];
+        if (
+          chosen !== undefined &&
+          q.options.includes(chosen) &&
+          (q.draft_option !== undefined && q.draft_option !== chosen)
+        ) {
           reconciled[q.id] = chosen;
         }
       }
@@ -6329,6 +6606,7 @@ export function bootstrapViewsPage() {
             syncAllRegions();
           }}
           onSwitchRecipient={handleSwitchComposerRecipient}
+          onReplyToMessage={handleReplyToConversationMessage}
           onGuideChoiceChange={(choice) => {
             guideChoice = choice;
             guideChoiceEdited = true;
@@ -6374,6 +6652,7 @@ export function bootstrapViewsPage() {
           roleState={roleState}
           observeMode={terminalObserveMode}
           size={terminalSize}
+          primaryInteractive={primaryActionId === "highbay-terminal-interactive"}
           primaryRestart={primaryActionId === "highbay-terminal-restart"}
           disabled={sessionState !== "active"}
           interrupting={hasPending("interrupt_team_role", role)}
@@ -6645,9 +6924,56 @@ export function bootstrapViewsPage() {
         ) {
           statusEl.textContent = "Showing the saved verification result.";
         }
+        const pendingOpenSeq = pendingDefaultVerifyCheck.get(changeId);
+        if (
+          pendingOpenSeq !== undefined &&
+          navigationSeq === pendingOpenSeq &&
+          sessionState === "active" &&
+          currentView.kind === "change" &&
+          currentView.changeId === changeId &&
+          currentView.stage === "build"
+        ) {
+          pendingDefaultVerifyCheck.delete(changeId);
+          const latestEd = editorsByChangeId.get(changeId);
+          const currentBuild = buildChangeId === changeId ? buildSnapshot : null;
+          if (latestEd !== undefined && currentBuild !== null) {
+            const nextStage = computeDefaultStageForConfirmed(latestEd, currentBuild);
+            if (nextStage !== "build") {
+              activateChangeStage(changeId, nextStage, "replace");
+            }
+          }
+        }
         finish();
       },
       (message) => {
+        if (pendingRestoredRunByChangeId.get(changeId) === runID) {
+          pendingRestoredRunByChangeId.delete(changeId);
+          const fallback = lastLoadedListByChangeId.get(changeId)?.[0] ?? null;
+          if (selectedVerificationChangeId === changeId && selectedRunId === runID && fallback !== null) {
+            selectedRunId = fallback;
+            syncHistoryState("replace");
+          }
+        }
+        const pendingOpenSeq = pendingDefaultVerifyCheck.get(changeId);
+        if (pendingOpenSeq !== undefined) {
+          pendingDefaultVerifyCheck.delete(changeId);
+          if (
+            navigationSeq === pendingOpenSeq &&
+            sessionState === "active" &&
+            currentView.kind === "change" &&
+            currentView.changeId === changeId &&
+            currentView.stage === "build"
+          ) {
+            const latestEd = editorsByChangeId.get(changeId);
+            const currentBuild = buildChangeId === changeId ? buildSnapshot : null;
+            if (latestEd !== undefined && currentBuild !== null) {
+              const nextStage = computeDefaultStageForConfirmed(latestEd, currentBuild);
+              if (nextStage !== "build") {
+                activateChangeStage(changeId, nextStage, "replace");
+              }
+            }
+          }
+        }
         if (
           generation === verificationGeneration &&
           order >= (runObservationOrder.get(runID) ?? -1)
@@ -6724,6 +7050,14 @@ export function bootstrapViewsPage() {
         finish();
       },
       (message, failure) => {
+        if (pendingRestoredRunByChangeId.get(changeId) === runId) {
+          pendingRestoredRunByChangeId.delete(changeId);
+          const fallback = lastLoadedListByChangeId.get(changeId)?.[0] ?? null;
+          if (selectedVerificationChangeId === changeId && selectedRunId === runId && fallback !== null) {
+            selectedRunId = fallback;
+            syncHistoryState("replace");
+          }
+        }
         if (
           generation === verificationGeneration &&
           order >= (runObservationOrder.get(runId) ?? -1)
@@ -6872,7 +7206,9 @@ export function bootstrapViewsPage() {
   }
 
   // computeDefaultStageForConfirmed chooses the truthful opening stage after
-  // both get_change and get_build have settled, without flashing Agree first.
+  // get_change and get_build have settled, checking accepted_at >= started_at
+  // on the fetched run so an older build's failure is never misattributed and a
+  // newer current-build failure opens Verify ahead of an unmerged prior pass.
   function computeDefaultStageForConfirmed(
     ed: ActiveEditorState,
     build: ChangeBuild["build"] | null
@@ -6891,37 +7227,38 @@ export function bootstrapViewsPage() {
       build.in_force &&
       build.request_revision === ed.card.request_revision
     ) {
-      if (build.taking.state === "passed" || build.taking.state === "merged") {
+      if (build.taking.state === "merged") {
         return "approve";
       }
-      const listedVer = changeList?.changes.find((c) => c.change_id === ed.card.change_id)
-        ?.latest_verification;
       const latestRun = latestVerificationFor(ed.card.change_id);
       if (
         latestRun !== null &&
+        latestRun.inputs_current &&
         runStartedInCurrentBuild(ed.card, build, latestRun) &&
         (latestRun.state.type === "not_completed" ||
           (latestRun.state.type === "completed" && !latestRun.state.value.report.passed))
       ) {
         return "verify";
       }
-      if (
-        latestRun === null &&
-        listedVer !== undefined &&
-        listedVer.inputs_current &&
-        (listedVer.state === "failed" || listedVer.state === "not_completed")
-      ) {
-        return "verify";
+      if (build.taking.state === "passed" && !pendingDefaultVerifyCheck.has(ed.card.change_id)) {
+        return "approve";
       }
     }
     return "build";
   }
 
   // activateChangeStage enters the chosen stage for an already-stored editor.
-  function activateChangeStage(changeId: string, stage: ChangeStageName, historyMode: "push" | "replace") {
+  function activateChangeStage(
+    changeId: string,
+    stage: ChangeStageName,
+    historyMode: "push" | "replace",
+    targetMobileSurface: MobileSurface = "stage"
+  ) {
     activeChangeId = changeId;
-    mobileSurface = "stage";
+    mobileSurface = targetMobileSurface;
+    switchComposerScope(composerScopeFor("change", changeId));
     const ed = editorsByChangeId.get(changeId);
+    const restoredRun = pendingRestoredRunByChangeId.get(changeId) ?? null;
     if (stage === "approve") {
       selectedVerificationChangeId = changeId;
       const approval = ed?.card.approval ?? ed?.card.unverified_approval?.approval;
@@ -6930,11 +7267,12 @@ export function bootstrapViewsPage() {
           ? savedApprovalEvidenceRun(ed.card, approval)
           : null;
       const currentSelectedForChange =
-        selectedRunId !== null && runsById.get(selectedRunId)?.change_id === changeId
+        restoredRun ??
+        (selectedRunId !== null && runsById.get(selectedRunId)?.change_id === changeId
           ? selectedRunId
-          : null;
+          : null);
       const run = savedRun ?? latestVerificationFor(changeId);
-      selectedRunId = run?.run_id ?? currentSelectedForChange;
+      selectedRunId = currentSelectedForChange ?? run?.run_id ?? null;
       currentView = { kind: "change", changeId, stage: "approve" };
       statusEl.textContent = "Review the saved check before approving it.";
       if (!lastLoadedListByChangeId.has(changeId)) {
@@ -6950,9 +7288,10 @@ export function bootstrapViewsPage() {
     if (stage === "verify") {
       selectedVerificationChangeId = changeId;
       const currentSelectedForChange =
-        selectedRunId !== null && runsById.get(selectedRunId)?.change_id === changeId
+        restoredRun ??
+        (selectedRunId !== null && runsById.get(selectedRunId)?.change_id === changeId
           ? selectedRunId
-          : null;
+          : null);
       const run = latestVerificationFor(changeId);
       selectedRunId =
         currentSelectedForChange ??
@@ -7010,22 +7349,60 @@ export function bootstrapViewsPage() {
     syncAllRegions();
   }
 
+  // armPendingVerifyCheck records openSeq when a confirmed card's latest listed
+  // verification failed/stopped and its full run snapshot is still loading.
+  function armPendingVerifyCheck(changeId: string, openSeq: number) {
+    const listedVer = changeList?.changes.find((c) => c.change_id === changeId)?.latest_verification;
+    if (
+      listedVer !== undefined &&
+      listedVer.inputs_current &&
+      (listedVer.state === "failed" || listedVer.state === "not_completed") &&
+      !runsById.has(listedVer.run_id)
+    ) {
+      pendingDefaultVerifyCheck.set(changeId, openSeq);
+    } else {
+      pendingDefaultVerifyCheck.delete(changeId);
+    }
+  }
+
   // openChange opens requestedChangeId in editorsByChangeId, preserving any
   // unsaved drafts on other cards and awaiting get_build before mounting a
   // confirmed card's default stage so it never flashes Agree then jumps.
-  function openChange(requestedChangeId: string, explicitStage?: ChangeStageName) {
-    if (!requestedChangeId || editorRequestsByChangeId.has(requestedChangeId)) {
+  function openChange(
+    requestedChangeId: string,
+    explicitStage?: ChangeStageName,
+    options?: {
+      historyMode?: "push" | "replace";
+      mobileSurface?: MobileSurface;
+      restoreRunId?: string;
+    }
+  ) {
+    if (!requestedChangeId) {
       return;
     }
+    const initialHistoryMode = options?.historyMode ?? (handlingPopState ? "replace" : "push");
+    const targetMobileSurface = options?.mobileSurface ?? "stage";
+    if (options?.restoreRunId !== undefined) {
+      pendingRestoredRunByChangeId.set(requestedChangeId, options.restoreRunId);
+      selectedRunId = options.restoreRunId;
+      selectedVerificationChangeId = requestedChangeId;
+    }
+
     const existing = editorsByChangeId.get(requestedChangeId);
     if (existing !== undefined) {
       const openSeq = ++navigationSeq;
       activeChangeId = requestedChangeId;
       refreshOpenCard(requestedChangeId);
       if (explicitStage !== undefined) {
+        pendingDefaultVerifyCheck.delete(requestedChangeId);
         readBuild(requestedChangeId);
         refreshVerificationObservations(requestedChangeId);
-        activateChangeStage(requestedChangeId, explicitStage, "push");
+        activateChangeStage(
+          requestedChangeId,
+          explicitStage,
+          initialHistoryMode,
+          targetMobileSurface
+        );
         return;
       }
       if (
@@ -7034,22 +7411,26 @@ export function bootstrapViewsPage() {
         existing.incomingCard !== null ||
         isEditorDirtyState(existing)
       ) {
+        pendingDefaultVerifyCheck.delete(requestedChangeId);
         readBuild(requestedChangeId);
         refreshVerificationObservations(requestedChangeId);
-        activateChangeStage(requestedChangeId, "agree", "push");
+        activateChangeStage(requestedChangeId, "agree", initialHistoryMode, targetMobileSurface);
         return;
       }
       if (buildChangeId === requestedChangeId && buildSnapshot !== null && buildReadError === null) {
+        armPendingVerifyCheck(requestedChangeId, openSeq);
         refreshVerificationObservations(requestedChangeId);
         activateChangeStage(
           requestedChangeId,
           computeDefaultStageForConfirmed(existing, buildSnapshot),
-          "push"
+          initialHistoryMode,
+          targetMobileSurface
         );
         return;
       }
+      armPendingVerifyCheck(requestedChangeId, openSeq);
       refreshVerificationObservations(requestedChangeId);
-      activateChangeStage(requestedChangeId, "build", "push");
+      activateChangeStage(requestedChangeId, "build", initialHistoryMode, targetMobileSurface);
       readBuild(requestedChangeId, (settled) => {
         if (navigationSeq !== openSeq || sessionState !== "active") {
           return;
@@ -7057,13 +7438,22 @@ export function bootstrapViewsPage() {
         const latestEd = editorsByChangeId.get(requestedChangeId) ?? existing;
         const target = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
         if (target !== "build") {
-          activateChangeStage(requestedChangeId, target, "replace");
+          activateChangeStage(requestedChangeId, target, "replace", mobileSurface);
         }
       });
       return;
     }
 
     const openSeq = ++navigationSeq;
+    pendingOpenByChangeId.set(requestedChangeId, {
+      openSeq,
+      explicitStage,
+      historyMode: initialHistoryMode,
+      mobileSurface: targetMobileSurface,
+    });
+    if (editorRequestsByChangeId.has(requestedChangeId)) {
+      return;
+    }
     lastOpenAttempt = requestedChangeId;
     cardLoadErrors.delete(requestedChangeId);
     statusEl.textContent = "Loading Change Card " + requestedChangeId + "...";
@@ -7072,6 +7462,12 @@ export function bootstrapViewsPage() {
       { change_id: requestedChangeId },
       requestedChangeId,
       (loadedCard) => {
+        const pendingOpen = pendingOpenByChangeId.get(requestedChangeId);
+        pendingOpenByChangeId.delete(requestedChangeId);
+        const effectiveSeq = pendingOpen?.openSeq ?? openSeq;
+        const effectiveStage = pendingOpen !== undefined ? pendingOpen.explicitStage : explicitStage;
+        const effectiveHistoryMode = pendingOpen?.historyMode ?? initialHistoryMode;
+        const effectiveMobileSurface = pendingOpen?.mobileSurface ?? targetMobileSurface;
         if (loadedCard.change_id !== requestedChangeId) {
           cardLoadErrors.set(
             requestedChangeId,
@@ -7081,11 +7477,12 @@ export function bootstrapViewsPage() {
               requestedChangeId +
               "."
           );
-          if (navigationSeq === openSeq) {
+          if (navigationSeq === effectiveSeq) {
             statusEl.textContent = "Could not load the requested Change Card.";
           }
           return;
         }
+        recordObservedCard(loadedCard);
         cardLoadErrors.delete(requestedChangeId);
         const newEd: ActiveEditorState = {
           card: loadedCard,
@@ -7096,83 +7493,105 @@ export function bootstrapViewsPage() {
           formError: null,
         };
         editorsByChangeId.set(loadedCard.change_id, newEd);
-        if (navigationSeq !== openSeq) {
+        if (navigationSeq !== effectiveSeq) {
           return;
         }
         activeChangeId = loadedCard.change_id;
         if (
-          explicitStage !== undefined ||
+          effectiveStage !== undefined ||
           loadedCard.status !== "confirmed" ||
           loadedCard.proposed_revision !== undefined
         ) {
-          const targetStage = explicitStage ?? "agree";
+          pendingDefaultVerifyCheck.delete(loadedCard.change_id);
+          const targetStage = effectiveStage ?? "agree";
           readBuild(loadedCard.change_id);
           refreshVerificationObservations(loadedCard.change_id);
-          activateChangeStage(loadedCard.change_id, targetStage, "push");
+          activateChangeStage(
+            loadedCard.change_id,
+            targetStage,
+            effectiveHistoryMode,
+            effectiveMobileSurface
+          );
           return;
         }
-        // Confirmed card without explicit stage: immediately show Build's loading
-        // state (never Agree), then transition via replace if get_build reveals
-        // a passed/merged or failed-verification default stage.
+        armPendingVerifyCheck(loadedCard.change_id, effectiveSeq);
         refreshVerificationObservations(loadedCard.change_id);
-        activateChangeStage(loadedCard.change_id, "build", "push");
+        activateChangeStage(
+          loadedCard.change_id,
+          "build",
+          effectiveHistoryMode,
+          effectiveMobileSurface
+        );
         readBuild(loadedCard.change_id, (settled) => {
-          if (navigationSeq !== openSeq || sessionState !== "active") {
+          if (navigationSeq !== effectiveSeq || sessionState !== "active") {
             return;
           }
           const latestEd = editorsByChangeId.get(loadedCard.change_id) ?? newEd;
           const targetStage = computeDefaultStageForConfirmed(latestEd, settled?.build ?? null);
           if (targetStage !== "build") {
-            activateChangeStage(loadedCard.change_id, targetStage, "replace");
+            activateChangeStage(loadedCard.change_id, targetStage, "replace", mobileSurface);
           }
         });
       },
       (message) => {
+        const pendingOpen = pendingOpenByChangeId.get(requestedChangeId);
+        pendingOpenByChangeId.delete(requestedChangeId);
         cardLoadErrors.set(requestedChangeId, "Could not load Change Card: " + message);
-        if (navigationSeq === openSeq) {
+        if (navigationSeq === (pendingOpen?.openSeq ?? openSeq)) {
           statusEl.textContent = "Could not load the requested Change Card.";
         }
       }
     );
   }
 
-  // applyHistoryViewState restores opaque navigation state on Back/Forward or reload.
+  // applyHistoryViewState restores opaque navigation state on Back/Forward or reload
+  // strictly via replace mode without mutating Forward history or clobbering mobileSurface.
   function applyHistoryViewState(state: HistoryViewState) {
     handlingPopState = true;
     try {
-      mobileSurface = state.mobileSurface ?? "stage";
+      const restoredSurface = state.mobileSurface ?? "stage";
       draftSentMessageId = state.newDraft?.sentMessageId;
       switch (state.view) {
         case "changes":
-          showChanges();
+          showChanges({ historyMode: "replace", mobileSurface: restoredSurface });
           break;
         case "new":
-          openNewChange();
+          openNewChange({ historyMode: "replace", mobileSurface: restoredSurface });
           break;
         case "team":
-          openTeam();
+          openTeam({ historyMode: "replace", mobileSurface: restoredSurface });
           break;
         case "story":
-          if (state.changeId !== undefined && editorsByChangeId.has(state.changeId)) {
+          if (
+            state.changeId !== undefined &&
+            (editorsByChangeId.has(state.changeId) ||
+              (changeList?.changes.some((c) => c.change_id === state.changeId) ?? false))
+          ) {
             activeChangeId = state.changeId;
+            loadCardIntoCache(state.changeId);
           }
-          openStory();
+          openStory({ historyMode: "replace", mobileSurface: restoredSurface });
           break;
         case "live":
-          if (state.changeId !== undefined && editorsByChangeId.has(state.changeId)) {
+          if (
+            state.changeId !== undefined &&
+            (editorsByChangeId.has(state.changeId) ||
+              (changeList?.changes.some((c) => c.change_id === state.changeId) ?? false))
+          ) {
             activeChangeId = state.changeId;
+            loadCardIntoCache(state.changeId);
           }
-          openLive();
+          openLive({ historyMode: "replace", mobileSurface: restoredSurface });
           break;
         case "change":
           if (state.changeId !== undefined) {
-            if (state.runId !== undefined) {
-              selectedRunId = state.runId;
-              selectedVerificationChangeId = state.changeId;
-            }
-            openChange(state.changeId, state.stage);
+            openChange(state.changeId, state.stage, {
+              historyMode: "replace",
+              mobileSurface: restoredSurface,
+              restoreRunId: state.runId,
+            });
           } else {
-            showChanges();
+            showChanges({ historyMode: "replace", mobileSurface: restoredSurface });
           }
           break;
       }
@@ -7181,17 +7600,32 @@ export function bootstrapViewsPage() {
     }
   }
 
-  function showFormError(message: string, source: "input" | "request" = "request") {
-    const ed = getActiveEditor();
+  function isViewingChangeOnAgree(changeId: string): boolean {
+    return (
+      activeChangeId === changeId &&
+      currentView.kind === "change" &&
+      currentView.changeId === changeId &&
+      currentView.stage === "agree"
+    );
+  }
+
+  function showFormError(
+    changeId: string,
+    message: string,
+    source: "input" | "request" = "request"
+  ) {
+    const ed = editorsByChangeId.get(changeId);
     if (!ed) {
       return;
     }
-    statusEl.textContent =
-      source === "input" ? message : "Change Card request failed; unsaved edits preserved.";
-    editorsByChangeId.set(ed.card.change_id, {
+    editorsByChangeId.set(changeId, {
       ...ed,
       formError: { message, source },
     });
+    if (isViewingChangeOnAgree(changeId)) {
+      statusEl.textContent =
+        source === "input" ? message : "Change Card request failed; unsaved edits preserved.";
+    }
     syncAllRegions();
   }
 
@@ -7251,6 +7685,7 @@ export function bootstrapViewsPage() {
     const unanswered = unansweredQuestions(ed)[0];
     if (unanswered !== undefined) {
       showFormError(
+        ed.card.change_id,
         "Choose an answer for “" + unanswered.question + "” before confirming.",
         "input"
       );
@@ -7260,6 +7695,7 @@ export function bootstrapViewsPage() {
     const exampleIssue = firstIncompleteExample(ed);
     if (exampleIssue !== null) {
       showFormError(
+        ed.card.change_id,
         "Enter " + exampleIssue.label + " for example " + exampleIssue.number + ".",
         "input"
       );
@@ -7299,11 +7735,15 @@ export function bootstrapViewsPage() {
           nextPriorCard(currentEd, updatedCard),
           "agree"
         );
-        focusResult("#highbay-cp1-editor");
+        if (isViewingChangeOnAgree(submittedCard.change_id)) {
+          focusResult("#highbay-cp1-editor");
+        }
       },
       (message, failure) => {
-        showFormError(message);
-        focusResult("#highbay-confirm-error");
+        showFormError(submittedCard.change_id, message);
+        if (isViewingChangeOnAgree(submittedCard.change_id)) {
+          focusResult("#highbay-confirm-error");
+        }
         if (failure.status === 0) {
           refreshOpenCard(submittedCard.change_id);
         }
@@ -7345,8 +7785,10 @@ export function bootstrapViewsPage() {
         const currentEd = editorsByChangeId.get(card.change_id) ?? null;
         const preserved = currentEd ? snapshotUnsavedDraft(currentEd, adopted) : null;
         mountChangeCard(adopted, preserved, nextPriorCard(currentEd, adopted), "agree");
-        statusEl.textContent = "Adopted the proposed revision; it is now the agreed revision.";
-        focusResult("#highbay-cp1-editor");
+        if (isViewingChangeOnAgree(card.change_id)) {
+          statusEl.textContent = "Adopted the proposed revision; it is now the agreed revision.";
+          focusResult("#highbay-cp1-editor");
+        }
       },
       (message, failure) => {
         failProposal(message, failure, card.change_id);
@@ -7370,6 +7812,7 @@ export function bootstrapViewsPage() {
       { change_id: card.change_id, request_revision: proposal.request_revision },
       card.change_id,
       (declined) => {
+        recordObservedCard(declined);
         const currentEd = editorsByChangeId.get(card.change_id);
         if (currentEd && currentEd.card.request_revision === declined.request_revision) {
           editorsByChangeId.set(card.change_id, {
@@ -7386,10 +7829,12 @@ export function bootstrapViewsPage() {
             "agree"
           );
         }
-        statusEl.textContent =
-          "Declined the proposed revision; the agreed revision stays in force.";
         syncAllRegions();
-        focusResult("#highbay-cp1-editor");
+        if (isViewingChangeOnAgree(card.change_id)) {
+          statusEl.textContent =
+            "Declined the proposed revision; the agreed revision stays in force.";
+          focusResult("#highbay-cp1-editor");
+        }
       },
       (message, failure) => {
         failProposal(message, failure, card.change_id);
@@ -7402,9 +7847,13 @@ export function bootstrapViewsPage() {
     if (currentEd) {
       editorsByChangeId.set(changeId, { ...currentEd, proposalError: message });
     }
-    statusEl.textContent = "The proposed revision was not changed.";
+    if (isViewingChangeOnAgree(changeId)) {
+      statusEl.textContent = "The proposed revision was not changed.";
+    }
     syncAllRegions();
-    focusResult("#highbay-proposal-error");
+    if (isViewingChangeOnAgree(changeId)) {
+      focusResult("#highbay-proposal-error");
+    }
     if (failure.status === 0 || failure.status === 409) {
       refreshOpenCard(changeId);
     }
@@ -7523,9 +7972,10 @@ export function bootstrapViewsPage() {
         if (latestCard.change_id !== changeId) {
           const message = "The server returned a different Change Card.";
           cardLoadErrors.set(changeId, message);
-          showFormError(message);
+          showFormError(changeId, message);
           return;
         }
+        recordObservedCard(latestCard);
         cardLoadErrors.delete(changeId);
         const currentEd = editorsByChangeId.get(changeId);
         if (currentEd && latestCard.request_revision === currentEd.card.request_revision) {
@@ -7534,12 +7984,15 @@ export function bootstrapViewsPage() {
             card: latestCard,
             formError: null,
           });
-          statusEl.textContent = latestCard.approval
-            ? "Showing the recorded approval for these inputs."
-            : latestCard.unverified_approval
-            ? "Showing the saved approval record (current promotion inputs could not be verified)."
-            : "Showing the latest card without a current approval.";
-          refreshVerificationObservations(changeId);
+          if (activeChangeId === changeId) {
+            statusEl.textContent = latestCard.approval
+              ? "Showing the recorded approval for these inputs."
+              : latestCard.unverified_approval
+              ? "Showing the saved approval record (current promotion inputs could not be verified)."
+              : "Showing the latest card without a current approval.";
+            refreshVerificationObservations(changeId);
+          }
+          syncAllRegions();
           return;
         }
         const preserved = currentEd ? snapshotUnsavedDraft(currentEd) : null;
@@ -7549,7 +8002,7 @@ export function bootstrapViewsPage() {
       (message) => {
         const error = "Could not load the current card and approval: " + message;
         cardLoadErrors.set(changeId, error);
-        showFormError(error);
+        showFormError(changeId, error);
       }
     );
   }
@@ -7558,8 +8011,10 @@ export function bootstrapViewsPage() {
     card: ChangeCardResult,
     preservedDraft: PreservedDraft | null,
     priorCard: ChangeCardResult | null = null,
-    explicitStage?: ChangeStageName
+    explicitStage?: ChangeStageName,
+    options?: { forceActivate?: boolean }
   ) {
+    recordObservedCard(card);
     const existing = editorsByChangeId.get(card.change_id);
     if (!existing || existing.card.request_revision !== card.request_revision) {
       verificationGeneration++;
@@ -7582,7 +8037,17 @@ export function bootstrapViewsPage() {
       formError: null,
     };
     editorsByChangeId.set(card.change_id, nextEd);
+    const shouldActivate =
+      options?.forceActivate === true ||
+      (activeChangeId === card.change_id &&
+        currentView.kind === "change" &&
+        currentView.changeId === card.change_id);
+    if (!shouldActivate) {
+      syncAllRegions();
+      return;
+    }
     activeChangeId = card.change_id;
+    switchComposerScope(composerScopeFor("change", card.change_id));
     const stage: ChangeStageName =
       explicitStage ??
       (card.status === "confirmed" && card.proposed_revision === undefined ? "build" : "agree");
@@ -7603,6 +8068,29 @@ export function bootstrapViewsPage() {
     refreshVerificationObservations(card.change_id);
     syncHistoryState("replace");
     syncAllRegions();
+  }
+
+  // Move focus programmatically on skip-link activation so exact /views URL and
+  // window.history.state are never mutated by native fragment navigation.
+  if (skipEl !== null) {
+    skipEl.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (isNarrowViewport() && mobileSurface === "conversation") {
+        (
+          document.getElementById("highbay-conversation-title") ??
+          document.getElementById("highbay-conversation-panel")
+        )?.focus();
+        return;
+      }
+      if (isNarrowViewport() && mobileSurface === "terminal") {
+        (
+          document.getElementById("highbay-terminal-title") ??
+          document.getElementById("highbay-terminal-drawer")
+        )?.focus();
+        return;
+      }
+      focusCurrentViewHeading();
+    });
   }
 
   // Re-sync regions cleanly when crossing the 1080px responsive breakpoint.

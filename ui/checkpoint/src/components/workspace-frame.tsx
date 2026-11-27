@@ -20,6 +20,7 @@ export interface FrameDestination {
 export interface JourneyStep extends FrameDestination {
   status: "done" | "attention" | "neutral";
   glyph?: string;
+  srStatus?: string;
   unsaved?: boolean;
 }
 
@@ -35,7 +36,6 @@ export interface MobileConversationToggle {
 export interface MobileTerminalToggle {
   active: boolean;
   label: string;
-  primary: boolean;
   onClick: (invoker: HTMLElement) => void;
 }
 
@@ -211,6 +211,9 @@ export function WorkspaceFrame(props: WorkspaceFrameProps) {
             onClick={() => selectStage(step.onClick)}
           >
             <span>{step.label}</span>
+            {step.srStatus !== undefined ? (
+              <span className="highbay-visually-hidden">{" (" + step.srStatus + ")"}</span>
+            ) : null}
             {step.glyph !== undefined ? (
               <span className="highbay-step-glyph" aria-hidden="true">
                 {step.glyph}
@@ -285,7 +288,7 @@ export function WorkspaceFrame(props: WorkspaceFrameProps) {
           {narrowWorkspace && props.mobileTerminal !== null ? (
             <Button
               id="highbay-mobile-terminal-toggle"
-              variant={props.mobileTerminal.primary ? "primary" : "pill"}
+              variant="pill"
               aria-pressed={props.mobileTerminal.active}
               onClick={(event) => props.mobileTerminal!.onClick(event.currentTarget)}
             >

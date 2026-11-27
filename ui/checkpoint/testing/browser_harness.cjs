@@ -1313,8 +1313,10 @@ async function workspaceScenario(input, facts, views) {
   await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
   await until(views, "document.getElementById('highbay-terminal-drawer') === null");
 
-  // Verify zero horizontal overflow and <= 1 primary action across 320, 375, 768, 1024, and 1280 px viewports.
-  let viewportsClean = true;
+  // Verify zero horizontal overflow, <= 1 primary action, and narrow-width sheet focus
+  // across 320, 375, 768, 1024, and 1280 px viewports, recording any failing width.
+  const failingViewports = [];
+  let mobileSheetFocusClean = false;
   for (const width of [320, 375, 768, 1024, 1280]) {
     await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 }, views.sessionId);
     await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
@@ -1323,19 +1325,37 @@ async function workspaceScenario(input, facts, views) {
       "document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
     );
     if (!ok) {
-      viewportsClean = false;
+      failingViewports.push(String(width) + "px");
     }
     if (width === 375) {
       await evaluate(views, "document.getElementById('highbay-mobile-conversation-toggle')?.click(), true");
       await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
-      const sheetOk = await evaluate(
+      const convOpenCheck = await evaluate(
         views,
-        "document.getElementById('highbay-conversation-panel') !== null && document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
+        "document.getElementById('highbay-conversation-panel') !== null && document.activeElement?.id === 'highbay-composer-input' && document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
       );
-      if (!sheetOk) {
-        viewportsClean = false;
-      }
+      await evaluate(views, "document.getElementById('highbay-rail-terminal-guide')?.click(), true");
+      const mobileTermReady = await until(
+        views,
+        "document.getElementById('highbay-terminal-drawer') !== null && (document.activeElement?.id === 'highbay-terminal-interactive' || document.activeElement?.id === 'highbay-terminal-close')"
+      );
+      await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const returnedToConv = await evaluate(
+        views,
+        "document.getElementById('highbay-terminal-drawer') === null && !document.getElementById('highbay-conversation-rail').hidden && document.activeElement?.id === 'highbay-rail-terminal-guide'"
+      );
       await evaluate(views, "document.getElementById('highbay-conversation-toggle')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const returnedToToggle = await evaluate(
+        views,
+        "document.getElementById('highbay-conversation-rail').hidden && document.activeElement?.id === 'highbay-mobile-conversation-toggle'"
+      );
+      mobileSheetFocusClean =
+        convOpenCheck && !mobileTermReady.timed_out && returnedToConv && returnedToToggle;
+      if (!convOpenCheck) {
+        failingViewports.push("375px-conversation-sheet");
+      }
     }
   }
   await views.dt.send("Emulation.clearDeviceMetricsOverride", {}, views.sessionId);
@@ -1353,7 +1373,9 @@ async function workspaceScenario(input, facts, views) {
     plain_escape_outside_closed: !closedByPlainEscape.timed_out,
     guide_observe_connected: !guideObserveConnected.timed_out,
     guide_interactive_connected: !guideInteractiveConnected.timed_out,
-    viewports_clean: viewportsClean,
+    viewports_clean: failingViewports.length === 0,
+    failing_viewports: failingViewports,
+    mobile_sheet_focus_clean: mobileSheetFocusClean,
     browser_cookies: (await views.dt.send("Storage.getCookies", {})).cookies.length,
   };
 }

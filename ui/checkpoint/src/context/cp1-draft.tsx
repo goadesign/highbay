@@ -33,11 +33,11 @@ export function useCP1Draft(): CP1DraftContextValue | null {
 export function answersNeedingRevision(
   questions: readonly AmbiguityQuestion[] | undefined,
   answers: Record<string, string>,
-): { question: string; answer: string }[] {
+): { id: string; question: string; answer: string }[] {
   return (questions ?? []).flatMap((item) => {
     const answer = Object.prototype.hasOwnProperty.call(answers, item.id) ? answers[item.id] : "";
     return item.draft_option !== undefined && answer !== "" && answer !== item.draft_option
-      ? [{ question: item.question, answer }] : [];
+      ? [{ id: item.id, question: item.question, answer }] : [];
   });
 }
 

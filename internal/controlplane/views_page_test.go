@@ -425,9 +425,9 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 await control(origin, "reply", { key: "GET /changes/chg-merged-approve/build", status: 200,
   body: { change_id: "chg-merged-approve", drafted_before_drop: false, build: { ...JSON.parse(input.build), state: "started", taking: { state: "merged" } } } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-nav-build"), "change navigation did not appear");
-if (!page.$("#highbay-build-taking")) page.$("#highbay-nav-build").click();
-await until(() => page.$("#highbay-build-taking")?.dataset.state === "merged", "the merged state did not appear");
+await until(() => page.state() === "approve", "merged current build did not open Approve by default");
+page.$("#highbay-nav-build").click();
+await until(() => page.state() === "build" && page.$("#highbay-build-taking")?.dataset.state === "merged", "the merged state did not appear");
 expect(!page.text("#highbay-build-taking").includes("git merge") && !page.$("#highbay-build-drop"), "a merged build still offers taking actions");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "merging hid approval of the still-current passed report");

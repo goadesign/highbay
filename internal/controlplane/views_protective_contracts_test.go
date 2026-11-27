@@ -148,6 +148,13 @@ if (page.$("#highbay-checkpoint-view")?.dataset.changeId !== "chg-protect") {
   page.$("#highbay-open-change-chg-protect").click();
   await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-protect", "confirmed card did not open");
 }
+page.$("#highbay-new-change").click();
+await until(() => page.$("#highbay-describe-input"), "+ New change did not open after successful send");
+expect(page.$("#highbay-describe-input").value === "", "successful Describe send did not clear draft text");
+page.$("#highbay-nav-changes").click();
+await until(() => page.$("#highbay-open-change-chg-protect"), "chg-protect missing on Changes");
+page.$("#highbay-open-change-chg-protect").click();
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-protect", "chg-protect did not reopen");
 
 // (a) Interrupt refusal -> #highbay-team-action-error, then successful Interrupt and Stop.
 page.$("#highbay-nav-team").click();
@@ -404,9 +411,7 @@ await until(() => page.status().includes("Could not confirm whether the build st
 page.$("#highbay-nav-changes").click();
 await until(() => page.$("#highbay-open-change-chg-merge-a"), "chg-merge-a missing");
 page.$("#highbay-open-change-chg-merge-a").click();
-await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-merge-a" && (page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval")), "chg-merge-a approval did not appear");
-if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
-await until(() => page.$("#highbay-cp5-merge") && !page.$("#highbay-cp5-merge").disabled, "chg-merge-a merge button did not enable");
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-merge-a" && page.state() === "approve" && page.$("#highbay-cp5-approval") && page.$("#highbay-cp5-merge") && !page.$("#highbay-cp5-merge").disabled, "chg-merge-a did not open Approve with an enabled merge button");
 
 await control(origin, "reply", { key: "POST /changes/chg-merge-a/merge", status: 200, body: { branch: "main", head_commit: "9".repeat(40) } });
 await control(origin, "hold", { key: "POST /changes/chg-merge-a/merge" });
@@ -416,9 +421,7 @@ await until(() => page.$("#highbay-cp5-merge-feedback-pending"), "chg-merge-a me
 page.$("#highbay-nav-changes").click();
 await until(() => page.$("#highbay-open-change-chg-merge-b"), "chg-merge-b missing");
 page.$("#highbay-open-change-chg-merge-b").click();
-await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-merge-b" && (page.$("#highbay-cp5-approval") || page.$("#highbay-review-approval")), "chg-merge-b approval did not appear");
-if (!page.$("#highbay-cp5-approval")) page.$("#highbay-review-approval").click();
-await until(() => page.$("#highbay-approval-stage") && page.text("#highbay-approval-stage").includes("Another change is being merged. Wait for that operation to finish."), "concurrent merge block was not shown on chg-merge-b: " + page.text("#highbay-approval-stage"));
+await until(() => page.$("#highbay-checkpoint-view")?.dataset.changeId === "chg-merge-b" && page.state() === "approve" && page.$("#highbay-cp5-approval") && page.$("#highbay-approval-stage") && page.text("#highbay-approval-stage").includes("Another change is being merged. Wait for that operation to finish."), "concurrent merge block was not shown on chg-merge-b: " + page.text("#highbay-approval-stage"));
 expect(!page.$("#highbay-cp5-merge") || page.$("#highbay-cp5-merge").disabled, "chg-merge-b offered an active merge while chg-merge-a merge was pending");
 
 await control(origin, "release", { key: "POST /changes/chg-merge-a/merge" });
