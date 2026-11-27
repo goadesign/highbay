@@ -104,7 +104,7 @@ func TestViewsPageVerificationTestSource(t *testing.T) {
 					"suiteCommit": suiteCommit,
 				}, `
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === input.change, "the confirmed change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === input.change, "the confirmed change did not open");
 page.$("#highbay-nav-cp4").click();
 await until(() => page.$("#highbay-result-view").dataset.runId === input.run, "the saved run did not open");
 expect(page.text("#highbay-cp4-title") === input.heading, "the run's status changed");

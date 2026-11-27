@@ -49,9 +49,12 @@ func TestCheckpointUIRefreshesApprovalWithoutDiscardingEdits(t *testing.T) {
 	})
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#highbay-nav-cp1"), "the change navigation did not appear");
+page.$("#highbay-nav-cp1").click();
 await until(() => page.$("#highbay-review-approval"), "the recorded approval summary is not shown");
 const field = () => page.$('textarea[data-field="expected_outcome"]');
 const reads = () => page.sent("GET", "/changes/approval-refresh");
+page.$("#highbay-refine-agreement").open = true;
 page.type(field(), "Keep this draft");
 page.$("#highbay-review-approval").click();
 await until(() => page.$("#highbay-cp5-approval"), "the saved approval did not open");

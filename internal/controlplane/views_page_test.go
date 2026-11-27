@@ -188,7 +188,7 @@ func TestViewsPageOpensTheOnlyChangeDirectly(t *testing.T) {
 	runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-only", "the only change did not open directly");
-expect(page.state() === "cp1-change-card" && !page.$("#highbay-change-list"), "the page showed the list instead of the only change");
+expect(page.state() === "agree" && !page.$("#highbay-change-list"), "the page showed the list instead of the only change");
 expect(page.$("#highbay-nav-changes") && page.$("#highbay-nav-cp1").getAttribute("aria-current") === "step", "stage navigation does not offer the list and mark the open stage");
 page.$("#highbay-nav-changes").click();
 expect(page.$$("#highbay-change-list li").length === 1 && page.$("#highbay-open-change-chg-only").getAttribute("aria-current") === "true", "the list does not mark the open change");
@@ -208,19 +208,17 @@ const card = await propose("chg-live", "Route refunds to a manager.", "Auto-appr
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-live", "the change did not open");
 const next = () => page.text("#highbay-frame-next dd");
-const journey = page.$$('[aria-label="Change journey"] button').map((button) => button.textContent);
-expect(journey.slice(-5).join(", ") === "Agree, Architecture, Build, Check, Approve", "wrong change journey: " + journey);
+const journey = page.$$('[aria-label="Change journey"] button > span:first-child').map((span) => span.textContent);
+expect(journey.join(", ") === "Agree, Architecture, Build, Verify, Approve", "wrong change journey: " + journey);
 expect(page.$("#highbay-cp1-next-question"), "Agree did not guide the user to the unanswered question");
 page.$("#highbay-nav-build").click();
-expect(page.$("#highbay-nav-build").getAttribute("aria-current") === "step" && page.$("#highbay-confirm-submit") && !page.$("#highbay-build-section"), "unconfirmed Build did not expose the existing confirmation form");
-expect(next().includes("then confirm the change"), "unconfirmed Build pointed to controls it did not have");
-await control(origin, "hold", { key: "POST /changes/preview" });
+await until(() => page.$("#highbay-stage-prerequisite"), "unconfirmed Build did not render its prerequisite card");
+expect(page.$("#highbay-nav-build").getAttribute("aria-current") === "step" && !page.$("#highbay-build-section"), "unconfirmed Build exposed Build controls");
+expect(next().includes("Confirm the Change Card in Agree"), "unconfirmed Build pointed to controls it did not have");
 page.$("#highbay-nav-cp2").click();
 expect(page.$("#highbay-nav-cp2").getAttribute("aria-current") === "step" &&
-       page.$("#highbay-cp2-loading") && next().includes("Wait for Highbay to evaluate the design"), "Architecture did not guide the pending preview");
-await control(origin, "release", { key: "POST /changes/preview" });
-await until(() => page.$("#highbay-cp2-error"), "Architecture did not show its refusal");
-expect(next().includes("Open Agree to confirm the change"), "Architecture did not guide recovery from an unconfirmed request");
+       page.$("#highbay-stage-prerequisite") && page.sent("POST", "/changes/preview").length === 0, "unconfirmed Architecture did not render its prerequisite card without firing preview RPC");
+expect(next().includes("Confirm the Change Card in Agree"), "Architecture did not guide recovery from an unconfirmed request");
 page.$("#highbay-nav-cp1").click();
 expect(!page.beforeUnload(), "the page asked to confirm leaving without unsaved edits");
 const field = page.$('textarea[data-field="expected_outcome"]');
@@ -427,7 +425,9 @@ func TestViewsPageApprovesAPassedResult(t *testing.T) {
 await control(origin, "reply", { key: "GET /changes/chg-merged-approve/build", status: 200,
   body: { change_id: "chg-merged-approve", drafted_before_drop: false, build: { ...JSON.parse(input.build), state: "started", taking: { state: "merged" } } } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-build-taking")?.dataset.state === "merged", "the merged state did not appear");
+await until(() => page.state() === "approve", "merged current build did not open Approve by default");
+page.$("#highbay-nav-build").click();
+await until(() => page.state() === "build" && page.$("#highbay-build-taking")?.dataset.state === "merged", "the merged state did not appear");
 expect(!page.text("#highbay-build-taking").includes("git merge") && !page.$("#highbay-build-drop"), "a merged build still offers taking actions");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "merging hid approval of the still-current passed report");
@@ -461,7 +461,7 @@ page.close();
 		ps := startPageServer(t, svc)
 		runPageScript(t, ps, map[string]any{"run": run.RunID, "digest": report.Digest, "revision": confirmed.RequestRevision, "candidate": commit}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-approve", "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-approve", "the change did not open");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "a passed result offered no approval control");
 expect(page.text("#highbay-result-view").includes("2 of 2 declared tests passed.") && page.text("#highbay-result-view").includes("holdout-1"), "the run's result is not shown");
@@ -481,16 +481,18 @@ page.$("#highbay-nav-cp1").click();
 const outcome = page.$('textarea[data-field="expected_outcome"]');
 const saved = outcome.value;
 page.type(outcome, "edited after approval");
-expect(page.$("#highbay-cp5-approval-dirty-warning"), "unsaved edits on an approved card did not warn that saving clears the approval");
+expect(page.$("#highbay-cp1-approval-dirty-warning"), "unsaved edits on an approved card did not warn that saving clears the approval");
 page.type(outcome, saved);
-expect(!page.$("#highbay-cp5-approval-dirty-warning"), "restoring the saved text did not clear the warning");
+expect(!page.$("#highbay-cp1-approval-dirty-warning"), "restoring the saved text did not clear the warning");
 const stored = await readCard("chg-approve");
 expect(stored.approval && stored.approval.approved_by === input.owner && stored.approval.report_digest === input.digest, "the saved change does not record the user's approval");
 page.close();
 
 // A new page session confirming the unchanged answers keeps the revision and the approval.
 const again = await openPage(origin, { link: input.link + "-2" });
-await until(() => again.$("#highbay-cp1-editor").dataset.changeId === "chg-approve" && again.$("#highbay-review-approval"), "a new session did not open the approved change");
+await until(() => again.$("#highbay-nav-cp1"), "a new session did not load change navigation");
+again.$("#highbay-nav-cp1").click();
+await until(() => again.$("#highbay-cp1-editor")?.dataset.changeId === "chg-approve" && again.$("#highbay-review-approval"), "a new session did not open the approved change");
 again.$("#highbay-confirm-submit").click();
 await until(() => again.sent("POST", "/changes/confirm").length === 1 && !again.$("#highbay-confirm-submit").disabled, "the unchanged confirmation did not finish");
 expect(again.$("#highbay-cp1-editor").dataset.requestRevision === input.revision && again.$("#highbay-review-approval"), "confirming unchanged answers changed the revision or dropped the approval");
@@ -535,19 +537,19 @@ again.close();
 		})
 		runPageScript(t, ps, map[string]any{"suiteCommit": spec.SuiteCommit, "candidate": commit}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-written-approve", "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-written-approve", "the change did not open");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "a passed result without promotion settings offered no approval control");
 page.$("#highbay-cp5-approve").click();
 await until(() => page.$("#highbay-cp5-approval"), "the recorded approval is not shown");
 const approval = page.text("#highbay-approval-stage");
 expect(approval.includes("Builder’s commit") && approval.includes(input.candidate) && approval.includes("Tests’ commit") && approval.includes("orders_acceptance") && approval.includes(input.suiteCommit) && approval.includes("This saved result names the builder’s commit") && !approval.includes("on branch highbay/tests)."), "written-tests approval did not keep its own commits or invented a historical branch: " + approval);
+const approvals = page.sent("POST", "/changes/approve").length;
 const reads = page.sent("GET", "/changes/chg-written-approve").length;
 await control(origin, "act", { key: "accept-new-tests" });
 await until(() => page.sent("GET", "/changes/chg-written-approve").length > reads && !page.$("#highbay-cp5-approval"), "accepting another tests commit did not automatically hide the approval and merge sentence without clicking refresh");
 page.$("#highbay-nav-cp5").click();
 await until(() => !page.$("#highbay-cp5-approve") && page.$("#highbay-cp5-approve-blocked"), "the older tests report did not remain visible with the owner’s refusal");
-const approvals = page.sent("POST", "/changes/approve").length;
 expect(page.sent("POST", "/changes/approve").length === approvals && !page.$("#highbay-cp5-approve-error"), "a saved report with old tests submitted another approval");
 expect(page.text("#highbay-cp5-approval-details").includes(input.suiteCommit) && page.text("#highbay-cp5-title") === "The check passed", "the stale observation changed the saved passing report or its tests commit");
 page.close();
@@ -573,7 +575,7 @@ page.close();
 		ps := startPageServer(t, svc)
 		runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-unavailable", "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-unavailable", "the change did not open");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-approval-stage"), "a passed result showed no review stage");
 await until(() => page.$("#highbay-cp5-unavailable"), "approval was not shown as unavailable before any click");
@@ -608,7 +610,7 @@ page.close();
 		ps := startPageServer(t, svc)
 		runPageScript(t, ps, nil, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-refused", "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-refused", "the change did not open");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "an available approval offered no control");
 checkControl(page, page.$("#highbay-cp5-approve"), "approve control");
@@ -657,7 +659,7 @@ page.close();
 		})
 		runPageScript(t, ps, map[string]any{"revision": confirmed.RequestRevision}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-stale", "the change did not open");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-stale", "the change did not open");
 page.$("#highbay-nav-cp5").click();
 await until(() => page.$("#highbay-cp5-approve") && !page.$("#highbay-cp5-approve").disabled, "no current approval control");
 // The owner can save a new revision after this page submits a current result.

@@ -27,12 +27,16 @@ export interface ProposedRevisionViewProps {
   revisionAid: React.ReactNode | null;
   // buildRevisionNotice describes adoption's effect on the agreed build.
   buildRevisionNotice: string | null;
+  // primaryAdopt marks Adopt this revision as the page's single primary action.
+  primaryAdopt: boolean;
   // onAnswer records the user's choice for one proposal question.
   onAnswer: (questionId: string, option: string) => void;
   // onAdopt confirms the proposal with the chosen answers.
   onAdopt: () => void;
   // onDecline removes the proposal, keeping the agreed revision.
   onDecline: () => void;
+  // onAskGuideToRevise focuses the Guide composer targeting proposal.request_revision.
+  onAskGuideToRevise: () => void;
   // onDiscardAnswers clears only the unsubmitted answers to this proposal.
   onDiscardAnswers: () => void;
 }
@@ -47,9 +51,11 @@ export function ProposedRevisionView({
   error,
   revisionAid,
   buildRevisionNotice,
+  primaryAdopt,
   onAnswer,
   onAdopt,
   onDecline,
+  onAskGuideToRevise,
   onDiscardAnswers,
 }: ProposedRevisionViewProps) {
   const questions = proposal.ambiguities ?? [];
@@ -227,7 +233,7 @@ export function ProposedRevisionView({
       <div className="highbay-field-row">
         <Button
           id="highbay-proposal-adopt"
-          variant="primary"
+          variant={primaryAdopt ? "primary" : "default"}
           disabled={busy || unanswered.length > 0 || revisionAid !== null}
           aria-describedby={[
             unanswered.length > 0 ? "highbay-proposal-adopt-hint" : "",
@@ -240,6 +246,14 @@ export function ProposedRevisionView({
         </Button>
         <Button id="highbay-proposal-decline" disabled={busy} onClick={onDecline}>
           Decline
+        </Button>
+        <Button
+          id="highbay-proposal-refine-with-guide"
+          variant="secondary"
+          disabled={busy}
+          onClick={onAskGuideToRevise}
+        >
+          Ask Guide to revise
         </Button>
         {Object.keys(answers).length > 0 ? (
           <Button id="highbay-proposal-discard-answers" variant="ghost" disabled={busy} onClick={onDiscardAnswers}>

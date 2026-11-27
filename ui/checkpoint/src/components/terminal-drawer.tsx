@@ -1,7 +1,8 @@
 // terminal-drawer.tsx attaches @xterm/xterm over Goa's typed WebSocket stream
-// (GET /team/roles/{role}/terminal) to inspect or unblock a live herdr-core
-// (hc) role terminal directly in the browser, with 256 KiB byte-credit flow
-// control and Ctrl+Shift+Escape keyboard focus escape.
+// (GET /team/roles/{role}/terminal) to passively watch (observe=true, preserving
+// the agent's PTY grid) or interactively unblock (observe=false) a live
+// herdr-core (hc) role terminal directly in the stage column, with 256 KiB
+// byte-credit flow control and Ctrl+Shift+Escape keyboard focus escape.
 
 import React, { useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
@@ -18,11 +19,18 @@ export type TerminalTicketOutcome =
   | { ok: true; ticket: string }
   | { ok: false; message: string };
 
-// TerminalDrawerProps supplies the active role, its observed state, and server
-// lifecycle callbacks.
+// TerminalDrawerSize controls the docked height inside the stage column.
+export type TerminalDrawerSize = "default" | "expanded" | "minimized";
+
+// TerminalDrawerProps supplies the active role, observe vs. interactive mode,
+// docked size, and server lifecycle callbacks.
 export interface TerminalDrawerProps {
   role: TeamRoleState["role"] | null;
   roleState: TeamRoleState | null;
+  observeMode: boolean;
+  size: TerminalDrawerSize;
+  primaryInteractive: boolean;
+  primaryRestart: boolean;
   disabled: boolean;
   interrupting: boolean;
   stopping: boolean;
@@ -30,6 +38,8 @@ export interface TerminalDrawerProps {
   restartSeq: number;
   actionError: string | null;
   onCreateTicket: (role: TeamRoleState["role"], signal: AbortSignal) => Promise<TerminalTicketOutcome>;
+  onSwitchInteractive: () => void;
+  onChangeSize: (next: TerminalDrawerSize) => void;
   onInterrupt: (role: TeamRoleState["role"]) => void;
   onStop: (role: TeamRoleState["role"]) => void;
   onRestart: (role: TeamRoleState["role"]) => void;
@@ -58,6 +68,18 @@ function clampCols(cols: number): number {
 // clampRows restricts terminal height to the Goa contract bounds [5, 250].
 function clampRows(rows: number): number {
   return Math.max(5, Math.min(250, Math.trunc(rows)));
+}
+
+// currentTerminalTheme picks the dark/light xterm palette from the document or media query.
+function currentTerminalTheme() {
+  const dark =
+    document.documentElement.dataset.theme === "dark" ||
+    (document.documentElement.dataset.theme !== "light" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches);
+  return dark
+    ? { background: "#09090b", foreground: "#fafafa", cursor: "#60a5fa" }
+    : { background: "#0f172a", foreground: "#f8fafc", cursor: "#38bdf8" };
 }
 
 // bytesToBase64 encodes raw PTY input bytes for TerminalClientFrame JSON transport.
@@ -92,11 +114,15 @@ function binaryStringToBytes(raw: string): Uint8Array {
   return bytes;
 }
 
-// TerminalDrawer mounts a non-modal docked terminal panel with live PTY I/O,
-// resize synchronization, byte-credit flow control, and keyboard focus escape.
+// TerminalDrawer mounts a non-modal docked terminal panel inside the stage
+// column with passive observe=true watching or interactive PTY I/O.
 export function TerminalDrawer({
   role,
   roleState,
+  observeMode,
+  size,
+  primaryInteractive,
+  primaryRestart,
   disabled,
   interrupting,
   stopping,
@@ -104,6 +130,8 @@ export function TerminalDrawer({
   restartSeq,
   actionError,
   onCreateTicket,
+  onSwitchInteractive,
+  onChangeSize,
   onInterrupt,
   onStop,
   onRestart,
@@ -111,6 +139,9 @@ export function TerminalDrawer({
 }: TerminalDrawerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const onCreateTicketRef = useRef(onCreateTicket);
+  onCreateTicketRef.current = onCreateTicket;
+
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [connectError, setConnectError] = useState<string | null>(null);
   const [closedDetails, setClosedDetails] = useState<ClosedDetails | null>(null);
@@ -147,33 +178,43 @@ export function TerminalDrawer({
     const encoder = new TextEncoder();
 
     const sendFrame = (frame: TerminalClientFrame) => {
+      if (observeMode && frame.client_frame.kind !== "credit") {
+        return;
+      }
       if (socket !== null && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(frame));
       }
     };
 
-    try {
-      const dark =
-        document.documentElement.dataset.theme === "dark" ||
-        (document.documentElement.dataset.theme !== "light" &&
-          typeof window.matchMedia === "function" &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const mql =
+      typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
+    const updateTheme = () => {
+      if (term !== null) {
+        term.options.theme = currentTerminalTheme();
+      }
+    };
+    mql?.addEventListener("change", updateTheme);
 
+    try {
       term = new Terminal({
-        cursorBlink: true,
+        disableStdin: observeMode,
+        cursorBlink: !observeMode,
         fontSize: 13,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-        theme: dark
-          ? { background: "#09090b", foreground: "#fafafa", cursor: "#3b82f6" }
-          : { background: "#0f172a", foreground: "#f8fafc", cursor: "#38bdf8" },
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        theme: currentTerminalTheme(),
       });
       fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
       term.open(host);
-      try {
-        fitAddon.fit();
-      } catch {
-        // Layout-free DOM test environments keep default dimensions.
+
+      if (!observeMode) {
+        try {
+          fitAddon.fit();
+        } catch {
+          // Layout-free DOM test environments keep default dimensions.
+        }
       }
       const initialCols = clampCols(term.cols || 100);
       const initialRows = clampRows(term.rows || 28);
@@ -191,56 +232,68 @@ export function TerminalDrawer({
         return true;
       });
 
-      term.onData((data) => {
-        const bytes = encoder.encode(data);
-        if (bytes.byteLength > 0) {
-          sendFrame({ client_frame: { kind: "input", data: bytesToBase64(bytes) } });
-        }
-      });
-
-      term.onBinary((raw) => {
-        const bytes = binaryStringToBytes(raw);
-        if (bytes.byteLength > 0) {
-          sendFrame({ client_frame: { kind: "input", data: bytesToBase64(bytes) } });
-        }
-      });
-
-      term.onResize(({ cols, rows }) => {
-        const nextCols = clampCols(cols);
-        const nextRows = clampRows(rows);
-        setDimensions({ cols: nextCols, rows: nextRows });
-        if (!applyingServerResize) {
-          sendFrame({ client_frame: { kind: "resize", cols: nextCols, rows: nextRows } });
-        }
-      });
-
-      if (typeof ResizeObserver !== "undefined") {
-        resizeObserver = new ResizeObserver(() => {
-          if (!disposed && fitAddon !== null) {
-            try {
-              fitAddon.fit();
-            } catch {
-              // Ignore transient zero-size layout passes.
-            }
+      if (!observeMode) {
+        term.onData((data) => {
+          const bytes = encoder.encode(data);
+          if (bytes.byteLength > 0) {
+            sendFrame({ client_frame: { kind: "input", data: bytesToBase64(bytes) } });
           }
         });
-        resizeObserver.observe(host);
-      }
 
-      term.focus();
+        term.onBinary((raw) => {
+          const bytes = binaryStringToBytes(raw);
+          if (bytes.byteLength > 0) {
+            sendFrame({ client_frame: { kind: "input", data: bytesToBase64(bytes) } });
+          }
+        });
+
+        term.onResize(({ cols, rows }) => {
+          const nextCols = clampCols(cols);
+          const nextRows = clampRows(rows);
+          setDimensions({ cols: nextCols, rows: nextRows });
+          if (!applyingServerResize) {
+            sendFrame({ client_frame: { kind: "resize", cols: nextCols, rows: nextRows } });
+          }
+        });
+
+        if (typeof ResizeObserver !== "undefined") {
+          resizeObserver = new ResizeObserver(() => {
+            if (!disposed && fitAddon !== null) {
+              try {
+                fitAddon.fit();
+              } catch {
+                // Ignore transient zero-size layout passes.
+              }
+            }
+          });
+          resizeObserver.observe(host);
+        }
+
+        term.focus();
+      }
     } catch {
       // If a headless test DOM cannot initialize xterm's renderer, continue
-      // establishing the ticket/WebSocket contract and focus Close.
-      closeBtnRef.current?.focus();
+      // establishing the ticket/WebSocket contract and focus Close when interactive.
+      if (!observeMode) {
+        closeBtnRef.current?.focus();
+      }
     }
 
-    const handleFocusIn = () => sendFrame({ client_frame: { kind: "focus", focused: true } });
-    const handleFocusOut = () => sendFrame({ client_frame: { kind: "focus", focused: false } });
+    const handleFocusIn = () => {
+      if (!observeMode) {
+        sendFrame({ client_frame: { kind: "focus", focused: true } });
+      }
+    };
+    const handleFocusOut = () => {
+      if (!observeMode) {
+        sendFrame({ client_frame: { kind: "focus", focused: false } });
+      }
+    };
     host.addEventListener("focusin", handleFocusIn);
     host.addEventListener("focusout", handleFocusOut);
 
     void (async () => {
-      const ticketOutcome = await onCreateTicket(role, abortController.signal);
+      const ticketOutcome = await onCreateTicketRef.current(role, abortController.signal);
       if (disposed || abortController.signal.aborted) {
         return;
       }
@@ -257,13 +310,21 @@ export function TerminalDrawer({
 
       const cols = clampCols(term?.cols ?? 100);
       const rows = clampRows(term?.rows ?? 28);
-      const encoded = WEBSOCKET_ROUTES.attach_role_terminal.encode({
-        role,
-        ticket: ticketOutcome.ticket,
-        cols,
-        rows,
-        observe: false,
-      });
+      const encoded = WEBSOCKET_ROUTES.attach_role_terminal.encode(
+        observeMode
+          ? {
+              role,
+              ticket: ticketOutcome.ticket,
+              observe: true,
+            }
+          : {
+              role,
+              ticket: ticketOutcome.ticket,
+              cols,
+              rows,
+              observe: false,
+            }
+      );
       const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
       const ws = new WebSocket(wsProtocol + window.location.host + encoded.path);
       socket = ws;
@@ -273,8 +334,7 @@ export function TerminalDrawer({
           return;
         }
         setStatus("connected");
-        const focused = host.contains(document.activeElement);
-        if (focused) {
+        if (!observeMode && host.contains(document.activeElement)) {
           sendFrame({ client_frame: { kind: "focus", focused: true } });
         }
       });
@@ -345,6 +405,7 @@ export function TerminalDrawer({
     return () => {
       disposed = true;
       abortController.abort();
+      mql?.removeEventListener("change", updateTheme);
       host.removeEventListener("focusin", handleFocusIn);
       host.removeEventListener("focusout", handleFocusOut);
       resizeObserver?.disconnect();
@@ -353,7 +414,7 @@ export function TerminalDrawer({
       }
       term?.dispose();
     };
-  }, [role, hasTerminal, reconnectNonce, restartSeq, onCreateTicket]);
+  }, [role, hasTerminal, observeMode, reconnectNonce, restartSeq]);
 
   if (role === null) {
     return null;
@@ -364,18 +425,22 @@ export function TerminalDrawer({
       id="highbay-terminal-drawer"
       className="highbay-card highbay-terminal-drawer"
       role="region"
+      tabIndex={-1}
       aria-labelledby="highbay-terminal-title"
       aria-describedby="highbay-terminal-escape-hint"
       data-role={role}
+      data-observe={String(observeMode)}
+      data-size={size}
       data-status={hasTerminal ? status : "unavailable"}
       onKeyDown={(event) => {
         // Pressing Escape outside the xterm input surface dismisses the drawer;
-        // inside xterm, Escape goes to the terminal program and Ctrl+Shift+Esc
-        // moves focus to Close terminal.
+        // inside interactive xterm, Escape goes to the terminal program and
+        // Ctrl+Shift+Esc moves focus to Close terminal.
         if (
           event.key === "Escape" &&
           !event.defaultPrevented &&
-          !(event.target instanceof Node && hostRef.current !== null && hostRef.current.contains(event.target))
+          (observeMode ||
+            !(event.target instanceof Node && hostRef.current !== null && hostRef.current.contains(event.target)))
         ) {
           event.preventDefault();
           onClose();
@@ -384,7 +449,9 @@ export function TerminalDrawer({
     >
       <div className="highbay-region-header">
         <div className="highbay-region-title-group">
-          <h2 id="highbay-terminal-title">{roleTitles[role]}</h2>
+          <h2 id="highbay-terminal-title" tabIndex={-1}>
+            {roleTitles[role]}
+          </h2>
           {roleState !== null ? <code>@{roleState.handle}</code> : null}
           <Badge
             variant={
@@ -407,10 +474,46 @@ export function TerminalDrawer({
               ? "Disconnected"
               : "Ended"}
           </Badge>
+          {hasTerminal ? (
+            <Badge variant={observeMode ? "outline" : "accent"}>
+              {observeMode ? "Watching (read-only)" : "Interactive"}
+            </Badge>
+          ) : null}
         </div>
         <div className="highbay-toolbar-actions">
           {hasTerminal ? (
             <>
+              {observeMode ? (
+                <Button
+                  id="highbay-terminal-interactive"
+                  variant={primaryInteractive ? "primary" : "secondary"}
+                  disabled={disabled || restarting || stopping}
+                  onClick={() => {
+                    if (size === "minimized") {
+                      onChangeSize("default");
+                    }
+                    onSwitchInteractive();
+                  }}
+                >
+                  Type in terminal
+                </Button>
+              ) : null}
+              <Button
+                id="highbay-terminal-expand"
+                variant="ghost"
+                aria-pressed={size === "expanded"}
+                onClick={() => onChangeSize(size === "expanded" ? "default" : "expanded")}
+              >
+                {size === "expanded" ? "Normal height" : "Expand"}
+              </Button>
+              <Button
+                id="highbay-terminal-minimize"
+                variant="ghost"
+                aria-pressed={size === "minimized"}
+                onClick={() => onChangeSize(size === "minimized" ? "default" : "minimized")}
+              >
+                {size === "minimized" ? "Restore" : "Minimize"}
+              </Button>
               <Button
                 id="highbay-terminal-interrupt"
                 disabled={disabled || interrupting || stopping || restarting || status !== "connected"}
@@ -445,28 +548,31 @@ export function TerminalDrawer({
           ) : roleState?.state === "not_started" || roleState?.state === "ended" || roleState?.state === "error" ? (
             <Button
               id="highbay-terminal-restart"
-              variant="primary"
+              variant={primaryRestart ? "primary" : "secondary"}
               disabled={disabled || restarting}
               onClick={() => onRestart(role)}
             >
               {restarting ? "Starting…" : "Restart"}
             </Button>
           ) : null}
-          <button
-            ref={closeBtnRef}
-            id="highbay-terminal-close"
-            type="button"
-            className="shadcn-btn highbay-btn"
-            onClick={onClose}
-          >
+          <Button ref={closeBtnRef} id="highbay-terminal-close" onClick={onClose}>
             Close terminal
-          </button>
+          </Button>
         </div>
       </div>
 
       <p id="highbay-terminal-escape-hint" className="highbay-muted highbay-terminal-hint">
-        Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> to leave terminal keyboard capture and
-        focus <strong>Close terminal</strong>.
+        {observeMode ? (
+          <>
+            Watching live terminal output without resizing the agent’s session. Choose{" "}
+            <strong>Type in terminal</strong> to send keystrokes.
+          </>
+        ) : (
+          <>
+            Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> to leave terminal keyboard capture
+            and focus <strong>Close terminal</strong>.
+          </>
+        )}
       </p>
 
       {actionError !== null ? (

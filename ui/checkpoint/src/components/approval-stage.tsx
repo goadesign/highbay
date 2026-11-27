@@ -43,7 +43,7 @@ export function ApprovalStage(props: ApprovalStageProps) {
   const { run, review } = props;
   if (run === null) return <section className="highbay-approval-stage" id="highbay-approval-stage" aria-labelledby="highbay-cp5-title">
     <h2 id="highbay-cp5-title" tabIndex={-1}>Review a verification result</h2>
-    <p>Select a saved run in Check to review its agreed Story, test results and approval requirements.</p>
+    <p>Select a saved run in Verify to review its agreed Story, test results and approval requirements.</p>
     {props.savedRecord !== null ? <>
       <p>No verification run is selected. The saved approval remains readable below.</p>
       <SavedApprovalRecord record={props.savedRecord} />

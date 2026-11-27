@@ -200,7 +200,9 @@ const open = async (changeId) => {
   await until(() => page.$("#highbay-open-change-" + changeId) && !page.$("#highbay-open-change-" + changeId).disabled, "the list does not offer " + changeId);
   const reads = page.sent("GET", "/changes/" + changeId).length;
   page.$("#highbay-open-change-" + changeId).click();
-  await until(() => editor().dataset.changeId === changeId && page.sent("GET", "/changes/" + changeId).length > reads && !page.$("#highbay-confirm-submit").disabled, changeId + " did not open");
+  await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === changeId && page.state() === "build" && page.sent("GET", "/changes/" + changeId).slice(reads).some((r) => r.status === 200), changeId + " did not open on Build");
+  page.$("#highbay-nav-cp1").click();
+  await until(() => editor()?.dataset.changeId === changeId && !page.$("#highbay-confirm-submit").disabled, changeId + " Agree did not settle");
 };
 const refresh = async () => {
   const reads = page.sent("GET", "/changes/chg-approved").length;

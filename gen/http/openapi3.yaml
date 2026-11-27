@@ -20784,7 +20784,7 @@ paths:
             tags:
                 - highbay
             summary: get_team_conversation highbay
-            description: Read the project's Chorus conversation messages and active pin for the browser workspace's Conversation Rail. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.
+            description: Read the project's Chorus conversation messages and active pin for the browser workspace. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.
             operationId: highbay#get_team_conversation
             responses:
                 "200":
@@ -20855,11 +20855,10 @@ paths:
                             $ref: '#/components/schemas/SendTeamMessagePayload'
                         example:
                             context:
-                                type: architecture_element
+                                type: refine_change
                                 value:
-                                    change_id: Dolores molestiae.
-                                    element_id: wm1
-                                    element_name: u
+                                    change_id: 0sb
+                                    request_revision: 9h4
                             guide_choice:
                                 client: gemini
                                 model: Et voluptates occaecati consequatur eos.
@@ -20900,7 +20899,7 @@ paths:
                                 temporary: false
                                 timeout: false
                 "422":
-                    description: 'unprocessable: The selected guide client is not installed, does not support the requested options, or the referenced Change Card context is invalid.'
+                    description: 'unprocessable: The selected guide client is not installed, does not support the requested options, the target worker role is not registered yet, the message with its context exceeds Chorus''s 4,000-character limit, or a Change Card authoring context (new_change, refine_change, or revise_answers) targets a recipient other than guide.'
                     content:
                         application/vnd.goa.error:
                             schema:
@@ -21351,16 +21350,16 @@ paths:
             tags:
                 - highbay
             summary: create_terminal_ticket highbay
-            description: Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser terminal drawer to a role's herdr-core terminal.
+            description: Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser workspace to a role's herdr-core terminal.
             operationId: highbay#create_terminal_ticket
             parameters:
                 - name: role
                   in: path
-                  description: Registered role whose terminal drawer is opening.
+                  description: Registered role whose terminal is opening.
                   required: true
                   schema:
                     type: string
-                    description: Registered role whose terminal drawer is opening.
+                    description: Registered role whose terminal is opening.
                     example: test_writer
                     enum:
                         - guide
@@ -30749,6 +30748,20 @@ components:
             required:
                 - held
                 - connection
+        NewChangeContext:
+            type: object
+            properties:
+                scope:
+                    type: string
+                    description: Scope of the requested Change Card.
+                    example: separate_card
+                    enum:
+                        - separate_card
+            description: Browser request to prepare a separate new Change Card in the draft and propose it with propose_change.
+            example:
+                scope: separate_card
+            required:
+                - scope
         OpenBuildRefusal:
             type: object
             properties:
@@ -34414,6 +34427,26 @@ components:
                 op_id: Neque rem quaerat asperiores sequi.
             required:
                 - op_id
+        RefineChangeContext:
+            type: object
+            properties:
+                change_id:
+                    type: string
+                    description: Change Card identifier being revised.
+                    example: 0sb
+                    minLength: 1
+                request_revision:
+                    type: string
+                    description: Latest request_revision visible in the browser workspace.
+                    example: 9h4
+                    minLength: 1
+            description: Existing Change Card and latest request_revision that the user is asking the guide to update with revise_change.
+            example:
+                change_id: 0sb
+                request_revision: 9h4
+            required:
+                - change_id
+                - request_revision
         ReplacedBuild:
             type: object
             properties:
@@ -34706,12 +34739,33 @@ components:
                     type: object
                     description: Optional structured workspace context formatted into the Chorus message by the server.
                     example:
-                        type: architecture_element
+                        type: refine_change
                         value:
-                            change_id: Dolores molestiae.
-                            element_id: wm1
-                            element_name: u
+                            change_id: 0sb
+                            request_revision: 9h4
                     anyOf:
+                        - type: object
+                          properties:
+                            type:
+                                type: string
+                                enum:
+                                    - new_change
+                            value:
+                                $ref: '#/components/schemas/NewChangeContext'
+                          required:
+                            - type
+                            - value
+                        - type: object
+                          properties:
+                            type:
+                                type: string
+                                enum:
+                                    - refine_change
+                            value:
+                                $ref: '#/components/schemas/RefineChangeContext'
+                          required:
+                            - type
+                            - value
                         - type: object
                           properties:
                             type:
@@ -34772,11 +34826,10 @@ components:
             description: Request body for send_team_message.
             example:
                 context:
-                    type: architecture_element
+                    type: refine_change
                     value:
-                        change_id: Dolores molestiae.
-                        element_id: wm1
-                        element_name: u
+                        change_id: 0sb
+                        request_revision: 9h4
                 guide_choice:
                     client: gemini
                     model: Et voluptates occaecati consequatur eos.
@@ -38325,7 +38378,7 @@ components:
                     example: Libero at velit sunt quae.
                 has_terminal:
                     type: boolean
-                    description: True when this role has a managed or attached herdr-core terminal that can be opened in the browser terminal drawer.
+                    description: True when this role has a managed or attached herdr-core terminal that can be opened in the browser workspace.
                     example: false
                 role:
                     type: string
@@ -38628,7 +38681,7 @@ components:
                           properties:
                             focused:
                                 type: boolean
-                                description: Whether the terminal drawer currently holds focus.
+                                description: Whether the browser terminal currently holds focus.
                                 example: false
                             kind:
                                 type: string

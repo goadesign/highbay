@@ -453,6 +453,8 @@ export function IncomingChangeCardView({
       className="highbay-card"
       role="region"
       aria-label="Incoming Change Card"
+      data-change-id={incomingCard.change_id}
+      data-request-revision={incomingCard.request_revision}
     >
       <h3>Updated Change Card Available</h3>
       <p>{incomingCard.summary}</p>

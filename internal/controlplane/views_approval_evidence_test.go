@@ -141,7 +141,7 @@ if (input.mode === "not_recorded") {
 }
 const otherIds = page.$$(".highbay-approval-test-list code").map((node) => node.textContent);
 expect(otherIds.includes("holdout-1") && !otherIds.includes("h"), "safe report projection was replaced by the private holdout identifier");
-expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0, "reading evidence started work");
+expect(page.sent("POST", "/changes/approve").length === 0 && !page.requests.some((r) => r.method === "POST" && /^\/changes\/[^/]+\/verifications$/.test(r.path)), "reading evidence started work");
 page.close();
 `)
 		})
@@ -299,7 +299,7 @@ expect(page.doc.activeElement === page.$("#highbay-cp5-title"), "latest action d
 expect(!page.$("#highbay-cp5-review-latest"), "latest check still offered itself as newer");
 page.$("#highbay-cp4-run-" + input.older).click();
 await until(() => page.$("#highbay-approval-stage").dataset.runId === input.older && page.$("#highbay-cp5-approve-blocked"), "earlier failure was no longer selectable");
-expect(page.sent("POST", "/changes/approve").length === 0 && page.sent("POST", "/changes/verify").length === 0, "review navigation started work or approved it");
+expect(page.sent("POST", "/changes/approve").length === 0 && !page.requests.some((r) => r.method === "POST" && /^\/changes\/[^/]+\/verifications$/.test(r.path)), "review navigation started work or approved it");
 page.close();
 `)
 }

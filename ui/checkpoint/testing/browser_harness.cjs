@@ -569,9 +569,13 @@ async function phoneScenario(input, facts, views) {
 // The Go fixture supplies typed presentation facts; this proves no worker ran.
 async function takingScenario(input, facts, views) {
   const takingState = input.taking_state === "replay" ? "merged" : input.taking_state === "dropped_stale" ? "dropped" : input.taking_state;
+  const navReady = await until(views, "document.getElementById('highbay-nav-build') !== null || document.querySelector('#highbay-build-taking[data-state=" + takingState + "]') !== null");
+  if (!navReady.timed_out) {
+    await evaluate(views, "if (!document.getElementById('highbay-build-taking')) document.getElementById('highbay-nav-build')?.click(), true");
+  }
   const ready = await until(views, "document.querySelector('#highbay-build-taking[data-state=" + takingState + "]') !== null");
   if (ready.timed_out) {
-    const state = await evaluate(views, "({ state: document.getElementById('highbay-checkpoint-root')?.dataset.state, text: document.body.innerText.slice(0, 6000) })");
+    const state = await evaluate(views, "({ state: document.getElementById('highbay-checkpoint-view')?.dataset.stage, text: document.body.innerText.slice(0, 6000) })");
     throw new Error("taking presentation did not load: " + JSON.stringify(state) + "; responses: " +
       JSON.stringify(views.requests.filter(to(input.origin, "GET", "/changes/taking-layout/build")).map((request) => ({ status: request.status, failure: request.failure }))));
   }
@@ -1167,6 +1171,7 @@ async function onboardingScenario(input, views) {
 // keyboard focus escape, and one-click server-owned role Restart) in Chromium.
 async function workspaceScenario(input, facts, views) {
   await views.dt.send("Page.bringToFront", {}, views.sessionId);
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, views.sessionId);
   const bannerShown = await until(
     views,
     "document.getElementById('highbay-update-banner') !== null && document.getElementById('highbay-update-install') !== null && document.getElementById('highbay-composer-input') !== null"
@@ -1214,9 +1219,13 @@ async function workspaceScenario(input, facts, views) {
     throw new Error("TerminalDrawer did not connect and render PTY output: " + await evaluate(views, "document.getElementById('highbay-terminal-drawer')?.innerText || ''"));
   }
 
-  // Type inside xterm and verify Ctrl+Shift+Escape moves focus to Close terminal.
+  // Type inside xterm: plain Escape reaches the PTY without closing the drawer,
+  // while Ctrl+Shift+Escape moves focus to Close terminal.
   await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
   await views.dt.send("Input.insertText", { text: "y" }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  const plainEscapeInsideKeptOpen = await evaluate(views, "document.getElementById('highbay-terminal-drawer') !== null");
   await views.dt.send(
     "Input.dispatchKeyEvent",
     {
@@ -1269,15 +1278,171 @@ async function workspaceScenario(input, facts, views) {
     throw new Error("TerminalDrawer did not reconnect after role restart");
   }
 
+  // Plain Escape on a drawer header control outside xterm closes the drawer.
+  await evaluate(views, "document.getElementById('highbay-terminal-close')?.focus(), true");
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  await views.dt.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, views.sessionId);
+  const closedByPlainEscape = await until(views, "document.getElementById('highbay-terminal-drawer') === null");
+
+  // Open waiting Guide terminal from ConversationRail: attaches in passive observe=true
+  // mode (zero input or resize frames), then promotes to interactive on #highbay-terminal-interactive.
+  await evaluate(views, "document.getElementById('highbay-rail-terminal-guide')?.click(), true");
+  const guideObserveConnected = await until(
+    views,
+    "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'guide' && document.getElementById('highbay-terminal-drawer')?.dataset.observe === 'true' && document.getElementById('highbay-terminal-drawer')?.dataset.status === 'connected' && document.getElementById('highbay-terminal-interactive') !== null"
+  );
+  if (guideObserveConnected.timed_out) {
+    throw new Error("Guide terminal did not connect in passive observe=true mode");
+  }
+  await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
+  await views.dt.send("Input.insertText", { text: "z" }, views.sessionId);
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 1200, height: 820, deviceScaleFactor: 1, mobile: false }, views.sessionId);
+  await evaluate(views, "new Promise((r) => setTimeout(r, 80))");
+
+  await evaluate(views, "document.getElementById('highbay-terminal-interactive').click(), true");
+  const guideInteractiveConnected = await until(
+    views,
+    "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'guide' && document.getElementById('highbay-terminal-drawer')?.dataset.observe === 'false' && document.getElementById('highbay-terminal-drawer')?.dataset.status === 'connected'"
+  );
+  if (guideInteractiveConnected.timed_out) {
+    throw new Error("Type in terminal did not reconnect Guide interactively");
+  }
+  await evaluate(views, "document.querySelector('#highbay-terminal-viewport textarea')?.focus(), true");
+  await views.dt.send("Input.insertText", { text: "g" }, views.sessionId);
+  await evaluate(views, "new Promise((r) => setTimeout(r, 80))");
+  await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
+  await until(views, "document.getElementById('highbay-terminal-drawer') === null");
+
+  // Verify zero horizontal overflow, <= 1 primary action, narrow-width sheet focus,
+  // hidden-terminal needs_you primary preservation, and narrow popover bounds across
+  // 320, 375, 768, 1024, and 1280 px viewports, recording any failing width.
+  const failingViewports = [];
+  let mobileSheetFocusClean = false;
+  let mobileHiddenTerminalPrimary = false;
+  let mobilePopoversFit = true;
+  for (const width of [320, 375, 768, 1024, 1280]) {
+    await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 }, views.sessionId);
+    await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+    const ok = await evaluate(
+      views,
+      "document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
+    );
+    if (!ok) {
+      failingViewports.push(String(width) + "px");
+    }
+    if (width === 375) {
+      await evaluate(views, "document.getElementById('highbay-mobile-conversation-toggle')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const convOpenCheck = await evaluate(
+        views,
+        "document.getElementById('highbay-conversation-panel') !== null && document.activeElement?.id === 'highbay-composer-input' && document.documentElement.scrollWidth <= window.innerWidth && document.querySelectorAll('[data-primary-action=\"true\"]').length <= 1"
+      );
+      await evaluate(views, "document.getElementById('highbay-rail-terminal-guide')?.click(), true");
+      const mobileTermReady = await until(
+        views,
+        "document.getElementById('highbay-terminal-drawer') !== null && (document.activeElement?.id === 'highbay-terminal-interactive' || document.activeElement?.id === 'highbay-terminal-close')"
+      );
+      await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const returnedToConv = await evaluate(
+        views,
+        "document.getElementById('highbay-terminal-drawer') === null && !document.getElementById('highbay-conversation-rail').hidden && document.activeElement?.id === 'highbay-rail-terminal-guide'"
+      );
+      await evaluate(views, "document.getElementById('highbay-conversation-toggle')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const returnedToToggle = await evaluate(
+        views,
+        "document.getElementById('highbay-conversation-rail').hidden && document.activeElement?.id === 'highbay-mobile-conversation-toggle'"
+      );
+      mobileSheetFocusClean =
+        convOpenCheck && !mobileTermReady.timed_out && returnedToConv && returnedToToggle;
+      if (!convOpenCheck) {
+        failingViewports.push("375px-conversation-sheet");
+      }
+
+      // Open interactive builder terminal on 375px, then hide the terminal sheet via Back to stage:
+      // #highbay-team-attention-terminal-builder must remain primary and never claim "terminal open" while hidden.
+      await evaluate(views, "document.getElementById('highbay-team-attention-terminal-builder')?.click(), true");
+      await until(views, "document.getElementById('highbay-terminal-drawer')?.dataset.role === 'builder' && !document.getElementById('highbay-terminal-region').hidden");
+      await evaluate(views, "document.getElementById('highbay-mobile-terminal-toggle')?.click(), true");
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      mobileHiddenTerminalPrimary = await evaluate(
+        views,
+        "document.getElementById('highbay-terminal-region').hidden === true && document.getElementById('highbay-team-attention-terminal-builder')?.dataset.primaryAction === 'true' && !document.getElementById('highbay-team-attention-terminal-builder')?.textContent.includes('terminal open')"
+      );
+      await evaluate(views, "document.getElementById('highbay-mobile-terminal-toggle')?.click(), true");
+      await evaluate(views, "document.getElementById('highbay-terminal-close')?.click(), true");
+      await until(views, "document.getElementById('highbay-terminal-drawer') === null");
+    }
+  }
+
+  // Seed a confirmed Change Card so the header renders project + Changes + + New change +
+  // #highbay-stage-menu + wrapped Inspect across [320, 375, 768, 1024, 1280], verifying open popovers fit inside [0, clientWidth].
+  const seedResp = await fetch(input.origin + "/__test/seed-card", { method: "POST" });
+  if (!seedResp.ok) {
+    throw new Error("seeding mobile popover card failed: " + seedResp.status);
+  }
+  await views.dt.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 800, deviceScaleFactor: 1, mobile: true }, views.sessionId);
+  await reload(views);
+  const stageMenuPresent = await until(
+    views,
+    "document.getElementById('highbay-stage-menu') !== null && document.querySelector('.highbay-frame-project-menu') !== null"
+  );
+  if (stageMenuPresent.timed_out) {
+    mobilePopoversFit = false;
+  } else {
+    for (const width of [320, 375, 768, 1024, 1280]) {
+      await views.dt.send("Emulation.setDeviceMetricsOverride", { width, height: 800, deviceScaleFactor: 1, mobile: width < 768 }, views.sessionId);
+      await evaluate(views, "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      const fits = await evaluate(
+        views,
+        "((w) => {" +
+          "const stageDetails = document.getElementById('highbay-stage-menu');" +
+          "const inspectDetails = document.querySelector('.highbay-frame-project-menu');" +
+          "if (!inspectDetails) return false;" +
+          "let stageOk = true;" +
+          "if (w <= 899) {" +
+            "if (!stageDetails) return false;" +
+            "stageDetails.open = true;" +
+            "const sr = stageDetails.querySelector('.highbay-frame-journey').getBoundingClientRect();" +
+            "stageOk = sr.left >= 0 && sr.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
+            "stageDetails.open = false;" +
+          "} else if (stageDetails !== null) {" +
+            "stageOk = false;" +
+          "}" +
+          "inspectDetails.open = true;" +
+          "const ir = inspectDetails.querySelector('.highbay-frame-references').getBoundingClientRect();" +
+          "const inspectOk = ir.left >= 0 && ir.right <= document.documentElement.clientWidth && document.documentElement.scrollWidth <= window.innerWidth;" +
+          "inspectDetails.open = false;" +
+          "return stageOk && inspectOk;" +
+        "})(" + String(width) + ")"
+      );
+      if (!fits) {
+        mobilePopoversFit = false;
+        failingViewports.push(String(width) + "px-popovers");
+      }
+    }
+  }
+  await views.dt.send("Emulation.clearDeviceMetricsOverride", {}, views.sessionId);
+
   facts.workspace = {
     release_href: releaseHref,
     update_ready: !updateReady.timed_out,
     draft_survived_update: draftSurvivedUpdate,
     reply_rendered: !replyRendered.timed_out,
     terminal_connected: !connected.timed_out,
+    plain_escape_inside_kept_open: plainEscapeInsideKeptOpen,
     focus_escaped: focusEscaped,
     builder_kept_across_guide_restart: builderKeptAcrossGuideRestart,
     terminal_restarted: !restarted.timed_out,
+    plain_escape_outside_closed: !closedByPlainEscape.timed_out,
+    guide_observe_connected: !guideObserveConnected.timed_out,
+    guide_interactive_connected: !guideInteractiveConnected.timed_out,
+    viewports_clean: failingViewports.length === 0,
+    failing_viewports: failingViewports,
+    mobile_sheet_focus_clean: mobileSheetFocusClean,
+    mobile_hidden_terminal_primary: mobileHiddenTerminalPrimary,
+    mobile_popovers_fit: mobilePopoversFit,
     browser_cookies: (await views.dt.send("Storage.getCookies", {})).cookies.length,
   };
 }
@@ -1509,7 +1674,7 @@ async function main(input, facts) {
     await reload(views);
     const liveReloaded = await until(
       views,
-      "document.querySelectorAll('#highbay-change-list [data-change-id]').length >= " + input.change_ids.length
+      "(document.getElementById('highbay-live-target') !== null && document.getElementById('highbay-live-target').dataset.state !== 'unread') || document.querySelectorAll('#highbay-change-list [data-change-id]').length >= " + input.change_ids.length
     );
     await settle(views, to(input.origin, "GET", "/project/browser-session"), 1);
     const liveRequests = views.requests.slice(beforeLiveReload).filter(server).map((r) => ({ ...r }));

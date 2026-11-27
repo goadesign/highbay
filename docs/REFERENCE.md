@@ -522,7 +522,7 @@ that differs from the binary the run verified, prevents approval; the
 refusal names no folder path and ends with the step "publish the binaries
 the run built, whose folder the run's Proof view shows, into the release
 folder that the promotion settings name, in a folder named after the commit,
-or remove the promotion settings". The Check view shows the selected run's
+or remove the promotion settings". The Verify view shows the selected run's
 actual source folder under **Binaries built by this run**, as selectable code;
 the approval error panel repeats it. Without promotion settings, an approval
 records no release binaries. A stored file the server cannot accept, such
@@ -1690,7 +1690,7 @@ For a completed run, get and list responses also include optional
 `candidate_binaries_dir` when the caller is the user and the server has
 promotion settings. It names the actual folder of binaries built by that
 run, read from its recorded plan, rather than a reconstructed run layout.
-Agents never receive this path. The Check view shows it under **Binaries
+Agents never receive this path. The Verify view shows it under **Binaries
 built by this run**, as selectable code, and repeats it in the approval
 error panel for that selected run.
 
@@ -2280,9 +2280,15 @@ that channel.
 The first message to guide or team starts a guide when there is no active
 one. Supply `guide_choice` to select its client, or let Highbay use the
 saved choice or discover an installed default. One optional `context`
-lets the browser include answers to revise, the selected architecture
-element, or the selected Story flow. A successful request returns the
-posted message. An invalid selection or context returns `422`.
+lets the browser request a separate new Change Card (`new_change` with
+`scope: "separate_card"`), ask Guide for a free-form revision of an
+existing Change Card (`refine_change`), include answers to revise
+(`revise_answers`), or attach the selected architecture element
+(`architecture_element`) or Story flow (`story_flow`). `new_change`,
+`refine_change`, and `revise_answers` require `to: "guide"`, while
+`architecture_element` and `story_flow` are valid for `guide`, `builder`,
+`test_writer`, or `team`. A successful request returns the posted message.
+An invalid selection or context returns `422`.
 When Chorus or Herdr Core cannot accept the request, it returns `503`.
 
 <a id="show_team_pane"></a>
@@ -2292,7 +2298,8 @@ When Chorus or Herdr Core cannot accept the request, it returns `503`.
 the role's terminal, valid for up to 30 seconds. Use the ticket in the
 query when upgrading `GET /team/roles/{role}/terminal` to a WebSocket.
 Optional `cols` and `rows` set the initial size. Use `observe=true` for a
-read-only attachment that cannot change terminal size or send input.
+server-enforced read-only attachment that ignores client input, resize,
+and focus frames and processes only flow-control credit frames.
 
 The browser sends input bytes, resizes, focus events, and credit. The
 stream returns output bytes, resizes, and the reason when it closes.
@@ -2489,9 +2496,10 @@ it does after a restart, the page keeps everything typed visible and
 available and explains how to reopen the workspace. Leaving with
 unsaved edits asks the browser to confirm, including for unadopted proposal answers and Model-form edits.
 
-**Every view.** The journey bar names **Describe** (or **Changes**), **Agree**,
-**Architecture**, **Build**, **Check** and **Approve**; open **Inspect** to
-reach **Story**, **Team**, **Live target** or **Diagnostics**. The label names the current inspection, and
+**Every view.** The Studio header names **Describe** (or **Changes**), **+ New
+change**, and the five-step change journey **Agree**, **Architecture**,
+**Build**, **Verify**, and **Approve**; open **Inspect** to
+reach **Team**, **Story**, **Live target**, or **Diagnostics**. The label names the current inspection, and
 Escape closes the disclosure and returns focus to it. On an empty project with
 a connected coding agent and no outstanding issue, the frame leaves room for
 the welcome card (showing live `initializing_phase` status while `init_project`
@@ -2499,13 +2507,15 @@ runs). When a confirmed agreement is open, the frame previews at
 most two lines of its summary. **Read full summary** expands **Agreement
 details** in Agree and focuses the saved summary while retaining unsaved edits.
 That preview remains available if you open another view while editing the card.
-While a proposed revision waits on a confirmed card, **Needs you** names
+While a proposed revision waits on a confirmed card, **Status** names
 adopting or declining the proposal across **Agree** and **Build**, and clicking
 **Build agreed revision** asks for confirmation before building the older
 agreement.
 
 The page shows an attention notice when a role needs your help. The notice
-can open the role's **Terminal** when it has a live terminal. It clears as
+can open the role's **Terminal** interactively when it has a live terminal;
+watching a working role's terminal defaults to passive `observe=true` mode
+until you choose **Type in terminal**. The notice clears as
 the role recovers.
 The page keeps one `wait_for_changes` read open and reads again only what
 changed. The operation status announces progress to assistive technology.
@@ -2517,14 +2527,14 @@ holds it beside them (**Switch to Incoming Card**).
 
 | View | What it shows and does |
 | --- | --- |
-| **Describe / Changes** | The welcome card takes your request and starts the guide when needed, showing **Preparing your project** with `initializing_phase` while [`init_project`](#init_project) runs and **Working on your request** / **Drafting your Change Card** while your coding agent or `draft_state` prepares the first Change Card. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists more work via [`list_changes`](#list_changes). It marks a pending revision **New revision proposed** and shows the latest saved test result and whether its inputs match the agreed revision and selected tests. |
-| **Conversation** | Project messages, role mentions, replies, and the channel pin. The first message can start the guide. |
-| **Team** | Each role's observed state and its worker assignment. **Start workers** requests missing workers with work. **Terminal** opens a live role terminal. Use `Ctrl+Shift+Escape` to move keyboard focus out of the terminal. |
+| **Describe / Changes / + New change** | The launch workspace takes your request (`new_change`) and starts the guide when needed, showing **Preparing your project** with `initializing_phase` while [`init_project`](#init_project) runs and **Working on your request** / **Drafting your Change Card** while your coding agent or `draft_state` prepares the first Change Card. Unconfirmed network/5xx sends preserve your draft and prompt you to check Conversation before resending, while a stopped guide after a confirmed receipt offers **Restart Guide** without re-posting the request. The first proposed Change Card opens automatically while the empty view is displayed. A project with one existing change also opens directly to its card. **Changes** lists saved cards via [`list_changes`](#list_changes), and **+ New change** drafts a separate Change Card alongside an independent **Proposals waiting for review** queue. |
+| **Conversation** | Project messages, role mentions, replies, subject pills, and the channel pin. Auto-collapsed on an idle empty project so one goal input leads Launch, and respects explicit user collapse thereafter. |
+| **Team** | Each role's observed state and its worker assignment. **Start workers** requests missing workers with work. **Terminal** watches a live role terminal passively (`observe=true`) or upgrades via **Type in terminal** (`observe=false`). Use `Ctrl+Shift+Escape` to move keyboard focus out of the terminal. |
 | **Story** | The Story saved with the shown revision, one row of step cards per flow. A finished flow is marked **will be tested end to end**. Other flows are marked **draft: not tested** with the reasons. Below it, see the current Story evaluation ([`get_story_refresh`](#get_story_refresh)) and how it differs from the change's Story. A draft joins the change when your coding agent proposes it and you confirm the new revision. |
 | **Live target** | Whether a live target is starting, running, ended unexpectedly or not confirmed stopped. A running target shows its commit, address, accepted prompt versions (never the text), and **Stop live target**, which asks first. An ended target shows its commit, launch and observed-end times, and the builder's recovery step. Below it, the model live targets started afterwards use and a form whose **Apply** sends [`configure_model`](#configure_model); a refusal names a missing key's variable. |
-| **Agree** | The Change Card: questions to answer, examples, preserved behaviors, and **Confirm Intent & Lock Examples** (on an agreed card, **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm (changed request and summary, questions and examples marked **New**, **Edited**, **Kept** or **Removed**, Story and design changes), **Adopt this revision** and **Decline**. A stale submission offers **Load Latest Card**. On a confirmed card the **Build** section comes first, with the saved agreement below it under **Agreed:** and the request. **Agreement details** and **Refine agreed answers and examples** remain available for review and refinement; an active edit stays open. **Previous Saved Revision** keeps the earlier snapshot: questions not yet answered in that proposal are labeled as historical, and a note distinguishes an unconfirmed proposal from the current confirmed agreement. **Review saved approval** opens the record in Approve. **Build** opens the same saved build section directly. |
-| **Architecture** | [`preview_architecture`](#preview_architecture) for the revision shown. Ask the guide about a selected element from the page. |
-| **Check** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
+| **Agree** | Dedicated single-column Change Card view: questions to answer, examples, preserved behaviors, **Ask Guide to revise** (`refine_change`), and **Confirm Intent & Lock Examples** (on an agreed card, folded **Agreement details** and **Refine agreed answers and examples** with **Refine Confirmed Answers & Examples**). A proposed revision appears above the agreed one with everything adopting it would confirm, **Adopt this revision**, **Ask Guide to revise** (bound to the proposed revision), and **Decline**. Unsaved drafts stay isolated per Change Card across navigation. **Review saved approval** opens the record in Approve. |
+| **Architecture** | Optional [`preview_architecture`](#preview_architecture) for a confirmed revision (unconfirmed cards show a Prerequisite Card pointing to Agree). Ask the guide or team about a selected element from the page. |
+| **Verify** | The change's verification runs and each report's scenario outcomes, hidden scenarios anonymous. **Check started** shows the request's start time in local time, not a completion time; the exact recorded timestamp stays in details. A single saved run needs no selector. Failed or incomplete runs in the current build offer **Message Builder**. With promotion settings, a completed run shows its actual binary folder under **Binaries built by this run**, as selectable code; the approval error panel repeats the selected run's folder. A run of written tests shows the `notice` of its `test_source`. **Candidate and run details** shows the run's candidate commit and its tests commit, labeled **Accepted tests commit** for written tests and **Evaluator commit** for an evaluator named in stored verification settings. |
 | **Approve** | The exact selected run’s recorded Story flows, required tests and outcomes; excluded drafts and unknown mapping; test source, human judgment limits and verified commits. **Test details and saved runs** discloses the safe report and history. **Verified inputs and digests** discloses full bindings. Next owns the single approval action, based on [`review_verification`](#review_verification); blocked or unverified records retain the owner’s reason. Unsaved Agree edits remain available on return. |
 | **Diagnostics** | A drawer listing recorded errors, with **All statuses** and **Without error status**, older pages, and **Retry from newest** after a failed read. |
 
@@ -2647,7 +2657,7 @@ Only while that same live approval is freshly read, the secondary
 first and, for written tests, a separate `git merge <tests_commit>`. Branch
 labels show where those commits were verified. An earlier agreement's build
 receives no merge action on Approve; its commit bindings remain readable.
-Existing Check history preserves older results.
+Existing Verify history preserves older results.
 An unverified saved record remains explicitly unverified.
 
 **What the page never shows or does.** It never shows prompt text or

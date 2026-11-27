@@ -241,7 +241,7 @@ type TeamRoleState struct {
 	// Registered Chorus handle.
 	Handle string
 	// True when this role has a managed or attached herdr-core terminal that can
-	// be opened in the browser terminal drawer.
+	// be opened in the browser workspace.
 	HasTerminal bool
 	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State string
@@ -661,7 +661,7 @@ type jsonTeamRoleStateTransport struct {
 	// Registered Chorus handle.
 	Handle *string `json:"handle"`
 	// True when this role has a managed or attached herdr-core terminal that can
-	// be opened in the browser terminal drawer.
+	// be opened in the browser workspace.
 	HasTerminal *bool `json:"has_terminal"`
 	// Current role state; unknown means herdr-core and Chorus cannot establish it.
 	State *string `json:"state"`
@@ -2393,7 +2393,7 @@ func validateProjectStatusJSONValue3(path string, value any, description string)
 		case "has_terminal":
 			if err := validateProjectStatusJSONValue5(
 				generatedJSONChildPath(path, key, false),
-				typed[key], "True when this role has a managed or attached herdr-core terminal that can be opened in the browser terminal drawer.",
+				typed[key], "True when this role has a managed or attached herdr-core terminal that can be opened in the browser workspace.",
 			); err != nil {
 				return err
 			}

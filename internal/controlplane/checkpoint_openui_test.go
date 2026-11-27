@@ -204,7 +204,7 @@ await control(origin, "reply", { key: "GET /changes/chg-extra-field", status: 20
 page.$("#highbay-nav-changes").click();
 page.$("#highbay-open-change-chg-extra-field").click();
 await until(() => page.$("#highbay-change-open-error"), "an answer with an undeclared field was accepted");
-expect(page.text("#highbay-change-open-error").includes("did not match its declared result") && editorRegion().dataset.changeId !== "chg-extra-field", "the refused answer was shown as a card");
+expect(page.text("#highbay-change-open-error").includes("did not match its declared result") && editorRegion()?.dataset.changeId !== "chg-extra-field", "the refused answer was shown as a card");
 
 // A timeline and callout composition still marks itself as an illustration.
 await open("chg-timeline-only");

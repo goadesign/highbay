@@ -115,59 +115,102 @@ func TestAuthenticateTerminalUpgrade(t *testing.T) {
 	}
 }
 
-// TestAttachTerminal follows one viewer: the ticket, the attach request
-// herdr-core receives, frames in both directions, and the end of the stream.
+// TestAttachTerminal follows both interactive and passive viewers: the ticket,
+// the attach request herdr-core receives, frames in both directions, and the
+// end of the stream.
 func TestAttachTerminal(t *testing.T) {
-	server, fakes := teamServer(t)
-	buildTeam(t, server)
-	ctx := userContext(server.state)
-	_, err := server.StartAgents(ctx, nil)
-	require.NoError(t, err)
+	t.Run("interactive attach applies input, resize, focus, and credit", func(t *testing.T) {
+		server, fakes := teamServer(t)
+		buildTeam(t, server)
+		ctx := userContext(server.state)
+		_, err := server.StartAgents(ctx, nil)
+		require.NoError(t, err)
 
-	ticket, err := server.CreateTerminalTicket(ctx, "builder")
-	require.NoError(t, err)
-	assert.Len(t, ticket.Ticket, 64)
-	assert.Equal(t, server.now().Add(terminalTicketLifetime).UTC().Format(time.RFC3339Nano), ticket.ExpiresAt)
+		ticket, err := server.CreateTerminalTicket(ctx, "builder")
+		require.NoError(t, err)
+		assert.Len(t, ticket.Ticket, 64)
+		assert.Equal(t, server.now().Add(terminalTicketLifetime).UTC().Format(time.RFC3339Nano), ticket.ExpiresAt)
 
-	exit := int32(0)
-	stream, viewer := fakes.core.stream, newFakeViewer()
-	viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameInput(&genhighbay.TerminalInputFrame{Data: []byte("ls\r")})}
-	viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameResize(&genhighbay.TerminalResize{Cols: 132, Rows: 43})}
-	viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameFocus(&genhighbay.TerminalFocusFrame{Focused: true})}
-	viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameCredit(&genhighbay.TerminalCreditFrame{Bytes: 5})}
-	stream.events <- hc.TerminalResized{Cols: 100, Rows: 30}
-	stream.events <- hc.TerminalOutput{Data: []byte("paint")}
+		exit := int32(0)
+		stream, viewer := fakes.core.stream, newFakeViewer()
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameInput(&genhighbay.TerminalInputFrame{Data: []byte("ls\r")})}
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameResize(&genhighbay.TerminalResize{Cols: 132, Rows: 43})}
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameFocus(&genhighbay.TerminalFocusFrame{Focused: true})}
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameCredit(&genhighbay.TerminalCreditFrame{Bytes: 5})}
+		stream.events <- hc.TerminalResized{Cols: 100, Rows: 30}
+		stream.events <- hc.TerminalOutput{Data: []byte("paint")}
 
-	done := make(chan error, 1)
-	go func() {
-		done <- server.AttachTerminal(ctx, &genhighbay.AttachRoleTerminalPayload{Role: "builder", Ticket: ticket.Ticket, Cols: 120, Rows: 40, Observe: true}, viewer)
-	}()
-	// The viewer's frames are applied before the program exits.
-	require.Eventually(t, func() bool {
+		done := make(chan error, 1)
+		go func() {
+			done <- server.AttachTerminal(ctx, &genhighbay.AttachRoleTerminalPayload{Role: "builder", Ticket: ticket.Ticket, Cols: 120, Rows: 40, Observe: false}, viewer)
+		}()
+		require.Eventually(t, func() bool {
+			stream.mu.Lock()
+			defer stream.mu.Unlock()
+			return stream.credit == 5
+		}, 5*time.Second, time.Millisecond)
+		stream.events <- hc.TerminalClosed{Reason: hc.CloseReason{Reason: "exited", ExitCode: &exit}}
+		require.NoError(t, <-done)
+
+		require.Len(t, fakes.core.attaches, 1)
+		assert.Equal(t, hc.AttachRequest{Terminal: "t1", Cols: 120, Rows: 40, History: terminalHistory, Observe: false}, fakes.core.attaches[0])
 		stream.mu.Lock()
-		defer stream.mu.Unlock()
-		return stream.credit == 5
-	}, 5*time.Second, time.Millisecond)
-	stream.events <- hc.TerminalClosed{Reason: hc.CloseReason{Reason: "exited", ExitCode: &exit}}
-	require.NoError(t, <-done)
+		assert.Equal(t, []byte("ls\r"), stream.input)
+		assert.Equal(t, [][2]uint16{{132, 43}}, stream.sizes)
+		assert.Equal(t, []bool{true}, stream.focus)
+		assert.Equal(t, 1, stream.closed, "the stream to herdr-core is closed when the relay ends")
+		stream.mu.Unlock()
+		code := 0
+		assert.Equal(t, []*genhighbay.TerminalServerFrame{
+			{ServerFrame: genhighbay.NewServerFrameResize(&genhighbay.TerminalResize{Cols: 100, Rows: 30})},
+			{ServerFrame: genhighbay.NewServerFrameOutput(&genhighbay.TerminalOutputFrame{Data: []byte("paint")})},
+			{ServerFrame: genhighbay.NewServerFrameClosed(&genhighbay.TerminalClosed{Reason: "exited", ExitCode: &code})},
+		}, viewer.received())
 
-	require.Len(t, fakes.core.attaches, 1)
-	assert.Equal(t, hc.AttachRequest{Terminal: "t1", Cols: 120, Rows: 40, History: terminalHistory, Observe: true}, fakes.core.attaches[0])
-	stream.mu.Lock()
-	assert.Equal(t, []byte("ls\r"), stream.input)
-	assert.Equal(t, [][2]uint16{{132, 43}}, stream.sizes)
-	assert.Equal(t, []bool{true}, stream.focus)
-	assert.Equal(t, 1, stream.closed, "the stream to herdr-core is closed when the relay ends")
-	stream.mu.Unlock()
-	code := 0
-	assert.Equal(t, []*genhighbay.TerminalServerFrame{
-		{ServerFrame: genhighbay.NewServerFrameResize(&genhighbay.TerminalResize{Cols: 100, Rows: 30})},
-		{ServerFrame: genhighbay.NewServerFrameOutput(&genhighbay.TerminalOutputFrame{Data: []byte("paint")})},
-		{ServerFrame: genhighbay.NewServerFrameClosed(&genhighbay.TerminalClosed{Reason: "exited", ExitCode: &code})},
-	}, viewer.received())
+		err = server.AttachTerminal(ctx, &genhighbay.AttachRoleTerminalPayload{Role: "builder", Ticket: ticket.Ticket}, newFakeViewer())
+		assert.Equal(t, "unprocessable", errorName(err), "a ticket opens one stream")
+	})
 
-	err = server.AttachTerminal(ctx, &genhighbay.AttachRoleTerminalPayload{Role: "builder", Ticket: ticket.Ticket}, newFakeViewer())
-	assert.Equal(t, "unprocessable", errorName(err), "a ticket opens one stream")
+	t.Run("passive observe attach grants credit and ignores input, resize, and focus", func(t *testing.T) {
+		server, fakes := teamServer(t)
+		buildTeam(t, server)
+		ctx := userContext(server.state)
+		_, err := server.StartAgents(ctx, nil)
+		require.NoError(t, err)
+
+		ticket, err := server.CreateTerminalTicket(ctx, "builder")
+		require.NoError(t, err)
+
+		exit := int32(0)
+		stream, viewer := fakes.core.stream, newFakeViewer()
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameInput(&genhighbay.TerminalInputFrame{Data: []byte("rm -rf /\r")})}
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameResize(&genhighbay.TerminalResize{Cols: 80, Rows: 20})}
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameFocus(&genhighbay.TerminalFocusFrame{Focused: true})}
+		viewer.frames <- &genhighbay.TerminalClientFrame{ClientFrame: genhighbay.NewClientFrameCredit(&genhighbay.TerminalCreditFrame{Bytes: 7})}
+		stream.events <- hc.TerminalResized{Cols: 140, Rows: 45}
+		stream.events <- hc.TerminalOutput{Data: []byte("observe")}
+
+		done := make(chan error, 1)
+		go func() {
+			done <- server.AttachTerminal(ctx, &genhighbay.AttachRoleTerminalPayload{Role: "builder", Ticket: ticket.Ticket, Cols: 120, Rows: 40, Observe: true}, viewer)
+		}()
+		require.Eventually(t, func() bool {
+			stream.mu.Lock()
+			defer stream.mu.Unlock()
+			return stream.credit == 7
+		}, 5*time.Second, time.Millisecond)
+		stream.events <- hc.TerminalClosed{Reason: hc.CloseReason{Reason: "exited", ExitCode: &exit}}
+		require.NoError(t, <-done)
+
+		require.Len(t, fakes.core.attaches, 1)
+		assert.Equal(t, hc.AttachRequest{Terminal: "t1", Cols: 120, Rows: 40, History: terminalHistory, Observe: true}, fakes.core.attaches[0])
+		stream.mu.Lock()
+		assert.Empty(t, stream.input, "passive observe stream forwarded input bytes")
+		assert.Empty(t, stream.sizes, "passive observe stream resized the PTY")
+		assert.Empty(t, stream.focus, "passive observe stream forwarded focus changes")
+		assert.Equal(t, uint32(7), stream.credit)
+		stream.mu.Unlock()
+	})
 }
 
 // TestAttachTerminalEnds covers the other ways a stream ends.

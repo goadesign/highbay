@@ -79,12 +79,15 @@ expect(!page.$("#highbay-frame-next button"), "assignment read invented a user d
 await control(origin, "act", { key: "team-needs" });
 await until(() => page.text(".highbay-frame-attention dd").includes("Builder needs you") && page.text(".highbay-frame-attention dd").includes("Test writer needs you"), "the owner's two Team requests were not both shown");
 expect(!page.$("#highbay-frame-next button"), "Team attention invented a verdict control");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
 const draft = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
 expect(draft, "the agreement example editor was lost");
 page.type(draft, "Unsaved requirement while reviewing tests");
 page.$("#highbay-nav-cp4").click();
-await until(() => page.$("#highbay-frame-next button"), "Check navigation retained Build instructions");
-expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "Unsaved requirement while reviewing tests", "Check navigation discarded unsaved agreement edits");
+await until(() => page.$("#highbay-frame-next button"), "Verify navigation retained Build instructions");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "Unsaved requirement while reviewing tests", "Verify navigation discarded unsaved agreement edits");
 page.close();
 `)
 }

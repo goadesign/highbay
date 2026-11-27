@@ -34,15 +34,24 @@ import (
 type (
 	// workspaceBrowserFacts captures Headless Chrome observations from workspaceScenario.
 	workspaceBrowserFacts struct {
-		ReleaseHref                   string `json:"release_href"`
-		UpdateReady                   bool   `json:"update_ready"`
-		DraftSurvivedUpdate           bool   `json:"draft_survived_update"`
-		ReplyRendered                 bool   `json:"reply_rendered"`
-		TerminalConnected             bool   `json:"terminal_connected"`
-		FocusEscaped                  bool   `json:"focus_escaped"`
-		BuilderKeptAcrossGuideRestart bool   `json:"builder_kept_across_guide_restart"`
-		TerminalRestarted             bool   `json:"terminal_restarted"`
-		BrowserCookies                int    `json:"browser_cookies"`
+		ReleaseHref                   string   `json:"release_href"`
+		UpdateReady                   bool     `json:"update_ready"`
+		DraftSurvivedUpdate           bool     `json:"draft_survived_update"`
+		ReplyRendered                 bool     `json:"reply_rendered"`
+		TerminalConnected             bool     `json:"terminal_connected"`
+		PlainEscapeInsideKeptOpen     bool     `json:"plain_escape_inside_kept_open"`
+		FocusEscaped                  bool     `json:"focus_escaped"`
+		BuilderKeptAcrossGuideRestart bool     `json:"builder_kept_across_guide_restart"`
+		TerminalRestarted             bool     `json:"terminal_restarted"`
+		PlainEscapeOutsideClosed      bool     `json:"plain_escape_outside_closed"`
+		GuideObserveConnected         bool     `json:"guide_observe_connected"`
+		GuideInteractiveConnected     bool     `json:"guide_interactive_connected"`
+		ViewportsClean                bool     `json:"viewports_clean"`
+		FailingViewports              []string `json:"failing_viewports"`
+		MobileSheetFocusClean         bool     `json:"mobile_sheet_focus_clean"`
+		MobileHiddenTerminalPrimary   bool     `json:"mobile_hidden_terminal_primary"`
+		MobilePopoversFit             bool     `json:"mobile_popovers_fit"`
+		BrowserCookies                int      `json:"browser_cookies"`
 	}
 
 	// workspaceBrowserFixture implements the conversation, terminal WebSocket,
@@ -53,11 +62,17 @@ type (
 		mu            sync.Mutex
 		version       string
 		uiBuild       string
+		seededCard    *genhighbay.ChangeCardResult
+		seededSavedAt string
 		messages      []*genhighbay.TeamMessage
 		sentPayloads  []*genhighbay.SendTeamMessagePayload
 		restartedRole []string
 		tickets       map[string]string
 		ticketCounts  map[string]int
+		observeModes  map[string][]bool
+		observeInputs int
+		observeResize int
+		guideInputs   [][]byte
 		attachCount   atomic.Int32
 		credits       atomic.Int64
 		inputs        [][]byte
@@ -87,6 +102,7 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 		uiBuild:      controlplane.ViewsPageScriptSHA256,
 		tickets:      map[string]string{},
 		ticketCounts: map[string]int{},
+		observeModes: map[string][]bool{},
 	}
 
 	appMux := http.NewServeMux()
@@ -197,6 +213,35 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 				Version: "v0.5.0",
 			}))
 			return
+		case r.URL.Path == "/__test/seed-card" && r.Method == http.MethodPost:
+			rev := strings.Repeat("a", 64)
+			now := time.Now().UTC().Format(time.RFC3339Nano)
+			confirmedBy := vp.state.Record.Owner
+			fixture.mu.Lock()
+			fixture.seededSavedAt = now
+			fixture.seededCard = &genhighbay.ChangeCardResult{
+				ChangeID:        "chg-mobile-popovers",
+				RequestRevision: rev,
+				Status:          "confirmed",
+				Prompt:          "Verify narrow stage and inspect popover bounds.",
+				Summary:         "Verify narrow stage and inspect popover bounds.",
+				Ambiguities:     []*genhighbay.AmbiguityQuestion{},
+				Answers:         map[string]string{},
+				ConfirmedBy:     &confirmedBy,
+				Examples: []*genhighbay.ExampleItem{
+					{
+						ID:               "check_01",
+						Scenario:         "Popover stays inside viewport",
+						InputSummary:     "320px and 375px",
+						ExpectedOutcome:  "No horizontal clipping or overflow",
+						VerificationKind: "deterministic",
+					},
+				},
+				PreservedBehaviors: []string{},
+			}
+			fixture.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+			return
 		default:
 			baseHandler.ServeHTTP(w, r)
 		}
@@ -220,9 +265,18 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	assert.True(t, facts.Workspace.DraftSurvivedUpdate, "unsaved ConversationRail input was lost during Update & Restart")
 	assert.True(t, facts.Workspace.ReplyRendered, "ConversationRail did not post message and render Markdown reply")
 	assert.True(t, facts.Workspace.TerminalConnected, "TerminalDrawer did not attach over WebSocket and render PTY output")
+	assert.True(t, facts.Workspace.PlainEscapeInsideKeptOpen, "plain Escape inside xterm closed TerminalDrawer instead of forwarding to the PTY")
 	assert.True(t, facts.Workspace.FocusEscaped, "Ctrl+Shift+Escape did not move focus out of xterm to Close terminal")
 	assert.True(t, facts.Workspace.BuilderKeptAcrossGuideRestart, "restarting guide disconnected the open builder TerminalDrawer")
 	assert.True(t, facts.Workspace.TerminalRestarted, "Restart button did not restart role and reconnect TerminalDrawer")
+	assert.True(t, facts.Workspace.PlainEscapeOutsideClosed, "plain Escape on a drawer header control outside xterm did not close TerminalDrawer")
+	assert.True(t, facts.Workspace.GuideObserveConnected, "waiting Guide terminal did not open in passive observe=true mode")
+	assert.True(t, facts.Workspace.GuideInteractiveConnected, "Type in terminal did not reconnect Guide interactively with observe=false")
+	assert.Empty(t, facts.Workspace.FailingViewports, "responsive viewports failed overflow or single-primary checks")
+	assert.True(t, facts.Workspace.ViewportsClean, "responsive viewports (320..1280px) overflowed horizontally or rendered >1 primary action: %v", facts.Workspace.FailingViewports)
+	assert.True(t, facts.Workspace.MobileSheetFocusClean, "narrow-width Conversation and Terminal sheets did not move focus in and restore focus on close")
+	assert.True(t, facts.Workspace.MobileHiddenTerminalPrimary, "hiding an interactive needs_you terminal sheet on narrow viewports suppressed the primary attention action")
+	assert.True(t, facts.Workspace.MobilePopoversFit, "narrow-width #highbay-stage-menu or Inspect popovers overflowed or clipped outside the viewport")
 	assert.Zero(t, facts.Workspace.BrowserCookies, "browser cookie store must remain empty")
 
 	assert.GreaterOrEqual(t, fixture.credits.Load(), int64(len("Allow tool? [y/N] ")), "xterm did not replenish stream byte credit")
@@ -233,16 +287,66 @@ func TestBrowserWorkspaceConversationTerminalAndUpdateInChromium(t *testing.T) {
 	for role, count := range fixture.ticketCounts {
 		ticketCounts[role] = count
 	}
+	guideModes := append([]bool{}, fixture.observeModes["guide"]...)
+	observeInputs := fixture.observeInputs
+	observeResize := fixture.observeResize
+	guideInputs := append([][]byte{}, fixture.guideInputs...)
 	sentCount := len(fixture.sentPayloads)
 	inputs := append([][]byte{}, fixture.inputs...)
 	fixture.mu.Unlock()
 
 	assert.Equal(t, "v0.5.0", applied)
 	assert.Equal(t, []string{"guide", "builder"}, restartedRoles)
-	assert.Equal(t, map[string]int{"builder": 2}, ticketCounts, "guide restart must not request another builder terminal ticket")
+	assert.Equal(t, map[string]int{"builder": 3, "guide": 3}, ticketCounts, "builder mints 3 tickets (desktop, restart, and 375px mobile sheet) and guide mints 3 (desktop observe, Type in terminal, and 375px mobile sheet observe)")
+	assert.Equal(t, []bool{true, false, true}, guideModes, "Guide terminal attaches passive observe=true on desktop and mobile sheet, and observe=false after Type in terminal")
+	assert.Zero(t, observeInputs, "passive observe=true terminal sent input frames")
+	assert.Zero(t, observeResize, "passive observe=true terminal sent resize frames")
+	assert.NotEmpty(t, guideInputs, "interactive Guide terminal did not deliver keystrokes after Type in terminal")
 	assert.Equal(t, 1, sentCount)
 	assert.NotEmpty(t, inputs, "keystrokes typed in xterm were not delivered over WebSocket")
+	var flatInputs []byte
+	for _, chunk := range inputs {
+		flatInputs = append(flatInputs, chunk...)
+	}
+	assert.Contains(t, string(flatInputs), "\x1b", "plain Escape inside xterm was not forwarded as ESC (0x1b) over WebSocket")
 	browser.stopAndCheck(t)
+}
+
+// ListChanges returns the seeded card once /__test/seed-card has been triggered.
+func (f *workspaceBrowserFixture) ListChanges(ctx context.Context) (*genhighbay.ChangeList, error) {
+	f.mu.Lock()
+	card := f.seededCard
+	savedAt := f.seededSavedAt
+	f.mu.Unlock()
+	if card == nil {
+		return f.Service.ListChanges(ctx)
+	}
+	return &genhighbay.ChangeList{
+		Version:           "1",
+		ApprovalAvailable: false,
+		Changes: []*genhighbay.ChangeListItem{
+			{
+				ChangeID:        card.ChangeID,
+				RequestRevision: card.RequestRevision,
+				Status:          card.Status,
+				SavedAt:         savedAt,
+				Summary:         card.Summary,
+			},
+		},
+	}, nil
+}
+
+// GetChange returns the seeded card when requested by ID.
+func (f *workspaceBrowserFixture) GetChange(
+	ctx context.Context, p *genhighbay.GetChangePayload,
+) (*genhighbay.ChangeCardResult, error) {
+	f.mu.Lock()
+	card := f.seededCard
+	f.mu.Unlock()
+	if card != nil && p.ChangeID == card.ChangeID {
+		return card, nil
+	}
+	return f.Service.GetChange(ctx, p)
 }
 
 // GetTeam returns a connected project team with a waiting Guide and a blocked Builder terminal.
@@ -357,6 +461,9 @@ func (f *workspaceBrowserFixture) AttachRoleTerminal(
 	f.mu.Lock()
 	wantRole, ok := f.tickets[p.Ticket]
 	delete(f.tickets, p.Ticket)
+	if ok && wantRole == p.Role {
+		f.observeModes[p.Role] = append(f.observeModes[p.Role], p.Observe)
+	}
 	f.mu.Unlock()
 	if !ok || wantRole != p.Role {
 		return genhighbay.MakeUnprocessable(errors.New("invalid or already-consumed terminal ticket"))
@@ -368,7 +475,9 @@ func (f *workspaceBrowserFixture) AttachRoleTerminal(
 	}()
 	attaches := f.attachCount.Add(1)
 	banner := []byte("Allow tool? [y/N] ")
-	if attaches >= 2 {
+	if p.Role == "guide" {
+		banner = []byte("Guide session output\r\n")
+	} else if attaches >= 2 {
 		banner = []byte("Restarted builder session\r\n")
 	}
 	if err := stream.SendWithContext(ctx, &genhighbay.TerminalServerFrame{
@@ -384,9 +493,20 @@ func (f *workspaceBrowserFixture) AttachRoleTerminal(
 		if credit, ok := frame.ClientFrame.AsCredit(); ok {
 			f.credits.Add(int64(credit.Bytes))
 		}
+		if _, ok := frame.ClientFrame.AsResize(); ok && p.Observe {
+			f.mu.Lock()
+			f.observeResize++
+			f.mu.Unlock()
+		}
 		if input, ok := frame.ClientFrame.AsInput(); ok {
 			f.mu.Lock()
-			f.inputs = append(f.inputs, append([]byte{}, input.Data...))
+			if p.Observe {
+				f.observeInputs++
+			} else if p.Role == "guide" {
+				f.guideInputs = append(f.guideInputs, append([]byte{}, input.Data...))
+			} else {
+				f.inputs = append(f.inputs, append([]byte{}, input.Data...))
+			}
 			f.mu.Unlock()
 		}
 	}

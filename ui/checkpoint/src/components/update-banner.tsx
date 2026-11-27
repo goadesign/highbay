@@ -140,13 +140,13 @@ export function UpdateBanner({
         </div>
         <div className="highbay-toolbar-actions">
           {showReload ? (
-            <Button id="highbay-update-reload" variant="primary" onClick={onReload}>
+            <Button id="highbay-update-reload" variant="secondary" onClick={onReload}>
               Reload
             </Button>
           ) : progress?.kind === "restart_failed" ? (
             <Button
               id="highbay-update-install"
-              variant="primary"
+              variant="secondary"
               disabled={disabled || busy}
               onClick={() => onCheckRestart(progress.targetVersion)}
             >
@@ -155,7 +155,7 @@ export function UpdateBanner({
           ) : progress?.kind === "error" || canAutoUpdate ? (
             <Button
               id="highbay-update-install"
-              variant="primary"
+              variant="secondary"
               disabled={disabled || busy}
               onClick={onInstall}
             >

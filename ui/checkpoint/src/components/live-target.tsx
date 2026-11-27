@@ -78,6 +78,8 @@ export interface LiveTargetStageProps {
   draftDirty: boolean;
   // draftReset changes only on discard, resetting the uncontrolled form.
   draftReset: number;
+  // primaryApply marks Apply as the page's single primary action when unblocked.
+  primaryApply: boolean;
   // onDiscardDraft clears unsent input without changing the connection.
   onDiscardDraft: () => void;
 }
@@ -389,6 +391,7 @@ function ModelSection({
   onDraft,
   draftDirty,
   draftReset,
+  primaryApply,
   onDiscardDraft,
 }: LiveTargetStageProps) {
   const currentKind = model !== null && model.connection.kind === "gateway" ? "gateway" : "direct";
@@ -508,7 +511,7 @@ function ModelSection({
             </label>
           </div>
           <div className="highbay-field-row">
-            <Button id="highbay-model-apply" type="submit" variant="primary">
+            <Button id="highbay-model-apply" type="submit" variant={primaryApply ? "primary" : "secondary"}>
               {applying ? "Applying..." : "Apply"}
             </Button>
             <Button id="highbay-model-discard" disabled={!draftDirty} onClick={onDiscardDraft}>

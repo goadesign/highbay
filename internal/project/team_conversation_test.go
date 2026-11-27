@@ -39,6 +39,20 @@ func TestMessageText(t *testing.T) {
 		{name: "the guide", payload: genhighbay.SendTeamMessagePayload{To: "guide", Text: "Build refunds"}, want: "@guide-1 Build refunds"},
 		{name: "a worker", payload: genhighbay.SendTeamMessagePayload{To: "builder", Text: "Why two commits?"}, want: "@builder-1 Why two commits?"},
 		{
+			name: "a separate new Change Card",
+			payload: genhighbay.SendTeamMessagePayload{To: "guide", Text: "Add audit exports.", Context: genhighbay.NewContextNewChange(
+				&genhighbay.NewChangeContext{Scope: "separate_card"},
+			)},
+			want: "@guide-1 Add audit exports.\n\n**New Change Card requested:** Prepare a separate change in the draft and save it as a new Change Card with propose_change (do not call revise_change on an existing Change Card).",
+		},
+		{
+			name: "free-form refinement of an existing Change Card",
+			payload: genhighbay.SendTeamMessagePayload{To: "guide", Text: "Support CSV output too.", Context: genhighbay.NewContextRefineChange(
+				&genhighbay.RefineChangeContext{ChangeID: "refunds", RequestRevision: "rev-3"},
+			)},
+			want: "@guide-1 Support CSV output too.\n\n**Revise this Change Card** (change `refunds`, latest request revision `rev-3`): Update the draft for this request and submit a revised Change Card with revise_change.",
+		},
+		{
 			name: "answers to revise, in question order",
 			payload: genhighbay.SendTeamMessagePayload{To: "guide", Text: "Revise the draft.", Context: genhighbay.NewContextReviseAnswers(
 				&genhighbay.ReviseAnswersContext{ChangeID: "refunds", RequestRevision: "rev-2", Answers: map[string]string{"q2": "Manager approves", "q1": "Total charged"}},
@@ -74,6 +88,20 @@ func TestMessageText(t *testing.T) {
 			)},
 			want: "@guide-1 Split this.\n\n**About this Story:** Refunds",
 		},
+		{
+			name: "an architecture element sent to builder",
+			payload: genhighbay.SendTeamMessagePayload{To: "builder", Text: "Check retry policy here.", Context: genhighbay.NewContextArchitectureElement(
+				&genhighbay.ArchitectureElementContext{ChangeID: &change, ElementID: "refunds.queue", ElementName: "Refund queue"},
+			)},
+			want: "@builder-1 Check retry policy here.\n\n**About this architecture element:** Refund queue (`refunds.queue`), change `refunds`",
+		},
+		{
+			name: "a Story flow sent to team",
+			payload: genhighbay.SendTeamMessagePayload{To: "team", Text: "Edge case note.", Context: genhighbay.NewContextStoryFlow(
+				&genhighbay.StoryFlowContext{ChangeID: &change, Story: "Refunds", FlowKey: &flow},
+			)},
+			want: "Edge case note.\n\n**About this Story:** Refunds, flow `over-limit`, change `refunds`",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := messageText(&test.payload, guide, roles)
@@ -88,6 +116,27 @@ func TestMessageText(t *testing.T) {
 		want    string
 	}{
 		{name: "a worker no build has registered", payload: genhighbay.SendTeamMessagePayload{To: "test_writer", Text: "Hello"}, want: "not part of this project's team yet"},
+		{
+			name: "new_change context sent to team",
+			payload: genhighbay.SendTeamMessagePayload{To: "team", Text: "Add exports", Context: genhighbay.NewContextNewChange(
+				&genhighbay.NewChangeContext{Scope: "separate_card"},
+			)},
+			want: "only be sent to guide",
+		},
+		{
+			name: "refine_change context sent to builder",
+			payload: genhighbay.SendTeamMessagePayload{To: "builder", Text: "Revise card", Context: genhighbay.NewContextRefineChange(
+				&genhighbay.RefineChangeContext{ChangeID: "refunds", RequestRevision: "rev-1"},
+			)},
+			want: "only be sent to guide",
+		},
+		{
+			name: "revise_answers context sent to builder",
+			payload: genhighbay.SendTeamMessagePayload{To: "builder", Text: "Revise answers", Context: genhighbay.NewContextReviseAnswers(
+				&genhighbay.ReviseAnswersContext{ChangeID: "refunds", RequestRevision: "rev-1", Answers: map[string]string{"q1": "A"}},
+			)},
+			want: "only be sent to guide",
+		},
 		{
 			name:    "one character past what Chorus stores",
 			payload: genhighbay.SendTeamMessagePayload{To: "team", Text: strings.Repeat("a", chorusTextLimit+1)},
@@ -247,6 +296,14 @@ func TestSendMessageRefusals(t *testing.T) {
 			want:    "unprocessable",
 		},
 		{
+			name: "Change Card authoring context sent to team refuses before starting guide",
+			payload: genhighbay.SendTeamMessagePayload{To: "team", Text: "New card", Context: genhighbay.NewContextNewChange(
+				&genhighbay.NewChangeContext{Scope: "separate_card"},
+			)},
+			arrange: func(*testing.T, *Server, *teamFakes) {},
+			want:    "unprocessable",
+		},
+		{
 			name:    "Chorus cannot be resolved",
 			payload: genhighbay.SendTeamMessagePayload{To: "team", Text: "Hello"},
 			arrange: func(_ *testing.T, _ *Server, fakes *teamFakes) {
@@ -269,6 +326,9 @@ func TestSendMessageRefusals(t *testing.T) {
 			var unavailable *genproject.TeamUnavailable
 			if test.cause != "" && assert.ErrorAs(t, err, &unavailable) {
 				assert.Equal(t, test.cause, unavailable.Cause)
+			}
+			if test.want == "unprocessable" {
+				assert.Empty(t, fakes.core.runs)
 			}
 			assert.Empty(t, fakes.chorus.posted())
 		})

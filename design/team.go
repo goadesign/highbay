@@ -9,7 +9,7 @@ var TeamRoleState = Type("TeamRoleState", func() {
 	Description("Observed terminal, Chorus liveness, attention, and assignment state of one registered project role.")
 	Attribute("role", String, "Registered role.", func() { Enum("guide", "builder", "test_writer") })
 	Attribute("handle", String, "Registered Chorus handle.")
-	Attribute("has_terminal", Boolean, "True when this role has a managed or attached herdr-core terminal that can be opened in the browser terminal drawer.")
+	Attribute("has_terminal", Boolean, "True when this role has a managed or attached herdr-core terminal that can be opened in the browser workspace.")
 	Attribute("state", String, "Current role state; unknown means herdr-core and Chorus cannot establish it.", func() {
 		Enum("not_started", "ended", "starting", "needs_you", "working", "waiting", "error", "unknown")
 	})
@@ -67,6 +67,23 @@ var TeamConversation = Type("TeamConversation", func() {
 	Required("team", "channel", "chorus_status", "messages")
 })
 
+// NewChangeContext requests a separate new Change Card rather than revising an open card.
+var NewChangeContext = Type("NewChangeContext", func() {
+	Description("Browser request to prepare a separate new Change Card in the draft and propose it with propose_change.")
+	Attribute("scope", String, "Scope of the requested Change Card.", func() {
+		Enum("separate_card")
+	})
+	Required("scope")
+})
+
+// RefineChangeContext identifies an existing Change Card revision the user wants revised in free form.
+var RefineChangeContext = Type("RefineChangeContext", func() {
+	Description("Existing Change Card and latest request_revision that the user is asking the guide to update with revise_change.")
+	Attribute("change_id", String, "Change Card identifier being revised.", func() { MinLength(1) })
+	Attribute("request_revision", String, "Latest request_revision visible in the browser workspace.", func() { MinLength(1) })
+	Required("change_id", "request_revision")
+})
+
 // ReviseAnswersContext carries selected ambiguity answers when asking the guide to revise a Change Card.
 var ReviseAnswersContext = Type("ReviseAnswersContext", func() {
 	Description("Selected Checkpoint 1 ambiguity answers that differ from the current draft_option and require a revised Change Card.")
@@ -108,6 +125,8 @@ var SendTeamMessagePayload = Type("SendTeamMessagePayload", func() {
 	Attribute("reply_to", Int, "Optional sequence number in the primary #channel being replied to.", func() { Minimum(1) })
 	Attribute("guide_choice", RoleAgentChoice, "Optional coding-agent CLI selection used if Highbay starts a missing guide for this message.")
 	OneOf("context", "Optional structured workspace context formatted into the Chorus message by the server.", func() {
+		Attribute("new_change", NewChangeContext)
+		Attribute("refine_change", RefineChangeContext)
 		Attribute("revise_answers", ReviseAnswersContext)
 		Attribute("architecture_element", ArchitectureElementContext)
 		Attribute("story_flow", StoryFlowContext)
@@ -147,10 +166,10 @@ var TerminalInputFrame = Type("TerminalInputFrame", func() {
 	Required("data")
 })
 
-// TerminalFocusFrame carries terminal drawer focus state changes.
+// TerminalFocusFrame carries browser terminal focus state changes.
 var TerminalFocusFrame = Type("TerminalFocusFrame", func() {
-	Description("Browser terminal drawer focus change.")
-	Attribute("focused", Boolean, "Whether the terminal drawer currently holds focus.")
+	Description("Browser terminal focus change.")
+	Attribute("focused", Boolean, "Whether the browser terminal currently holds focus.")
 	Required("focused")
 })
 
@@ -206,7 +225,7 @@ func teamMethods() {
 		})
 	})
 	Method("get_team_conversation", func() {
-		Description("Read the project's Chorus conversation messages and active pin for the browser workspace's Conversation Rail. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.")
+		Description("Read the project's Chorus conversation messages and active pin for the browser workspace. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.")
 		Result(TeamConversation)
 		HTTP(func() {
 			GET("/team/conversation")
@@ -218,7 +237,7 @@ func teamMethods() {
 		Payload(SendTeamMessagePayload)
 		Result(TeamMessage)
 		Error("team_unavailable", ErrorResult, "Chorus or herdr-core could not accept the message or start the guide.")
-		Error("unprocessable", ErrorResult, "The selected guide client is not installed, does not support the requested options, or the referenced Change Card context is invalid.")
+		Error("unprocessable", ErrorResult, "The selected guide client is not installed, does not support the requested options, the target worker role is not registered yet, the message with its context exceeds Chorus's 4,000-character limit, or a Change Card authoring context (new_change, refine_change, or revise_answers) targets a recipient other than guide.")
 		HTTP(func() {
 			POST("/team/messages")
 			Response(StatusCreated)
@@ -290,9 +309,9 @@ func teamMethods() {
 		})
 	})
 	Method("create_terminal_ticket", func() {
-		Description("Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser terminal drawer to a role's herdr-core terminal.")
+		Description("Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser workspace to a role's herdr-core terminal.")
 		Payload(func() {
-			Attribute("role", String, "Registered role whose terminal drawer is opening.", func() { Enum("guide", "builder", "test_writer") })
+			Attribute("role", String, "Registered role whose terminal is opening.", func() { Enum("guide", "builder", "test_writer") })
 			Required("role")
 		})
 		Result(TerminalTicketResult)

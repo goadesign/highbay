@@ -66,7 +66,14 @@ if (input.state === "earlier_configured" || input.state === "merged_configured")
 await control(origin, "reply", { key: "GET " + path, status: 200,
   body: { change_id: "chg-taking", drafted_before_drop: false, build: { ...saved, state: "started", taking: variants[input.state] } } });
 const page = await openPage(origin, { link: input.link });
-await until(() => page.$("#highbay-build-taking") && !page.$("#highbay-build-loading"), "taking state did not appear");
+const expectedOpenStage =
+  !input.state.startsWith("earlier_") &&
+  (variants[input.state].state === "passed" || variants[input.state].state === "merged")
+    ? "approve"
+    : "build";
+await until(() => page.$("#highbay-nav-build") && page.sent("GET", path).some((r) => r.status !== undefined) && page.state() === expectedOpenStage, "confirmed change did not open expected default stage " + expectedOpenStage);
+if (expectedOpenStage === "approve") page.$("#highbay-nav-build").click();
+await until(() => page.state() === "build" && page.$("#highbay-build-taking") && !page.$("#highbay-build-loading"), "taking state did not appear");
 await until(() => {
   const action = page.$("#highbay-build-start") ?? page.$("#highbay-build-again");
   return !action || !action.disabled;
@@ -230,13 +237,21 @@ if (input.state === "passed") {
       !page.$("#highbay-build-loading"), "taking refresh did not settle");
     expect(!page.text("#highbay-build-taking").includes("git merge"), "refresh granted approval to unapproved work");
   };
-  const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
-  page.type(field, "keep editor focus when commands vanish"); field.focus();
+  page.$("#highbay-nav-cp1").click();
+  page.$("#highbay-refine-agreement").open = true;
+  page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep editor focus when commands vanish");
+  page.$("#highbay-nav-build").click();
+  await until(() => page.$("#highbay-build-taking"), "taking did not return");
+  const composer = page.$("#highbay-composer-input");
+  page.type(composer, "composer note"); composer.focus();
   await replaceTaking(variants.evaluator);
-  expect(page.doc.activeElement === field && field.value === "keep editor focus when commands vanish", "removing only an unfocused tests command stole editor focus");
+  expect(page.doc.activeElement === composer && composer.value === "composer note", "removing only an unfocused tests command stole external focus");
   await replaceTaking(passed);
   await replaceTaking(variants.merged);
-  expect(page.doc.activeElement === field && field.value === "keep editor focus when commands vanish", "removing unfocused commands stole external editor focus");
+  expect(page.doc.activeElement === composer && composer.value === "composer note", "removing unfocused commands stole external focus");
+  page.$("#highbay-nav-cp1").click();
+  expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "keep editor focus when commands vanish", "taking refreshes discarded Agree draft");
+  page.$("#highbay-nav-build").click();
 }
 expect(page.sent("POST", path).length === (state === "merged" ? 1 : 0) && page.sent("POST", path + "/drop").length === 0, "taking actions wrote beyond the explicit replay confirmation");
 page.close();
@@ -302,15 +317,18 @@ await control(origin, "act", { key: "resave-next" });
 await until(() => !page.$("#highbay-build-drop-question") && page.$("#highbay-build-taking")?.dataset.state === "building", "a freshly observed different open start did not invalidate old consent");
 expect(page.$("#highbay-build-start").disabled && !page.text("#highbay-build-taking").includes("git merge"), "fresh replacement retained old merge commits or unblocked the selected Build");
 expect(page.sent("POST", other + "/drop").length === 0, "fresh replacement reused old Drop consent");
-const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
-page.type(field, "keep this draft through blocker recovery");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep this draft through blocker recovery");
+page.$("#highbay-nav-build").click();
 await control(origin, "reply", { key: "GET " + other, status: 200,
   body: { change_id: "chg-passed-open", drafted_before_drop: false, build: { ...saved, state: "started", taking: { state: "dropped", kept_branches: [] } } } });
 await control(origin, "act", { key: "drop-passed-open" });
 await until(() => !page.$("#highbay-build-blocking-change") && page.$("#highbay-build-enabling-step") && !page.$("#highbay-build-start"), "fresh closed blocker did not expose the selected agreement’s post-drop recovery");
 expect(page.text("#highbay-build-enabling-step").includes("This agreement was drafted before a build was dropped") && !page.text("#highbay-build-enabling-step").includes("this change again"), "never-built agreement recovery assumes an earlier build of this change");
-expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep this draft through blocker recovery", "blocker recovery replaced unsaved editor text");
 expect(page.sent("POST", path).length === 1, "a fresh read retried Build without consent");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "keep this draft through blocker recovery", "blocker recovery replaced unsaved editor text");
 page.close();
 `)
 }
@@ -341,9 +359,12 @@ await control(origin, "reply", { key: "GET /changes/chg-nav-next", status: 200, 
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-open-change-chg-nav-next"), "change list did not load");
 page.$("#highbay-open-change-chg-nav-next").click();
-await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled && page.$("#highbay-proposal"), "proposed change did not open");
+await until(() => page.$("#highbay-proposal"), "proposed change did not open");
 page.$('#highbay-proposal [data-question-id="q-review"] [data-option="keep"]').click();
+page.$("#highbay-refine-agreement").open = true;
 page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep my local scenario");
+page.$("#highbay-nav-build").click();
+await until(() => page.$("#highbay-build-start") && !page.$("#highbay-build-start").disabled, "Build start on proposed change did not load");
 page.$("#highbay-build-start").click();
 await until(() => page.$("#highbay-build-confirm") && !page.$("#highbay-build-confirm").disabled, "earlier agreement did not ask for Build consent");
 expect(page.text("#highbay-build-question").includes("Build the earlier agreed revision") &&
@@ -358,11 +379,14 @@ await until(() => page.$("#highbay-build-open-blocking-change"), "other-change r
 const [start] = page.sent("POST", "/changes/chg-nav-next/build");
 expect(start.body.request_revision === card.request_revision && !("replaces" in start.body), "first Build submitted a different revision or replaced a start");
 page.$("#highbay-build-open-blocking-change").click();
-await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-nav-open", "open-blocking-change action did not show its subject");
-const preserved = page.text("#highbay-preserved-draft");
-expect(preserved.includes("keep my local scenario") && preserved.includes("[Proposed " + "f".repeat(64) + "] q-review (Which result?)=keep"), "opening the blocker lost unsent draft text or proposal choices");
+await until(() => page.$("#highbay-checkpoint-view").dataset.changeId === "chg-nav-open", "open-blocking-change action did not show its subject");
 page.$("#highbay-nav-cp1").click();
-expect(page.text("#highbay-preserved-draft") === preserved, "returning to the same card duplicated preserved proposal choices");
+expect(!page.$("#highbay-preserved-draft") && !page.text("#highbay-cp1-editor").includes("keep my local scenario"), "opening chg-nav-open leaked chg-nav-next's draft");
+await control(origin, "reply", { key: "GET /changes/chg-nav-next", status: 200, body: card });
+page.$("#highbay-nav-changes").click();
+page.$("#highbay-open-change-chg-nav-next").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-nav-next", "returning to chg-nav-next did not open Agree");
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "keep my local scenario" && page.$('#highbay-proposal [data-question-id="q-review"] [data-option="keep"]').getAttribute("aria-pressed") === "true", "opening the blocker lost chg-nav-next's live draft text or proposal choices");
 expect(page.sent("POST", "/changes/confirm").length === 0 && page.sent("POST", "/changes/chg-nav-open/build/drop").length === 0, "navigation adopted a proposal or dropped work");
 page.close();
 `)
@@ -385,8 +409,11 @@ func TestViewsPageDropRequiresExactConsentAndPersists(t *testing.T) {
 const path = "/changes/chg-drop/build/drop";
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-drop") && !page.$("#highbay-build-drop").disabled, "Drop did not become ready");
-const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
-page.type(field, "keep my unsaved scenario");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep my unsaved scenario");
+page.$("#highbay-nav-build").click();
+await until(() => page.$("#highbay-build-drop") && !page.$("#highbay-build-drop").disabled, "Drop did not return");
 page.$("#highbay-build-drop").click();
 await until(() => page.$("#highbay-build-drop-confirm"), "Drop did not ask separately");
 expect(page.text("#highbay-build-drop-question").includes("edits it has not proposed are lost") && page.text("#highbay-build-drop-question").includes("Your branch keeps its current commits"), "Drop omitted its effects");
@@ -416,8 +443,9 @@ expect(page.text("#highbay-build-enabling-step").includes("This agreement was dr
 expect(page.text("#highbay-build-taking").includes("Highbay builds nothing on it, and it no longer blocks another build.") && !page.text("#highbay-build-section").includes("Another change can be built"), "a dropped build whose agreement the server would refuse still promises another build");
 expect(page.$("#highbay-build-taking").nextElementSibling === page.$("#highbay-build-enabling-step"), "the enabling step does not directly follow the dropped build's facts");
 expect(!page.$("#highbay-build-drop") && !page.$("#highbay-build-drop-question"), "closed build still offers Drop");
-expect(field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep my unsaved scenario", "Drop lost unsaved editor state");
 expect(page.sent("POST", path).length === 1, "Drop submitted twice");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "keep my unsaved scenario", "Drop lost unsaved editor state");
 page.close();
 const again = await openPage(origin, { link: input.link + "-2" });
 await until(() => again.$("#highbay-build-taking")?.dataset.state === "dropped" && !again.$("#highbay-build-loading"), "a new page did not read the saved drop");
@@ -571,12 +599,18 @@ await until(() => page.sent("POST", drop)[0].status === 409 && page.$("#highbay-
 expect(page.doc.activeElement === page.$("#highbay-build-title"), "removing the focused taking panel lost focus instead of using the stable Build heading");
 await control(origin, "release", { key: "GET " + path });
 await until(() => !page.$("#highbay-build-loading"), "selected build recovery did not settle");
-const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
-page.type(field, "keep focused unsaved scenario"); field.focus();
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "keep focused unsaved scenario");
+page.$("#highbay-nav-build").click();
+const composer = page.$("#highbay-composer-input");
+page.type(composer, "keep focused composer"); composer.focus();
 await control(origin, "act", { key: "restore-build" });
 await until(() => !page.$("#highbay-build-blocking-change") && page.$("#highbay-build-taking")?.dataset.state === "building", "fresh owner build did not remove the other panel");
-expect(page.doc.activeElement === field && field === page.$('textarea[data-example-id="check_01"][data-field="scenario"]') && field.value === "keep focused unsaved scenario", "removing an unfocused taking panel stole or replaced editor focus");
+expect(page.doc.activeElement === composer && composer.value === "keep focused composer", "removing an unfocused taking panel stole external focus");
 expect(page.sent("POST", drop).length === 1, "focus recovery retried Drop");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "keep focused unsaved scenario", "removing taking panel replaced Agree editor state");
 page.close();
 `)
 }
@@ -603,18 +637,25 @@ func TestViewsPageOpenRebuildQuestionKeepsFocusDuringBackgroundRefresh(t *testin
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
 await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "rebuild was not ready");
+page.$("#highbay-nav-cp1").click();
+page.$("#highbay-refine-agreement").open = true;
+page.type(page.$('textarea[data-example-id="check_01"][data-field="scenario"]'), "focus stays in my unsaved text");
+page.$("#highbay-nav-build").click();
+await until(() => page.$("#highbay-build-again") && !page.$("#highbay-build-again").disabled, "rebuild did not return");
 page.$("#highbay-build-again").click();
 await until(() => page.$("#highbay-build-confirm") && !page.$("#highbay-build-confirm").disabled, "rebuild did not ask");
-const field = page.$('textarea[data-example-id="check_01"][data-field="scenario"]');
-page.type(field, "focus stays in my unsaved text"); field.focus();
+const composer = page.$("#highbay-composer-input");
+page.type(composer, "focus stays in my composer"); composer.focus();
 await control(origin, "act", { key: "needs-attention" });
 await until(() => page.$("#highbay-team-attention-builder") && page.$("#highbay-build-confirm") && !page.$("#highbay-build-confirm").disabled, "background Team update did not settle with the question open");
-expect(page.doc.activeElement === field && field.value === "focus stays in my unsaved text", "background refresh pulled focus out of the editor into an unchanged question");
+expect(page.doc.activeElement === composer && composer.value === "focus stays in my composer", "background refresh pulled focus out of the text input into an unchanged question");
 const confirm = page.$("#highbay-build-confirm"); confirm.focus();
 await control(origin, "act", { key: "working-again" });
 await until(() => !page.$("#highbay-team-attention-builder") && page.$("#highbay-build-confirm") && !page.$("#highbay-build-confirm").disabled, "second Team update did not settle");
 expect(page.doc.activeElement === confirm && confirm === page.$("#highbay-build-confirm"), "background refresh pulled focus from the confirmation control into its group");
 expect(page.sent("POST", "/changes/chg-question-focus/build").length === 0, "focus preservation submitted a rebuild");
+page.$("#highbay-nav-cp1").click();
+expect(page.$('textarea[data-example-id="check_01"][data-field="scenario"]').value === "focus stays in my unsaved text", "background refresh discarded Agree draft");
 page.close();
 `)
 }

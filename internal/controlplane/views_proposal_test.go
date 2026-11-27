@@ -20,6 +20,8 @@ func TestViewsPageProposalChoicesGuardAReplacementLink(t *testing.T) {
 	ps, _ := proposalPage(t)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#highbay-nav-cp1"), "change navigation did not appear");
+page.$("#highbay-nav-cp1").click();
 await until(() => page.$("#highbay-confirm-submit"), "the agreed card did not open");
 expect(!page.beforeUnload(), "a saved agreement unexpectedly blocked leaving");
 await control(origin, "act", { key: "propose" });
@@ -45,6 +47,8 @@ func TestViewsPagePendingEditDefersAReplacementLink(t *testing.T) {
 	ps, _ := proposalPage(t)
 	runPageScript(t, ps, nil, `
 const page = await openPage(origin, { link: input.link });
+await until(() => page.$("#highbay-nav-cp1"), "change navigation did not appear");
+page.$("#highbay-nav-cp1").click();
 await until(() => page.$("#highbay-confirm-submit"), "the agreed card did not open");
 expect(!page.beforeUnload(), "a clean card unexpectedly blocked leaving");
 const agreement = page.text(".highbay-frame-summary");
@@ -52,7 +56,7 @@ await control(origin, "hold", { key: "POST /changes/confirm" });
 page.$("#highbay-confirm-submit").click();
 await until(() => page.sent("POST", "/changes/confirm").some((r) => r.status === undefined), "the edit request was not held pending");
 page.$("#highbay-nav-changes").click();
-expect(page.$("#highbay-agreement-details") && page.$("#highbay-read-full-summary") && page.text(".highbay-frame-summary") === agreement, "Describe hid the agreement while protecting a pending save");
+expect(page.$("#highbay-read-full-summary") && page.text(".highbay-frame-summary") === agreement, "Changes hid the agreement while protecting a pending save");
 page.win.location.hash = "link=pending-save-link";
 await until(() => page.$("#highbay-pending-link") && page.win.location.hash === "", "an outstanding edit did not defer the link");
 expect(page.beforeUnload() && page.$("#highbay-open-pending-link").disabled, "the pending edit did not guard both exit paths");
@@ -81,11 +85,13 @@ const page = await openPage(origin, { link: input.link });
 const editor = () => page.$("#highbay-cp1-editor");
 const outcome = () => page.$('textarea[data-example-id="check_01"][data-field="expected_outcome"]');
 const answer = () => page.$('#highbay-proposal [data-question-id="chg-proposal-ambiguity-01"] [data-option="with_tax"]');
-await until(() => editor().dataset.changeId === "chg-proposal" && page.$("#highbay-agreement-details"), "the agreed change did not open");
-const next = () => page.text("#highbay-frame-next dd");
+await until(() => page.$("#highbay-nav-cp1"), "change navigation did not appear");
 page.$("#highbay-nav-cp1").click();
+await until(() => editor()?.dataset.changeId === "chg-proposal" && page.$("#highbay-agreement-details"), "the agreed change did not open");
+const next = () => page.text("#highbay-frame-next dd");
 expect(next().includes("Review Agreement details"), "clean Agree did not point to the saved agreement");
 const agreement = page.text(".highbay-frame-summary");
+page.$("#highbay-refine-agreement").open = true;
 page.type(outcome(), "Typed on the agreed revision");
 expect(next().includes("Save or discard your refinements"), "dirty Agree did not point to refinement");
 
@@ -181,7 +187,9 @@ func TestViewsPageKeepsAnswersWhenAdoptOrDeclineIsRefused(t *testing.T) {
 	runPageScript(t, ps, map[string]any{"agreed": agreed}, viewsPageScriptHelpers+`
 const page = await openPage(origin, { link: input.link });
 const answer = () => page.$('#highbay-proposal [data-question-id="chg-proposal-ambiguity-01"] [data-option="with_tax"]');
-await until(() => page.$("#highbay-cp1-editor").dataset.changeId === "chg-proposal", "the agreed change did not open");
+await until(() => page.$("#highbay-nav-cp1"), "change navigation did not appear");
+page.$("#highbay-nav-cp1").click();
+await until(() => page.$("#highbay-cp1-editor")?.dataset.changeId === "chg-proposal", "the agreed change did not open");
 await control(origin, "act", { key: "propose" });
 await until(() => page.$("#highbay-proposal"), "the proposal did not appear");
 answer().click();

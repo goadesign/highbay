@@ -82,18 +82,29 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   children?: React.ReactNode;
 }
 
-// Button renders an accessible action button or toggle pill.
-export function Button({ variant = "default", className = "", type = "button", children, ...rest }: ButtonProps) {
+// Button renders an accessible action button or toggle pill. Only the page's
+// single primary action uses variant="primary", which also marks
+// data-primary-action="true" for automated and visual verification.
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = "default", className = "", type = "button", children, ...rest },
+  ref
+) {
   const variantCls =
     variant === "pill" ? "highbay-pill" : variant === "default" ? "highbay-btn"
       : "highbay-btn shadcn-btn-" + variant + " highbay-btn-" + variant;
   const cls = ["shadcn-btn", variantCls, className].filter(Boolean).join(" ");
   return (
-    <button type={type} className={cls} {...rest}>
+    <button
+      ref={ref}
+      type={type}
+      className={cls}
+      data-primary-action={variant === "primary" ? "true" : undefined}
+      {...rest}
+    >
       {children}
     </button>
   );
-}
+});
 
 // ChoiceGroupProps binds visible options to the single saved or draft answer.
 interface ChoiceGroupProps {

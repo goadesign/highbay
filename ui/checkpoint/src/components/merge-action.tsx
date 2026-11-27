@@ -17,8 +17,8 @@ export interface MergeControls {
 
 // MergePrimaryAction belongs in the fixed frame's one primary-action slot.
 // Its ID is assigned by the caller so mounted surfaces cannot duplicate it.
-export function MergePrimaryAction({ id, controls }: { id: string; controls: MergeControls }) {
-  return <Button id={id} variant="primary" disabled={!controls.eligible || controls.pending}
+export function MergePrimaryAction({ id, controls, primary = true }: { id: string; controls: MergeControls; primary?: boolean }) {
+  return <Button id={id} variant={primary ? "primary" : "secondary"} disabled={!controls.eligible || controls.pending}
     onClick={controls.onMerge}>
     {controls.pending ? "Merging…" : "Merge into current branch"}
   </Button>;

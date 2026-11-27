@@ -22,20 +22,19 @@ import { countsPhrase, storyCounts } from "./story";
 
 export interface CP1EditorProps {
   card: ChangeCardResult;
-  // buildSection leads a confirmed card so the current work appears first.
-  buildSection: React.ReactNode;
   // buildRevisionNotice explains the effect of changing the agreed revision.
   buildRevisionNotice: string | null;
   // proposalWaiting is true while a proposed revision waits beside the
   // agreed card; refining the agreed card is then refused, so it is offered
   // only after the user adopts or declines the proposal.
   proposalWaiting: boolean;
+  // primaryConfirm marks #highbay-confirm-submit as the page's primary action.
+  primaryConfirm: boolean;
   priorCard: ChangeCardResult | null;
   draftAnswers: Record<string, string>;
   draftExamples: ExampleItem[];
   rpcInFlight: boolean;
   loadingVerifications: boolean;
-  cp4Open: boolean;
   preservedDraft: PreservedDraft | null;
   formError: string | null;
   // revisionAid explains and resolves a choice the draft does not implement.
@@ -50,6 +49,10 @@ export interface CP1EditorProps {
   onDiscardDraft: () => void;
   onLoadLatestCard: (() => void) | null;
   onLoadVerifications: () => void;
+  // onAskGuideToRevise focuses the Guide composer with a refine_change subject pill.
+  onAskGuideToRevise: (() => void) | null;
+  // onContinueToBuild navigates to the Build stage once the agreement is confirmed.
+  onContinueToBuild: (() => void) | null;
   // onOpenStory shows the Story stage for this change.
   onOpenStory: () => void;
   // onReviewApproval opens the saved record in the approval stage.
@@ -138,15 +141,14 @@ function FieldTextarea({
 // workspace (when present), and the canonical shadcn/ui CP1 inspector.
 export function CP1EditorView({
   card,
-  buildSection,
   buildRevisionNotice,
   proposalWaiting,
+  primaryConfirm,
   priorCard,
   draftAnswers,
   draftExamples,
   rpcInFlight,
   loadingVerifications,
-  cp4Open,
   preservedDraft,
   formError,
   revisionAid,
@@ -156,6 +158,8 @@ export function CP1EditorView({
   onDiscardDraft,
   onLoadLatestCard,
   onLoadVerifications,
+  onAskGuideToRevise,
+  onContinueToBuild,
   onOpenStory,
   onReviewApproval,
 }: CP1EditorProps) {
@@ -260,12 +264,10 @@ export function CP1EditorView({
 
   return (
     <CP1DraftContext.Provider value={ctxValue}>
-      {card.status === "confirmed" ? buildSection : null}
-
       <Card className="highbay-meta">
         <div className="highbay-region-header">
           <div className="highbay-region-title-group">
-            <h2>
+            <h2 id="highbay-agree-title" tabIndex={-1}>
               {card.status === "confirmed"
                 ? card.prompt.trim() === card.summary.trim() ? "Agreement" : "Agreed: " + card.prompt
                 : "Review & Confirm Change Intent"}
@@ -277,15 +279,28 @@ export function CP1EditorView({
             </Badge>
             {card.approval ? <Badge variant="success">Approval recorded</Badge> : null}
             {card.unverified_approval ? <Badge variant="warning">Approval unverified</Badge> : null}
-            {!cp4Open ? (
+            {!proposalWaiting && onAskGuideToRevise !== null ? (
               <Button
-                id="highbay-load-verifications"
-                disabled={loadingVerifications}
-                onClick={onLoadVerifications}
+                id="highbay-agree-refine-with-guide"
+                variant="secondary"
+                disabled={rpcInFlight}
+                onClick={onAskGuideToRevise}
               >
-                {loadingVerifications ? "Loading saved verifications..." : "View saved verifications"}
+                Ask Guide to revise
               </Button>
             ) : null}
+            {card.status === "confirmed" && !draftDirty && !proposalWaiting && onContinueToBuild !== null ? (
+              <Button id="highbay-agree-open-build" variant="secondary" onClick={onContinueToBuild}>
+                Open Build →
+              </Button>
+            ) : null}
+            <Button
+              id="highbay-cp1-load-verifications"
+              disabled={loadingVerifications}
+              onClick={onLoadVerifications}
+            >
+              {loadingVerifications ? "Loading saved verifications..." : "View saved verifications"}
+            </Button>
           </div>
         </div>
         <p id="highbay-agreement-revision">
@@ -302,13 +317,11 @@ export function CP1EditorView({
         ) : savedAgreement}
       </Card>
 
-      {card.status !== "confirmed" ? buildSection : null}
-
       {card.approval !== undefined || card.unverified_approval !== undefined ? (
         <section className="highbay-approval-summary" aria-label="Saved approval">
           <p><strong>{card.unverified_approval !== undefined ? "Saved approval needs checking." : "Approval recorded."}</strong>
             {" Read its evidence, verified commits and current status in Approve."}</p>
-          {draftDirty ? <Alert id="highbay-cp5-approval-dirty-warning" variant="warning" role="status">
+          {draftDirty ? <Alert id="highbay-cp1-approval-dirty-warning" variant="warning" role="status">
             Saving different answers or examples creates a new revision and clears this approval.
           </Alert> : null}
           <Button id="highbay-review-approval" onClick={onReviewApproval}>Review saved approval</Button>
@@ -557,7 +570,7 @@ export function CP1EditorView({
               Only complete flows are tested end to end; drafts do not block confirming.
             </p>
             <Button id="highbay-confirm-open-story" onClick={onOpenStory}>
-              Show the Story
+              View Story flows →
             </Button>
           </div>
 
@@ -574,7 +587,7 @@ export function CP1EditorView({
           <CardFooter>
             <Button
               id="highbay-confirm-submit"
-              variant={card.status === "confirmed" && draftDirty ? "primary" : "secondary"}
+              variant={primaryConfirm ? "primary" : "secondary"}
               disabled={rpcInFlight || proposalWaiting || revisionAid !== null}
               aria-describedby={proposalWaiting ? "highbay-confirm-blocked" :
                 revisionAid !== null ? "highbay-confirm-revision-needed-label" :

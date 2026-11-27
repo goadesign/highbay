@@ -609,7 +609,7 @@ func BuildSendTeamMessagePayload(highbaySendTeamMessageBody *string) (*highbay.S
 		}
 		err = json.Unmarshal([]byte(*highbaySendTeamMessageBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"context\": {\n         \"type\": \"architecture_element\",\n         \"value\": {\n            \"change_id\": \"Dolores molestiae.\",\n            \"element_id\": \"wm1\",\n            \"element_name\": \"u\"\n         }\n      },\n      \"guide_choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      },\n      \"reply_to\": 8303348737552024948,\n      \"text\": \"n9\",\n      \"to\": \"team\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"context\": {\n         \"type\": \"refine_change\",\n         \"value\": {\n            \"change_id\": \"0sb\",\n            \"request_revision\": \"9h4\"\n         }\n      },\n      \"guide_choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      },\n      \"reply_to\": 8303348737552024948,\n      \"text\": \"n9\",\n      \"to\": \"team\"\n   }'")
 		}
 		if !(body.To == "team" || body.To == "guide" || body.To == "builder" || body.To == "test_writer") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.to", body.To, []any{"team", "guide", "builder", "test_writer"}))
@@ -636,6 +636,20 @@ func BuildSendTeamMessagePayload(highbaySendTeamMessageBody *string) (*highbay.S
 				err = goa.MergeErrors(err, err2)
 			} else {
 				switch string(body.Context.Kind()) {
+				case "new_change":
+					actual, _ := body.Context.AsNewChange()
+					if actual != nil {
+						if err2 := validateNewChangeContextRequestBody(actual, "body.context.value"); err2 != nil {
+							err = goa.MergeErrors(err, err2)
+						}
+					}
+				case "refine_change":
+					actual, _ := body.Context.AsRefineChange()
+					if actual != nil {
+						if err2 := validateRefineChangeContextRequestBody(actual, "body.context.value"); err2 != nil {
+							err = goa.MergeErrors(err, err2)
+						}
+					}
 				case "revise_answers":
 					actual, _ := body.Context.AsReviseAnswers()
 					if actual != nil {
@@ -675,6 +689,24 @@ func BuildSendTeamMessagePayload(highbaySendTeamMessageBody *string) (*highbay.S
 	}
 	if body.Context != nil {
 		switch string(body.Context.Kind()) {
+		case "new_change":
+			actual, _ := body.Context.AsNewChange()
+			var obj *highbay.NewChangeContext
+			if actual != nil {
+				obj = marshalNewChangeContextRequestBodyToHighbayNewChangeContext(actual)
+			}
+			u := v.Context
+			u.SetNewChange((*highbay.NewChangeContext)(obj))
+			v.Context = u
+		case "refine_change":
+			actual, _ := body.Context.AsRefineChange()
+			var obj *highbay.RefineChangeContext
+			if actual != nil {
+				obj = marshalRefineChangeContextRequestBodyToHighbayRefineChangeContext(actual)
+			}
+			u := v.Context
+			u.SetRefineChange((*highbay.RefineChangeContext)(obj))
+			v.Context = u
 		case "revise_answers":
 			actual, _ := body.Context.AsReviseAnswers()
 			var obj *highbay.ReviseAnswersContext

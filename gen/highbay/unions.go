@@ -1579,6 +1579,8 @@ func (u *Connection) UnmarshalJSON(data []byte) error {
 // Context holds exactly one of its branch values.
 type Context struct {
 	kind                ContextKind
+	newChange           *NewChangeContext
+	refineChange        *RefineChangeContext
 	reviseAnswers       *ReviseAnswersContext
 	architectureElement *ArchitectureElementContext
 	storyFlow           *StoryFlowContext
@@ -1588,6 +1590,10 @@ type Context struct {
 type ContextKind string
 
 const (
+	// ContextKindNewChange identifies the new_change branch.
+	ContextKindNewChange ContextKind = "new_change"
+	// ContextKindRefineChange identifies the refine_change branch.
+	ContextKindRefineChange ContextKind = "refine_change"
 	// ContextKindReviseAnswers identifies the revise_answers branch.
 	ContextKindReviseAnswers ContextKind = "revise_answers"
 	// ContextKindArchitectureElement identifies the architecture_element branch.
@@ -1599,6 +1605,54 @@ const (
 // Kind returns the selected branch.
 func (u Context) Kind() ContextKind {
 	return u.kind
+}
+
+// NewContextNewChange constructs Context with the new_change branch set.
+func NewContextNewChange(v *NewChangeContext) Context {
+	return Context{
+		kind:      ContextKindNewChange,
+		newChange: v,
+	}
+}
+
+// AsNewChange returns the value when the new_change branch is selected.
+func (u Context) AsNewChange() (_ *NewChangeContext, ok bool) {
+	if u.kind != ContextKindNewChange {
+		return
+	}
+	return u.newChange, true
+}
+
+// SetNewChange selects the new_change branch and stores v.
+func (u *Context) SetNewChange(v *NewChangeContext) {
+	*u = Context{
+		kind:      ContextKindNewChange,
+		newChange: v,
+	}
+}
+
+// NewContextRefineChange constructs Context with the refine_change branch set.
+func NewContextRefineChange(v *RefineChangeContext) Context {
+	return Context{
+		kind:         ContextKindRefineChange,
+		refineChange: v,
+	}
+}
+
+// AsRefineChange returns the value when the refine_change branch is selected.
+func (u Context) AsRefineChange() (_ *RefineChangeContext, ok bool) {
+	if u.kind != ContextKindRefineChange {
+		return
+	}
+	return u.refineChange, true
+}
+
+// SetRefineChange selects the refine_change branch and stores v.
+func (u *Context) SetRefineChange(v *RefineChangeContext) {
+	*u = Context{
+		kind:         ContextKindRefineChange,
+		refineChange: v,
+	}
 }
 
 // NewContextReviseAnswers constructs Context with the revise_answers branch set.
@@ -1685,10 +1739,22 @@ func (u Context) Value() (any, error) {
 	switch u.kind {
 	case "":
 		return nil, goa.InvalidEnumValueError("type", "", []any{
+			string(ContextKindNewChange),
+			string(ContextKindRefineChange),
 			string(ContextKindReviseAnswers),
 			string(ContextKindArchitectureElement),
 			string(ContextKindStoryFlow),
 		})
+	case ContextKindNewChange:
+		if u.newChange == nil {
+			return nil, goa.MissingFieldError("value", "Context")
+		}
+		return u.newChange, nil
+	case ContextKindRefineChange:
+		if u.refineChange == nil {
+			return nil, goa.MissingFieldError("value", "Context")
+		}
+		return u.refineChange, nil
 	case ContextKindReviseAnswers:
 		if u.reviseAnswers == nil {
 			return nil, goa.MissingFieldError("value", "Context")
@@ -1706,6 +1772,8 @@ func (u Context) Value() (any, error) {
 		return u.storyFlow, nil
 	default:
 		return nil, goa.InvalidEnumValueError("type", u.kind, []any{
+			string(ContextKindNewChange),
+			string(ContextKindRefineChange),
 			string(ContextKindReviseAnswers),
 			string(ContextKindArchitectureElement),
 			string(ContextKindStoryFlow),
@@ -1744,6 +1812,18 @@ func (u *Context) UnmarshalJSON(data []byte) error {
 		return goa.InvalidFieldTypeError("value", nil, "non-null JSON value")
 	}
 	switch raw.Type {
+	case string(ContextKindNewChange):
+		var v *NewChangeContext
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetNewChange(v)
+	case string(ContextKindRefineChange):
+		var v *RefineChangeContext
+		if err := json.Unmarshal(raw.Value, &v); err != nil {
+			return err
+		}
+		u.SetRefineChange(v)
 	case string(ContextKindReviseAnswers):
 		var v *ReviseAnswersContext
 		if err := json.Unmarshal(raw.Value, &v); err != nil {
@@ -1767,6 +1847,8 @@ func (u *Context) UnmarshalJSON(data []byte) error {
 			return goa.MissingFieldError("type", "Context")
 		}
 		return goa.InvalidEnumValueError("type", raw.Type, []any{
+			string(ContextKindNewChange),
+			string(ContextKindRefineChange),
 			string(ContextKindReviseAnswers),
 			string(ContextKindArchitectureElement),
 			string(ContextKindStoryFlow),

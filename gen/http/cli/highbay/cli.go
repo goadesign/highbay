@@ -284,7 +284,7 @@ func ParseEndpoint(
 	highbayStopTeamRoleFlags.Var(highbayStopTeamRoleRoleFlag, "role", "Registered role to stop.")
 	highbayRestartTeamRoleFlags.Var(highbayRestartTeamRoleBodyFlag, "body", "")
 	highbayRestartTeamRoleFlags.Var(highbayRestartTeamRoleRoleFlag, "role", "Registered role whose managed herdr-core terminal is being restarted.")
-	highbayCreateTerminalTicketFlags.Var(highbayCreateTerminalTicketRoleFlag, "role", "Registered role whose terminal drawer is opening.")
+	highbayCreateTerminalTicketFlags.Var(highbayCreateTerminalTicketRoleFlag, "role", "Registered role whose terminal is opening.")
 	highbayAttachRoleTerminalFlags.Var(highbayAttachRoleTerminalRoleFlag, "role", "Registered role whose herdr-core terminal is being attached.")
 	highbayAttachRoleTerminalFlags.Var(highbayAttachRoleTerminalTicketFlag, "ticket", "")
 	highbayDismissTeamNoticeFlags.Var(highbayDismissTeamNoticeBodyFlag, "body", "")
@@ -1039,13 +1039,13 @@ func highbayUsage() {
 	fmt.Fprintln(os.Stderr, `    get-story-refresh: Return the project owner's current in-memory Story refresh operation for the guide's draft, the same one for every caller acting for the owner: op_id, state (none, running, succeeded, or failed), snapshot_digest, draft_folder, and the evaluated stories (empty when the design does not load the Story module) or a failure diagnostic. When no refresh has been run yet in this server process for the guide's draft, state is none with the intended draft_folder and a message instructing the caller to run refresh_story; this read succeeds before a go.mod or draft folder exists.`)
 	fmt.Fprintln(os.Stderr, `    update-draft: The guide brings design changes made outside Highbay into its draft, before drafting a new change and when told a design file changed in the project folder. Under the draft's lock Highbay compares each design file's draft and live versions over a recorded base. The history base is the latest recorded version present in the project's committed history since the draft's start, or the starting folder version when that history supplies none. The comparison base is whichever of that history base and the outside version the draft last took was recorded later; with no previous take, it is the history base. A live version equal to the comparison base brings nothing. If the project's committed history gained a recorded version since the last take, Highbay takes and reports the live version without merging it. Otherwise an outside change is taken when the draft did not change that file, merged with git merge-file when both changed it, and listed to correct when both changed the same lines or one side removed what the other changed. A draft file Go cannot parse, and a module the project's go.mod requires at another version or with another replace directive than the draft's, are listed to correct; Highbay does not merge go.mod. Each listed file names the folder that holds it: the guide corrects a file of its draft, while a design file or go.mod of the project folder that cannot be parsed is the user's to correct there and the guide never edits it. When the project's commit, the draft, the project's files or the draft's made-from list change while Highbay prepares the update, Highbay brings nothing and answers conflict, and the guide calls update_draft again. Highbay records an interrupted update so a later call can finish it without merging its result again; if the guide changed the file in between, the file is listed to correct. An uncommitted revert to an older version may bring nothing; when a build reports design_changed_outside for an uncommitted design change, the user commits the change in the project folder, then asks the guide to call update_draft, refresh_story and revise_change. Otherwise call refresh_story after this update. Takes no input.`)
 	fmt.Fprintln(os.Stderr, `    get-team: Read the project team's registered roles and current herdr-core terminal, Chorus liveness, and unread-assignment facts. Reading creates nothing and marks no assignment read. Only the user's browser session may call it; wait_for_changes covers this snapshot.`)
-	fmt.Fprintln(os.Stderr, `    get-team-conversation: Read the project's Chorus conversation messages and active pin for the browser workspace's Conversation Rail. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.`)
+	fmt.Fprintln(os.Stderr, `    get-team-conversation: Read the project's Chorus conversation messages and active pin for the browser workspace. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.`)
 	fmt.Fprintln(os.Stderr, `    send-team-message: Post a message from the user in the browser workspace to the project's Chorus channel (mentioning the target role when directed). If the message targets guide or team and no guide is currently active, Highbay starts a managed guide terminal in herdr-core first so the user never leaves the browser.`)
 	fmt.Fprintln(os.Stderr, `    start-team-agents: Start missing project agents in herdr-core using explicit choices, otherwise saved choices and installed cross-family defaults. Never replaces a running guide. Only the user's browser session may call it.`)
 	fmt.Fprintln(os.Stderr, `    interrupt-team-role: Send an interrupt signal (SIGINT / Ctrl-C) to a running role's herdr-core terminal at the user's request.`)
 	fmt.Fprintln(os.Stderr, `    stop-team-role: Terminate and remove a role's managed herdr-core terminal at the user's request so it can be restarted cleanly.`)
 	fmt.Fprintln(os.Stderr, `    restart-team-role: Atomically stop and remove a role's existing managed herdr-core terminal (when present) and launch a fresh managed herdr-core terminal for that role using the supplied choice, saved choice, or installed default. External non-managed sessions are never replaced.`)
-	fmt.Fprintln(os.Stderr, `    create-terminal-ticket: Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser terminal drawer to a role's herdr-core terminal.`)
+	fmt.Fprintln(os.Stderr, `    create-terminal-ticket: Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser workspace to a role's herdr-core terminal.`)
 	fmt.Fprintln(os.Stderr, `    attach-role-terminal: Upgrade to a bidirectional WebSocket attached to a role's live herdr-core PTY with 256 KiB credit flow control.`)
 	fmt.Fprintln(os.Stderr, `    list-team-agent-options: Discover installed coding-agent executables and their supported options on demand. Only the user may call it; ordinary team reads never run discovery subprocesses.`)
 	fmt.Fprintln(os.Stderr, `    dismiss-team-notice: Save the user's dismissal of one project notice without changing agent capability or startup behavior.`)
@@ -1584,7 +1584,7 @@ func highbayGetTeamConversationUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read the project's Chorus conversation messages and active pin for the browser workspace's Conversation Rail. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.`)
+	fmt.Fprintln(os.Stderr, `Read the project's Chorus conversation messages and active pin for the browser workspace. Only the user's browser session may call it; wait_for_changes advances whenever new Chorus messages arrive.`)
 
 	// Flags list
 
@@ -1608,7 +1608,7 @@ func highbaySendTeamMessageUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay send-team-message --body '{\n      \"context\": {\n         \"type\": \"architecture_element\",\n         \"value\": {\n            \"change_id\": \"Dolores molestiae.\",\n            \"element_id\": \"wm1\",\n            \"element_name\": \"u\"\n         }\n      },\n      \"guide_choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      },\n      \"reply_to\": 8303348737552024948,\n      \"text\": \"n9\",\n      \"to\": \"team\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "highbay send-team-message --body '{\n      \"context\": {\n         \"type\": \"refine_change\",\n         \"value\": {\n            \"change_id\": \"0sb\",\n            \"request_revision\": \"9h4\"\n         }\n      },\n      \"guide_choice\": {\n         \"client\": \"gemini\",\n         \"model\": \"Et voluptates occaecati consequatur eos.\",\n         \"program\": \"f\",\n         \"thinking\": \"Sapiente vero ut impedit.\",\n         \"yolo\": true\n      },\n      \"reply_to\": 8303348737552024948,\n      \"text\": \"n9\",\n      \"to\": \"team\"\n   }'")
 }
 
 func highbayStartTeamAgentsUsage() {
@@ -1693,10 +1693,10 @@ func highbayCreateTerminalTicketUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser terminal drawer to a role's herdr-core terminal.`)
+	fmt.Fprintln(os.Stderr, `Mint a single-use 30-second WebSocket upgrade ticket for attaching the browser workspace to a role's herdr-core terminal.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role whose terminal drawer is opening.`)
+	fmt.Fprintln(os.Stderr, `    -role STRING: Registered role whose terminal is opening.`)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")

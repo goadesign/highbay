@@ -158,12 +158,43 @@ func TestViewsPageSessionLifecycle(t *testing.T) {
   expect(reused.win.localStorage.getItem("highbay.session") !== null, "a refused link erased an active stored session");
   reused.close();
 
-  // After an unhanded-off restart the old session is refused; typed edits stay and localStorage is cleared.
+  // (f) A non-422 link exchange failure renders #highbay-link-failed with the server's message, never #highbay-link-used.
+  await fetch(origin + "/__test/fail-next-exchange", { method: "POST" });
+  const failedLinkTab = await openPage(origin, { link: "transient-link", storage: page.win.localStorage });
+  await until(() => failedLinkTab.$("#highbay-link-failed"), "a 503 link exchange failure did not render #highbay-link-failed");
+  expect(!failedLinkTab.$("#highbay-link-used") && failedLinkTab.text("#highbay-link-failed").includes("Session store temporarily unavailable."), "non-422 link failure rendered wrong alert: " + failedLinkTab.text("#highbay-signed-out"));
+  expect(failedLinkTab.win.localStorage.getItem("highbay.session") !== null, "a 503 link exchange failure erased an active stored session");
+  failedLinkTab.close();
+
+  // (h) A stale tab receiving 401 must not erase a newer session written to localStorage by a sibling tab.
+  const staleTab = await openPage(origin, { storage: page.win.localStorage });
+  await until(() => (staleTab.$("#highbay-open-change-chg-session") || staleTab.$('textarea[data-field="expected_outcome"]')) && staleTab.requests.every((r) => r.path === "/change-updates" || r.status !== undefined), "staleTab did not settle initial session reads");
+  // Pause both tabs' waiting loops before invalidating their session so restart cannot trigger an early 401 race.
+  page.setHidden(true);
+  staleTab.setHidden(true);
   await control(origin, "restart");
+  const postRestartLink = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
+  const siblingFresh = await openPage(origin, { link: postRestartLink });
+  await until(() => siblingFresh.win.localStorage.getItem("highbay.session") !== null && (siblingFresh.$("#highbay-open-change-chg-session") || siblingFresh.$('textarea[data-field="expected_outcome"]')), "siblingFresh did not establish a newer post-restart session");
+  const newerToken = siblingFresh.win.localStorage.getItem("highbay.session");
+  staleTab.win.localStorage.setItem("highbay.session", newerToken);
+  const teamReadsBefore = staleTab.sent("GET", "/team").length;
+  staleTab.$("#highbay-nav-team").click();
+  await until(() => staleTab.$("#highbay-team-refresh"), "staleTab did not open Team");
+  staleTab.$("#highbay-team-refresh").click();
+  await until(() => staleTab.sent("GET", "/team").slice(teamReadsBefore).some((r) => r.status === 401) && staleTab.$("#highbay-session-ended"), "staleTab did not receive 401 and end its rejected in-memory session");
+  expect(staleTab.win.localStorage.getItem("highbay.session") === newerToken, "staleTab 401 erased the sibling tab's newer stored session");
+  staleTab.close();
+  siblingFresh.close();
+
+  // After an unhanded-off restart without a newer sibling token, 401 on GET /project/browser-session clears localStorage.
+  await control(origin, "restart");
+  expect(page.win.localStorage.getItem("highbay.session") !== null, "hidden page lost its pre-restart stored session before reload test");
   const restartedReload = await openPage(origin, { storage: page.win.localStorage });
-  await until(() => restartedReload.$("#highbay-signed-out"), "a reload after restart did not sign out cleanly");
+  await until(() => restartedReload.sent("GET", "/project/browser-session").some((r) => r.status === 401) && restartedReload.$("#highbay-signed-out"), "a reload after restart did not receive 401 and sign out cleanly");
   expect(restartedReload.win.localStorage.length === 0, "401 on GET /project/browser-session did not clear localStorage");
   restartedReload.close();
+  page.setHidden(false);
 
   const fresh = await (await fetch(origin + "/__test/link", { method: "POST" })).text();
   field.focus();
@@ -597,8 +628,17 @@ func startViewsProject(t *testing.T, opts controlplane.Options) *viewsProject {
 			assert.NoError(t, cp.Close())
 		}
 	})
+	var failNextExchange atomic.Bool
 	api := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/__test/fail-next-exchange":
+			failNextExchange.Store(true)
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodPost && r.URL.Path == "/project/browser-session" && failNextExchange.CompareAndSwap(true, false):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, err := io.WriteString(w, `{"name":"unavailable","id":"exchange-503","message":"Session store temporarily unavailable.","temporary":true,"timeout":false,"fault":false}`)
+			assert.NoError(t, err)
 		case r.Method == http.MethodPost && r.URL.Path == "/__test/restart":
 			if err := vp.restart(); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

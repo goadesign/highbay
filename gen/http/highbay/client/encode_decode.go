@@ -8671,6 +8671,29 @@ func marshalHighbayRoleAgentChoiceToRoleAgentChoiceRequestBody(v *highbay.RoleAg
 	return res
 }
 
+// marshalHighbayNewChangeContextToNewChangeContextRequestBody builds a value
+// of type *NewChangeContextRequestBody from a value of type
+// *highbay.NewChangeContext.
+func marshalHighbayNewChangeContextToNewChangeContextRequestBody(v *highbay.NewChangeContext) *NewChangeContextRequestBody {
+	res := &NewChangeContextRequestBody{
+		Scope: v.Scope,
+	}
+
+	return res
+}
+
+// marshalHighbayRefineChangeContextToRefineChangeContextRequestBody builds a
+// value of type *RefineChangeContextRequestBody from a value of type
+// *highbay.RefineChangeContext.
+func marshalHighbayRefineChangeContextToRefineChangeContextRequestBody(v *highbay.RefineChangeContext) *RefineChangeContextRequestBody {
+	res := &RefineChangeContextRequestBody{
+		ChangeID:        v.ChangeID,
+		RequestRevision: v.RequestRevision,
+	}
+
+	return res
+}
+
 // marshalHighbayReviseAnswersContextToReviseAnswersContextRequestBody builds a
 // value of type *ReviseAnswersContextRequestBody from a value of type
 // *highbay.ReviseAnswersContext.
@@ -8727,6 +8750,29 @@ func marshalRoleAgentChoiceRequestBodyToHighbayRoleAgentChoice(v *RoleAgentChoic
 		Model:    v.Model,
 		Thinking: v.Thinking,
 		Yolo:     v.Yolo,
+	}
+
+	return res
+}
+
+// marshalNewChangeContextRequestBodyToHighbayNewChangeContext builds a value
+// of type *highbay.NewChangeContext from a value of type
+// *NewChangeContextRequestBody.
+func marshalNewChangeContextRequestBodyToHighbayNewChangeContext(v *NewChangeContextRequestBody) *highbay.NewChangeContext {
+	res := &highbay.NewChangeContext{
+		Scope: v.Scope,
+	}
+
+	return res
+}
+
+// marshalRefineChangeContextRequestBodyToHighbayRefineChangeContext builds a
+// value of type *highbay.RefineChangeContext from a value of type
+// *RefineChangeContextRequestBody.
+func marshalRefineChangeContextRequestBodyToHighbayRefineChangeContext(v *RefineChangeContextRequestBody) *highbay.RefineChangeContext {
+	res := &highbay.RefineChangeContext{
+		ChangeID:        v.ChangeID,
+		RequestRevision: v.RequestRevision,
 	}
 
 	return res

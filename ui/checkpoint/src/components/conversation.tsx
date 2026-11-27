@@ -1,6 +1,6 @@
-// conversation.tsx renders the persistent Chorus Team Conversation Rail and the
-// Describe-stage prompt composer so users drive guide, builder, and test_writer
-// directly from the browser without copying prompts between windows.
+// conversation.tsx renders the persistent Chorus Team Conversation Dock so users
+// coordinate with guide, builder, and test_writer directly from the browser
+// with smart near-bottom tail-follow scrolling and recipient-safe subject pills.
 
 import React, { useEffect, useRef, useState } from "react";
 import { roleChoiceError } from "../agent-choices";
@@ -22,21 +22,28 @@ export type ComposerContext = NonNullable<SendTeamMessagePayload["context"]>;
 // ComposerRecipient is a valid target role or the shared team channel.
 export type ComposerRecipient = SendTeamMessagePayload["to"];
 
-// ComposerDraft holds the user's unsent message text, target, reply link, and
-// stage context across background refreshes and stage switches.
+// ComposerDraft holds the user's unsent message text, target, reply link,
+// stage context, and any action-seeded boilerplate across refreshes and stages.
 export interface ComposerDraft {
   to: ComposerRecipient;
   text: string;
   replyTo: number | null;
   context: ComposerContext | null;
+  seededText?: string;
 }
 
 // ConversationRailProps supplies the shared Chorus conversation, team state,
-// and page-owned send/terminal actions.
+// unread count, stale-revision guard, and page-owned send/terminal actions.
 export interface ConversationRailProps {
   open: boolean;
+  unreadCount: number;
+  primarySend: boolean;
+  staleHold: boolean;
+  staleContextBanner: React.ReactNode;
+  detachedNotice: string | null;
   conversation: TeamConversation | null;
   snapshot: TeamSnapshot | null;
+  teamLoading: boolean;
   loading: boolean;
   sending: boolean;
   error: string | null;
@@ -51,30 +58,13 @@ export interface ConversationRailProps {
   onToggleOpen: () => void;
   onRefresh: () => void;
   onDraftChange: (patch: Partial<ComposerDraft>) => void;
+  onSwitchRecipient: (nextTo: ComposerRecipient) => void;
+  onReplyToMessage: (seq: number, senderRole: TeamMessage["sender_role"]) => void;
   onGuideChoiceChange: (choice: RoleAgentChoice) => void;
   onLoadAgentOptions: () => void;
   onRefreshAgentOptions: () => void;
   onSend: () => void;
   onOpenTerminal: (role: TeamRoleState["role"], invoker: HTMLElement | null) => void;
-}
-
-// DescribeComposerProps supplies the first-prompt composer shown on an empty
-// project's Describe view.
-export interface DescribeComposerProps {
-  disabled: boolean;
-  sending: boolean;
-  sendError: string | null;
-  guideNeedsLaunch: boolean;
-  guideChoice: RoleAgentChoice | undefined;
-  agentOptions: readonly InstalledAgentOption[] | null;
-  agentOptionsLoading: boolean;
-  agentOptionsError: string | null;
-  draftText: string;
-  onDraftTextChange: (text: string) => void;
-  onGuideChoiceChange: (choice: RoleAgentChoice) => void;
-  onLoadAgentOptions: () => void;
-  onRefreshAgentOptions: () => void;
-  onSubmit: () => void;
 }
 
 const senderLabels: Record<TeamMessage["sender_role"], string> = {
@@ -107,6 +97,13 @@ const recipientLabels: Record<ComposerRecipient, string> = {
   test_writer: "Test writer",
 };
 
+const shortRecipientLabels: Record<ComposerRecipient, string> = {
+  guide: "Guide",
+  team: "Team",
+  builder: "Builder",
+  test_writer: "Test writer",
+};
+
 const roleButtonLabels: Record<TeamRoleState["role"], string> = {
   guide: "Guide",
   builder: "Builder",
@@ -128,22 +125,55 @@ export function guideRoleNeedsStart(snapshot: TeamSnapshot | null): boolean {
   return guide === undefined || guide.state === "not_started" || guide.state === "ended";
 }
 
+// contextRequiresGuide reports whether a structured context may only be sent to Guide.
+export function contextRequiresGuide(ctx: ComposerContext | null): boolean {
+  return (
+    ctx !== null &&
+    (ctx.type === "new_change" || ctx.type === "refine_change" || ctx.type === "revise_answers")
+  );
+}
+
 // describeComposerContext summarizes an attached stage context chip in plain English.
-export function describeComposerContext(ctx: ComposerContext): string {
+export function describeComposerContext(
+  ctx: ComposerContext,
+  recipient?: ComposerRecipient
+): string {
+  const prefix = recipient !== undefined ? "To " + shortRecipientLabels[recipient] + " · " : "";
   switch (ctx.type) {
-    case "revise_answers":
+    case "new_change":
+      return prefix + "New Change Card";
+    case "refine_change":
       return (
+        prefix +
         "Revise change " +
         ctx.value.change_id +
+        " · revision " +
+        ctx.value.request_revision.slice(0, 12)
+      );
+    case "revise_answers":
+      return (
+        prefix +
+        "Revise change " +
+        ctx.value.change_id +
+        " · revision " +
+        ctx.value.request_revision.slice(0, 12) +
         " (" +
         Object.keys(ctx.value.answers).length +
         (Object.keys(ctx.value.answers).length === 1 ? " answer" : " answers") +
         ")"
       );
     case "architecture_element":
-      return "Architecture element: " + ctx.value.element_name + " (" + ctx.value.element_id + ")";
+      return (
+        prefix +
+        "Architecture element: " +
+        ctx.value.element_name +
+        " (" +
+        ctx.value.element_id +
+        ")"
+      );
     case "story_flow":
       return (
+        prefix +
         "Story: " +
         ctx.value.story +
         (ctx.value.flow_key !== undefined ? " · flow " + ctx.value.flow_key : "")
@@ -151,12 +181,18 @@ export function describeComposerContext(ctx: ComposerContext): string {
   }
 }
 
-// ConversationRail displays the team's Chorus channel, inline role-attention
-// actions, and the message composer.
+// ConversationRail displays the team's Chorus channel, live role-terminal pills,
+// and the pinned bottom message composer without duplicating global attention alerts.
 export function ConversationRail({
   open,
+  unreadCount,
+  primarySend,
+  staleHold,
+  staleContextBanner,
+  detachedNotice,
   conversation,
   snapshot,
+  teamLoading,
   loading,
   sending,
   error,
@@ -171,20 +207,25 @@ export function ConversationRail({
   onToggleOpen,
   onRefresh,
   onDraftChange,
+  onSwitchRecipient,
+  onReplyToMessage,
   onGuideChoiceChange,
   onLoadAgentOptions,
   onRefreshAgentOptions,
   onSend,
   onOpenTerminal,
 }: ConversationRailProps) {
-  const listEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const submitButtonRef = useRef<HTMLButtonElement | null>(null);
+  const stickToBottomRef = useRef(true);
   const lastMessageCount = useRef(0);
   const lastCompositionEndAt = useRef<number | null>(null);
   const [customizeGuide, setCustomizeGuide] = useState(false);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
 
-  const needsGuideStart =
-    (draft.to === "guide" || draft.to === "team") && guideRoleNeedsStart(snapshot);
+  const targetsGuide = draft.to === "guide" || draft.to === "team";
+  const initialTeamPending = targetsGuide && snapshot === null && teamLoading;
+  const needsGuideStart = targetsGuide && guideRoleNeedsStart(snapshot);
 
   useEffect(() => {
     if (needsGuideStart) {
@@ -194,13 +235,20 @@ export function ConversationRail({
 
   const messages = conversation?.messages ?? [];
   useEffect(() => {
-    if (open && messages.length > lastMessageCount.current) {
-      listEndRef.current?.scrollIntoView({ block: "nearest" });
+    const container = messagesContainerRef.current;
+    if (open && container !== null && messages.length > lastMessageCount.current) {
+      const newest = messages[messages.length - 1];
+      if (stickToBottomRef.current || newest?.sender_role === "you") {
+        container.scrollTop = container.scrollHeight;
+        stickToBottomRef.current = true;
+        setShowJumpLatest(false);
+      } else {
+        setShowJumpLatest(true);
+      }
     }
     lastMessageCount.current = messages.length;
-  }, [open, messages.length]);
+  }, [open, messages]);
 
-  const needsYouRoles = (snapshot?.roles ?? []).filter((role) => role.state === "needs_you");
   const terminalRoles = (snapshot?.roles ?? []).filter((role) => role.has_terminal);
   const chorusUnavailable =
     conversation?.chorus_status === "unavailable" || snapshot?.chorus_status === "unavailable";
@@ -215,7 +263,9 @@ export function ConversationRail({
   const canSend =
     !disabled &&
     !sending &&
+    !staleHold &&
     !chorusUnavailable &&
+    !initialTeamPending &&
     draft.text.trim() !== "" &&
     !guideInvalid;
 
@@ -226,11 +276,12 @@ export function ConversationRail({
           id="highbay-conversation-toggle"
           aria-expanded={false}
           aria-controls="highbay-conversation-panel"
-          variant={needsYouRoles.length > 0 ? "primary" : "default"}
+          variant="secondary"
           onClick={onToggleOpen}
         >
-          Team chat ({messages.length})
-          {needsYouRoles.length > 0 ? " · Needs you" : ""}
+          {"Team chat (" +
+            (unreadCount > 0 ? unreadCount + " new" : String(messages.length)) +
+            ")"}
         </Button>
       </div>
     );
@@ -240,11 +291,14 @@ export function ConversationRail({
     <Card
       id="highbay-conversation-panel"
       className="highbay-card highbay-conversation-card"
+      tabIndex={-1}
       aria-labelledby="highbay-conversation-title"
     >
       <div className="highbay-region-header">
         <div className="highbay-region-title-group">
-          <h2 id="highbay-conversation-title">Team conversation</h2>
+          <h2 id="highbay-conversation-title" tabIndex={-1}>
+            Team conversation
+          </h2>
           {conversation?.channel ? <code>{conversation.channel}</code> : null}
         </div>
         <div className="highbay-toolbar-actions">
@@ -273,7 +327,7 @@ export function ConversationRail({
             <Button
               key={role.role}
               id={"highbay-rail-terminal-" + role.role}
-              variant={role.state === "needs_you" ? "primary" : "pill"}
+              variant={role.state === "needs_you" ? "secondary" : "pill"}
               aria-pressed={openTerminalRole === role.role}
               disabled={disabled}
               onClick={(event) => onOpenTerminal(role.role, event.currentTarget)}
@@ -303,32 +357,6 @@ export function ConversationRail({
         </Alert>
       ) : null}
 
-      {needsYouRoles.map((role) => (
-        <Alert
-          key={role.role}
-          id={"highbay-rail-attention-" + role.role}
-          variant="warning"
-          role="status"
-        >
-          <div className="highbay-conversation-attention-row">
-            <span>
-              <strong>{roleButtonLabels[role.role]} needs you</strong>
-              {role.attention !== "none" ? " (" + role.attention + ")" : ""}.
-            </span>
-            {role.has_terminal ? (
-              <Button
-                id={"highbay-rail-unblock-" + role.role}
-                variant="primary"
-                disabled={disabled}
-                onClick={(event) => onOpenTerminal(role.role, event.currentTarget)}
-              >
-                Open {roleButtonLabels[role.role]} terminal
-              </Button>
-            ) : null}
-          </div>
-        </Alert>
-      ))}
-
       {conversation?.pin !== undefined ? (
         <details className="highbay-details highbay-conversation-pin" id="highbay-conversation-pin">
           <summary>Pinned team board (#{conversation.pin.seq})</summary>
@@ -338,22 +366,33 @@ export function ConversationRail({
 
       <div
         id="highbay-conversation-messages"
+        ref={messagesContainerRef}
         className="highbay-conversation-messages"
         role="log"
         aria-label="Messages"
         aria-live="polite"
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 48;
+          stickToBottomRef.current = nearBottom;
+          if (nearBottom && showJumpLatest) {
+            setShowJumpLatest(false);
+          }
+        }}
       >
         {conversation === null && loading ? (
           <p className="highbay-muted">Loading conversation…</p>
         ) : messages.length === 0 ? (
           <p id="highbay-conversation-empty" className="highbay-muted">
-            No messages yet. Send a message below to guide your team or describe a change.
+            No messages yet. Send a message below to guide your team or ask a question.
           </p>
         ) : (
           <ol className="highbay-message-list" role="list">
             {messages.map((msg) => {
               const isPrimaryChannel =
                 conversation !== null && msg.target === conversation.channel;
+              const replyTargetId =
+                msg.reply_to !== undefined ? messageDomId(msg.target, msg.reply_to) : null;
               return (
                 <li
                   key={msg.id}
@@ -370,7 +409,7 @@ export function ConversationRail({
                     <span>
                       <Badge variant={senderBadgeVariants[msg.sender_role]}>
                         {senderLabels[msg.sender_role]}
-                      </Badge>
+                      </Badge>{" "}
                       <code>@{msg.sender}</code>
                       {!isPrimaryChannel ? (
                         <>
@@ -386,10 +425,24 @@ export function ConversationRail({
                       </time>
                     </span>
                   </div>
-                  {msg.reply_to !== undefined ? (
+                  {replyTargetId !== null && msg.reply_to !== undefined ? (
                     <p className="highbay-message-reply-ref">
                       Replying to{" "}
-                      <a href={"#" + messageDomId(msg.target, msg.reply_to)}>
+                      <a
+                        href={"#" + replyTargetId}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          const targetEl = document.getElementById(replyTargetId);
+                          if (targetEl !== null) {
+                            targetEl.tabIndex = -1;
+                            targetEl.focus({ preventScroll: true });
+                            const container = messagesContainerRef.current;
+                            if (container !== null) {
+                              container.scrollTop = Math.max(0, targetEl.offsetTop - container.offsetTop);
+                            }
+                          }
+                        }}
+                      >
                         message #{msg.reply_to}
                       </a>
                     </p>
@@ -401,18 +454,7 @@ export function ConversationRail({
                         variant="ghost"
                         disabled={disabled}
                         aria-label={"Reply to message #" + msg.seq + " from " + msg.sender}
-                        onClick={() => {
-                          const nextTo: ComposerRecipient =
-                            msg.sender_role === "builder"
-                              ? "builder"
-                              : msg.sender_role === "test_writer"
-                              ? "test_writer"
-                              : msg.sender_role === "guide"
-                              ? "guide"
-                              : draft.to;
-                          onDraftChange({ replyTo: msg.seq, to: nextTo });
-                          document.getElementById("highbay-composer-input")?.focus();
-                        }}
+                        onClick={() => onReplyToMessage(msg.seq, msg.sender_role)}
                       >
                         Reply
                       </Button>
@@ -423,8 +465,26 @@ export function ConversationRail({
             })}
           </ol>
         )}
-        <div ref={listEndRef} />
       </div>
+
+      {showJumpLatest ? (
+        <div className="highbay-conversation-jump-row">
+          <Button
+            id="highbay-conversation-jump-latest"
+            variant="secondary"
+            onClick={() => {
+              const container = messagesContainerRef.current;
+              if (container !== null) {
+                container.scrollTop = container.scrollHeight;
+              }
+              stickToBottomRef.current = true;
+              setShowJumpLatest(false);
+            }}
+          >
+            Jump to latest
+          </Button>
+        </div>
+      ) : null}
 
       <form
         id="highbay-composer-form"
@@ -440,6 +500,12 @@ export function ConversationRail({
           onSend();
         }}
       >
+        {detachedNotice !== null ? (
+          <Alert id="highbay-composer-detached-notice" role="status">
+            {detachedNotice}
+          </Alert>
+        ) : null}
+
         {draft.replyTo !== null ? (
           <div className="highbay-composer-chip" id="highbay-composer-reply-chip">
             <span>Replying to #{draft.replyTo}</span>
@@ -455,16 +521,18 @@ export function ConversationRail({
 
         {draft.context !== null ? (
           <div className="highbay-composer-chip" id="highbay-composer-context-chip">
-            <span>Attached: {describeComposerContext(draft.context)}</span>
+            <span>Attached: {describeComposerContext(draft.context, draft.to)}</span>
             <Button
               variant="ghost"
               disabled={disabled || sending}
-              onClick={() => onDraftChange({ context: null })}
+              onClick={() => onDraftChange({ context: null, seededText: undefined })}
             >
               Remove attachment
             </Button>
           </div>
         ) : null}
+
+        {staleContextBanner}
 
         <div className="highbay-composer-controls">
           <label className="highbay-field-label" htmlFor="highbay-composer-to">
@@ -475,15 +543,28 @@ export function ConversationRail({
               className="highbay-input"
               value={draft.to}
               disabled={disabled || sending}
+              onInput={(event) => {
+                const value = event.currentTarget.value;
+                if (
+                  value !== draft.to &&
+                  (value === "guide" ||
+                    value === "team" ||
+                    value === "builder" ||
+                    value === "test_writer")
+                ) {
+                  onSwitchRecipient(value);
+                }
+              }}
               onChange={(event) => {
                 const value = event.currentTarget.value;
                 if (
-                  value === "guide" ||
-                  value === "team" ||
-                  value === "builder" ||
-                  value === "test_writer"
+                  value !== draft.to &&
+                  (value === "guide" ||
+                    value === "team" ||
+                    value === "builder" ||
+                    value === "test_writer")
                 ) {
-                  onDraftChange({ to: value });
+                  onSwitchRecipient(value);
                 }
               }}
             >
@@ -587,7 +668,16 @@ export function ConversationRail({
                 event.currentTarget.form?.requestSubmit(submitButtonRef.current ?? undefined);
               }
             }}
-            onChange={(event) => onDraftChange({ text: event.currentTarget.value })}
+            onInput={(event) => {
+              if (event.currentTarget.value !== draft.text) {
+                onDraftChange({ text: event.currentTarget.value });
+              }
+            }}
+            onChange={(event) => {
+              if (event.currentTarget.value !== draft.text) {
+                onDraftChange({ text: event.currentTarget.value });
+              }
+            }}
           />
         </label>
 
@@ -598,191 +688,18 @@ export function ConversationRail({
         ) : null}
 
         <div className="highbay-composer-footer">
-          <button
+          <Button
             ref={submitButtonRef}
             id="highbay-composer-send"
             type="submit"
-            className="shadcn-btn shadcn-btn-primary highbay-btn highbay-btn-primary"
+            variant={primarySend ? "primary" : "secondary"}
             disabled={!canSend}
           >
             {sending ? "Sending…" : needsGuideStart ? "Start Guide & send" : "Send message"}
-          </button>
+          </Button>
         </div>
       </form>
     </Card>
-  );
-}
-
-// DescribeComposer lets the user describe their first feature directly in the
-// Describe welcome card, launching guide automatically if none is running.
-export function DescribeComposer({
-  disabled,
-  sending,
-  sendError,
-  guideNeedsLaunch,
-  guideChoice,
-  agentOptions,
-  agentOptionsLoading,
-  agentOptionsError,
-  draftText,
-  onDraftTextChange,
-  onGuideChoiceChange,
-  onLoadAgentOptions,
-  onRefreshAgentOptions,
-  onSubmit,
-}: DescribeComposerProps) {
-  const submitButtonRef = useRef<HTMLButtonElement | null>(null);
-  const lastCompositionEndAt = useRef<number | null>(null);
-  const [customizeAgent, setCustomizeAgent] = useState(false);
-
-  useEffect(() => {
-    if (guideNeedsLaunch) {
-      onLoadAgentOptions();
-    }
-  }, [guideNeedsLaunch, onLoadAgentOptions]);
-
-  const selectedOption = (agentOptions ?? []).find(
-    (opt) => opt.client === guideChoice?.client && opt.program === guideChoice.program
-  );
-  const choiceInvalid =
-    guideNeedsLaunch &&
-    (agentOptions === null ||
-      guideChoice === undefined ||
-      roleChoiceError(guideChoice, agentOptions) !== null);
-  const canSubmit = !disabled && !sending && draftText.trim() !== "" && !choiceInvalid;
-
-  return (
-    <form
-      id="highbay-describe-form"
-      className="highbay-describe-form"
-      method="post"
-      action="/team/messages"
-      aria-labelledby="highbay-change-list-title"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!canSubmit) {
-          return;
-        }
-        onSubmit();
-      }}
-    >
-      <label className="highbay-field-label" htmlFor="highbay-describe-input">
-        What would you like to build or change?
-        <textarea
-          id="highbay-describe-input"
-          name="describe_text"
-          className="shadcn-textarea highbay-input"
-          rows={4}
-          placeholder="Example: Build a multi-tenant incident platform: a triage agent and remediation agent with MCP tools to search pod logs, correlate deploys, and roll back services with on-call approval."
-          value={draftText}
-          disabled={disabled || sending}
-          enterKeyHint="send"
-          onCompositionEnd={(event) => {
-            lastCompositionEndAt.current = event.nativeEvent.timeStamp;
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              if (event.nativeEvent.isComposing) {
-                return;
-              }
-              if (
-                lastCompositionEndAt.current !== null &&
-                Math.abs(event.nativeEvent.timeStamp - lastCompositionEndAt.current) < 50
-              ) {
-                return;
-              }
-              event.preventDefault();
-              if (!canSubmit) {
-                return;
-              }
-              event.currentTarget.form?.requestSubmit(submitButtonRef.current ?? undefined);
-            }
-          }}
-          onChange={(event) => onDraftTextChange(event.currentTarget.value)}
-        />
-      </label>
-
-      {guideNeedsLaunch ? (
-        <div className="highbay-guide-launch-box" id="highbay-describe-guide-choice">
-          <div className="highbay-conversation-attention-row">
-            <span>
-              Guide:{" "}
-              <strong>
-                {selectedOption !== undefined
-                  ? selectedOption.title
-                  : agentOptionsLoading
-                  ? "Finding installed coding agents…"
-                  : "Select an installed coding agent"}
-              </strong>
-            </span>
-            <Button
-              variant="ghost"
-              aria-expanded={customizeAgent}
-              aria-controls="highbay-describe-guide-fields"
-              disabled={disabled || sending}
-              onClick={() => setCustomizeAgent((prev) => !prev)}
-            >
-              {customizeAgent ? "Hide agent settings" : "Choose coding agent"}
-            </Button>
-          </div>
-          {agentOptionsError !== null ? (
-            <Alert variant="destructive" role="alert">
-              Could not read installed agents: {agentOptionsError}{" "}
-              <Button disabled={disabled || agentOptionsLoading} onClick={onRefreshAgentOptions}>
-                Retry
-              </Button>
-            </Alert>
-          ) : null}
-          {customizeAgent || selectedOption === undefined ? (
-            <div id="highbay-describe-guide-fields">
-              {agentOptions !== null && agentOptions.length > 0 ? (
-                <RoleChoiceFields
-                  idPrefix="highbay-describe-guide"
-                  role="guide"
-                  legend="Guide coding agent"
-                  options={agentOptions}
-                  choice={guideChoice}
-                  disabled={disabled || sending}
-                  compact={true}
-                  onChange={onGuideChoiceChange}
-                />
-              ) : !agentOptionsLoading && agentOptions !== null ? (
-                <p className="highbay-muted">
-                  No supported coding agent is installed yet. Install Claude Code, Codex, Gemini
-                  CLI, Cursor, or Antigravity, then{" "}
-                  <Button disabled={disabled} onClick={onRefreshAgentOptions}>
-                    refresh installed agents
-                  </Button>
-                  .
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {sendError !== null ? (
-        <Alert id="highbay-describe-error" variant="destructive" role="alert">
-          {sendError}
-        </Alert>
-      ) : null}
-
-      <div className="highbay-field-row">
-        <button
-          ref={submitButtonRef}
-          id="highbay-describe-submit"
-          type="submit"
-          className="shadcn-btn shadcn-btn-primary highbay-btn highbay-btn-primary"
-          disabled={!canSubmit}
-        >
-          {sending
-            ? "Sending to Guide…"
-            : guideNeedsLaunch
-            ? "Start Guide & draft Change Card"
-            : "Send to Guide"}
-        </button>
-      </div>
-    </form>
   );
 }
 
